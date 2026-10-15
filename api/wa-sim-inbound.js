@@ -10,8 +10,14 @@
 // and WA_ALLOW_UNSIGNED is NEVER needed on Vercel: only a signed-in staff member
 // can inject a simulated message.
 //
-//   POST { phone, text, name?, agoMs? }
+//   POST { phone, text, name?, agoMs?, media? }
 //   Authorization: Bearer <Firebase ID token>   (auth.currentUser.getIdToken())
+//
+// v18.8.0 phase 6: `media` is "image", "audio" or "document" — a KIND, never an
+// id. The server mints the MOCK id (src/lib/wa-mock-media.js), and `text` is
+// the caption, so a photo or a voice note may come with none. An id taken from
+// the request would go into a Graph path with the restaurant's token on it, the
+// thing api/wa-media.js is built not to allow.
 //
 // Mirrors ONE message of api/wa-inbound's flow: store fast (processInbound with
 // parse=null + one-time auto-ack), answer, then parse with Gemini AFTER the
@@ -22,6 +28,7 @@
 import { verifyStaffToken, staffAuthError } from "./_lib/rtdb.js";
 import { simEnabled } from "./_lib/env.js";
 import { injectSimInbound } from "./_lib/inbound-core.js";
+import { SIM_MEDIA } from "../src/lib/wa-mock-media.js";
 
 // Run `promise` after the response is sent (same hook as api/wa-inbound): on
 // Vercel via the request-context waitUntil, on the local harness the long-lived
@@ -70,11 +77,16 @@ export default async function handler(req, res) {
   const body = await readJsonBody(req);
   const phone = body && body.phone;
   const text = body && typeof body.text === "string" ? body.text : "";
-  if (!phone || !text.trim()) { res.status(400).json({ error: "phone and text are required" }); return; }
+  const media = body && body.media != null ? body.media : null;
+  if (media !== null && !(typeof media === "string" && Object.prototype.hasOwnProperty.call(SIM_MEDIA, media))) {
+    res.status(400).json({ error: "media must be one of: " + Object.keys(SIM_MEDIA).join(", ") });
+    return;
+  }
+  if (!phone || (!text.trim() && !media)) { res.status(400).json({ error: "phone and text (or media) are required" }); return; }
   const agoMs = Number(body.agoMs) || 0;
 
   try {
-    const r = await injectSimInbound({ phone, text, name: body && body.name, agoMs }, scheduleAfterResponse);
+    const r = await injectSimInbound({ phone, text, name: body && body.name, agoMs, media }, scheduleAfterResponse);
     res.status(200).json({ ok: true, phoneKey: r.phoneKey, skipped: r.skipped });
   } catch (e) {
     console.error("[wa-sim-inbound] failed:", e && e.message);

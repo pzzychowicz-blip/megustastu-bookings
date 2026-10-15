@@ -140,7 +140,7 @@ An EU business (Fuerteventura, Spain). What the app keeps about people, and wher
 | `bookings` | guest names, phone numbers, free-text notes (allergies, occasions), history | **no automatic purge** (an auto-erase was investigated and dropped) |
 | `vouchers` | free-text `notes`, and `issuedBy` (the issuing account's email) | never deleted, only voided (the code is the key) |
 | `activity` | every entry's author (`uid`, `email`). Guest names are never stored, except a DELETED booking's `subject` and `guestKey` | pruned after `settings/admin.activityRetentionDays` (default 365, at most 3650) |
-| `conversations`, `messages` (WhatsApp, when the module is on) | the guest's phone number (the key) and message text, up to 4,000 characters per message | **no retention: nothing deletes them automatically** |
+| `conversations`, `messages` (WhatsApp, when the module is on) | the guest's phone number (the key) and message text, up to 4,000 characters per message; a photo's, voice note's or document's Meta id and name (the file itself is never stored, Meta keeps it 7 days received, 30 sent) | **12 months, daily prune** (v18.8.0): `api/wa-prune.js`, a Vercel Cron at 04:00 UTC behind `CRON_SECRET`, deletes each message older than `settings/admin.waRetentionDays` (default 365, at least 30, at most 3650) and a conversation whose last message is. The privacy notice states 12 months. Without `CRON_SECRET` the prune refuses to run (503) |
 | Download backup | the database on a device: the whole of it since v18.1.1, partial before that | as long as the file is kept. Treat it as the database |
 
 **Where data leaves Firebase** (the database itself is Google Firebase, in
@@ -167,7 +167,6 @@ of theirs carries is not reached by it; delete that conversation from the Inbox.
 for one small team, but it's a decision, not an accident.
 
 **Open, to decide before WhatsApp goes live:**
-- a retention period for messages
 - per-role read scope
 
 The public `/privacy` page Meta requires draws on this section.

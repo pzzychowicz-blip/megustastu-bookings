@@ -27,7 +27,8 @@
 // message id is the sanitized wamid, so a redelivery targets the same RTDB
 // path; we additionally skip the whole upsert when the message already exists.
 
-import { normalizePhone, isPhoneKey, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse } from "../../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, mediaLabel, mediaSnippet } from "../../src/lib/whatsapp.js";
+import { simMediaMessage } from "../../src/lib/wa-mock-media.js";
 import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours } from "./rtdb.js";
 import { sendText } from "./meta.js";
 import { parseMessage, mockParse } from "./gemini.js";
@@ -100,8 +101,13 @@ export async function applyParse(phoneKey, parse, ts) {
 //                  (the async flow acks before the LLM answers).
 //   preloadedConv— the conversation the caller (wa-inbound) already read for
 //                  the draft-aware parse; passing it avoids a duplicate read.
+//   media        — v18.8.0: `{ kind, mediaId, mime, filename?, voice? }` for a
+//                  photo, a voice note or a document (inboundContent below);
+//                  stored on the message, re-checked here.
+//   snippetText  — the conversation list's line when it is not `text` itself
+//                  (a media message's "Photo · caption").
 // Returns { phoneKey, skipped } — skipped=true when the wamid was seen before.
-export async function processInbound({ phone, text, ts, wamid, profileName, parse, langHint, preloadedConv, willParse }) {
+export async function processInbound({ phone, text, ts, wamid, profileName, parse, langHint, preloadedConv, willParse, media, snippetText }) {
   const phoneKey = normalizePhone(phone);
   // v18.0.0 phase 6 (CT-WA-04): `!phoneKey` is not the question — "+" is truthy,
   // is a legal RTDB key and is nobody. api/wa-recheck.js had already refused it
@@ -128,7 +134,7 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
     phone: phone || phoneKey,
     channel: "whatsapp",
     lastMessageAt: ts,
-    lastMessageSnippet: String(text || "").slice(0, 200),
+    lastMessageSnippet: snippet(snippetText != null ? snippetText : text),
     unread: true,
     windowExpiresAt: ts + WA_WINDOW_MS,
     language: lang,
@@ -155,7 +161,7 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
   await upsertConversation(phoneKey, patch);
 
   // ── The inbound message itself ────────────────────────────────────────────
-  await appendMessage(phoneKey, {
+  const inbound = {
     id: msgId,
     direction: "in",
     text: String(text || ""),
@@ -164,64 +170,136 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
     isAutoAck: false,
     channel: "whatsapp",
     providerMsgId: wamid || null,
-  });
+  };
+  // Omitted, not null, when absent: a text message keeps the shape it had.
+  const m = sanitizeMedia(media);
+  if (m) inbound.media = m;
+  await appendMessage(phoneKey, inbound);
 
   // ── One-time auto-ack (after the inbound so the thread reads naturally) ───
+  // v18.8.0: `autoAckSent: true` in the patch above is a CLAIM, written before
+  // the send so two inbounds arriving together do not both ack. A send that
+  // FAILS hands the claim back (`autoAckSent: false`), so the next inbound
+  // tries again; before, a failed auto-reply was never retried, because the
+  // flag said it had been sent. A send that succeeded keeps the claim even if
+  // storing the ack's bubble then fails: the customer has the message, and a
+  // second one would be the duplicate the claim exists to prevent.
   if (firstEver) {
     const ackText = AUTO_ACK_TEXT[lang] || AUTO_ACK_TEXT.es;
+    let sent = null;
     try {
-      const sent = await sendText(phoneKey, ackText);
-      await appendMessage(phoneKey, {
-        id: "ack" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        direction: "out",
-        text: ackText,
-        ts: ts + 1500,
-        status: sent.status,
-        isAutoAck: true,
-        channel: "whatsapp",
-        providerMsgId: sent.wamid || null,
-      });
+      sent = await sendText(phoneKey, ackText);
     } catch (e) {
-      // Auto-ack failure must never fail the inbound — log and move on.
+      // Auto-ack failure must never fail the inbound — log, release, move on.
       console.warn("[wa-inbound] auto-ack send failed: " + e.message);
+      try {
+        await upsertConversation(phoneKey, { autoAckSent: false });
+      } catch (e2) {
+        console.warn("[wa-inbound] could not release the auto-ack claim: " + e2.message);
+      }
+    }
+    if (sent) {
+      try {
+        await appendMessage(phoneKey, {
+          id: "ack" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          direction: "out",
+          text: ackText,
+          ts: ts + 1500,
+          status: sent.status,
+          isAutoAck: true,
+          channel: "whatsapp",
+          providerMsgId: sent.wamid || null,
+        });
+      } catch (e) {
+        console.warn("[wa-inbound] auto-ack sent but not stored: " + e.message);
+      }
     }
   }
 
   return { phoneKey, skipped: false };
 }
 
-// injectSimInbound({ phone, text, name, agoMs }, afterResponse) — the SANDBOX
-// inbound flow shared by api/wa-sim-inbound (online Sim panel) and
+// inboundContent(m) — what one webhook message becomes (v18.8.0): the text to
+// store, the media to store beside it, the conversation list's line, and the
+// text to hand the parser (null = no parse). It decides what staff see of a
+// customer's message. Here since phase 6 (it was api/wa-inbound.js's, which
+// re-exports it): the simulator's media messages take the same road
+// (injectSimInbound below), so a sim photo is stored as a real one is.
+//
+//   text      → the body; parsed.
+//   image / document → `media` + the caption as text, or the fallback
+//               ("Photo", "Document: menu.pdf"); the caption is parsed like a
+//               text, a photo without one is not parsed at all.
+//   audio     → `media` (`voice: true` for a voice note) + "Voice message" /
+//               "Audio"; never parsed (no caption exists).
+//   anything else, or a media message whose id is not one → one line naming
+//               the kind and saying it stays on the phone (decided
+//               2026-10-14). It used to be "[image message]".
+const OTHER_LABEL = {
+  image: "Photo", audio: "Audio", document: "Document", video: "Video", sticker: "Sticker",
+  location: "Location", contacts: "Contact card", reaction: "Reaction", interactive: "Reply", button: "Reply",
+};
+export function inboundContent(m) {
+  const type = m && typeof m.type === "string" ? m.type : "";
+  if (type === "text" && m.text && typeof m.text.body === "string") {
+    const body = m.text.body;
+    return { text: body, media: null, snippet: body, parseText: body.trim() ? body : null };
+  }
+  if (WA_MEDIA_KINDS.includes(type) && m[type] && typeof m[type] === "object") {
+    const src = m[type];
+    const media = sanitizeMedia({ kind: type, mediaId: src.id, mime: src.mime_type, filename: src.filename, voice: src.voice });
+    if (media) {
+      const caption = type !== "audio" && typeof src.caption === "string" ? src.caption.trim() : "";
+      return { text: caption || mediaLabel(media), media, snippet: mediaSnippet(media, caption), parseText: caption || null };
+    }
+  }
+  const line = (OTHER_LABEL[type] || "Message") + " — " + WA_OPEN_ON_PHONE;
+  return { text: line, media: null, snippet: line, parseText: null };
+}
+
+// injectSimInbound({ phone, text, name, agoMs, media }, afterResponse) — the
+// SANDBOX inbound flow shared by api/wa-sim-inbound (online Sim panel) and
 // api/wa-sim-generate (Gemini-invented scenarios). Mirrors api/wa-inbound for a
 // single message: store fast (processInbound, parse=null + auto-ack), then parse
 // with Gemini AFTER the response via `afterResponse` (the endpoint's Vercel
 // waitUntil / harness shim) so the draft lands through the client's onValue.
 // `afterResponse(promise)` schedules post-response work; returns the
 // processInbound result ({ phoneKey, skipped }).
-export async function injectSimInbound({ phone, text, name, agoMs = 0 }, afterResponse) {
+//
+// v18.8.0 phase 6: `media` is a KIND ("image" / "audio" / "document"), never an
+// id. The message is built here (`simMediaMessage`, a MOCK id minted on the
+// server) and read through `inboundContent`, as a webhook's is, so `text`
+// becomes its caption and only a caption is parsed. An unknown kind is refused
+// by the endpoint before this runs; here it would read as a text.
+export async function injectSimInbound({ phone, text, name, agoMs = 0, media }, afterResponse) {
   const ts = Date.now() - (Number(agoMs) || 0);
   const conv = await getConversation(normalizePhone(phone));
   const existingDraft = conv && conv.draftStatus === "parsed" ? conv.draftData : null;
+  const content = inboundContent((media && simMediaMessage(media, text)) || { type: "text", text: { body: String(text || "") } });
+  const parseText = content.parseText;
   const r = await processInbound({
-    phone, text, ts,
+    phone, text: content.text, ts,
     wamid: "sim." + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
     profileName: name || null,
     parse: null,
-    langHint: mockParse(text).language,
+    langHint: mockParse(parseText || "").language,
     preloadedConv: conv,
-    willParse: true, // flags "analyzing…" until applyParse lands the draft
+    media: content.media,
+    snippetText: content.snippet,
+    willParse: !!parseText, // flags "analyzing…" until applyParse lands the draft
   });
   // /code-review v18.0.0 phase 6: nothing was stored, so there is nothing to
   // parse. `api/wa-inbound.js` has always guarded this — `parseJobs.push` sits
   // on the non-skipped branch — and this second scheduler did not, so a junk
   // phone or a repeated wamid still bought a live, billed Gemini call whose
   // result `applyParse` then discarded on the null key. The rule applied at one
-  // of the two places that schedule a parse.
-  if (r.skipped || !r.phoneKey) return r;
+  // of the two places that schedule a parse. v18.8.0: and a voice note or a
+  // photo without a caption has nothing to parse, as in the webhook.
+  if (r.skipped || !r.phoneKey || !parseText) return r;
   afterResponse((async () => {
     try {
       const hours = await readOperatingHours();
-      const parse = await parseMessage(text, { hours, existingDraft });
+      const parse = await parseMessage(parseText, { hours, existingDraft });
       await applyParse(r.phoneKey, parse, ts);
     } catch (e) {
       console.warn("[wa-sim] parse failed: " + e.message);

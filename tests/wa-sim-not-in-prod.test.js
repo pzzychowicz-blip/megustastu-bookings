@@ -129,6 +129,23 @@ describe("the WhatsApp simulator cannot reach production", () => {
     ).toEqual([]);
   });
 
+  // v18.8.0 phase 6: the simulator's media table is shared with the SERVER
+  // (api/_lib/meta.js, inbound-core.js), so it is not a simulator module the
+  // build stubs. In src/ only the stubbed wa-backend-sim.js may import it, or it
+  // rides into a production chunk.
+  it("in src/, only the simulator's backend client imports the mock media", () => {
+    const importers = [];
+    (function walk(dir) {
+      for (const n of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, n.name);
+        if (n.isDirectory()) { walk(p); continue; }
+        if (!/\.(js|jsx)$/.test(n.name) || n.name === "wa-mock-media.js") continue;
+        if (/from "\.{1,2}\/(lib\/)?wa-mock-media/.test(stripComments(readFileSync(p, "utf8")).join("\n"))) importers.push(p.slice(join(ROOT, "src").length + 1));
+      }
+    })(join(ROOT, "src"));
+    expect(importers).toEqual(["lib/wa-backend-sim.js"]);
+  });
+
   it("App reaches the simulator only through a dynamic import", () => {
     const app = read("src/App.jsx");
     expect(app, "a STATIC import puts the simulator in the entry chunk whatever WA_SANDBOX says")

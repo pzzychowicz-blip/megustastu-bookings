@@ -24,13 +24,18 @@ import { auth } from "../firebase";
 // before routing an inbound through here — so importing it would be a second
 // place the same question is asked, and lint caught it as dead on arrival.
 import { WA_BACKEND_URL } from "./wa-backend";
+import { simMediaMessage } from "./wa-mock-media";
 
 // Wrap one inbound message in the Meta Cloud API webhook shape and POST it to
 // the local /api/wa-inbound — the client-side mirror of
 // scripts/wa-webhook-samples.mjs::textMessagePayload. `agoMs` back-dates the
 // message (unix-seconds timestamp), e.g. to simulate an expired 24h window.
-export async function postFakeWebhook({ phone, text, name, agoMs = 0 }) {
+// v18.8.0 phase 6: `media` ("image" / "audio" / "document") makes it a photo,
+// a voice note or a PDF, with `text` as its caption and a MOCK id the harness's
+// /api/wa-media answers with a bundled sample (src/lib/wa-mock-media.js).
+export async function postFakeWebhook({ phone, text, name, agoMs = 0, media }) {
   const waId = String(phone).replace(/^\+/, "");
+  const content = (media && simMediaMessage(media, text)) || { type: "text", text: { body: text } };
   const payload = {
     object: "whatsapp_business_account",
     entry: [{
@@ -41,13 +46,11 @@ export async function postFakeWebhook({ phone, text, name, agoMs = 0 }) {
           messaging_product: "whatsapp",
           metadata: { display_phone_number: "34600000000", phone_number_id: "PHONE_NUMBER_ID_LOCAL_SIM" },
           contacts: [{ wa_id: waId, profile: { name: name || "Sim Customer" } }],
-          messages: [{
+          messages: [Object.assign({
             from: waId,
             id: "wamid.LOCALSIM." + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
             timestamp: String(Math.floor((Date.now() - agoMs) / 1000)),
-            type: "text",
-            text: { body: text },
-          }],
+          }, content)],
         },
       }],
     }],
@@ -66,14 +69,15 @@ export async function postFakeWebhook({ phone, text, name, agoMs = 0 }) {
 // /api/wa-sim-inbound (same-origin on Vercel). Unlike postFakeWebhook this needs
 // no HMAC/WA_ALLOW_UNSIGNED — the staff Firebase ID token is the gate. The
 // server runs the real pipeline incl. live Gemini parsing.
-export async function postSimInbound({ phone, text, name, agoMs = 0 }) {
+// v18.8.0 phase 6: `media` is sent as a KIND; the server mints the id.
+export async function postSimInbound({ phone, text, name, agoMs = 0, media }) {
   const user = auth.currentUser;
   if (!user) throw new Error("not signed in");
   const idToken = await user.getIdToken();
   const res = await fetch(WA_BACKEND_URL + "/api/wa-sim-inbound", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
-    body: JSON.stringify({ phone, text, name, agoMs }),
+    body: JSON.stringify({ phone, text, name, agoMs, media: media || undefined }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
@@ -84,10 +88,13 @@ export async function postSimInbound({ phone, text, name, agoMs = 0 }) {
 //   · DEV    → the local harness's unsigned /api/wa-inbound (Meta-shaped payload)
 //   · online → the staff-auth /api/wa-sim-inbound (no public-webhook exposure)
 // Either way the server parses with Gemini and the draft lands via onValue.
-export function backendInbound({ phone, text, name, windowAgeMs = 0 }) {
+// `media` (v18.8.0): a photo, a voice note or a PDF from the customer, `text`
+// its caption. There is no client-side path for one: only the server writes a
+// message's `media`, so the panel offers these in backend mode alone.
+export function backendInbound({ phone, text, name, windowAgeMs = 0, media }) {
   return import.meta.env.DEV
-    ? postFakeWebhook({ phone, text, name, agoMs: windowAgeMs })
-    : postSimInbound({ phone, text, name, agoMs: windowAgeMs });
+    ? postFakeWebhook({ phone, text, name, agoMs: windowAgeMs, media })
+    : postSimInbound({ phone, text, name, agoMs: windowAgeMs, media });
 }
 
 // ✨ Suggest reply (Gemini plays the customer). Same Gemini-stays-server-side

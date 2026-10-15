@@ -20,9 +20,9 @@ import { countLabel } from "../../lib/booking-logic";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
 import { simulateInbound } from "../../lib/wa-sim";
 import { backendEnabled, setBackendEnabled, backendHealth, WA_BACKEND_URL } from "../../lib/wa-backend";
-import { suggestCustomerReply, generateScenario, simErrorText } from "../../lib/wa-backend-sim";
+import { suggestCustomerReply, generateScenario, simErrorText, backendInbound } from "../../lib/wa-backend-sim";
 import { WA_SANDBOX } from "../../lib/waSandbox";
-import { FlaskIcon, DiceIcon } from "./WaIcons";
+import { FlaskIcon, DiceIcon, PhotoIcon, PlayIcon, FileIcon } from "./WaIcons";
 
 export function WaSimulator({ ctx, onClose }) {
   // The footer's line and whether it reports a failure (v18.4.5: a failure is
@@ -105,6 +105,14 @@ export function WaSimulator({ ctx, onClose }) {
     ? custKey
     : (custList.length ? custList[0].phoneKey : "");
   const custConv = custList.find((c) => c.phoneKey === effectiveKey) || null;
+  // v18.8.0: messages are listened to per conversation, so the panel watches
+  // its customer's thread itself (✨ Suggest reads its history), through the
+  // seam the inbox uses. `ctx.watchMessages` is stable while the module is on.
+  const watchMessages = ctx.watchMessages;
+  useEffect(() => {
+    if (!effectiveKey || !watchMessages) return undefined;
+    return watchMessages(effectiveKey);
+  }, [effectiveKey, watchMessages]);
 
   function custLabel(c) {
     const who = c.profileName || c.phone || c.phoneKey;
@@ -117,6 +125,21 @@ export function WaSimulator({ ctx, onClose }) {
     simulateInbound({ phone: custConv.phone || custConv.phoneKey, language: custConv.language, text: custText.trim() }, sending("customer reply, " + who));
     if (!viaBackend()) setStatus("Customer replied → " + who);
     setCustText("");
+  }
+  // v18.8.0 phase 6 — the customer sends a photo, a voice note or a PDF, with
+  // the message above as its caption (a voice note has none). Backend mode
+  // only: a message's `media` is written by the server alone, so it arrives
+  // through the real inbound path (a webhook on the DEV harness, the staff-auth
+  // /api/wa-sim-inbound online) and the file is the bundled sample of its kind.
+  function sendMediaAsCustomer(kind, what) {
+    if (!custConv) return;
+    if (!viaBackend()) { setFailure("Turn on backend mode first: only the server stores a customer's file."); return; }
+    const who = custConv.profileName || custConv.phone || custConv.phoneKey;
+    const caption = kind === "audio" ? "" : custText.trim();
+    const run = sending(what + ", " + who);
+    backendInbound({ phone: custConv.phone || custConv.phoneKey, text: caption, media: kind })
+      .then(function () { run.onBackend(null); }, function (e) { run.onBackend(e); });
+    if (caption) setCustText("");
   }
   async function suggestReply() {
     if (!custConv || suggesting) return;
@@ -253,6 +276,14 @@ export function WaSimulator({ ctx, onClose }) {
               <button className="mgt-hover-scale" onClick={sendAsCustomer} style={mkBtn({ minHeight: 40, padding: "8px 14px", background: S.accent })}>Send as customer</button>
             </div>
             <div style={{ fontSize: T.small, color: "var(--text-muted)" }}>Arrives as a real inbound (window resets, unread). Suggest reply asks Gemini to write the customer's next message — edit before sending.</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button className="mgt-hover-scale" disabled={!backendOn} onClick={() => sendMediaAsCustomer("image", "customer photo")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: S.accent, display: "inline-flex", alignItems: "center", gap: 6 })}><PhotoIcon size={IC.control} />Send a photo</button>
+              <button className="mgt-hover-scale" disabled={!backendOn} onClick={() => sendMediaAsCustomer("audio", "customer voice note")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: S.accent, display: "inline-flex", alignItems: "center", gap: 6 })}><PlayIcon size={IC.control} />Send a voice note</button>
+              <button className="mgt-hover-scale" disabled={!backendOn} onClick={() => sendMediaAsCustomer("document", "customer PDF")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: S.accent, display: "inline-flex", alignItems: "center", gap: 6 })}><FileIcon size={IC.control} />Send a PDF</button>
+            </div>
+            <div style={{ fontSize: T.small, color: "var(--text-muted)" }}>{backendOn
+              ? "The message above goes with a photo or a PDF as its caption (a voice note has none). The file is the bundled sample of its kind while sending is mock."
+              : "Backend mode only: a customer's file is stored by the server, never by this panel."}</div>
           </div>
         )}
       </Section>

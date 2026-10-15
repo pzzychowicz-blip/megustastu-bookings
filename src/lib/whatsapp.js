@@ -52,6 +52,122 @@ export function snippet(text) {
   return String(text == null ? "" : text).slice(0, WA_SNIPPET_LEN);
 }
 
+// conversationDeletePatch(keys) — the ONE write that deletes conversations
+// (v18.8.0 /code-review): each key's conversation row AND its messages, as a
+// multi-path update at the database root, so neither half can outlive the
+// other. The inbox's Delete and bulk delete were two writes, and messages left
+// without their row are out of everyone's reach: the inbox lists conversations,
+// and so does the nightly prune (api/wa-prune.js). Per key, never a whole node,
+// since the rules grant `$phoneKey` and refuse a wipe. A key that cannot be one
+// path segment is skipped: `update()` throws on . # $ [ ] and reads "/" as a
+// deeper path.
+export function conversationDeletePatch(keys) {
+  const patch = {};
+  (keys || []).forEach(function (k) {
+    if (typeof k !== "string" || !k || /[.#$[\]/]/.test(k)) return;
+    patch["conversations/" + k] = null;
+    patch["messages/" + k] = null;
+  });
+  return patch;
+}
+
+// ── Media on a message (v18.8.0) ──────────────────────────────────────────
+// A photo, a voice note or a document is stored as METADATA beside the
+// message's text, never as bytes: `media: { kind, mediaId, mime, filename?,
+// voice? }`. Meta holds the file (7 days received, 30 days sent) and
+// /api/wa-media fetches it on demand, reading the id from the STORED message,
+// never from a request. `text` keeps the caption, or a readable fallback
+// (`mediaLabel`), so a device on an older build still shows something.
+//
+// Messages are read without a whitelist and written whole by the server, and
+// the client only ever update()s a message's status, so an older build never
+// deletes this key: no SCHEMA raise (src/lib/schema.js says when one is owed).
+export const WA_MEDIA_KINDS = ["image", "audio", "document"];
+// The line every other kind gets: a video, a sticker, a location, a contact
+// card. Decided 2026-10-14: those stay on the phone.
+export const WA_OPEN_ON_PHONE = "open WhatsApp on the phone to see it";
+// Meta's media ids are digits; the simulator's are "MOCK.<kind>.<id>". The id
+// goes into a Graph API path, so anything else is not an id, and it must START
+// with a letter or digit, or ".." would be a path segment that climbs.
+const MEDIA_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+// "type/subtype", optionally with parameters ("audio/ogg; codecs=opus").
+const MIME_RE = /^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*(\s*;.*)?$/i;
+export const WA_FILENAME_LEN = 200;
+
+// sanitizeMedia(raw) — the stored shape, or null when it is not one. Optional
+// keys are OMITTED rather than undefined: RTDB refuses an undefined property
+// (the root CLAUDE.md row), on both the Admin SDK and the client.
+export function sanitizeMedia(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  if (!WA_MEDIA_KINDS.includes(raw.kind)) return null;
+  if (typeof raw.mediaId !== "string" || !MEDIA_ID_RE.test(raw.mediaId)) return null;
+  const out = { kind: raw.kind, mediaId: raw.mediaId };
+  if (typeof raw.mime === "string" && raw.mime.length <= 100 && MIME_RE.test(raw.mime)) out.mime = raw.mime;
+  // A file name is a customer's text and ends up in a response header (the
+  // download's Content-Disposition), so control characters go before it is kept.
+  const name = raw.kind === "document" && typeof raw.filename === "string"
+    ? Array.from(raw.filename).filter((ch) => ch.charCodeAt(0) > 31 && ch !== "\u007f").join("").trim().slice(0, WA_FILENAME_LEN)
+    : "";
+  if (name) out.filename = name;
+  if (raw.kind === "audio" && raw.voice === true) out.voice = true;
+  if (Number.isFinite(raw.size) && raw.size > 0) out.size = Math.round(raw.size);
+  return out;
+}
+
+// What a media message is called when there is no picture to show: the
+// fallback text, the snippet's lead, and the bubble's line once it expired.
+export function mediaLabel(media) {
+  if (!media) return "";
+  if (media.kind === "image") return "Photo";
+  if (media.kind === "audio") return media.voice ? "Voice message" : "Audio";
+  if (media.kind === "document") return media.filename ? "Document: " + media.filename : "Document";
+  return "";
+}
+// The conversation list's line for a media message: the label, then the
+// caption when there is one.
+export function mediaSnippet(media, caption) {
+  const label = mediaLabel(media);
+  const c = String(caption == null ? "" : caption).trim();
+  return c ? label + " · " + c : label;
+}
+
+// A file's size as a person reads it: "820 KB", "2.4 MB". Bytes under a KB
+// read "1 KB"; an unknown size reads "". Through `countLabel`, so the number
+// and its unit never break apart.
+export function fileSizeLabel(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  if (n < 1024 * 1024) return countLabel(Math.max(1, Math.round(n / 1024)), "KB");
+  return countLabel(Math.round(n / (1024 * 1024) * 10) / 10, "MB");
+}
+
+// ── Sending a photo or a PDF (v18.8.0) ─────────────────────────────────────
+// What staff may send, by its type, and the kind each becomes. The composer
+// sends every photo as a JPEG it has shrunk (so its location data is gone too);
+// the server also takes a PNG, and nothing else.
+export const WA_SEND_TYPES = { "image/jpeg": "image", "image/png": "image", "application/pdf": "document" };
+export function sendKindOf(mime) {
+  const base = String(mime || "").split(";")[0].trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(WA_SEND_TYPES, base) ? WA_SEND_TYPES[base] : null;
+}
+// Vercel refuses a request body over 4.5 MB before the function runs, so the
+// file is held under it with room to spare. In binary units, as `fileSizeLabel`
+// prints it: "4.2 MB".
+export const WA_SEND_MAX_BYTES = Math.floor(4.2 * 1024 * 1024);
+// Meta's limit on a photo's or a document's caption.
+export const WA_CAPTION_MAX = 1024;
+
+// How a media message's file can still be fetched: Meta keeps a RECEIVED file
+// 7 days and one the business SENT 30 (the go-live plan's § A4). Computed from
+// the message's own `ts`, so an expired bubble says so without a request.
+export const WA_MEDIA_KEEP_IN_MS = 7 * 24 * 60 * 60 * 1000;
+export const WA_MEDIA_KEEP_OUT_MS = 30 * 24 * 60 * 60 * 1000;
+export function mediaExpired(msg, now) {
+  if (!msg || !msg.media) return false;
+  const keep = msg.direction === "out" ? WA_MEDIA_KEEP_OUT_MS : WA_MEDIA_KEEP_IN_MS;
+  return !(Number(msg.ts) > 0) || (now == null ? Date.now() : now) - msg.ts > keep;
+}
+
 // How long the big "✓ Booking confirmed" banner stays before it dismisses
 // itself (ConversationView's timer). The ✕ still dismisses it immediately, and
 // a new inbound message clears acceptedBadgeDismissedAt so it re-surfaces —
@@ -102,6 +218,75 @@ export const AUTO_ACK_TEXT = {
   en: "Thanks for your message! We'll get back to you shortly.",
   es: "¡Gracias por su mensaje! Le contestaremos en breve.",
 };
+
+// ── v18.8.0 phase 8: "Suggest these" ────────────────────────────────────────
+// The reply the draft card offers when a request does not fit (or lands on the
+// kitchen's busiest quarter): written in code, put into the reply box and
+// NEVER sent, so staff read and send it themselves. Spanish takes the formal
+// register of the templates and the auto-reply above ("le", "su"). A language
+// the app has no text for gets English; no language at all gets Spanish, as
+// the template chips do.
+//   reason   "full" (no table) · "kitchen" (a table, but the kitchen is at its
+//            limit) · "hours" (outside opening hours)
+//   alts     the times on the card's chips, in clock order
+//   waitlist offer the waitlist too (only meaningful with "full"), or, as
+//            "added", say the customer is on it already
+const DAYS_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const DAYS_ES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MONTHS_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+// "Friday 16 October" / "viernes 16 de octubre". A date that is not ISO is
+// returned as it came: the reply is a suggestion, and staff will see it.
+export function spokenDay(iso, lang) {
+  const m = typeof iso === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso) : null;
+  if (!m) return String(iso || "");
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  const day = dt.getUTCDate();
+  return lang === "es"
+    ? DAYS_ES[dt.getUTCDay()] + " " + day + " de " + MONTHS_ES[dt.getUTCMonth()]
+    : DAYS_EN[dt.getUTCDay()] + " " + day + " " + MONTHS_EN[dt.getUTCMonth()];
+}
+
+function joinOr(items, lang) {
+  if (items.length <= 1) return items.join("");
+  return items.slice(0, -1).join(", ") + (lang === "es" ? " o " : " or ") + items[items.length - 1];
+}
+
+export function availabilityReply(lang, o) {
+  const es = (lang || "es") === "es";
+  const alts = (o && o.alts) || [];
+  const day = spokenDay(o.date, es ? "es" : "en");
+  const size = Number(o.size);
+  if (es) {
+    const las = alts.map(function (t) { return "las " + t; });
+    if (o.reason === "kitchen") {
+      return "A las " + o.time + " del " + day + " tenemos la cocina muy llena. ¿Le iría bien "
+        + joinOr(alts.map(function (t) { return "a las " + t; }), "es") + "?";
+    }
+    if (o.reason === "hours") {
+      return "Lo sentimos, no aceptamos reservas a las " + o.time + "."
+        + (alts.length ? " El " + day + " podemos ofrecerle " + joinOr(las, "es") + "." : "");
+    }
+    let s = "Lo sentimos, no tenemos mesa para " + size + " a las " + o.time + " del " + day + ".";
+    if (alts.length) s += " Podemos ofrecerle " + joinOr(las, "es") + ".";
+    if (o.waitlist === "added") s += " Le hemos apuntado en la lista de espera y le avisaremos si se libera una mesa.";
+    else if (o.waitlist) s += (alts.length ? " Si lo prefiere," : " Si lo desea,") + " le apuntamos en la lista de espera y le avisamos si se libera una mesa.";
+    return s;
+  }
+  if (o.reason === "kitchen") {
+    return "At " + o.time + " on " + day + " our kitchen is at its busiest. Would " + joinOr(alts, "en") + " suit you instead?";
+  }
+  if (o.reason === "hours") {
+    return "Sorry, we don't take bookings at " + o.time + "."
+      + (alts.length ? " On " + day + " we could offer " + joinOr(alts, "en") + "." : "");
+  }
+  let s = "Sorry, we have no table for " + size + " at " + o.time + " on " + day + ".";
+  if (alts.length) s += " We could offer " + joinOr(alts, "en") + ".";
+  if (o.waitlist === "added") s += " We've put you on our waitlist and will let you know if a table frees up.";
+  else if (o.waitlist) s += (alts.length ? " Or we can" : " We can") + " put you on our waitlist and let you know if a table frees up.";
+  return s;
+}
 
 // Phone-identity primitives — complementarity contract (applied at the v16.0.0
 // prod sync): `src/lib/customers.js` is now the ONE home of normalizePhone /

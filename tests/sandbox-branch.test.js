@@ -57,6 +57,21 @@ describe("the generated sandbox branch", () => {
     expect(wf).toContain("grep -qxF '" + INCLUDE + "' .vercelignore");
   });
 
+  // v18.8.0 phase 7: the nightly prune is NOT simulator tooling. It deploys to
+  // both projects (each prunes its own database), so no ignore line may catch it,
+  // and its cron must name a function that exists.
+  it("every cron names a function that main deploys", () => {
+    const crons = JSON.parse(read("vercel.json")).crons || [];
+    expect(crons.map((c) => c.path)).toEqual(["/api/wa-prune"]);
+    const ignored = rules(read(".vercelignore")).map((l) => new RegExp("^" + l.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*") + "$"));
+    for (const c of crons) {
+      const file = c.path.replace(/^\//, "") + ".js";
+      expect(read(file).length, file).toBeGreaterThan(0);
+      expect(ignored.filter((re) => re.test(file)).map(String), file + " is excluded from the deployment").toEqual([]);
+      expect(c.schedule).toBe("0 4 * * *");
+    }
+  });
+
   it("the workflow builds from main and pushes `sandbox`, and only `sandbox`", () => {
     const wf = read(".github/workflows/sandbox.yml");
     expect(wf).toMatch(/ref: main\n/);

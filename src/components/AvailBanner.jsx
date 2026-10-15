@@ -26,6 +26,32 @@ import { R, T, FW } from "../lib/constants";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { AlertIcon } from "./Icons";
 
+// v18.8.0 phase 8: ONE time to pick, shared with the WhatsApp draft card, where
+// a tap accepts the request at that time. It was a `<span>` with an onClick
+// here, so no keyboard could reach a suggested time; a `<button>` is focusable,
+// is pressed by Enter and Space, and wears the app's press dip. Its look is the
+// span's, declaration for declaration: `index.css` gives a button the app's
+// font, and every property a button's UA style would change is set inline.
+export function TimeChip({ time, onPick }) {
+  return (
+    <button
+      type="button"
+      className="mgt-hover-scale"
+      onClick={() => onPick(time)}
+      style={{
+        cursor: "pointer", padding: "2px 8px", borderRadius: R.pill,
+        fontWeight: FW.semi, fontSize: T.body,
+        background: "var(--suggest-bg)",
+        color: "var(--success-text)",
+        border: "1px solid var(--suggest-border)",
+        boxShadow: "var(--shadow-btn)"
+      }}
+    >
+      {time}
+    </button>
+  );
+}
+
 export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
   const message = msg || "No tables available.";
   const hasEarlier = sugg && sugg.earlier && sugg.earlier.length > 0;
@@ -36,23 +62,7 @@ export function AvailBanner({ msg, sugg, style, onTapTime, warn }) {
     if (!onTapTime) return arr.join(", ");
     return (
       <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
-        {arr.map((t) => (
-          <span
-            key={t}
-            className="mgt-hover-scale"
-            onClick={() => onTapTime(t)}
-            style={{
-              cursor: "pointer", padding: "2px 8px", borderRadius: R.pill,
-              fontWeight: FW.semi, fontSize: T.body,
-              background: "var(--suggest-bg)",
-              color: "var(--success-text)",
-              border: "1px solid var(--suggest-border)",
-              boxShadow: "var(--shadow-btn)"
-            }}
-          >
-            {t}
-          </span>
-        ))}
+        {arr.map((t) => <TimeChip key={t} time={t} onPick={onTapTime} />)}
       </span>
     );
   }

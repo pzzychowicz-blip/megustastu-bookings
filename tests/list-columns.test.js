@@ -126,9 +126,15 @@ describe("one text measure", () => {
         else if (/\.(js|jsx)$/.test(e.name)) files.push(p);
       }
     })(SRC);
-    const hits = files.filter((f) => /measureText\(|getContext\(/.test(stripComments(readFileSync(f, "utf8")).join("\n")))
+    const read = (f) => stripComments(readFileSync(f, "utf8")).join("\n");
+    // v18.8.0: the reply composer's photo shrink draws a PICTURE on a canvas
+    // (re-encoding a photo before it is sent), which is not a text measure. It
+    // is named here so a second canvas still fails, and it may never measure.
+    const DRAWS = ["lib/wa-attach.js"];
+    const hits = files.filter((f) => /measureText\(|getContext\(/.test(read(f)))
       .map((f) => f.slice(SRC.length + 1));
-    expect(hits).toEqual(["components/atoms.jsx"]);
+    expect(hits.filter((h) => !DRAWS.includes(h))).toEqual(["components/atoms.jsx"]);
+    for (const f of DRAWS) expect(read(join(SRC, f)), f).not.toMatch(/measureText\(/);
     expect(Atoms).toMatch(/export function textWidth\(label, weight, size, family\) \{/);
   });
 });

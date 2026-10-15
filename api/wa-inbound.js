@@ -10,7 +10,8 @@
 //          separate /api/wa-status function (deviation from the Phase 1a list,
 //          documented in the sandbox summary): Meta only ever calls ONE url.
 //
-// Flow per inbound text message (TWO PHASES since the async-parse change):
+// Flow per inbound message (TWO PHASES since the async-parse change; a photo,
+// voice note or document since v18.8.0 too — see inboundContent):
 //   PHASE A (before the response): raw body → HMAC verify (X-Hub-Signature-256;
 //   WA_ALLOW_UNSIGNED=1 skips it on the local harness) → normalize → wamid
 //   dedupe → inbound-core.processInbound with parse=null (conversation upsert +
@@ -36,7 +37,7 @@
 import { env } from "./_lib/env.js";
 import { verifySignature } from "./_lib/meta.js";
 import { parseMessage, mockParse } from "./_lib/gemini.js";
-import { processInbound, applyParse } from "./_lib/inbound-core.js";
+import { processInbound, applyParse, inboundContent } from "./_lib/inbound-core.js";
 import { updateMessageStatusByWamid, readOperatingHours, getConversation } from "./_lib/rtdb.js";
 import { normalizePhone, isPhoneKey } from "../src/lib/whatsapp.js";
 
@@ -95,6 +96,11 @@ export function inboundTs(raw) {
   if (!Number.isFinite(ms) || ms <= 0) return now;
   return Math.min(ms, now);
 }
+
+// inboundContent(m) — what one webhook message becomes: moved to
+// _lib/inbound-core.js in v18.8.0 phase 6, where the simulator's media messages
+// take the same road. Re-exported here, where its tests import it.
+export { inboundContent };
 
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
@@ -170,10 +176,10 @@ export default async function handler(req, res) {
         // ── Inbound messages (phase A: store fast, parse later) ───────────
         for (const m of Array.isArray(value.messages) ? value.messages : []) {
           try {
-            // Text only for now (Phase 3 covers media); non-text becomes a
-            // placeholder message with no draft (and no parse job).
-            const isText = m.type === "text" && m.text;
-            const text = isText ? m.text.body : "[" + (m.type || "unsupported") + " message]";
+            // v18.8.0: a photo, a voice note or a document is stored with its
+            // media; a caption is parsed like a text (see inboundContent).
+            const content = inboundContent(m);
+            const willParse = content.parseText !== null;
             const phone = "+" + String(m.from || "").replace(/^\+/, "");
             const ts = inboundTs(m.timestamp);
             // Read the conversation ONCE: a PENDING draft (draftStatus "parsed")
@@ -184,20 +190,22 @@ export default async function handler(req, res) {
             const conv = await getConversation(normalizePhone(phone));
             const existingDraft = conv && conv.draftStatus === "parsed" ? conv.draftData : null;
             const r = await processInbound({
-              phone, text, ts,
+              phone, text: content.text, ts,
+              media: content.media,
+              snippetText: content.snippet,
               wamid: m.id || null,
               profileName: profileByWaId[m.from] || null,
               parse: null, // the LLM runs in phase B, after the response
               // Auto-ack language before the LLM has run: the mock parser's
               // regex detection is free and good enough for a two-line ack.
-              langHint: isText ? mockParse(text).language : null,
+              langHint: willParse ? mockParse(content.parseText).language : null,
               preloadedConv: conv,
-              willParse: isText, // flag "analyzing…" only for messages we'll parse
+              willParse, // flag "analyzing…" only for messages we'll parse
             });
             if (r.skipped) results.skipped++;
             else {
               results.messages++;
-              if (isText) parseJobs.push({ phoneKey: r.phoneKey, text, existingDraft, ts });
+              if (willParse) parseJobs.push({ phoneKey: r.phoneKey, text: content.parseText, existingDraft, ts });
             }
           } catch (e) {
             results.errors++;

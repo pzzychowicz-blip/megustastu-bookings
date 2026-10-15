@@ -152,7 +152,8 @@ function sanitisers() {
 }
 
 const PINNED = {
-  schema: 2,
+  // 3: v18.8.0, `settings/admin.waRetentionDays` (sanitizeAdminSettings).
+  schema: 3,
   prints: {
       "hooks/useBookingDefaults.js:sanitizeTiers": "8d1b9808c9",
       "hooks/useBookingDefaults.js:sanitizeBookingDefaults": "7a6d45c5c4",
@@ -165,7 +166,7 @@ const PINNED = {
       "hooks/useOptimizerSettings.js:sanitizeOptimizer": "74794693a2",
       "hooks/useRecurring.js:sanitizeRule": "b047ce1ebe",
       "hooks/useRecurring.js:sanitizeRecurring": "9f3c9986fd",
-      "hooks/useRoles.js:sanitizeAdminSettings": "97b57e7524",
+      "hooks/useRoles.js:sanitizeAdminSettings": "42a2f8f352",
       "hooks/useUserPrefs.js:sanitizeUserPrefs": "fb820d1b7b",
       "hooks/useVoucherDefaults.js:sanitizeVoucherDefaults": "7abe4b008f",
       "hooks/useWaSettings.js:sanitizeWa": "2cbe5d8113",
@@ -183,6 +184,11 @@ const PINNED = {
       "lib/tags.js:sanitizeTagList": "5efb78d18b",
       "lib/vouchers.js:sanitizeVoucher": "ef3e67ad4b",
       "lib/vouchers.js:sanitizeVouchers": "371d5b2c85",
+      // v18.8.0: added WITHOUT a SCHEMA raise, the one case the note above does
+      // not cover. It is the server's check on what it WRITES (a message's
+      // `media`), never a reader's whitelist: messages are read whole and the
+      // client only update()s a status, so no build can drop the key.
+      "lib/whatsapp.js:sanitizeMedia": "a8c7408304",
       "lib/whatsapp.js:sanitizeParse": "b8f1f1273a",
       "BOOKING_FIELDS": "id,name,phone,date,time,scheduledTime,size,duration,originalDuration,preference,notes,status,tables,customDur,_manual,_locked,_conflict,preferredTables,returnOf,history,noShow,deposit,voucherCode,recurringId,recurringDate,anonymized,guestId,stayedMin,updatedAt,tags,guestTags,guestTagsAt"
   },

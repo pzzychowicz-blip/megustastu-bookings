@@ -62,6 +62,7 @@ import { retentionDaysOf, DEFAULT_RETENTION_DAYS } from "../lib/activity";
 export const DEFAULT_ADMIN_SETTINGS = {
   v: 1, enforceRoles: false, modules: DEFAULT_MODULES,
   activityRetentionDays: DEFAULT_RETENTION_DAYS,
+  waRetentionDays: DEFAULT_RETENTION_DAYS,
 };
 
 export function sanitizeAdminSettings(s) {
@@ -105,6 +106,13 @@ export function sanitizeAdminSettings(s) {
     // have pruned eleven months of the log on the next admin who opened it.
     // `retentionDaysOf` is the one normaliser all three call sites now share.
     activityRetentionDays: retentionDaysOf(src.activityRetentionDays),
+    // v18.8.0 phase 7: how long WhatsApp messages are kept. api/wa-prune.js
+    // reads it every night through the SAME normaliser (`lib/retention.js`), so
+    // the screen and the delete cannot disagree, and an absent, null or 0 value
+    // is the shipped year, never the minimum. A new key on this whitelist, so
+    // SCHEMA went 2 → 3: a build without it rewrites `settings/admin` whole and
+    // the setting is gone.
+    waRetentionDays: retentionDaysOf(src.waRetentionDays),
   };
 }
 
@@ -437,6 +445,12 @@ export function useRoles({ uid, userEmail, setWriteWarning }) {
       "Couldn't change the log's retention — you may not have permission, or another device changed it first.");
   }, [writeAdmin]);
 
+  // ── How long WhatsApp messages are kept (v18.8.0) ─────────────────────────
+  const setWaRetention = useCallback(function (days) {
+    return writeAdmin({ waRetentionDays: days },
+      "Couldn't change how long WhatsApp messages are kept — you may not have permission, or another device changed it first.");
+  }, [writeAdmin]);
+
   // ── The module registry ───────────────────────────────────────────────────
   // `withModule` applies one switch to the stored map, so an admin turning
   // WhatsApp on does not restate what vouchers is set to.
@@ -456,6 +470,7 @@ export function useRoles({ uid, userEmail, setWriteWarning }) {
   return {
     can, isAdmin, myEntry, enforceRoles, setEnforceRoles,
     activityRetentionDays: adminSettings.activityRetentionDays, setActivityRetention,
+    waRetentionDays: adminSettings.waRetentionDays, setWaRetention,
     modules, hasModule, setModuleEnabled,
     roles, invites, rows, rolesReady: ready,
     setRole, setCapability, removeUser, inviteUser, withdrawInvite, applyInvite,

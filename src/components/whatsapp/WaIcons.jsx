@@ -214,3 +214,48 @@ export function DiceIcon({ size = IC.chrome, color = "currentColor" }) {
     </Svg>
   );
 }
+
+// ── v18.8.0: media ───────────────────────────────────────────────────────────
+// PaperclipIcon — the composer's "attach a photo or a PDF" (phase 5).
+export function PaperclipIcon({ size = IC.chrome, color = "currentColor" }) {
+  return (
+    <Svg size={size} color={color}>
+      <path d="M20 11.5 12.3 19.2a5 5 0 0 1-7.1-7.1l8-8a3.4 3.4 0 0 1 4.8 4.8l-8 8a1.7 1.7 0 0 1-2.4-2.4l7.3-7.3" />
+    </Svg>
+  );
+}
+
+// FileIcon — a document a customer sent or was sent: a page with its corner
+// folded and NO text lines, so it is not TemplatesIcon (a page of text that
+// inserts a template) on the same thread.
+export function FileIcon({ size = IC.chrome, color = "currentColor" }) {
+  return (
+    <Svg size={size} color={color}>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+    </Svg>
+  );
+}
+
+// PlayIcon — play a voice note. A stroked triangle with round joins, the set's
+// no-fill style; its centre of mass sits right of the box's, so it is nudged
+// left (x 7–19) to look centred in a round button.
+export function PlayIcon({ size = IC.chrome, color = "currentColor" }) {
+  return (
+    <Svg size={size} color={color}>
+      <path d="M8 5.2v13.6a.8.8 0 0 0 1.2.7l10.6-6.8a.8.8 0 0 0 0-1.4L9.2 4.5a.8.8 0 0 0-1.2.7z" />
+    </Svg>
+  );
+}
+
+// PhotoIcon — where a photo will be, while it loads or once it is gone: a frame
+// with a hill and a sun, the picture-of-a-picture every platform uses.
+export function PhotoIcon({ size = IC.chrome, color = "currentColor" }) {
+  return (
+    <Svg size={size} color={color}>
+      <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+      <circle cx="9" cy="10" r="1.8" />
+      <path d="m21 16-4.5-4.5L8 19.5" />
+    </Svg>
+  );
+}

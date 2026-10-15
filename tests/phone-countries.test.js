@@ -454,8 +454,20 @@ describe("Add to waitlist takes the phone the way Save does (v18.2.0 phase 80)",
     expect(save).toMatch(/draftForSave\(/);
     expect(App).not.toMatch(/Choose the country code/);
     expect(App).not.toMatch(/withTypedCode|phoneHasCode/);
-    expect(App.match(/phoneForSave\(/g)).toHaveLength(1);
+    // v18.8.0 phase 8: twice — the WhatsApp draft's Add to waitlist is the
+    // second waitlist door, and asks the same helper (pinned below).
+    expect(App.match(/phoneForSave\(/g)).toHaveLength(2);
     expect(read("src", "lib", "booking-save.js").match(/phoneForSave\(/g)).toHaveLength(1);
+  });
+  // v18.8.0 phase 8: the WhatsApp draft's door takes the phone the same way,
+  // refusing BEFORE the write and storing the checked number.
+  it("the WhatsApp draft's Add to waitlist asks the same helper, before it writes", () => {
+    const wa = App.slice(App.indexOf("function addDraftToWaitlist(conv){"), App.indexOf("function addFormToWaitlist(){"));
+    expect(wa).toMatch(/const phoneRule=phoneForSave\(p\.phone,generalSettings\.pinnedCountries,generalSettings\.phonePrefix,false\);/);
+    expect(wa).toMatch(/if\(phoneRule\.refusal\)return phoneRule\.refusal;/);
+    expect(wa.indexOf("phoneRule.refusal")).toBeLessThan(wa.indexOf("addToWaitlist("));
+    expect(wa).toMatch(/phone:cleanPhoneOf\(phoneRule\.phone\)/);
+    expect(wa.indexOf('refused("waitlistManage")')).toBeLessThan(wa.indexOf("phoneForSave("));
   });
 });
 

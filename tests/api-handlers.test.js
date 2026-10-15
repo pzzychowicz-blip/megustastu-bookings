@@ -14,13 +14,26 @@
 // `parseThread` (the recheck's LLM read of a thread); `parseMessage` runs in
 // its mock mode, and `sendText` in its mock mode except where the live half is
 // the subject, with `fetch` stubbed.
+//
+// v18.8.0 adds the four handlers it did not run: `wa-inbound` (the webhook,
+// read from a raw byte stream so its HMAC sees what Meta signed) and the three
+// `wa-sim-*` endpoints (the 404 kill switch, then the shared method and auth
+// gate, then their own 400s).
+//
+// And `wa-media` both ways: viewing a stored file (phase 4) and sending a photo
+// or a PDF (phase 5), the second also against checklist A4-5 — one Graph
+// `/messages` call per send, the caption inside it.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import crypto from "node:crypto";
 import { Buffer } from "node:buffer";
+import { Readable, Writable } from "node:stream";
+import { readFileSync } from "node:fs";
 
 const fake = vi.hoisted(() => {
-  const state = { tree: {}, writes: [] };
+  // `failWrite(op, path)` → true makes that write throw (a database error the
+  // code under test has to survive), before anything is changed.
+  const state = { tree: {}, writes: [], queries: [], failWrite: null, noIndex: false };
   const parts = (p) => p.split("/").filter(Boolean);
   const read = (p) => parts(p).reduce((n, k) => (n != null && typeof n === "object" ? n[k] : undefined), state.tree);
   const write = (p, v) => {
@@ -30,13 +43,51 @@ const fake = vi.hoisted(() => {
     const last = ks[ks.length - 1];
     if (v === null || v === undefined) delete n[last]; else n[last] = v;
   };
+  const snapOf = (v) => ({ exists: () => v !== undefined && v !== null, val: () => (v === undefined ? null : v) });
   const db = {
     ref: (path) => ({
-      get: async () => { const v = read(path); return { exists: () => v !== undefined && v !== null, val: () => (v === undefined ? null : v) }; },
-      set: async (v) => { state.writes.push({ op: "set", path, value: v }); write(path, v); },
+      get: async () => snapOf(read(path)),
+      // v18.8.0 /code-review (api/wa-prune.js): `orderByChild(k).endAt(v)`,
+      // as RTDB orders it for this use: a child with no number at `k` (null)
+      // sorts first and is kept, a string sorts after every number and is not.
+      // Each query is recorded, so a test can see what the prune asked for.
+      orderByChild: (k) => ({
+        endAt: (end) => ({
+          get: async () => {
+            state.queries.push({ path, orderByChild: k, endAt: end });
+            // What the server answers a get() on a query it has no index for.
+            if (state.noIndex) throw new Error('Index not defined, add ".indexOn": "' + k + '", for path "/' + path + '", to the rules');
+            const node = read(path);
+            if (node == null || typeof node !== "object") return snapOf(undefined);
+            const out = {};
+            Object.keys(node).forEach((id) => {
+              const v = node[id] != null && typeof node[id] === "object" ? node[id][k] : undefined;
+              if (v === undefined || v === null || (typeof v === "number" && v <= end)) out[id] = node[id];
+            });
+            return snapOf(Object.keys(out).length ? out : undefined);
+          },
+        }),
+      }),
+      set: async (v) => {
+        if (state.failWrite && state.failWrite("set", path)) throw new Error("database unavailable");
+        state.writes.push({ op: "set", path, value: v }); write(path, v);
+      },
       update: async (patch) => {
+        if (state.failWrite && state.failWrite("update", path)) throw new Error("database unavailable");
         state.writes.push({ op: "update", path, value: patch });
         Object.keys(patch).forEach((k) => write(path + "/" + k, patch[k]));
+      },
+      // v18.8.0 phase 7 (api/wa-prune.js). The real SDK may first call `fn`
+      // with null and retry with the stored value; this calls it once, with
+      // the stored value, which is the call that decides.
+      transaction: async (fn) => {
+        if (state.failWrite && state.failWrite("transaction", path)) throw new Error("database unavailable");
+        const cur = read(path);
+        const next = fn(cur === undefined ? null : cur);
+        if (next === undefined) return { committed: false, snapshot: { exists: () => cur != null, val: () => cur } };
+        state.writes.push({ op: "transaction", path, value: next });
+        write(path, next);
+        return { committed: true, snapshot: { exists: () => next != null, val: () => next } };
       },
     }),
   };
@@ -60,10 +111,18 @@ vi.mock("../api/_lib/gemini.js", async (orig) => Object.assign({}, await orig(),
 import sendHandler from "../api/wa-send.js";
 import recheckHandler from "../api/wa-recheck.js";
 import configHandler from "../api/wa-config.js";
+import inboundHandler, { inboundContent } from "../api/wa-inbound.js";
+import simInboundHandler from "../api/wa-sim-inbound.js";
+import simSuggestHandler from "../api/wa-sim-suggest.js";
+import simGenerateHandler from "../api/wa-sim-generate.js";
+import mediaHandler, { MEDIA_VIEW_MAX, servedType, sniffType } from "../api/wa-media.js";
+import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "../api/wa-prune.js";
+import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
-import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT } from "../src/lib/whatsapp.js";
+import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX } from "../src/lib/whatsapp.js";
+import { simMediaMessage } from "../src/lib/wa-mock-media.js";
 
 // A request as Vercel hands it over (the body already parsed) and a response
 // that records the one answer a handler gives.
@@ -80,9 +139,13 @@ const openConv = (extra) => Object.assign({ phoneKey: KEY, phone: KEY, windowExp
 beforeEach(() => {
   fake.state.tree = {};
   fake.state.writes = [];
+  fake.state.queries = [];
+  fake.state.failWrite = null;
+  fake.state.noIndex = false;
   vi.stubEnv("FIREBASE_SERVICE_ACCOUNT", '{"project_id":"test"}');
   ["WA_STAFF_EMAILS", "WA_SEND_MODE", "WA_LLM_MODE", "WA_DB_URL", "WA_ALLOW_UNSIGNED", "WA_SIM_ENABLED",
     "META_APP_SECRET", "META_WA_TOKEN", "META_PHONE_NUMBER_ID", "META_VERIFY_TOKEN", "GEMINI_API_KEY", "GEMINI_MODEL", "TENANT_WA_CONTEXT",
+    "CRON_SECRET",
   ].forEach((k) => vi.stubEnv(k, ""));
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -96,6 +159,8 @@ describe.each([
   ["wa-send", sendHandler, "POST", "GET"],
   ["wa-recheck", recheckHandler, "POST", "GET"],
   ["wa-config", configHandler, "GET", "POST"],
+  ["wa-media", mediaHandler, "GET", "PUT"],
+  ["wa-media (send)", mediaHandler, "POST", "PUT"],
 ])("%s — method and staff auth", (name, handler, method, wrong) => {
   it("answers 405 to the wrong method, before anything else", async () => {
     const res = await call(handler, { method: wrong, token: "staff" });
@@ -317,7 +382,7 @@ describe("wa-config", () => {
     vi.stubEnv("META_VERIFY_TOKEN", "   "); // present: a blank-looking value is still a value
     const res = await config();
     expect(res.statusCode).toBe(200);
-    expect(res.body.set).toMatchObject({ GEMINI_API_KEY: true, FIREBASE_SERVICE_ACCOUNT: true, META_WA_TOKEN: false, META_VERIFY_TOKEN: true, WA_STAFF_EMAILS: false });
+    expect(res.body.set).toMatchObject({ GEMINI_API_KEY: true, FIREBASE_SERVICE_ACCOUNT: true, META_WA_TOKEN: false, META_VERIFY_TOKEN: true, WA_STAFF_EMAILS: false, CRON_SECRET: false });
     expect(Object.values(res.body.set).every((v) => typeof v === "boolean")).toBe(true);
     expect(JSON.stringify(res.body)).not.toContain("secret-key-value");
   });
@@ -396,12 +461,43 @@ describe("processInbound", () => {
     expect(convAt(KEY).lastMessageSnippet.length).toBe(200);
   });
 
-  it("a failed auto-ack does not lose the customer's message", async () => {
+  it("a failed auto-ack does not lose the customer's message, and hands its claim back", async () => {
     vi.stubEnv("WA_SEND_MODE", "live"); // live with no token: sendText throws
     const r = await processInbound({ phone: KEY, text: "Hola", ts: TS, wamid: "wamid.G" });
     expect(r.skipped).toBe(false);
     expect(msgsAt(KEY).map((m) => m.direction)).toEqual(["in"]);
+    expect(convAt(KEY).autoAckSent).toBe(false);
+    // The claim is written BEFORE the send (two quick inbounds must not both
+    // ack), then released: the order of the two writes is the contract.
+    const claims = fake.state.writes.filter((w) => w.op === "update" && "autoAckSent" in w.value).map((w) => w.value.autoAckSent);
+    expect(claims).toEqual([true, false]);
+  });
+
+  it("the next inbound after a failed auto-ack sends it, once", async () => {
+    vi.stubEnv("WA_SEND_MODE", "live");
+    await processInbound({ phone: KEY, text: "Hola", ts: TS, wamid: "wamid.H1" });
+    vi.stubEnv("WA_SEND_MODE", "mock"); // the provider is back
+    await processInbound({ phone: KEY, text: "¿Hola?", ts: TS + 60000, wamid: "wamid.H2" });
+    expect(msgsAt(KEY).map((m) => [m.direction, !!m.isAutoAck])).toEqual([["in", false], ["in", false], ["out", true]]);
     expect(convAt(KEY).autoAckSent).toBe(true);
+    await processInbound({ phone: KEY, text: "gracias", ts: TS + 120000, wamid: "wamid.H3" });
+    expect(msgsAt(KEY).filter((m) => m.isAutoAck).length).toBe(1);
+  });
+
+  it("an auto-ack that was sent keeps its claim even if its bubble cannot be stored", async () => {
+    const realSet = fake.db.ref;
+    fake.db.ref = (path) => {
+      const r = realSet(path);
+      if (/\/ack/.test(path)) r.set = async () => { throw new Error("write refused"); };
+      return r;
+    };
+    try {
+      await processInbound({ phone: KEY, text: "Hola", ts: TS, wamid: "wamid.I" });
+    } finally {
+      fake.db.ref = realSet;
+    }
+    expect(convAt(KEY).autoAckSent).toBe(true);
+    expect(msgsAt(KEY).map((m) => m.direction)).toEqual(["in"]);
   });
 });
 
@@ -500,5 +596,874 @@ describe("sendText", () => {
     await expect(sendText(KEY, "hi")).rejects.toThrow("Invalid OAuth access token");
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500, json: async () => { throw new Error("not json"); } })));
     await expect(sendText(KEY, "hi")).rejects.toThrow("Graph API error 500");
+  });
+});
+
+// ── api/wa-inbound.js — the webhook (v18.8.0) ────────────────────────────────
+// A request whose body is a byte STREAM, as Vercel hands this handler over
+// (`bodyParser: false`), and a response that also records `send`.
+function rawCall(handler, { method = "POST", body = "", headers = {}, query } = {}) {
+  const req = Readable.from(body ? [Buffer.from(body)] : []);
+  Object.assign(req, { method, headers, query: query || {} });
+  const res = {
+    statusCode: null, body: null,
+    status(c) { this.statusCode = c; return this; },
+    json(b) { this.body = b; return this; },
+    send(b) { this.body = b; return this; },
+  };
+  return handler(req, res).then(() => res);
+}
+const SECRET = "s3cret";
+const hmac = (raw, secret = SECRET) => "sha256=" + crypto.createHmac("sha256", secret).update(raw).digest("hex");
+const webhook = (value) => JSON.stringify({
+  object: "whatsapp_business_account",
+  entry: [{ id: "WABA", changes: [{ field: "messages", value: Object.assign({ messaging_product: "whatsapp" }, value) }] }],
+});
+const nowSecs = () => String(Math.floor(Date.now() / 1000));
+const inMsg = (extra) => Object.assign({ from: "34600111222", id: "wamid.IN1", timestamp: nowSecs() }, extra);
+// Posts a payload signed with the app secret; `raw` overrides the bytes.
+const deliver = (value, { raw, headers } = {}) => {
+  const body = raw !== undefined ? raw : webhook(value);
+  return rawCall(inboundHandler, { body, headers: Object.assign({ "x-hub-signature-256": hmac(body) }, headers) });
+};
+const inbound = () => msgsAt(KEY).filter((m) => m.direction === "in");
+
+// The phase-B parse is registered through Vercel's request-context waitUntil;
+// the stub collects what was scheduled so a test can wait for it.
+const REQ_CTX = Symbol.for("@vercel/request-context");
+let scheduled;
+beforeEach(() => {
+  scheduled = [];
+  globalThis[REQ_CTX] = { get: () => ({ waitUntil: (p) => scheduled.push(p) }) };
+});
+afterEach(() => { delete globalThis[REQ_CTX]; });
+
+describe("wa-inbound — the handshake, the method, the signature", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("GET echoes hub.challenge only for subscribe with the configured verify token", async () => {
+    vi.stubEnv("META_VERIFY_TOKEN", "vt");
+    const q = (mode, token) => ({ "hub.mode": mode, "hub.verify_token": token, "hub.challenge": "1234" });
+    const ok = await rawCall(inboundHandler, { method: "GET", query: q("subscribe", "vt") });
+    expect([ok.statusCode, ok.body]).toEqual([200, "1234"]);
+    expect((await rawCall(inboundHandler, { method: "GET", query: q("subscribe", "nope") })).statusCode).toBe(403);
+    expect((await rawCall(inboundHandler, { method: "GET", query: q("unsubscribe", "vt") })).statusCode).toBe(403);
+  });
+  it("GET refuses every token when none is configured, the empty one included", async () => {
+    const res = await rawCall(inboundHandler, { method: "GET", query: { "hub.mode": "subscribe", "hub.verify_token": "", "hub.challenge": "1" } });
+    expect(res.statusCode).toBe(403);
+  });
+  it("answers 405 to anything but GET and POST", async () => {
+    expect((await rawCall(inboundHandler, { method: "PUT" })).statusCode).toBe(405);
+  });
+  it("answers 401 to a missing signature, a wrong secret and bytes changed after signing, and writes nothing", async () => {
+    const body = webhook({ messages: [inMsg({ type: "text", text: { body: "hola" } })] });
+    expect((await rawCall(inboundHandler, { body })).statusCode).toBe(401);
+    expect((await rawCall(inboundHandler, { body, headers: { "x-hub-signature-256": hmac(body, "other") } })).statusCode).toBe(401);
+    expect((await rawCall(inboundHandler, { body: body + " ", headers: { "x-hub-signature-256": hmac(body) } })).statusCode).toBe(401);
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("answers 400 to signed bytes that are not JSON", async () => {
+    expect((await deliver(null, { raw: "{not json" })).statusCode).toBe(400);
+  });
+  it("answers 200 to a signed payload with nothing in it", async () => {
+    const res = await deliver({});
+    expect([res.statusCode, res.body]).toEqual([200, { ok: true, messages: 0, statuses: 0, skipped: 0, errors: 0 }]);
+  });
+});
+
+describe("wa-inbound — what a message is stored as", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  // v18.8.0 phase 6: the DEV simulator posts `simMediaMessage` in a webhook to
+  // the harness, so its photo, voice note and PDF take this handler's road.
+  it("the simulator's media messages are stored as Meta's are", async () => {
+    await deliver({ messages: [
+      inMsg(Object.assign({ id: "wamid.S1" }, simMediaMessage("document", "La carta"))),
+      inMsg(Object.assign({ id: "wamid.S2" }, simMediaMessage("audio", "no caption on audio"))),
+    ] });
+    const [doc, voice] = inbound().sort((a, b) => (a.id < b.id ? -1 : 1));
+    expect(doc).toMatchObject({ text: "La carta", media: { kind: "document", mime: "application/pdf", filename: "menu-grupos-2026.pdf" } });
+    expect(voice).toMatchObject({ text: "Voice message", media: { kind: "audio", voice: true } });
+    expect(doc.media.mediaId).toMatch(/^MOCK\.document\./);
+  });
+
+  it("a text is stored as it came, with no media key, and parsed after the response", async () => {
+    const res = await deliver({
+      contacts: [{ wa_id: "34600111222", profile: { name: "Ana" } }],
+      messages: [inMsg({ type: "text", text: { body: "Mesa para 4 mañana a las 21:00" } })],
+    });
+    expect(res.body).toMatchObject({ ok: true, messages: 1 });
+    const [m] = inbound();
+    expect(m.text).toBe("Mesa para 4 mañana a las 21:00");
+    expect("media" in m).toBe(false);
+    expect(convAt(KEY)).toMatchObject({ profileName: "Ana", lastMessageSnippet: "Mesa para 4 mañana a las 21:00", parsing: true });
+    expect(scheduled).toHaveLength(1);
+    await scheduled[0];
+    expect(convAt(KEY)).toMatchObject({ draftStatus: "parsed", draftData: { size: 4 } });
+  });
+  it("a photo with a caption: the media beside the caption, the caption parsed", async () => {
+    await deliver({ messages: [inMsg({ type: "image", image: { id: "1234567890", mime_type: "image/jpeg", sha256: "x", caption: " Mesa para 4 mañana a las 21:00 " } })] });
+    const [m] = inbound();
+    expect(m.media).toEqual({ kind: "image", mediaId: "1234567890", mime: "image/jpeg" });
+    expect(m.text).toBe("Mesa para 4 mañana a las 21:00");
+    expect(convAt(KEY).lastMessageSnippet).toBe("Photo · Mesa para 4 mañana a las 21:00");
+    expect(scheduled).toHaveLength(1);
+    await scheduled[0];
+    expect(convAt(KEY).draftData.size).toBe(4);
+  });
+  it("a photo without a caption reads \"Photo\" and is not parsed", async () => {
+    await deliver({ messages: [inMsg({ type: "image", image: { id: "1234567890", mime_type: "image/png" } })] });
+    expect(inbound()[0]).toMatchObject({ text: "Photo", media: { kind: "image", mime: "image/png" } });
+    expect(convAt(KEY).lastMessageSnippet).toBe("Photo");
+    expect("parsing" in convAt(KEY)).toBe(false);
+    expect(scheduled).toEqual([]);
+  });
+  it("a voice note keeps its voice flag and its codec line, and is never parsed", async () => {
+    await deliver({ messages: [inMsg({ type: "audio", audio: { id: "998877", mime_type: "audio/ogg; codecs=opus", voice: true } })] });
+    expect(inbound()[0]).toMatchObject({ text: "Voice message", media: { kind: "audio", mediaId: "998877", mime: "audio/ogg; codecs=opus", voice: true } });
+    expect(scheduled).toEqual([]);
+  });
+  it("an audio file that is not a voice note reads \"Audio\" and carries no voice key", async () => {
+    await deliver({ messages: [inMsg({ type: "audio", audio: { id: "998877", mime_type: "audio/mpeg" } })] });
+    const [m] = inbound();
+    expect(m.text).toBe("Audio");
+    expect("voice" in m.media).toBe(false);
+  });
+  it("a document keeps its file name and is not parsed without a caption", async () => {
+    await deliver({ messages: [inMsg({ type: "document", document: { id: "555", mime_type: "application/pdf", filename: "menu.pdf" } })] });
+    expect(inbound()[0]).toMatchObject({ text: "Document: menu.pdf", media: { kind: "document", mediaId: "555", mime: "application/pdf", filename: "menu.pdf" } });
+    expect(scheduled).toEqual([]);
+  });
+  it("a kind the app does not show is one line saying it stays on the phone, with no media", async () => {
+    await deliver({ messages: [
+      inMsg({ id: "wamid.V", type: "video", video: { id: "777", mime_type: "video/mp4" } }),
+      inMsg({ id: "wamid.L", type: "location", location: { latitude: 28.1, longitude: -15.4 } }),
+    ] });
+    const ms = inbound();
+    expect(ms.map((m) => m.text)).toEqual(["Video — open WhatsApp on the phone to see it", "Location — open WhatsApp on the phone to see it"]);
+    expect(ms.some((m) => "media" in m)).toBe(false);
+    expect(scheduled).toEqual([]);
+  });
+  it("a media id that could climb a path is not stored as media", async () => {
+    await deliver({ messages: [inMsg({ type: "image", image: { id: "../x", mime_type: "image/jpeg" } })] });
+    const [m] = inbound();
+    expect(m.text).toBe("Photo — open WhatsApp on the phone to see it");
+    expect("media" in m).toBe(false);
+  });
+  it("a redelivered message is skipped, not stored twice", async () => {
+    const msg = inMsg({ type: "text", text: { body: "hola" } });
+    await deliver({ messages: [msg] });
+    const again = await deliver({ messages: [msg] });
+    expect(again.body).toMatchObject({ messages: 0, skipped: 1 });
+    expect(inbound()).toHaveLength(1);
+  });
+  it("messages that are not an array manufacture nothing (CT-WA-04)", async () => {
+    const res = await deliver({ messages: "abc" });
+    expect(res.body).toMatchObject({ messages: 0, errors: 0 });
+    expect(fake.state.writes).toEqual([]);
+  });
+});
+
+describe("wa-inbound — the message timestamp", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+  const tsFor = async (timestamp) => {
+    fake.state.tree = {};
+    await deliver({ messages: [inMsg({ timestamp, type: "text", text: { body: "hola" } })] });
+    return inbound()[0].ts;
+  };
+
+  it("a timestamp that is not a number, or not positive, is now — stored, not a 500 (CT-WA-02)", async () => {
+    for (const bad of ["abc", "-1", "0", ""]) {
+      const before = Date.now();
+      const ts = await tsFor(bad);
+      expect(ts).toBeGreaterThanOrEqual(before);
+      expect(ts).toBeLessThanOrEqual(Date.now());
+    }
+  });
+  it("a future timestamp is now, and an old one is kept", async () => {
+    const before = Date.now();
+    expect(await tsFor("99999999999")).toBeLessThanOrEqual(Date.now());
+    expect(await tsFor("99999999999")).toBeGreaterThanOrEqual(before);
+    const old = Math.floor(Date.now() / 1000) - 3 * 86400;
+    expect(await tsFor(String(old))).toBe(old * 1000);
+  });
+});
+
+describe("wa-inbound — delivery and read receipts", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+  const seedOut = (status) => {
+    fake.state.tree = { messages: { [KEY]: { o1: { id: "o1", direction: "out", text: "hi", ts: 1, status, providerMsgId: "wamid.OUT" } } } };
+  };
+  const receipt = (status, id = "wamid.OUT", recipient = "34600111222") => deliver({ statuses: [{ id, status, recipient_id: recipient, timestamp: nowSecs() }] });
+
+  it("a receipt moves the message's status forward and is counted", async () => {
+    seedOut("sent");
+    const res = await receipt("delivered");
+    expect(res.body).toMatchObject({ statuses: 1 });
+    expect(fake.read("messages/" + KEY + "/o1/status")).toBe("delivered");
+  });
+  it("a receipt that arrives late never moves it back (CT-WA-05)", async () => {
+    seedOut("read");
+    const res = await receipt("delivered");
+    expect(res.body).toMatchObject({ statuses: 1 });
+    expect(fake.read("messages/" + KEY + "/o1/status")).toBe("read");
+  });
+  it("a receipt for a message nobody has, or for no recipient, writes nothing", async () => {
+    seedOut("sent");
+    expect((await receipt("delivered", "wamid.OTHER")).body).toMatchObject({ statuses: 0 });
+    expect((await receipt("delivered", "wamid.OUT", "")).body).toMatchObject({ statuses: 0 });
+    expect(fake.state.writes).toEqual([]);
+  });
+});
+
+describe("wa-inbound — when to ask Meta to deliver again", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("answers 500 only when everything in the payload failed", async () => {
+    const realRef = fake.db.ref;
+    fake.db.ref = () => { throw new Error("database unreachable"); };
+    try {
+      const res = await deliver({ messages: [inMsg({ type: "text", text: { body: "hola" } })] });
+      expect(res.statusCode).toBe(500);
+      expect(res.body).toMatchObject({ messages: 0, errors: 1 });
+    } finally {
+      fake.db.ref = realRef;
+    }
+  });
+  it("answers 200 when one message failed and another was stored, so the stored one is not redelivered", async () => {
+    const realRef = fake.db.ref;
+    const OTHER = "+34600999888";
+    fake.db.ref = (path) => { if (path.includes(OTHER)) throw new Error("refused"); return realRef(path); };
+    try {
+      const res = await deliver({ messages: [
+        inMsg({ id: "wamid.OK", type: "text", text: { body: "hola" } }),
+        inMsg({ id: "wamid.BAD", from: "34600999888", type: "text", text: { body: "hola" } }),
+      ] });
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toMatchObject({ messages: 1, errors: 1 });
+    } finally {
+      fake.db.ref = realRef;
+    }
+  });
+});
+
+describe("inboundContent", () => {
+  it("a text that is only spaces is stored and not parsed", () => {
+    expect(inboundContent({ type: "text", text: { body: "  " } })).toEqual({ text: "  ", media: null, snippet: "  ", parseText: null });
+  });
+  it("an audio's caption, should one ever arrive, is not read", () => {
+    expect(inboundContent({ type: "audio", audio: { id: "1", caption: "hola" } })).toMatchObject({ text: "Audio", parseText: null });
+  });
+  it("a message with no type at all is a message to read on the phone", () => {
+    expect(inboundContent({}).text).toBe("Message — open WhatsApp on the phone to see it");
+    expect(inboundContent(null).text).toBe("Message — open WhatsApp on the phone to see it");
+  });
+});
+
+// ── api/wa-sim-*.js — the simulator's three endpoints (v18.8.0) ──────────────
+describe.each([
+  ["wa-sim-inbound", simInboundHandler, { phone: KEY, text: "hola" }],
+  ["wa-sim-suggest", simSuggestHandler, { history: [] }],
+  ["wa-sim-generate", simGenerateHandler, {}],
+])("%s — the kill switch, then the gate", (name, handler, body) => {
+  it("answers 404 unless WA_SIM_ENABLED is exactly \"1\", before the method and before auth", async () => {
+    for (const v of [undefined, "", "0", "true", "yes"]) {
+      vi.stubEnv("WA_SIM_ENABLED", v);
+      for (const method of ["GET", "POST"]) {
+        for (const token of [undefined, "staff", "nonsense"]) {
+          const res = await call(handler, { method, token, body });
+          expect([v, method, token, res.statusCode]).toEqual([v, method, token, 404]);
+        }
+      }
+    }
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("once enabled: 405 to GET, 401 without a token or with a bad one, 403 off the allow-list", async () => {
+    vi.stubEnv("WA_SIM_ENABLED", "1");
+    vi.stubEnv("WA_STAFF_EMAILS", "ana@example.com");
+    expect((await call(handler, { method: "GET", token: "staff", body })).statusCode).toBe(405);
+    expect((await call(handler, { body })).statusCode).toBe(401);
+    expect((await call(handler, { token: "nonsense", body })).statusCode).toBe(401);
+    expect((await call(handler, { token: "stranger", body })).statusCode).toBe(403);
+    expect((await call(handler, { token: "unverified", body })).statusCode).toBe(403);
+    expect(fake.state.writes).toEqual([]);
+  });
+});
+
+describe("the simulator endpoints, enabled and signed in", () => {
+  beforeEach(() => vi.stubEnv("WA_SIM_ENABLED", "1"));
+
+  it("wa-sim-inbound: 400 without a phone or a text, and stores one that has both", async () => {
+    expect((await call(simInboundHandler, { token: "staff", body: { text: "hola" } })).statusCode).toBe(400);
+    expect((await call(simInboundHandler, { token: "staff", body: { phone: KEY, text: "  " } })).statusCode).toBe(400);
+    expect(fake.state.writes).toEqual([]);
+    const res = await call(simInboundHandler, { token: "staff", body: { phone: KEY, text: "hola", name: "Sim" } });
+    expect([res.statusCode, res.body]).toEqual([200, { ok: true, phoneKey: KEY, skipped: false }]);
+    expect(inbound()[0].text).toBe("hola");
+  });
+  // v18.8.0 phase 6: the customer's photo, voice note or PDF, from the panel.
+  it("wa-sim-inbound: a media message is a KIND, with the id minted here and the text as its caption", async () => {
+    const res = await call(simInboundHandler, { token: "staff", body: { phone: KEY, text: "  La terraza  ", media: "image" } });
+    expect([res.statusCode, res.body]).toEqual([200, { ok: true, phoneKey: KEY, skipped: false }]);
+    const [m] = inbound();
+    expect(m.text).toBe("La terraza");
+    expect(m.media).toEqual({ kind: "image", mediaId: m.media.mediaId, mime: "image/jpeg" });
+    expect(m.media.mediaId).toMatch(/^MOCK\.image\.[a-z0-9]+$/);
+    // A caption is parsed, as a webhook's is (one job handed to waitUntil).
+    expect(convAt(KEY).lastMessageSnippet).toBe("Photo · La terraza");
+    expect(scheduled).toHaveLength(1);
+  });
+  it("wa-sim-inbound: a voice note needs no text, carries none, and is not parsed", async () => {
+    const res = await call(simInboundHandler, { token: "staff", body: { phone: KEY, text: "ignored", media: "audio" } });
+    expect(res.statusCode).toBe(200);
+    const [m] = inbound();
+    expect([m.text, m.media.kind, m.media.voice, m.media.mime]).toEqual(["Voice message", "audio", true, "audio/ogg; codecs=opus"]);
+    expect("parsing" in convAt(KEY)).toBe(false);
+    expect(scheduled).toHaveLength(0);
+    expect((await call(simInboundHandler, { token: "staff", body: { phone: KEY, media: "document" } })).statusCode).toBe(200);
+    expect(inbound().map((x) => x.text)).toContain("Document: menu-grupos-2026.pdf");
+    expect(scheduled).toHaveLength(0);
+  });
+  it("wa-sim-inbound: 400 to a media that is not one of the three kinds, an id included, and writes nothing", async () => {
+    for (const media of ["video", "__proto__", "toString", "", 7, { kind: "image", mediaId: "1234567890" }]) {
+      const res = await call(simInboundHandler, { token: "staff", body: { phone: KEY, text: "x", media } });
+      expect([String(media), res.statusCode]).toEqual([String(media), 400]);
+    }
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("wa-media answers the simulator's voice note with the bundled sample while sending is mock", async () => {
+    await call(simInboundHandler, { token: "staff", body: { phone: KEY, media: "audio" } });
+    const [m] = inbound();
+    const res = await mediaCall({ query: { phoneKey: KEY, msgId: m.id } });
+    expect([res.statusCode, res.headers["content-type"]]).toEqual([200, "audio/ogg; codecs=opus"]);
+    expect(res.bytes.subarray(0, 4).toString("latin1")).toBe("OggS");
+  });
+  it("wa-sim-suggest: 400 without a history, and 400 naming the key when Gemini has none", async () => {
+    expect((await call(simSuggestHandler, { token: "staff", body: {} })).statusCode).toBe(400);
+    const res = await call(simSuggestHandler, { token: "staff", body: { history: [] } });
+    expect([res.statusCode, res.body.error]).toEqual([400, "GEMINI_API_KEY not set"]);
+  });
+  it("wa-sim-generate: 400 naming the key when Gemini has none, and writes nothing", async () => {
+    const res = await call(simGenerateHandler, { token: "staff", body: { hint: "x" } });
+    expect([res.statusCode, res.body.error]).toEqual([400, "GEMINI_API_KEY not set"]);
+    expect(fake.state.writes).toEqual([]);
+  });
+});
+
+// ── api/wa-media.js — viewing a photo, a voice note, a document (v18.8.0) ─────
+// A response that is a real Writable, so the handler can stream into it.
+function mediaCall({ token = "staff", query } = {}) {
+  const chunks = [];
+  const res = new Writable({ write(c, e, cb) { chunks.push(Buffer.from(c)); cb(); } });
+  Object.assign(res, {
+    statusCode: null, body: null, headers: {},
+    status(c) { this.statusCode = c; return this; },
+    json(b) { this.body = b; this.end(); return this; },
+    setHeader(k, v) { this.headers[k.toLowerCase()] = v; },
+  });
+  const req = { method: "GET", headers: token ? { authorization: "Bearer " + token } : {}, query: query || {} };
+  return mediaHandler(req, res).then(() => Object.assign(res, { bytes: Buffer.concat(chunks) }));
+}
+const MEDIA_MSG = (media, extra) => Object.assign({ id: "wamid_P", direction: "in", text: "Photo", ts: Date.now(), media }, extra);
+const seedMedia = (msg) => { fake.state.tree = { messages: { [KEY]: { [msg.id]: msg } } }; };
+const PIC = Buffer.from("\xff\xd8\xff\xe0 a jpeg", "binary");
+// Meta's two answers: the lookup (JSON) and the file (bytes).
+const metaFetch = ({ info = {}, infoStatus = 200, file = PIC, fileStatus = 200, fileHeaders } = {}) => vi.fn(async (url) => {
+  if (url.startsWith("https://graph.facebook.com/")) {
+    return new Response(JSON.stringify(Object.assign({ url: "https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1", mime_type: "image/jpeg", file_size: file.length }, info)), { status: infoStatus });
+  }
+  return new Response(fileStatus === 200 ? file : "nope", { status: fileStatus, headers: Object.assign({ "content-type": "image/jpeg", "content-length": String(file.length) }, fileHeaders) });
+});
+
+describe("wa-media GET", () => {
+  beforeEach(() => vi.stubEnv("META_WA_TOKEN", "tok"));
+
+  it("400 without a usable phone key or message id, and writes nothing", async () => {
+    expect((await mediaCall({ query: { msgId: "wamid_P" } })).statusCode).toBe(400);
+    expect((await mediaCall({ query: { phoneKey: KEY } })).statusCode).toBe(400);
+    expect((await mediaCall({ query: { phoneKey: "+", msgId: "wamid_P" } })).statusCode).toBe(400);
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "../x" } })).statusCode).toBe(400);
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("404 for a message nobody has, and for one with no media", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(404);
+    seedMedia({ id: "wamid_P", direction: "in", text: "hola", ts: 1 });
+    const res = await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } });
+    expect([res.statusCode, res.body.error]).toEqual([404, "this message has no media"]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("streams the file Meta holds, asked with the id STORED on the message, never one from the request", async () => {
+    seedMedia(MEDIA_MSG({ kind: "image", mediaId: "1234567890", mime: "image/jpeg" }));
+    const f = metaFetch();
+    vi.stubGlobal("fetch", f);
+    const res = await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P", mediaId: "999" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.bytes.equals(PIC)).toBe(true);
+    expect(res.headers).toMatchObject({ "content-type": "image/jpeg", "cache-control": "private, max-age=86400", "x-content-type-options": "nosniff", "content-disposition": "inline" });
+    expect(f.mock.calls.map((c) => c[0])).toEqual([
+      "https://graph.facebook.com/v26.0/1234567890",
+      "https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1",
+    ]);
+    expect(f.mock.calls.every((c) => c[1].headers.Authorization === "Bearer tok")).toBe(true);
+  });
+  it("410 when Meta no longer has the file, at either call; 502 when Meta fails otherwise", async () => {
+    seedMedia(MEDIA_MSG({ kind: "image", mediaId: "1234567890" }));
+    vi.stubGlobal("fetch", metaFetch({ infoStatus: 404 }));
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(410);
+    vi.stubGlobal("fetch", metaFetch({ fileStatus: 404 }));
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(410);
+    vi.stubGlobal("fetch", metaFetch({ infoStatus: 500 }));
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(502);
+  });
+  it("413 for a file larger than the browser is handed, before the download starts", async () => {
+    seedMedia(MEDIA_MSG({ kind: "document", mediaId: "555", filename: "big.pdf" }));
+    const f = metaFetch({ info: { file_size: MEDIA_VIEW_MAX + 1 } });
+    vi.stubGlobal("fetch", f);
+    const res = await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } });
+    expect(res.statusCode).toBe(413);
+    expect(f).toHaveBeenCalledTimes(1);
+    // …and when only the download says how big it is.
+    vi.stubGlobal("fetch", metaFetch({ info: { file_size: undefined }, fileHeaders: { "content-length": String(MEDIA_VIEW_MAX + 1) } }));
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(413);
+  });
+  it("a type that could run as the app is served as a download, never inline", async () => {
+    seedMedia(MEDIA_MSG({ kind: "document", mediaId: "555", filename: "menú carta.html" }));
+    vi.stubGlobal("fetch", metaFetch({ info: { mime_type: "text/html" } }));
+    const res = await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } });
+    expect(res.headers["content-type"]).toBe("application/octet-stream");
+    expect(res.headers["content-disposition"]).toBe("attachment; filename*=UTF-8''men%C3%BA%20carta.html");
+    expect(servedType("image/svg+xml")).toBe("application/octet-stream");
+    expect(servedType("audio/ogg; codecs=opus")).toBe("audio/ogg; codecs=opus");
+    expect(servedType("application/PDF")).toBe("application/PDF");
+  });
+  it("sends the token only to a host Meta serves media from", async () => {
+    seedMedia(MEDIA_MSG({ kind: "image", mediaId: "1234567890" }));
+    const f = metaFetch({ info: { url: "https://evil.example.com/x" } });
+    vi.stubGlobal("fetch", f);
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(502);
+    expect(f).toHaveBeenCalledTimes(1);
+    vi.stubGlobal("fetch", metaFetch({ info: { url: "http://lookaside.fbsbx.com/x" } }));
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(502);
+  });
+  it("503 when the deployment has no Meta token", async () => {
+    vi.stubEnv("META_WA_TOKEN", "");
+    seedMedia(MEDIA_MSG({ kind: "image", mediaId: "1234567890" }));
+    vi.stubGlobal("fetch", vi.fn());
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(503);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("a simulator id is answered with the bundled sample in mock mode, and is gone in live mode", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    for (const [kind, file, type] of [["image", "photo.jpg", "image/jpeg"], ["audio", "voice.ogg", "audio/ogg; codecs=opus"], ["document", "menu.pdf", "application/pdf"]]) {
+      seedMedia(MEDIA_MSG({ kind, mediaId: "MOCK." + kind + ".abc" }));
+      const res = await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } });
+      expect([kind, res.statusCode, res.headers["content-type"]]).toEqual([kind, 200, type]);
+      expect(res.bytes.equals(readFileSync(new URL("../api/_lib/mock-media/" + file, import.meta.url)))).toBe(true);
+    }
+    vi.stubEnv("WA_SEND_MODE", "live");
+    vi.stubEnv("WA_STAFF_EMAILS", "ana@example.com");
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(410);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+// ── api/wa-media.js — sending a photo or a PDF (v18.8.0, phase 5) ─────────────
+// The request is a byte stream (`bodyParser` is off), the file its body, the
+// caption and a document's name in two percent-encoded headers.
+const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("IHDR")]);
+const PDF = Buffer.from("%PDF-1.4\n1 0 obj\n");
+function sendFile({ token = "staff", phoneKey = KEY, bytes = JPEG, type = "image/jpeg", caption, filename, headers } = {}) {
+  const h = Object.assign({ "content-type": type }, token ? { authorization: "Bearer " + token } : {});
+  if (caption !== undefined) h["x-caption"] = encodeURIComponent(caption);
+  if (filename !== undefined) h["x-filename"] = encodeURIComponent(filename);
+  return rawCall(mediaHandler, { body: bytes, headers: Object.assign(h, headers), query: phoneKey === null ? {} : { phoneKey } });
+}
+const goLive = () => {
+  vi.stubEnv("WA_SEND_MODE", "live");
+  vi.stubEnv("WA_STAFF_EMAILS", "ana@example.com");
+  vi.stubEnv("META_WA_TOKEN", "tok");
+  vi.stubEnv("META_PHONE_NUMBER_ID", "555");
+};
+// Meta's two answers to a send: the upload (`/media`) and the message (`/messages`).
+const graphFetch = ({ uploadStatus = 200, upload = { id: "1122334455" }, sendStatus = 200 } = {}) => vi.fn(async (url) => {
+  if (url.endsWith("/media")) return new Response(JSON.stringify(uploadStatus === 200 ? upload : { error: { message: "Upload refused" } }), { status: uploadStatus });
+  if (url.endsWith("/messages")) return new Response(JSON.stringify(sendStatus === 200 ? { messages: [{ id: "wamid.OUT" }] } : { error: { message: "Recipient not allowed" } }), { status: sendStatus });
+  throw new Error("unexpected call to " + url);
+});
+const messageCalls = (f) => f.mock.calls.filter((c) => c[0].endsWith("/messages"));
+
+describe("wa-media POST — what is refused, before anything is sent or stored", () => {
+  beforeEach(() => {
+    fake.state.tree = { conversations: { [KEY]: openConv() } };
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  it("400 without a usable phone key, with a header that does not decode, and with a caption over WA_CAPTION_MAX", async () => {
+    expect((await sendFile({ phoneKey: null })).statusCode).toBe(400);
+    expect((await sendFile({ phoneKey: "+" })).statusCode).toBe(400);
+    expect((await sendFile({ headers: { "x-caption": "%E0%A4%A" } })).statusCode).toBe(400);
+    expect((await sendFile({ type: "application/pdf", bytes: PDF, headers: { "x-filename": "%" } })).statusCode).toBe(400);
+    const long = await sendFile({ caption: "x".repeat(WA_CAPTION_MAX + 1) });
+    expect([long.statusCode, long.body.error]).toEqual([400, "a caption can be up to " + WA_CAPTION_MAX + " characters"]);
+    expect(fake.state.writes).toEqual([]);
+    // The cap is on the caption as sent, so spaces around it do not count.
+    expect((await sendFile({ caption: "  " + "x".repeat(WA_CAPTION_MAX) + "  " })).statusCode).toBe(200);
+  });
+
+  it("415 for anything but a JPEG, a PNG or a PDF, whatever its bytes are", async () => {
+    for (const type of ["text/html", "image/gif", "image/svg+xml", "application/octet-stream", ""]) {
+      const res = await sendFile({ type });
+      expect([type, res.statusCode]).toEqual([type, 415]);
+    }
+    expect(fake.state.writes).toEqual([]);
+  });
+
+  it("413 when the declared length is over the cap, and when the body runs past it without one", async () => {
+    expect((await sendFile({ headers: { "content-length": String(WA_SEND_MAX_BYTES + 1) } })).statusCode).toBe(413);
+    const over = Buffer.concat([JPEG, Buffer.alloc(WA_SEND_MAX_BYTES + 1 - JPEG.length)]);
+    expect((await sendFile({ bytes: over })).statusCode).toBe(413);
+    expect(fake.state.writes).toEqual([]);
+    const atCap = Buffer.concat([JPEG, Buffer.alloc(WA_SEND_MAX_BYTES - JPEG.length)]);
+    expect((await sendFile({ bytes: atCap })).statusCode).toBe(200);
+  });
+
+  it("the cap fits under Vercel's 4.5 MB request body, which a raw body is all of", () => {
+    expect(WA_SEND_MAX_BYTES).toBeLessThan(4.5 * 1000 * 1000);
+  });
+
+  it("400 for an empty body, and for bytes that are not what the Content-Type says", async () => {
+    const empty = await sendFile({ bytes: Buffer.alloc(0) });
+    expect([empty.statusCode, empty.body.error]).toEqual([400, "no file"]);
+    expect((await sendFile({ bytes: PNG, type: "image/jpeg" })).body.error).toBe("the file is not a photo");
+    expect((await sendFile({ bytes: JPEG, type: "image/png" })).statusCode).toBe(400);
+    const html = await sendFile({ bytes: Buffer.from("<html><script>"), type: "application/pdf" });
+    expect([html.statusCode, html.body.error]).toEqual([400, "the file is not a PDF"]);
+    expect(fake.state.writes).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("404 for a conversation that does not exist, 410 once its window has shut", async () => {
+    expect((await sendFile({ phoneKey: "+34600999888" })).statusCode).toBe(404);
+    fake.state.tree = { conversations: { [KEY]: openConv({ windowExpiresAt: Date.now() - 1 }) } };
+    expect((await sendFile()).statusCode).toBe(410);
+    expect(fake.state.writes).toEqual([]);
+  });
+
+  it("sniffType names the three by their first bytes, and nothing else", () => {
+    expect(sniffType(JPEG)).toBe("image/jpeg");
+    expect(sniffType(PNG)).toBe("image/png");
+    expect(sniffType(PDF)).toBe("application/pdf");
+    for (const b of [Buffer.alloc(0), Buffer.from([0xff, 0xd8]), Buffer.from("GIF89a"), Buffer.from("%PDF"), Buffer.from("<svg")]) {
+      expect(sniffType(b)).toBe(null);
+    }
+  });
+});
+
+describe("wa-media POST — a photo or a PDF sent", () => {
+  beforeEach(() => { fake.state.tree = { conversations: { [KEY]: openConv() } }; });
+
+  it("mock: stores an outbound message with its caption, its author and its media, and touches no network", async () => {
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    const conv = convAt(KEY);
+    const res = await sendFile({ caption: "  Your table on the terrace  ", filename: "ignored.jpg" });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, status: "delivered" });
+    expect(res.body.wamid).toMatch(/^wamid\.MOCK\./);
+    expect(res.body.mediaId).toMatch(/^MOCK\.image\./);
+    const [m] = msgsAt(KEY);
+    expect(m).toEqual({
+      id: res.body.msgId, direction: "out", text: "Your table on the terrace", ts: m.ts, status: "delivered",
+      isAutoAck: false, channel: "whatsapp", providerMsgId: res.body.wamid, authorEmail: "ana@example.com",
+      media: { kind: "image", mediaId: res.body.mediaId, mime: "image/jpeg", size: JPEG.length },
+    });
+    expect(convAt(KEY)).toMatchObject({ lastMessageAt: m.ts, lastMessageSnippet: "Photo · Your table on the terrace", windowExpiresAt: conv.windowExpiresAt });
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("a PDF keeps its name, cleaned of control characters, or is document.pdf; with no caption its text is the label", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    await sendFile({ bytes: PDF, type: "application/pdf", filename: "Menú\u0007 otoño.pdf" });
+    const [named] = msgsAt(KEY);
+    expect(named.media).toMatchObject({ kind: "document", mime: "application/pdf", filename: "Menú otoño.pdf" });
+    expect(named.text).toBe("Document: Menú otoño.pdf");
+    expect(convAt(KEY).lastMessageSnippet).toBe("Document: Menú otoño.pdf");
+    fake.state.tree = { conversations: { [KEY]: openConv() } };
+    await sendFile({ bytes: PDF, type: "application/pdf", caption: "   " });
+    expect(msgsAt(KEY)[0].media.filename).toBe("document.pdf");
+    expect(msgsAt(KEY)[0].text).toBe("Document: document.pdf");
+  });
+
+  it("a PNG is sent as a photo, with its own type", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const res = await sendFile({ bytes: PNG, type: "image/png" });
+    expect(res.statusCode).toBe(200);
+    expect(msgsAt(KEY)[0].media).toMatchObject({ kind: "image", mime: "image/png" });
+    expect(msgsAt(KEY)[0].text).toBe("Photo");
+  });
+
+  it("a send to an archived conversation un-archives it", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    fake.state.tree = { conversations: { [KEY]: openConv({ archived: true, archivedAt: 5 }) } };
+    await sendFile();
+    expect(convAt(KEY).archived).toBe(false);
+    expect("archivedAt" in convAt(KEY)).toBe(false);
+  });
+
+  // /code-review: Meta had the photo, the database write failed, and the
+  // answer was a 500, so the composer said "Couldn't send … still attached"
+  // and a second press sent the customer the same photo twice.
+  it("a send that reached the customer is a 200 even when storing it fails, and says it was not stored", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    fake.state.failWrite = (op, path) => op === "set" && path.startsWith("messages/");
+    const res = await sendFile({ caption: "La carta" });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, stored: false, status: "delivered" });
+    expect(msgsAt(KEY)).toEqual([]);
+    expect(console.error).toHaveBeenCalledWith(expect.stringMatching(/sent, but not stored/), "database unavailable");
+    fake.state.failWrite = null;
+    expect((await sendFile()).body).toMatchObject({ ok: true, stored: true });
+  });
+
+  it("the photo it stored opens: in mock mode the GET answers the bundled sample for the stored id", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const sent = await sendFile();
+    const res = await mediaCall({ query: { phoneKey: KEY, msgId: sent.body.msgId } });
+    expect([res.statusCode, res.headers["content-type"]]).toEqual([200, "image/jpeg"]);
+    expect(res.bytes.equals(readFileSync(new URL("../api/_lib/mock-media/photo.jpg", import.meta.url)))).toBe(true);
+  });
+});
+
+// Checklist A4-5: every send to a customer is ONE Graph `/messages` call. A
+// caption never becomes a second message, and the upload is not one.
+describe("A4-5 — one message per send, the caption inside it", () => {
+  beforeEach(() => {
+    goLive();
+    fake.state.tree = { conversations: { [KEY]: openConv() } };
+  });
+
+  it("wa-send: exactly one Graph call, and it is /messages", async () => {
+    const f = graphFetch();
+    vi.stubGlobal("fetch", f);
+    expect((await call(sendHandler, { token: "staff", body: { phoneKey: KEY, text: "hola" } })).statusCode).toBe(200);
+    expect(f.mock.calls.map((c) => c[0])).toEqual(["https://graph.facebook.com/v26.0/555/messages"]);
+  });
+
+  it("wa-media: one upload to /media, then exactly one /messages, with the file's id and the caption inside it", async () => {
+    const f = graphFetch();
+    vi.stubGlobal("fetch", f);
+    const res = await sendFile({ caption: "Mesa 4 a las 21:00" });
+    expect(res.statusCode).toBe(200);
+    expect(f.mock.calls.map((c) => c[0])).toEqual([
+      "https://graph.facebook.com/v26.0/555/media",
+      "https://graph.facebook.com/v26.0/555/messages",
+    ]);
+    const [, up] = f.mock.calls[0];
+    expect(up.headers).toEqual({ Authorization: "Bearer tok" }); // the multipart boundary is fetch's to write
+    expect(up.body.get("messaging_product")).toBe("whatsapp");
+    expect(up.body.get("type")).toBe("image/jpeg");
+    const file = up.body.get("file");
+    expect([file.name, file.type, file.size]).toEqual(["photo.jpg", "image/jpeg", JPEG.length]);
+    expect(Buffer.from(await file.arrayBuffer()).equals(JPEG)).toBe(true);
+    expect(JSON.parse(messageCalls(f)[0][1].body)).toEqual({
+      messaging_product: "whatsapp", to: "34600111222", type: "image", image: { id: "1122334455", caption: "Mesa 4 a las 21:00" },
+    });
+    expect(msgsAt(KEY)).toHaveLength(1);
+    expect(msgsAt(KEY)[0]).toMatchObject({ text: "Mesa 4 a las 21:00", status: "sent", providerMsgId: "wamid.OUT", media: { kind: "image", mediaId: "1122334455" } });
+  });
+
+  it("a PDF's one message carries its name; with no caption there is no caption key at all", async () => {
+    const f = graphFetch({ upload: { id: "9988" } });
+    vi.stubGlobal("fetch", f);
+    await sendFile({ bytes: PDF, type: "application/pdf", filename: "carta.pdf", caption: "  " });
+    expect(f.mock.calls[0][1].body.get("file").name).toBe("carta.pdf");
+    expect(messageCalls(f)).toHaveLength(1);
+    expect(JSON.parse(messageCalls(f)[0][1].body)).toEqual({
+      messaging_product: "whatsapp", to: "34600111222", type: "document", document: { id: "9988", filename: "carta.pdf" },
+    });
+  });
+
+  it("502 when the upload fails (and then no message is sent) or the send fails; nothing is stored either way", async () => {
+    const f = graphFetch({ uploadStatus: 400 });
+    vi.stubGlobal("fetch", f);
+    const up = await sendFile();
+    expect([up.statusCode, up.body.error]).toEqual([502, "send failed: Upload refused"]);
+    expect(messageCalls(f)).toHaveLength(0);
+    vi.stubGlobal("fetch", graphFetch({ sendStatus: 400 }));
+    const sent = await sendFile();
+    expect([sent.statusCode, sent.body.error]).toEqual([502, "send failed: Recipient not allowed"]);
+    expect(fake.state.writes).toEqual([]);
+  });
+});
+
+// ── api/wa-prune.js — the nightly message prune (v18.8.0 phase 7) ────────────
+describe("wa-prune", () => {
+  const DAY = 86400000;
+  const CRON = "c".repeat(64);
+  const prune = ({ auth = "Bearer " + CRON, method = "GET" } = {}) => {
+    const res = { statusCode: null, body: null, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } };
+    return pruneHandler({ method, headers: auth == null ? {} : { authorization: auth } }, res).then(() => res);
+  };
+  const ago = (days) => Date.now() - days * DAY;
+  const msg = (id, ts) => (ts === undefined ? { id, direction: "in", text: id } : { id, direction: "in", text: id, ts });
+
+  it("503 with no CRON_SECRET, whatever is sent, and writes nothing", async () => {
+    expect((await prune()).statusCode).toBe(503);
+    expect((await prune({ auth: "Bearer " })).statusCode).toBe(503);
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("401 to a missing, wrong, or almost-right token, before the method is asked, and writes nothing", async () => {
+    vi.stubEnv("CRON_SECRET", CRON);
+    for (const auth of [null, "", CRON, "Bearer " + CRON.slice(1), "Bearer " + CRON + " ", "bearer " + CRON, "Basic " + CRON]) {
+      expect([auth, (await prune({ auth })).statusCode]).toEqual([auth, 401]);
+    }
+    expect((await prune({ auth: "nope", method: "POST" })).statusCode).toBe(401);
+    expect((await prune({ method: "POST" })).statusCode).toBe(405);
+    expect(fake.state.writes).toEqual([]);
+  });
+
+  it("deletes an old conversation with its messages, and old messages in a live one, and leaves the rest", async () => {
+    vi.stubEnv("CRON_SECRET", CRON);
+    fake.state.tree = {
+      settings: { admin: { waRetentionDays: 90 } },
+      conversations: {
+        "+34600000001": { phoneKey: "+34600000001", createdAt: ago(300), lastMessageAt: ago(120) },
+        "+34600000002": { phoneKey: "+34600000002", createdAt: ago(200), lastMessageAt: ago(1) },
+        "+34600000003": { phoneKey: "+34600000003", createdAt: ago(10), lastMessageAt: ago(2) },
+        "+34600000004": { phoneKey: "+34600000004", createdAt: ago(200) }, // no lastMessageAt: never deleted
+      },
+      messages: {
+        "+34600000001": { a: msg("a", ago(300)), b: msg("b", ago(120)), c: msg("c") },
+        "+34600000002": { d: msg("d", ago(150)), e: msg("e", ago(91)), f: msg("f", ago(89)), g: msg("g", ago(1)), h: msg("h") },
+        "+34600000003": { i: msg("i", ago(10)) },
+        "+34600000004": { j: msg("j", ago(150)), k: msg("k", ago(5)) },
+      },
+    };
+    const res = await prune();
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, days: 90, conversations: 1, messages: 6, read: 3, errors: 0 });
+    const t = fake.state.tree;
+    expect(Object.keys(t.conversations).sort()).toEqual(["+34600000002", "+34600000003", "+34600000004"]);
+    expect(t.messages["+34600000001"]).toEqual({});
+    expect(Object.keys(t.messages["+34600000002"]).sort()).toEqual(["f", "g", "h"]); // a message with no ts stays in a live thread
+    expect(Object.keys(t.messages["+34600000003"])).toEqual(["i"]);
+    expect(Object.keys(t.messages["+34600000004"])).toEqual(["k"]);
+    expect(t.conversations["+34600000004"]).toBeTruthy();
+    // Per key and per message, never a whole node.
+    for (const w of fake.state.writes) {
+      expect(w.path).toMatch(/^(conversations|messages)\/\+346000000\d\d$/);
+      expect(w.op === "transaction" ? w.value : Object.values(w.value).every((v) => v === null)).toBe(w.op === "transaction" ? null : true);
+    }
+    expect(console.log).toHaveBeenCalledWith(expect.stringMatching(/^\[wa-prune\] kept 90 days .*removed 1 conversation\(s\) and 6 message\(s\), read 3 thread\(s\), 0 error\(s\)$/));
+  });
+
+  // /code-review: the thread was deleted FIRST, so a failed message delete
+  // left its messages behind with no conversation, and the prune walks
+  // conversations only: kept for ever. Messages go first now, and a failure
+  // leaves the conversation for the next night to find again.
+  it("a failed message delete never orphans a thread: the conversation stays, and the next night finishes the job", async () => {
+    vi.stubEnv("CRON_SECRET", CRON);
+    fake.state.tree = {
+      settings: { admin: { waRetentionDays: 90 } },
+      conversations: { [KEY]: { phoneKey: KEY, createdAt: ago(300), lastMessageAt: ago(120) } },
+      messages: { [KEY]: { a: msg("a", ago(300)), b: msg("b", ago(120)) } },
+    };
+    fake.state.failWrite = (op, path) => op === "update" && path.startsWith("messages/");
+    const first = await prune();
+    expect(first.statusCode).toBe(500);
+    expect(first.body).toMatchObject({ ok: false, conversations: 0, messages: 0, errors: 1 });
+    expect(fake.state.tree.conversations[KEY]).toBeTruthy();
+    expect(Object.keys(fake.state.tree.messages[KEY]).sort()).toEqual(["a", "b"]);
+
+    fake.state.failWrite = null;
+    const second = await prune();
+    expect(second.body).toMatchObject({ ok: true, conversations: 1, messages: 2, errors: 0 });
+    expect(fake.state.tree.conversations[KEY]).toBeUndefined();
+    expect(fake.state.tree.messages[KEY]).toEqual({});
+  });
+  it("a failed conversation delete leaves an empty thread that the next night deletes", async () => {
+    vi.stubEnv("CRON_SECRET", CRON);
+    fake.state.tree = {
+      conversations: { [KEY]: { phoneKey: KEY, createdAt: ago(800), lastMessageAt: ago(400) } },
+      messages: { [KEY]: { a: msg("a", ago(400)) } },
+    };
+    fake.state.failWrite = (op) => op === "transaction";
+    expect((await prune()).body).toMatchObject({ ok: false, conversations: 0, messages: 1, errors: 1 });
+    expect(fake.state.tree.messages[KEY]).toEqual({});
+    fake.state.failWrite = null;
+    expect((await prune()).body).toMatchObject({ ok: true, conversations: 1, messages: 0, errors: 0 });
+    expect(fake.state.tree.conversations[KEY]).toBeUndefined();
+  });
+
+  // /code-review: after the first year every regular's thread began before the
+  // cutoff, and each was read WHOLE every night. A live thread is now asked
+  // only for what is older than the cutoff, on the indexed `ts`.
+  it("a live thread is read through the ts query, only up to the cutoff; a thread that is going is read whole", async () => {
+    vi.stubEnv("CRON_SECRET", CRON);
+    const live = "+34600000002";
+    fake.state.tree = {
+      settings: { admin: { waRetentionDays: 90 } },
+      conversations: {
+        [KEY]: { phoneKey: KEY, createdAt: ago(300), lastMessageAt: ago(120) },
+        [live]: { phoneKey: live, createdAt: ago(400), lastMessageAt: ago(1) },
+      },
+      messages: {
+        [KEY]: { a: msg("a", ago(120)) },
+        [live]: { old: msg("old", ago(100)), "new": msg("new", ago(1)), nots: msg("nots") },
+      },
+    };
+    const res = await prune();
+    expect(res.body).toMatchObject({ ok: true, conversations: 1, messages: 2, read: 2 });
+    expect(fake.state.queries).toEqual([{ path: "messages/" + live, orderByChild: "ts", endAt: res.body.cutoff - 1 }]);
+    expect(Object.keys(fake.state.tree.messages[live]).sort()).toEqual(["new", "nots"]);
+  });
+  it("before the index is published the query is refused, and the thread is read whole instead", async () => {
+    vi.stubEnv("CRON_SECRET", CRON);
+    fake.state.noIndex = true;
+    fake.state.tree = {
+      conversations: { [KEY]: { phoneKey: KEY, createdAt: ago(800), lastMessageAt: ago(1) } },
+      messages: { [KEY]: { old: msg("old", ago(400)), "new": msg("new", ago(1)) } },
+    };
+    const res = await prune();
+    expect(res.body).toMatchObject({ ok: true, messages: 1, errors: 0 });
+    expect(Object.keys(fake.state.tree.messages[KEY])).toEqual(["new"]);
+  });
+  it("the index the query needs is in the rules, where the thread's messages are", () => {
+    const rules = JSON.parse(readFileSync(new URL("../database.rules.json", import.meta.url), "utf8")).rules;
+    expect(rules.messages.$phoneKey[".indexOn"]).toEqual(["ts"]);
+  });
+
+  it("reads the setting through the one normaliser: absent, null, 0 or junk is a year, and a tiny number is the 30-day floor", async () => {
+    vi.stubEnv("CRON_SECRET", CRON);
+    for (const [v, days] of [[undefined, 365], [null, 365], [0, 365], ["x", 365], [-5, 365], [7, 30], [730, 730]]) {
+      fake.state.tree = v === undefined ? {} : { settings: { admin: { waRetentionDays: v } } };
+      expect([v, (await prune()).body.days]).toEqual([v, days]);
+    }
+  });
+
+  it("a conversation that came alive after the read keeps its thread (the delete re-checks what is stored)", async () => {
+    const cutoff = ago(90);
+    fake.state.tree = { conversations: { [KEY]: { phoneKey: KEY, lastMessageAt: ago(1) } } };
+    expect(await removeConversationIf(KEY, (cur) => conversationExpired(cur, cutoff))).toBe(false);
+    expect(fake.state.tree.conversations[KEY]).toBeTruthy();
+    fake.state.tree.conversations[KEY].lastMessageAt = ago(100);
+    expect(await removeConversationIf(KEY, (cur) => conversationExpired(cur, cutoff))).toBe(true);
+    expect(fake.state.tree.conversations[KEY]).toBeUndefined();
+  });
+
+  it("the three pure questions", () => {
+    const cut = 1000;
+    expect(conversationExpired({ lastMessageAt: 999 }, cut)).toBe(true);
+    for (const c of [{ lastMessageAt: 1000 }, { lastMessageAt: "1" }, {}, null]) expect(conversationExpired(c, cut)).toBe(false);
+    expect(mayHoldOld({ createdAt: 1000, lastMessageAt: 2000 }, cut)).toBe(false);
+    expect(mayHoldOld({ createdAt: 999, lastMessageAt: 2000 }, cut)).toBe(true);
+    expect(mayHoldOld({ lastMessageAt: 2000 }, cut)).toBe(true);
+    const node = { a: { ts: 999 }, b: { ts: 1000 }, c: {}, d: { ts: "5" }, e: null };
+    expect(staleMessageIds(node, cut, false)).toEqual(["a"]);
+    expect(staleMessageIds(node, cut, true)).toEqual(["a", "c", "d", "e"]);
+    expect(staleMessageIds(null, cut, true)).toEqual([]);
   });
 });

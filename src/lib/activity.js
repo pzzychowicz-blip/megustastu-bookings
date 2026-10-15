@@ -70,9 +70,13 @@ export const PRUNE_AFTER_MS = 31536000000;
 //
 // Days rather than milliseconds, because a person picks months and a stored
 // `31536000000` is unreadable in the Firebase console.
-export const DEFAULT_RETENTION_DAYS = 365;
-export const RETENTION_MIN_DAYS = 30;
-export const RETENTION_MAX_DAYS = 3650;
+//
+// v18.8.0 phase 7: the numbers and the normaliser moved to `retention.js`, a
+// leaf, because the WhatsApp prune (api/wa-prune.js) runs under Node ESM and
+// this file's `./day` import has no extension. Re-exported here, so every
+// caller keeps its import, and there is still ONE normaliser for both deletes.
+export { DEFAULT_RETENTION_DAYS, RETENTION_MIN_DAYS, RETENTION_MAX_DAYS, retentionDaysOf } from "./retention.js";
+import { DEFAULT_RETENTION_DAYS, retentionDaysOf } from "./retention.js";
 export const RETENTION_CHOICES = [
   { days: 90, label: countLabel(3, "month", "months") },
   { days: 180, label: countLabel(6, "month", "months") },
@@ -80,35 +84,6 @@ export const RETENTION_CHOICES = [
   { days: 730, label: countLabel(2, "year", "years") },
   { days: 1825, label: countLabel(5, "year", "years") },
 ];
-
-/**
- * A stored value → a usable number of days. ONE normaliser, because the value
- * drives a DELETE and it was being defaulted in three places that did not agree
- * (/code-review).
- *
- * `sanitizeAdminSettings` reached for `clampStep`, which is the wrong shape for
- * this: it tests `Number.isFinite` AFTER coercing, and `Number(null)`,
- * `Number("")` and `Number(0)` are all 0 — finite — so the default branch was
- * never reached and all three clamped to the 30-day MINIMUM. Measured:
- * `clampStep(null, 365, 30, 3650, 1) === 30`. A `settings/admin` node holding a
- * null or empty retention would therefore have pruned ELEVEN MONTHS of the
- * audit log on the next admin to open it, with no backups to recover from.
- *
- * That is exactly the trap `lib/clamp.js` documents in its own header — "`null`
- * and `""` are not absent because `Number()` makes both 0" — and `retentionMs`
- * and `isPrunable` were already guarding it correctly, which is what made the
- * disagreement invisible: two of the three fallbacks were right.
- *
- * **Absent means the DEFAULT, never the minimum.** Every unusable input widens
- * to the shipped year, because the unsafe direction here is silent and
- * irreversible.
- */
-export function retentionDaysOf(v) {
-  if (v == null || v === "") return DEFAULT_RETENTION_DAYS;
-  const n = Number(v);
-  if (!Number.isFinite(n) || n < 1) return DEFAULT_RETENTION_DAYS;
-  return Math.min(RETENTION_MAX_DAYS, Math.max(RETENTION_MIN_DAYS, Math.round(n)));
-}
 
 /** Days → ms, through the one normaliser above. */
 export function retentionMs(days) {

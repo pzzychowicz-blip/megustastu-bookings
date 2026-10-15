@@ -35210,3 +35210,787 @@ Five findings. Four confirmed and fixed, one acted on without proof (item 3).
 `tests/privacy.test.js` is 14 cases. Gate after the fixes: main bundle 165.11 kB gz
 · 3,197 tests · lint 63 problems, 0 errors · style OK.
 
+
+## v18.8.0 — WhatsApp photos, voice notes and documents; message retention; the draft checks the request
+
+**Date:** 2026-10-14 · **Branch:** `feat/v18.8.0-wa-media-retention` ·
+**Plan:** `~/.claude/plans/in-referrance-to-whatsapp-quirky-peacock.md` (every decision
+in it made with Patryk on 2026-10-14). Closes go-live checklist **A4-1** (photos) and
+**A4-5** (one outbound = one message), and ROADMAP's "Before WhatsApp goes live (#8)".
+Coexistence (R-3) is v18.9.0, with its own plan.
+
+### Phase 1 — each conversation loads only its own messages (#8)
+
+`useWhatsApp` had one permanent `onValue(ref(db, "messages"))`: every device downloaded
+every message of every conversation at open and on each change, to show the one thread
+on screen. It now listens to **one conversation at a time**. `watchMessages(phoneKey)`
+attaches `onValue(messages/<key>)` on the first watcher and detaches it on the last
+(reference-counted: the inbox and the simulator can watch one key, and StrictMode mounts
+every effect twice), and returns the unwatch. `InboxPanel` watches the open thread in an
+effect on `activeKey`, so selecting another thread, Back to the list, or closing the
+inbox detaches it; `WaSimulator` watches its customer's thread through the same seam
+(✨ Suggest reads its history). It is a `useCallback` on `[on]`, so the effect does not
+re-attach per render. `messagesMap` keeps its shape and holds only the watched keys.
+
+- **The write guard is per key.** `appendMessage` and `patchMessage` refuse until THAT
+  key's first snapshot has landed (`messagesLoadedKeys`); both callers write to the open
+  thread. `removeMessages` takes the conversations guard instead, because bulk delete
+  removes threads nobody has open, and a per-key delete cannot write stale data over
+  real data (`eraseConversation`'s argument).
+- **The simulator writes through its own writer**, `simAppendMessage`: in client mode
+  `wa-sim.js` is the mock server and writes to any conversation, so it writes the way
+  `api/_lib/rtdb.js` does (a child-set of a fresh id, no local mirror). App passes it
+  under the `appendMessage` name `wa-sim.js` already calls, so the simulator is
+  unchanged. Dead in a production build (`WA_SANDBOX`).
+- **A loading thread is `undefined`, an empty one `[]`.** The thread now arrives a moment
+  after it opens, and `ConversationView`'s new-bubble animation read the snapshot that
+  brings it as a message that had just landed, so every open animated the last bubble in.
+  `baselineRef` takes the baseline from the first LOADED render.
+- **`clearAllWaData`** (the simulator's hard reset) still deletes every conversation key
+  plus every watched key; a message subtree whose conversation row is already gone is no
+  longer seen there. ~~Every delete in the app removes both halves in one write, and the
+  daily prune (phase 7) clears such a subtree once it is old.~~ Neither was true when
+  written: the inbox's Delete made two writes, and the prune finds a thread only through its
+  conversation row. The `/code-review` below (item 2) made every delete one write, which is
+  what keeps such a subtree from existing.
+
+**Verified on DEV** (the Firebase connection's own listen table,
+`db._repo.persistentConnection_.listens`): inbox closed → `/conversations` only; inbox
+open on a thread → `/conversations` + `/messages/+34604378189`; another thread selected
+→ the first detached, `/messages/+34612202359` attached, 8 bubbles drawn and none
+animated; inbox closed → `/conversations` only. The client-mode simulator wrote an
+inbound and its auto-ack to a thread nobody had open, and a client-mode reply on the
+open thread was appended and flipped to `delivered`.
+
+### Phase 2 — a failed auto-reply is retried
+
+`processInbound` writes `autoAckSent: true` in the conversation patch BEFORE the send,
+which is a claim: two inbounds arriving together must not both ack. But a send that then
+failed left the claim standing, so the auto-reply was never retried. A failed send now
+writes `autoAckSent: false` back (its own try, so a failed release cannot fail the
+inbound), and the next inbound sends it. A send that succeeded keeps the claim even when
+storing the ack's bubble fails afterwards: the customer has the message, and a second
+one is the duplicate the claim exists for. **Tests:** the existing failed-ack case now
+expects `false` and the two writes in order (`[true, false]`); new cases send on the
+next inbound exactly once, and keep the claim when only the bubble's write fails. The
+first two fail against the previous `inbound-core.js` (run). **Verified on DEV**
+(`processInbound` run against the DEV database with `WA_SEND_MODE=live` and no token,
+then mock): `autoAckSent` false after the failed send, true after the next inbound, and
+the thread holds two inbounds and one auto-ack.
+
+### Phase 3 — a photo, a voice note or a document is stored as what it is
+
+`api/wa-inbound.js` stored anything that was not text as `"[image message]"`. It now asks
+`inboundContent(m)` (exported, beside `inboundTs`) what a message becomes:
+
+- **image / audio / document** → the message gains `media: {kind, mediaId, mime?,
+  filename?, voice?}` (`sanitizeMedia`, `src/lib/whatsapp.js`). `text` is the caption, or
+  a fallback a build that knows nothing of `media` still shows: "Photo", "Voice message",
+  "Audio", "Document: menu.pdf". The conversation list's line is the fallback plus the
+  caption ("Photo · Somos 3, mejor a las 21:00"), through `processInbound`'s new
+  `snippetText`. **A caption is parsed like a text**; a photo without one, and any audio,
+  is not parsed at all, so the "analyzing…" flag is not raised for it.
+- **Anything else** (video, sticker, location, contact card, reaction, a media message
+  whose id is not one) → one line, "Video — open WhatsApp on the phone to see it"
+  (decided 2026-10-14), and no `media`.
+- **The id is checked, because it goes into a Graph path in phase 4**: letters, digits,
+  `.`, `_`, `-`, starting with a letter or digit (the first version allowed `..`, a
+  segment that climbs). A mime type must read as one (codec parameters kept). A file name
+  loses its control characters, since it ends up in a `Content-Disposition` header.
+  Optional keys are omitted, never `undefined` (the root CLAUDE.md row).
+- **No `SCHEMA` raise**, and the reason is recorded in `src/hooks/CLAUDE.md`'s `messages`
+  line for the next field: messages are read without a whitelist, the server writes them
+  whole, and the client only `update()`s a message's `status`, so an older build cannot
+  delete a key it does not know. `tests/schema.test.js` found `sanitizeMedia` (its walker
+  fingerprints every `sanitize*`): it is pinned with that reason beside it, SCHEMA left at
+  2. `tests/wa-parse-guard.test.js`' source pin on `if (isText) parseJobs.push` now reads
+  `willParse`, still after the skipped branch.
+
+**Tests.** `tests/api-handlers.test.js` now RUNS the webhook and the three simulator
+handlers (ROADMAP #8's test clause, gone from ROADMAP): the GET handshake (and that no
+configured token refuses even an empty one); 401 for a missing signature, a wrong secret
+and bytes changed after signing, writing nothing; 400 for signed bytes that are not JSON;
+each kind's stored shape and line; the caption's draft landing after the response (a stub
+request context collects what `waitUntil` was handed); a redelivery skipped; `messages`
+that is a string manufacturing nothing (CT-WA-04); the timestamp clamp through the
+handler (CT-WA-02); receipts moving a status forward and never back (CT-WA-05); and 500
+only when everything in the payload failed, 200 when one message of two was stored. The
+`wa-sim-*` handlers answer 404 over five env values × two methods × three tokens, then
+405 / 401 / 403, then their own 400s. `tests/wa-media.test.js` holds the pure helpers.
+Mutation-checked: with the line that stores `media` removed, five of the new cases fail.
+
+**Verified on DEV** through the harness (`:3999`, restarted on this code): one
+Meta-shaped payload carrying a captioned photo, a voice note, a PDF and a video stored
+four messages with the shapes above, plus a Spanish auto-ack (its language read from the
+caption). Gemini answered every parse with 503 "high demand" that afternoon, so the
+caption reached the parser (its logged length is the caption's) and the message was kept
+without a draft, which is the designed failure; the same handler with the mock parser
+turned a photo captioned "Mesa para 4 mañana a las 21:00" into a draft for 4 at 21:00
+tomorrow. The inbox draws the list line "Photo · …" and each bubble's text.
+
+### Phase 4 — viewing a photo, a voice note or a document
+
+**`GET /api/wa-media?phoneKey&msgId`** (new `api/wa-media.js`, which takes the send as
+POST in phase 5, so production gains one function, not two). The staff gate, then the
+message is read from the database and **its stored id is the only one used**: the
+browser names a message, never a media id, because the id goes into a Graph path with
+the restaurant's token on it. Then `GET /{media-id}` for Meta's short-lived URL, type and
+size (`mediaInfo`, `_lib/meta.js`), and the bytes fetched with the same bearer
+(`downloadMedia`, only on Meta's media hosts and https, `isMediaHost`) and **streamed**
+to the browser (`pipeline(Readable.fromWeb(…), res)`), since Vercel's guide says a
+streamed response is not held to its 4.5 MB body limit. Answers: 405, 401 / 403 / 503
+(the shared staff gate), 400, 404 (no message, or no media on it), 410 (Meta answers
+4xx: the file is gone), 413 over 16 MB (`MEDIA_VIEW_MAX`, the browser holds the whole
+file: "open WhatsApp on the phone"), 502 otherwise. Only `INLINE_TYPES` keep their type
+(pictures without SVG, audio, PDF, plain text); anything else is
+`application/octet-stream` with `attachment` and `nosniff`, because the client opens a
+document from a blob URL on this origin, where an HTML or SVG file would run as the app.
+A file name reaches `Content-Disposition` as RFC 5987 `filename*=UTF-8''…`.
+
+**Mock media moved here from phase 6**, because nothing in this phase could be seen
+without it: while `WA_SEND_MODE` is mock, a `MOCK.<kind>.<id>` id is answered with a
+bundled sample (`api/_lib/mock-media/`: a 960×720 photo, a 7.5 s Ogg/Opus voice note, a
+one-page PDF, 46 kB together), read through static `new URL(…, import.meta.url)`s so the
+deployment's file tracing includes them; on a live deployment a MOCK id is 410. The
+harness routes `/api/wa-media`. Phase 6 keeps the simulator buttons and the mock upload.
+
+**The client.** `fetchMedia` (`src/lib/wa-backend.js`) downloads with the staff token
+(an `<img src>` cannot carry one) into a blob URL, one per message, shared by the bubble
+and the viewer, reference-counted and revoked 60 s after the last release. `useWaMedia`
+gives a bubble its state: none · expired (computed from the message's time: 7 days
+received, 30 sent, no request) · idle · loading (derived, never set) · ready · toolarge ·
+error with Retry. **The bubble** (`MessageBubble.jsx`): a 240px thumbnail fetched once an
+IntersectionObserver sees it, a grey `--wa-media-wait` square while it loads (a new
+token, registered DECORATIVE: no text sits on it); a voice note's Play button, then
+`<audio controls autoPlay>`; a document row (icon, name, size) that opens a blank tab AT
+THE PRESS and points it at the file when it lands (a tab opened after the download is a
+popup the browser blocks), and saves instead for a type that is not safe to open, a
+refused tab, or an installed iPhone/iPad app. The caption shows under the media only when
+it is a real caption, not the stored fallback. **`PhotoViewer`** (new): an `Overlay` card
+on a tablet and the full-screen sheet on a phone, "Photo · From the customer · 17:11",
+the photo at up to 70dvh, its caption, **Save photo** (named after the message, with the
+type's extension) and **Done**. Modal id `waphoto` in `MODAL_Z` after `wadelete`, with
+its `escapeAction` case; App mounts it in `ModalPresence` after the simulator. Done and
+not a ✕, as the plan had it: Done is the house word for a dismissal with no decision in
+it (the waitlist, Find a booking, the seat note). Icons: `PaperclipIcon` (phase 5),
+`FileIcon`, `PlayIcon`, `PhotoIcon` in `WaIcons.jsx`, on its `Svg` helper.
+
+**CSP** (`vercel.json`): `img-src 'self' data: blob:` and `media-src 'self' blob:`, pinned
+in `tests/csp.test.js` with `object-src 'none'` and `script-src` unchanged.
+`public/sw.js` already leaves `/api/*` to the network; `tests/service-worker.test.js` now
+names two `/api/wa-media` paths among those it must not cache.
+
+**Tests.** `tests/api-handlers.test.js` runs the GET through its stubbed Graph and
+download: the id taken from the database whatever the query says, 400 / 404 / 410 / 413
+/ 502 / 503, the token sent only to Meta's media hosts, MOCK samples in mock mode and 410
+live, a non-inline type served as an attachment, and the stream's bytes. It joins the shared method and staff-gate
+`describe.each`. Mutation-checked: reading the id from the query fails one case, keeping
+every type inline fails another. `tests/wa-rtdb-hardening.test.js`' count of
+`sanitizeKey(phoneKey)` calls is 8 (`getMessage`).
+
+**Verified on DEV** (harness in mock mode, four MOCK messages posted to one thread: a
+photo eight days old, a captioned photo, a voice note, `menu-grupos.pdf`): a request
+without a token is 401; the thumbnail draws the 960×720 sample at 240×240 with its
+caption, the old photo reads "Photo — no longer on WhatsApp", and a clean reload fetched
+the one image in view and nothing else; Play played the voice note (7.52 s, a blob URL);
+a real (non-MOCK) id with no token configured locally shows Couldn't load and Retry. The
+viewer plays `mgt-card-in` / `mgt-scrim-in` on open and `mgt-card-out` /
+`mgt-scrim-out` on Escape before it unmounts, and on a 375px phone opens as the
+full-screen sheet above the inbox. The browser pane refuses popups, so the PDF took its
+designed fallback there (`window.open` → null → save); **the PDF itself was checked in
+Chrome (Playwright, `channel: chrome`) against a scratch page served with `vercel.json`'s
+exact headers**: the blob photo and the voice note load with no CSP violation, and the
+PDF renders in Chrome's viewer by both of the app's paths (straight to the blob, and a
+blank tab pointed at it), `object-src 'none'` notwithstanding. Still to measure: Vercel's
+4.5 MB limit against a streamed response, on the sandbox after merge (A5-6); Safari's
+Ogg/Opus playback and the viewer on the iOS Simulator, with phase 5's picker. Main bundle
+134.40 → 137.56 kB gz.
+
+**Follow-up: the viewer's buttons were 66px tall** (Patryk: "gigantic compared to the
+other ones"). Save photo is a link, because a download needs `href` and `download`, and
+it took mkBtn's 44px floor like the Done beside it. A `<button>` is border-box by the
+browser's default and an `<a>` is not, and nothing in the app sets `box-sizing`
+globally, so the link's floor was its CONTENT's: measured on DEV, 105 × 66 (44 + 2 × 10
+padding + 2 × 1 border), and the footer row, a flex row stretching its items, made Done
+66 beside it. The link is `boxSizing: border-box` and centres its text, and the row
+centres its items. Measured after: both 44 (Save photo 105 × 44, Done 69.1 × 44, the
+same as Find a booking's Done), on the tablet card and on the 375px sheet, where Done
+sits 18px from the edge. `tests/link-buttons.test.js` finds every `<a>` styled with a
+button maker and fails one that is not border-box (mutation-checked: dropping the
+property fails it); Save photo is the only one today.
+
+### Phase 5 — sending a photo or a PDF (A4-1 send, A4-5)
+
+**`POST /api/wa-media?phoneKey`** (the same function as the GET). The file is the RAW body
+(`bodyParser` off), so a 4 MB PDF costs 4 MB of Vercel's 4.5 MB request body and not the
+5.3 MB a base64 field would; its type is the Content-Type, and the caption and a
+document's name ride in `X-Caption` / `X-Filename`, percent-encoded (a header carries
+bytes, not text), which keeps both out of URLs and request logs. Guards in order: 405 →
+the staff gate → 400 (phoneKey, a header that does not decode, a caption over
+`WA_CAPTION_MAX` 1,024) → 415 (only `WA_SEND_TYPES`: JPEG, PNG, PDF) → 413 (over
+`WA_SEND_MAX_BYTES`, 4.2 MiB, by Content-Length and again while reading) → 400 (an
+empty body, or first bytes that are not what the Content-Type says: `sniffType`) → 404 →
+410 (the window) → 502. The body is read before the conversation, so no refusal leaves a
+request half-read. Then **two calls, one message**: `uploadMedia` (`POST
+/{phone-number-id}/media`, multipart) and `sendMedia`, ONE `/messages` call carrying the
+id and the caption. `sendText` and `sendMedia` now share `postMessage`, the one function
+that POSTs a message, so A4-5 has one place to hold. The outbound message is stored with
+`media` (through `sanitizeMedia`, so a document's name is cleaned before it is sent too)
+and `authorEmail`; the snippet reads "Photo · <caption>" or "Document: <name>"; an archived
+conversation is un-archived, as `wa-send` does. **The mock upload moved here from phase
+6**: in mock mode `uploadMedia` returns `MOCK.<kind>.<random>`, which the GET answers
+with the sample, so a sent photo can be seen on DEV. The harness's CORS allows the two
+headers.
+
+**The composer** (`ReplyComposer.jsx`, `src/lib/wa-attach.js`). A paperclip (shown only
+where `sendMedia` exists, i.e. `sendsViaServer()`) opens a hidden file input. A photo is
+redrawn on a canvas, longest side 1,600px, JPEG at 0.8, over white, honouring its
+rotation, which also drops its metadata and the place it was taken; a PDF over the cap,
+or anything that is not a photo or a PDF, is refused with a sentence and attaches
+nothing. The file waits in a chip (a thumbnail, or the name and size, and a ✕) that
+eases in and out on a `Reveal`, the box becomes its **Caption**, and Send or Enter sends
+it; the button reads "Sending…" meanwhile. A failure keeps the file attached and says
+why ("Couldn’t send: Recipient not allowed. The file is still attached."); the sentence
+leaves when you type, as `InlineAlert` does in a form. **Everything the composer holds is
+keyed to its thread**, because ConversationView is not remounted per conversation: the
+file, its sentence, a send in flight, a photo being prepared, and (found while writing
+these notes) the TEXT, which had always been one string for every thread and is now the
+caption. Measured on DEV before: a caption typed beside a PDF for one customer sat in the
+next customer's box as a reply, one Enter from being sent to them. Each thread now keeps
+its own draft, as WhatsApp does, and a sent caption is cleared in its own thread
+wherever staff are by then. Focus goes to the caption after a photo or a PDF is picked
+(the PDF path skipped it at first). `MessageBubble` offers no Retry on a failed media
+message and `handleResend` skips one: its text is the stored label, and a resend would
+have sent the word "Photo".
+
+**Tests.** `tests/api-handlers.test.js`: the POST joins the shared gate's `describe.each`;
+its 400s, 415s, 413s (declared, streamed past the cap, exactly at the cap) and sniff
+mismatches; 404 and 410; the stored message and conversation; a PNG; un-archiving; a sent
+photo then opened through the GET; and **A4-5 as assertions**: one Graph call for a
+`wa-send` (to `/messages`), and for a `wa-media` POST one upload then exactly one
+`/messages` with the id and caption inside it, a PDF's carrying its name and no caption key
+when there is none, and 502 with nothing stored when the upload or the send fails (and no
+`/messages` call after a failed upload). Mutation-checked: sending the caption as a second
+text message fails the A4-5 case, and dropping the sniff fails the mismatch case.
+`tests/wa-media.test.js`: `sendKindOf`, `attachKind`, `attachRefusal`, `fitWithin`, and the
+composer's thread keying. Writing `attachRefusal`'s test found a sentence that contradicted
+itself: a PDF a few kB over the cap rounds to the cap's own label and read "This PDF is
+4.2 MB. The most that can be sent from here is 4.2 MB."; it says "just over" now.
+`tests/list-columns.test.js` names `wa-attach.js` as the one canvas beside `textWidth`'s, on
+the ground that it draws a picture, and fails it if it ever measures text.
+
+**Verified on DEV** (harness in backend mode, mock send, thread `+34 699000555`): a
+3000×2000 transparent PNG became an 11 KB JPEG in the chip, its transparent half white;
+the chip eased in (0 → 66px over ~530ms) and out on ✕ (66 → 0 over ~480ms); a photo sent
+with "Vuestra mesa en la terraza ☀️" made ONE outbound bubble with the caption, emoji
+intact, "delivered", the list reading "Photo · Vuestra mesa en la terraza ☀️", and the
+network showed one POST (no `wa-send`, the caption in no URL) then one GET for the new
+thumbnail; a PDF with no caption made one bubble ("Carta de grupos – otoño.pdf · 1 KB ·
+Open"), and a PDF with a caption, sent with Enter, one bubble with the caption under it;
+an HTML file and a 4.5 MB PDF were refused with their sentences, no chip and no request; a
+502 (stubbed in the page) kept the file with its sentence and the next Send went through;
+a file picked in one thread was absent from another and back on return, and so were two
+drafts typed in two threads. **On the iOS Simulator** (iPhone 18 Pro Max, iOS 27, the
+signed-in home-screen clip on :5179): the paperclip opens the native picker (Photo Library,
+Take Photo, Choose File); a library photo with a location became a 500 KB chip with its
+thumbnail and the Caption box focused; sent with a caption it made ONE bubble with the
+caption, the chip gone and the box empty; thumbnails load, the viewer opens as a full
+sheet with 44px buttons and Done closes it, and the Ogg/Opus voice note plays to its end
+in WebKit. (The simulator's `text` injection never reached the box; tapping its keyboard
+did, so that was the tool, not the field.) **The metadata goes**, measured in the page: a
+2400×1800 JPEG carrying an Exif APP1 with GPS fields came out of `shrinkPhoto` 1600×1200
+with neither "Exif" nor "GPSLatitude" in its bytes. Not checked: the iPad web clip, as no
+iPad simulator has a signed-in clip and signing one in needs the DEV password; it is the
+same WebKit, and the tablet card layout it would show was measured in Chrome.
+Pre-existing and left alone: a failed TEXT send's banner reads "WhatsApp send failed: send
+failed: …" (the composer's sentence drops the server's prefix).
+Main bundle 137.56 → 139.51 kB gz; 3,295 tests.
+
+### Phase 6 — the simulator's customer sends a photo, a voice note or a PDF
+
+The Sim panel's **Reply as customer** gains **Send a photo**, **Send a voice note** and
+**Send a PDF**, the message box above as the caption (a voice note has none, as on
+WhatsApp). **Backend mode only**: a message's `media` is written by the server alone, so
+there is no client-side path, and with backend mode off the three are disabled and say
+why. They take the real road. On DEV the panel posts a Meta-shaped webhook to the
+harness's `/api/wa-inbound`; on the sandbox it posts to the staff-auth
+`/api/wa-sim-inbound`, which now takes `media: "image" | "audio" | "document"`.
+
+**A KIND, never an id.** The sandbox endpoint mints the `MOCK.<kind>.<random>` id itself
+and refuses anything that is not one of the three kinds with a 400, a `{kind, mediaId}`
+object included: an id taken from a browser would go into a Graph path with the
+restaurant's token on it, which is the one thing `api/wa-media.js` is built not to allow
+(and on a live deployment a MOCK id is 410 anyway). The kind is checked with
+`hasOwnProperty`, so `"toString"` and `"__proto__"` are refused too (mutation-checked: an
+`in` test lets `"toString"` through and fails the case).
+
+**One spelling, one road.** `src/lib/wa-mock-media.js` (new, pure, imports nothing) holds
+what each kind looks like in a webhook (`SIM_MEDIA`: the type, a voice note's flag, a
+document's name), `mockMediaId(kind)`, which `uploadMedia`'s mock now calls too, and
+`simMediaMessage(kind, caption)`. `inboundContent` moved from `api/wa-inbound.js` to
+`api/_lib/inbound-core.js` (the webhook re-exports it), so `injectSimInbound` reads a sim
+photo exactly as the webhook reads Meta's: the caption is the text and is parsed, an
+uncaptioned photo or a voice note is not. In `src/` only the simulator's stubbed
+`wa-backend-sim.js` imports the new module, so none of it reaches a production chunk
+(`dist/` checked for its strings; the main bundle did not move).
+
+**Tests.** `tests/api-handlers.test.js`: `/api/wa-sim-inbound` with a kind stores the media,
+a server-minted id and the caption, and schedules one parse for a caption and none for a
+voice note or an uncaptioned PDF; six things that are not a kind are 400s that write
+nothing; the GET answers the sim voice note with the bundled Ogg; and the webhook stores
+`simMediaMessage`'s photo and voice note as Meta's. `tests/wa-media.test.js`: the builder's
+shapes, null for every non-kind, and `wa-mock-media.js` as the only file under `api/` and
+`src/` that builds a MOCK id. `tests/wa-sim-not-in-prod.test.js`: in `src/`, only
+`wa-backend-sim.js` imports it.
+
+**Verified on DEV** (harness in backend mode, mock send, thread `+34 699000111`): a photo
+with "Así queda la terraza", a voice note and a PDF with "El menú que pedimos" arrived
+through the webhook as three bubbles (the photo's thumbnail, the voice note's player, the
+PDF's chip, each caption under its file). The list read "Document: menu-grupos-2026.pdf · El
+menú que pedimos", the photo's GET answered 200 and the voice note played (7.5 s). The
+harness parsed the two captions and not the voice note. Gemini answered the first with its
+own 503, and the message was kept without a draft as designed. Then the harness was run
+once with `WA_SIM_ENABLED=1` and the page's staff token: `media: "image"` stored a photo
+whose thumbnail rendered with its caption, a forged `{kind, mediaId}` and `"video"` were 400s,
+and without the flag all three were the gate's 404.
+Main bundle unchanged at 139.51 kB gz; 3,306 tests.
+
+### Phase 7 — WhatsApp messages are kept 12 months, then deleted every night
+
+**What was missing.** A customer's messages were kept for ever. The privacy notice named no
+period, and SECURITY.md §3 listed "a retention period for messages" as open. The decision
+(2026-10-14): 12 months by default, the restaurant can change it, and a nightly job deletes
+what is older. Files are not ours to delete: Meta holds them (7 days for one received, 30 for
+one sent), and the app shows them through the proxy without keeping a copy.
+
+**The setting.** `settings/admin.waRetentionDays`, beside the activity log's
+`activityRetentionDays` and built the same way. It has the same choices (Settings → Admin,
+under **WhatsApp messages**, shown only while the module is on: "Keep messages for") and the
+same normaliser, `retentionDaysOf`. That function moved to a new leaf, `src/lib/retention.js`,
+because the prune imports it under Node ESM and `activity.js` reaches `./day` without an
+extension. `activity.js` re-exports all four names, so no caller changed. An absent, null, 0
+or junk value reads as the shipped year and never as the 30-day floor. `useRoles`' whitelist
+gained the key, so **`SCHEMA` went 2 → 3**: a build without it rewrites `settings/admin` whole
+and would drop the setting. The rules needed nothing, since `settings/admin` validates no keys
+and its write grant and `adminRev` CAS already cover a new one (checked against
+`database.rules.json`).
+
+**The prune.** `api/wa-prune.js`, a GET that Vercel Cron calls at 04:00 UTC every day
+(`vercel.json`'s new `crons`). Each project's production deployment runs it: the sandbox's
+prunes DEV, the restaurant's prunes PROD.
+- **The secret is the only gate, and it is asked first.** With `CRON_SECRET` unset the answer
+  is 503 and nothing is read: an endpoint that deletes must not run open because a variable was
+  forgotten. A wrong or missing bearer gets 401, compared in constant time, before the method is
+  asked. Integrations gained a "Nightly message cleanup" group so the Admin tab shows whether
+  the secret is set (a boolean, as for every key; `api/wa-config.js` lists it).
+- **What goes**, against `cutoff = now − days`:
+  - a conversation whose `lastMessageAt` is older than the cutoff, with all its messages;
+  - in a live conversation, each message whose own `ts` is older.
+
+  A message with no readable `ts` stays in a live thread, because its age is unknown, and goes
+  with a deleted one, because it then belongs to nothing. A conversation with no readable
+  `lastMessageAt` is never deleted.
+- **A thread that came alive keeps itself.** The conversation delete is a transaction
+  (`removeConversationIf`) that re-asks "still expired?" against what is stored at that moment.
+  So a message that arrived while the prune ran saves the thread, and its own message is kept
+  because its `ts` is inside the window. A customer who writes again a year later gets the
+  one-time auto-reply again, which was accepted.
+- **Only threads that can hold an old message are read** (`mayHoldOld`). A conversation created
+  inside the window cannot hold one, so most nights read almost nothing.
+- **Deletes go per key.** Each conversation goes on its own, and each thread's old messages go
+  as one update of nulls under its own key. Nothing deletes a whole node: firebase-admin bypasses
+  the rules, so this code is the only limit on what it can remove.
+- **It reports what it did.** One log line ("kept 365 days (before …): removed X
+  conversation(s) and Y message(s), read Z thread(s), E error(s)") and the same counts as JSON.
+  A thread that fails is counted and skipped, and any error makes the answer 500, so Vercel's cron
+  log shows a failed night.
+
+The dev harness routes `/api/wa-prune` and sets no secret, so it answers 503 until one is given.
+
+**The privacy notice says so** (EN and ES, "How long we keep it" / "Cuánto tiempo los
+conservamos"). It now states that each WhatsApp message is deleted automatically 12 months after
+it was sent, and the conversation with its last message. It also states that a photo, voice note
+or document stays with Meta (7 days received, 30 sent), and that the booking system shows it
+from Meta without storing a copy. The tenant's `privacy.updated` is 2026-10-14.
+SECURITY.md §3's conversations/messages row reads "12 months, daily prune", and the open item is
+gone from its list.
+
+**Tests** (3,306 → 3,316):
+- `tests/api-handlers.test.js` gains a `wa-prune` block, with `transaction` added to the
+  in-memory firebase-admin:
+  - 503 with no secret, writing nothing;
+  - 401 to a missing, wrong or almost-right token, before a POST is told 405;
+  - a deletion scenario that asserts each write is per key, plus the log line;
+  - the setting through the normaliser (absent, null, 0 and junk are a year; 3 is the 30-day
+    floor);
+  - the transaction re-check (a conversation that came alive between the read and the delete is
+    kept, with its new message);
+  - the three pure questions.
+- `tests/sandbox-branch.test.js`: every cron names a function `main` deploys, so a cron can't
+  point at a file `.vercelignore` drops.
+- `tests/privacy.test.js`: the notice's periods equal `DEFAULT_RETENTION_DAYS` and the
+  `WA_MEDIA_KEEP_*` numbers, in both languages.
+- `tests/activity.test.js`: `waRetentionDays` reads like the log's and is kept apart from it.
+- `tests/schema.test.js` is re-pinned at 3 with `sanitizeAdminSettings`' new print.
+- `tests/wa-rtdb-hardening.test.js` counts 11 `sanitizeKey(phoneKey)` sites (three new).
+
+Mutation-checked:
+- with the transaction's re-check removed, the came-alive case fails;
+- with the secret check moved after the method, the 401-before-405 case fails.
+
+**Verified on DEV** (the harness run once with a `CRON_SECRET`, the page signed in on the persisted
+session):
+- The first run removed 2 conversations and 5 messages and read 3 threads. One of the two was the
+  2017 Meta test sample that had sat on DEV since the sandbox's first webhook. The sandbox's own
+  cron would remove it on its first night anyway.
+- A second run removed nothing.
+- Setting "Keep messages for" to 2 years, then back to 1, showed in the next run's `days` (730,
+  then 365), so the screen and the delete read the same value.
+- With no secret, the answer was 503.
+- On the local dev server, the Integrations panel shows its "couldn't check" state, as designed
+  (no `/api` there).
+
+Main bundle 139.57 kB gz (+0.06, the Admin section); 3,316 tests; lint 63 warnings; style OK.
+
+### Phase 8 — the draft checks the request before Accept
+
+**What was missing.** The draft card said what the customer asked for and nothing about whether
+the restaurant could take it, so a full evening was found out only once the booking form had
+opened over the inbox (Patryk, 2026-10-06; the ROADMAP entry this closes).
+
+**The check is the booking form's own** (`src/lib/draft-check.js`, pure), composed as
+BookingFormModal composes `availScan` and `kitchenScan`, so the card and the form it opens
+cannot disagree:
+- `draftCheckable(conv)`: a new booking still waiting for a decision, with a size, a date and a
+  time that `sanitizeParse`'s own predicates accept. Anything less is a question for the
+  customer.
+- `draftAvailability`: `trialFits` with the form's `noResh` (`!optimizerActiveFor`), and when
+  nothing fits `findTimes` + `formatSugg`; then `getKitchenLoad` plus this party against
+  `KITCHEN_TABLE_LIMIT`, and when that is reached `findKitchenFriendlyTimes`. A closed day asks
+  nothing else. A time Save would refuse (before opening, after `lastStartMins`) is not called a
+  fit, and the times nearby are still offered.
+- `nearestTimes`: the four times nearest the one asked (a tie goes to the earlier), in clock
+  order.
+- `draftCheckLine`: one sentence per outcome and its tone: "Fits at 20:00", "Kitchen may be
+  busy at 20:00", "No tables for 12 at 20:30", "23:00 is outside opening hours", "Closed on that
+  day".
+- `draftPrefill`: Accept's rule for the name, the phone (with its "+") and the fallbacks, moved
+  out of `useWhatsApp` so Accept and Add to waitlist fill the same fields.
+- `onWaitlistFor`: derived from the waitlist (the same normalised phone, the same date), so
+  nothing is stored on the conversation.
+
+**After the paint.** `useDraftCheck` (hooks) runs it through `useDeferredCompute`, keyed on the
+draft's size, date, time and seating, the bookings, the table blocks, the optimiser and the day's
+hours. Not on `liveBookings`, which App rebuilds on its 15-second tick: the card would blank and
+re-check four times a minute.
+
+**On the card** (`DraftCheck` in `DraftCard.jsx`, in the compact bar and the full card):
+- "Checking the tables…" with a pulsing dot while it runs, then the line in its tone with a mark.
+- "Accept at:" and a chip per other time. A chip is Accept at that time (`onAccept({ time })` →
+  `handleAcceptDraft(conv, over)`).
+- With no table: **Add to waitlist** (App's `addDraftToWaitlist`: asks `waitlistManage`, runs the
+  phone through `phoneForSave` as the form's door does, and shows a refusal under the card), which
+  then reads **On the waitlist**.
+- **Suggest these** (or Suggest a reply): `availabilityReply(lang, …)` in `whatsapp.js` writes
+  the reply in the customer's language, English or Spanish, with the day spelled out, and puts it
+  in the reply box through the composer's new `insert` handle. Nothing is sent.
+- The answer is spoken by an always-mounted status region.
+- `DraftCheck` is keyed to the conversation, so a switch replaces it. Before the key, the old
+  line folded over the new thread for 126 ms (measured).
+
+**`TimeChip`** (`AvailBanner.jsx`). The booking form's suggestion chips were `<span onClick>`,
+unreachable from a keyboard; they are `<button type="button">` now, and the card uses the same
+component. Measured identical (49.66×20 px; only `text-align` differs), and Enter on a focused
+chip picks its time without saving the form.
+
+**`useDeferredCompute` never hands back an answer to another question.** Its reset runs in an
+effect, after the paint, so for one frame after a change the previous answer stood under the new
+question: measured in the inbox, where a switch read "Fits at 20:30" under the next draft's
+time, and the booking form had the same frame on every edited field. A result is now stored with
+the deps it answers and read only while they are still the deps (`sameDeps`, `STALE`). The
+collapse while re-checking is unchanged: that was already the hook's contract (Patryk's).
+
+**Found by running it, fixed here.** Add to waitlist turned into a status chip of its own: a
+content-box `<span>` 44px tall beside 36px buttons, and narrower, so on a 1280px tablet the row
+re-wrapped and the control moved 460px from under the finger that pressed it, and the press
+dropped a keyboard user's focus to `<body>`. It is one button in one box now: `WAIT_W` 130px (the
+wider label in the button's type: 129.0 against 128.6), and once done `aria-disabled` (never
+`disabled`, which makes Chrome blur it) with `mgt-nopress`. The status region adds "On the
+waitlist." Re-measured with a real click: (42, 636) 130×36 before and after, Suggest these
+unmoved, focus kept, the label changing 278ms later as the write echoes.
+
+**Tests** (3,316 → 3,357):
+- `tests/draft-check.test.js` (new, 28):
+  - which drafts are checked;
+  - agreement with `trialFits` for an empty evening, a full one, completed visits, a busy kitchen,
+    one party fewer, a table block, a closed day, times outside the hours, the optimiser off, and
+    the seating asked;
+  - `nearestTimes`;
+  - `draftPrefill`, with source pins that Accept and the waitlist both read it;
+  - `onWaitlistFor`;
+  - `availabilityReply` in English and Spanish;
+  - source pins for the deferred hook, the chip, Suggest and the waitlist button;
+  - `sameDeps` and the stale guard.
+- `tests/phone-countries.test.js`: App's `phoneForSave(` count is 2, and `addDraftToWaitlist` is
+  pinned to it.
+- `tests/contrast.test.js`: the three inks on `--wa-draft-bg`, in all four themes.
+
+Mutation-checked:
+- the kitchen counted without this party fails;
+- the outside-hours branch removed fails;
+- a bad ink in the registry fails in all four themes;
+- the stale guard removed fails;
+- the waitlist button made `disabled`, or split back into a chip, fails.
+
+**Verified on DEV** (the simulator's canned drafts, backend mode off for the run and on again
+after):
+- English, 2 guests tomorrow at 20:00: "Fits at 20:00".
+- Spanish, 12 guests Friday 16.10 at 20:30, with a 20-guest test booking at 20:00:
+  - "No tables for 12 at 20:30", with chips 17:15, 17:30, 17:45 and 18:00;
+  - the 17:30 chip opened the form at 17:30 for 12, which placed them on tables 3–7;
+  - Suggest these put the Spanish reply in the box with the cursor at its end;
+  - Add to waitlist stored the entry, and removing it from the waitlist panel turned the button
+    back by itself.
+- Without that booking the same draft read "Kitchen may be busy at 20:30", with no chips (no
+  quieter time had a table for 12).
+- The full card at 1024×1366.
+- Not measured: the fold when a booking changes under an open card. The page was hidden for that
+  part of the session (`requestAnimationFrame` did not fire), and a reading then measures the
+  throttling. It is the shared `Reveal`, measured both ways in `tests/motion.test.js`.
+- All the test data was removed afterwards: the booking, the waitlist entry, and the two
+  conversations (archived).
+
+Main bundle 142.47 kB gz (+2.90). By the sourcemap, against phase 7: DraftCard +2.9 kB raw,
+`whatsapp.js` +2.2, `draft-check.js` +2.1, the rest under 0.5 each. The main chunk is 502.53 kB
+raw, past Vite's 500 kB warning for the first time. 3,357 tests; lint 63 warnings; style OK.
+
+### Phase 9 — the WhatsApp inbox loads when it is opened
+
+**Why.** Phase 8 took the startup chunk to 502.53 kB, past Vite's 500 kB warning for the first
+time. Patryk chose (at the handback, over accepting the warning) to fix it in this version. The
+inbox was a static import in App, so every restaurant downloaded it at startup, including one
+with the module switched off.
+
+**What changed.** `InboxPanel` and `PhotoViewer` are `lazyChunk`s in App, each mounted inside a
+`Suspense` with no fallback, the way Settings, Find a booking and the More popover already are.
+`useWhatsApp` stays eager: it is the data layer (the listeners, the unread count, Accept's seam
+into the booking form), and only the screens wait until they are opened. Nothing is prefetched,
+as decided: a restaurant fetches the inbox on its first open.
+
+**Measured** (production build; the startup set is the entry plus every chunk it imports
+statically, summed with Node's gzip):
+
+| | phase 8 | phase 9 |
+|---|---|---|
+| entry chunk | 502.53 kB · 142.47 kB gz | 418.87 kB · 121.67 kB gz |
+| startup set | 1,074.60 kB · 315.10 kB gz | 1,002.18 kB · 298.38 kB gz |
+
+- New lazy chunks: `InboxPanel` 67.12 kB (17.04 gz), `PhotoViewer` 2.26 kB, and `useWaMedia`
+  5.61 kB, which both use.
+- Two small chunks are new in the startup set, because the entry now shares them with the inbox
+  chunk: `customers.js` (9.99 kB) and `firebase.js` (1.25 kB).
+- No chunk is over 500 kB, so the warning is gone.
+- The built output still holds the production database URL once (now in the `firebase` chunk)
+  and the DEV one nowhere, as `src/CLAUDE.md` says.
+
+**Tests** (3,357 → 3,361): `tests/inbox-lazy.test.js`.
+- App reaches both screens only through `lazyChunk`, each inside a `Suspense`.
+- No file outside `components/whatsapp/` imports an inbox component statically. One such import
+  anywhere undoes the split silently: the v18.0.0 Admin panel was in the startup bundle that way.
+- From the build: none of four inbox-only strings is in the startup set, and all four are in some
+  chunk, so the absence means the split and not a renamed string.
+- Mutation-checked: with phase 8's App.jsx (the static imports) rebuilt, three of the four fail,
+  the build check included.
+- The two older tests that read the build (`wa-sim-not-in-prod`, `write-trace`) read every chunk,
+  so the inbox's chunk is still covered by both.
+
+**Verified on DEV:**
+- A fresh load fetched no inbox module in 8 seconds.
+- The first open fetched the inbox's 11 modules and showed it after 2.28 s. That is the dev
+  server compiling each module on first request; production fetches one 17 kB (gzipped) chunk.
+- A warm open showed the dialog 41 ms after a real click, and Escape returned focus to the
+  WhatsApp button. The `I` key opens it.
+- The photo viewer fetched its module on its first open, with 44px Save photo and Done.
+- Accept opened the form at the draft's 21:00, and Back returned to the inbox on the same
+  conversation, its check line intact.
+- **One limit, shared with Settings:** a dialog finds its opener among blurs from the last
+  `RECENT_MS` (1,500 ms, `lib/focus-return.js`). A cold first open slower than that returns
+  focus to `<body>` when the inbox closes. Measured on the dev server's 2.28 s open; a
+  production chunk of 17 kB is expected to be well inside the window.
+
+Main bundle 121.67 kB gz (−20.80); 3,361 tests; lint 63 warnings; style OK.
+
+### `/code-review` of the branch (2026-10-15)
+
+Seven findings. Each was tested against the code before it was changed, and each fix is
+its own commit.
+
+1. **The prune deleted a conversation before its messages.** It finds a thread through its
+   conversation row, so if the message delete then failed, the messages were kept for ever,
+   past the period the privacy notice states. Reproduced with a database double whose message
+   delete throws: the conversation was gone and both messages stayed. The messages go first
+   now, and a failure leaves the conversation for the next night to find again (two new tests,
+   one per failing write). One race is accepted: a thread that comes alive between the read and
+   the delete keeps its row but loses any message with no readable `ts`, which nothing in this
+   app writes.
+
+2. **The inbox's Delete was two writes, and a comment said the prune would clean up after it.**
+   `doDeleteConversation` and bulk delete each made two `set(null)` calls (the row, then the
+   messages), and nothing reaches a thread's messages once its row is gone: the inbox and the
+   prune both find a thread through its row. Both deletes are now ONE multi-path update,
+   `conversationDeletePatch(keys)` (`lib/whatsapp.js`), which `eraseConversation` and
+   `clearAllWaData` use as well. The unused single-half `removeConversation` and
+   `removeMessages` are removed, so the two-write shape cannot come back by being called.
+   `tests/wa-rtdb-hardening.test.js` tests the patch and checks that every delete in the hook
+   goes through it. On DEV, a seeded conversation deleted from the Archived tab left neither
+   `conversations/<key>` nor `messages/<key>`.
+
+3. **A photo the customer received could be reported as not sent.** Once Meta has accepted
+   the message, a failure to store it escaped as a 500, the composer said "Couldn't send …
+   The file is still attached", and a second press sent the same file again. Reproduced with
+   a database double that refuses the message write. `POST /api/wa-media` now answers 200 with
+   `stored: false` (a failed conversation-line update after a stored message is only logged),
+   and the composer clears the file and says "Sent to the customer, but it could not be saved
+   in this thread. Don't send it again." Not reproduced on DEV: nothing there makes the Admin
+   SDK's write fail on demand. The text send (`api/wa-send.js`) has the same shape and is
+   unchanged; its failure goes to the write-warning banner, which offers no resend.
+
+4. **The prune read every long-lived thread whole, every night.** A conversation that began
+   before the cutoff can hold an old message, so it is read; after the first year that is
+   every regular customer, and each thread was downloaded in full to find the few messages
+   that just turned 12 months old. The header's "most nights read almost nothing" held only
+   in year one. A live thread is now asked only for its old messages, on a new
+   `.indexOn: ["ts"]` at `messages/$phoneKey` (`readOldMessages`); a thread that is going is
+   still read whole. **Measured on the emulator through firebase-admin:** with the index, the
+   query returns exactly the messages below the cutoff plus those with no `ts`. Without it,
+   `get()` is refused ("Index not defined"), where I had written that the server would
+   filter. So `readOldMessages` falls back to the whole read on that error alone, and the
+   deploy order does not matter. `npm run test:rules`: 307 passed. Three new prune tests
+   (the query and its bound, the fallback, the index in the rules).
+
+5. **A keyboard press on a voice note or a document dropped focus on `<body>`.** Play and
+   the document row were `disabled` while the file loaded, and a focused control that becomes
+   disabled loses focus (re-measured on DEV with a scratch button). They are `aria-disabled`
+   now (the phase 8 "On the waitlist" pattern) and ignore a press while loading, and focus
+   follows a press made with it to whatever replaces the control: the player, the Retry chip,
+   or back through Play. Measuring it found the photo's Retry had the same gap (the chip
+   leaves with the failure), so it hands focus to "Open photo". Measured on DEV with real
+   Enter presses and `fetch` stubbed to hold `/api/wa-media` 1.5 s and answer with the
+   bundled samples: Play keeps focus while loading, then the `<audio>` has it; the document row
+   keeps it through "Opening…" and the failure; Retry → Play → player; photo Retry → Open
+   photo. The backend harness on :3999 was another process with no database access, so
+   it was stubbed rather than used.
+
+6. **Text typed while a file uploaded was erased when it arrived.** The box stays editable
+   during the upload, and a success cleared the whole draft. Now the draft as it was sent is
+   taken off the front of whatever is there, and the rest stays. Measured on DEV with the
+   media POST stubbed to answer after 1.5 s: caption "Our menu", Enter, then " Shall I book
+   you?" typed during the upload; the request carried "Our menu", and the box was left
+   holding "Shall I book you?". A draft edited in the middle during the upload is kept
+   whole: what was sent can no longer be told apart from it.
+
+7. **A file attached in one conversation was dropped by attaching one in another.** The
+   composer stays mounted when the two-pane inbox opens another thread, and it held one
+   attachment slot, keyed to its thread: a PDF picked for customer B replaced customer A's,
+   while A's caption, kept per thread since phase 5, stayed. Measured on DEV at 1280px, the
+   old code: attach in A, attach in B, back to A, and A had no file. Attachments are now kept
+   per thread the way the text is (`atts[threadKey]`), and a photo's preview URL is given
+   back when nothing shows it any more (a diff of the URLs still held, plus the unmount).
+   Same run, new code: A kept `a-menu.pdf` and "caption A", B kept `b-menu.pdf`. The same
+   measurement found the chip and the refusal sentence were one `Reveal` across threads, so
+   opening a thread with no file left the previous customer's file folding away over the new
+   box (the reason `DraftCheck` is keyed to the conversation). Both are keyed to the thread
+   now, and the other customer's chip is gone 50 ms after the switch. At phone width a thread
+   unmounts on Back and its text and file go with it, as before; my first reading of this
+   finding was taken there, at 526px, and measured that rather than the slot.
+
+### Follow-up (2026-10-15, before the merge)
+
+1. **Accept fills Name from the WhatsApp profile name** (Patryk: "the parsing stopped finding
+   the name"). It had not stopped. Measured on DEV through the harness with live Gemini: four
+   phrasings ("soy Marta Ruiz", a "Gracias, Lucía" sign-off, a follow-up "My name is John
+   Smith", "this is Peter") and a Re-check each put the name in the draft, and Accept filled
+   the form with it. What a real phone did differently was not type a name: the sandbox
+   conversation from Patryk's own phone (14.10) held a `profileName`, which Meta sends with
+   every message, and no message naming him, so `draftPrefill` had nothing to read. It now
+   falls back to the profile name LAST: the name typed in the message, else the name on this
+   phone's past bookings, else the profile name (Patryk's order; a profile name is a nickname
+   or an emoji as often as a name). Accept and Add to waitlist both read `draftPrefill`, so
+   both gain it. Verified on DEV: a simulated customer whose profile is "Lucía Gómez" writing
+   "Mesa para 2 mañana a las 14:00" opens the form with Name "Lucía Gómez". The simulator's
+   customer has the profile name "Sim Customer" unless the panel gives one, so a simulated
+   draft that states no name now opens with that. Locally the harness timed every parse out
+   at 15 s first: the `.env.local` it was copied from pinned `GEMINI_MODEL=gemini-3.1-flash-lite`;
+   without the line it uses the default, `gemini-3.5-flash-lite`, which answered in about 5 s.
+   A local file, not in the repo.
+
+2. **The parsing indicator can be seen** (Patryk: "parsing a message should show that something
+   is working"). It was there: "Reading the message…" over a shimmer bar, and "parsing…" on the
+   conversation's row, measured on DEV for the whole 5.5 s of a Re-check. What made it look
+   still: the sweep never painted. It was a background-image on the bar itself, and the bar
+   (and the row's chip) carries an inline `background`, whose shorthand resets
+   background-image and beats a class (/code-review, measured: `background-image: none`).
+   `--wa-shimmer` was also never defined in either theme (only its entry in
+   `tests/contrast.test.js`'s DECORATIVE list existed). Now `--wa-shimmer` is the draft ink at 0.45 (light)
+   and `#fde68a` at 0.6 (dark), drawn by a `::after` band 40% of the bar wide that a TRANSFORM
+   carries edge to edge (`translateX(-100%)` → `250%`, the same 1100ms ease-in-out loop, so
+   DESIGN.md's loop exception is unchanged and the sweep no longer repaints), and the card's
+   draft icon breathes with `.mgt-dot-pulse`, as the draft check's "Checking the tables…" dot
+   does. At rest, and once reduced motion collapses the loop, the band sits off the left edge.
+   Measured on DEV in both themes: the band's computed transform moves across the bar, and
+   the row chip (64px) takes the same rule. The band is `z-index: -1` inside an
+   `isolation: isolate` host (/code-review), so it passes behind the chip's "parsing…" rather
+   than over it. `.mgt-shimmer::after` joins the stylesheet's
+   CRITICAL_SELECTORS: without it the bar just sits still.
+
+3. **A waiting draft dims while it is read again.** On a follow-up message or a Re-check the old
+   draft stayed at full strength under "Reading the message…", so values about to change looked
+   final. Its card now sits at `REREAD_DIM` (0.55) with `aria-busy` while `isParsing`, on
+   `M.move` both ways (a state, so neither direction curve's case), and stays pressable, since
+   the parse may change nothing. Only a waiting draft: an accepted or dismissed card cannot be
+   changed by a parse. Measured on DEV through a Re-check, sampled each frame: 0.91 at 68 ms,
+   0.55 by 269 ms, held for the whole parse, then 0.71 → 1.00 over 190 ms when it landed.
+
+4. **A photo fades in over its waiting box** (`.mgt-appear`, `--t-move` ease-out, the timeline
+   ghosts' entrance) where it replaced the box in one frame. An opacity transition on `onLoad`
+   was tried first and measured as never starting: a blob decodes before the first paint, so the
+   image was never drawn at 0. A photo already downloaded still stands as the box for a frame
+   (the IntersectionObserver gate), so the fade replaces that flash and plays on reopening a
+   thread too. Measured on DEV: box at 111 ms, the photo 0 → 1.00 between 138 and 371 ms, cold
+   and reopened alike.
+
+5. **A file on its way breathes.** The photo's waiting box, Play and the document row while they
+   fetch, and the attached file while it is sent, were a static label ("Loading…", "Opening…",
+   "Sending…") over a wait of up to a few seconds. Their icon (the thumbnail, for an attached
+   photo) now takes `.mgt-dot-pulse`, the draft check's loop, only while waiting. Measured on
+   DEV with `/api/wa-media` held 1.5 s: the waiting box and the document row's icon run
+   `mgt-dot-pulse` during the wait and drop it once the file is there. The voice note's Play and
+   the attached file while sending take the same class on the same condition; not measured
+   live.
+
+6. **A phone on the network reaches the local WhatsApp backend** (dev tooling only). The DEV
+   app called the harness at `http://localhost:3999`, which on the iPhone meant the iPhone, so
+   backend mode there broke every send and the paperclip (shown only in backend mode) could
+   not be tested. `WA_BACKEND_URL` now takes the page's host in DEV, and the harness answers
+   CORS for private-network origins as well as localhost (`DEV_ORIGIN_RE`); it already
+   listened on every interface. A production build still calls `/api/*` on its own origin.
+   Signing in on a phone also needs the phone's origin on the DEV API key's website
+   restrictions, which Patryk added for `http://192.168.1.34:5173/*`.
+
+### Deploy steps (Patryk)
+
+1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random
+   value from `openssl rand -hex 32`, then redeploy each. Without it the nightly prune answers
+   503 and deletes nothing. Settings → Admin → Integrations shows whether it is set.
+2. **Publish `database.rules.json` to PROD (and DEV).** The only change is
+   `.indexOn: ["ts"]` on `messages/$phoneKey` (the `/code-review` above, item 4): no
+   permission moves, and the order against the app deploy does not matter, because without
+   the index the prune reads each thread whole, as before, and logs once that the index is
+   missing. `settings/admin` gains `waRetentionDays` inside its existing grant and `adminRev`
+   pair; the one other config change is `vercel.json`'s cron.
+3. **Refresh every device after the deploy.** `SCHEMA` is 3, so a device still on the old
+   build shows "This device needs refreshing" and writes nothing until it reloads.
+
+After the merge: tick A4-1 and A4-5 in the go-live checklist. A5-6 is the live test on the
+sandbox: a photo each way with a real phone, a voice note in, a PDF each way, the 4.5 MB
+measurement, and the first cron run in Vercel's logs.

@@ -75,6 +75,10 @@ const SELF = "test-hygiene.test.js";
 // empty unless somebody can say why a raw read is right.
 const EXEMPT = {
   // "some.test.js": "why a raw read is correct here",
+  // v18.8.0: it reads the three bundled media samples (a JPEG, an Ogg, a PDF)
+  // to compare bytes served with bytes on disk, and reads no source; the .js
+  // path the detector finds is `vi.mock("../api/_lib/gemini.js")`.
+  "api-handlers.test.js": "reads binary media fixtures byte for byte, never JS source",
 };
 
 const files = readdirSync(TESTS)

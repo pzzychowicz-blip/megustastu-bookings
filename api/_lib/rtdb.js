@@ -192,6 +192,13 @@ export async function readMessages(phoneKey, limit) {
   return limit > 0 ? list.slice(-limit) : list;
 }
 
+// v18.8.0: one stored message, or null — what api/wa-media.js reads a media id
+// from, so the id is never one a browser supplied.
+export async function getMessage(phoneKey, msgId) {
+  const snap = await getDb().ref("messages/" + sanitizeKey(phoneKey) + "/" + sanitizeKey(msgId)).get();
+  return snap.exists() ? snap.val() : null;
+}
+
 export async function messageExists(phoneKey, msgId) {
   const snap = await getDb().ref("messages/" + sanitizeKey(phoneKey) + "/" + sanitizeKey(msgId)).get();
   return snap.exists();
@@ -228,4 +235,81 @@ export async function readOperatingHours() {
   } catch {
     return null; // prompt falls back to the default hours line
   }
+}
+
+// ── Retention (v18.8.0 phase 7, api/wa-prune.js) ─────────────────────────────
+// What the nightly prune reads and deletes. Deletes go PER KEY (a conversation)
+// and PER MESSAGE (a multi-path update of nulls under one conversation), never
+// a whole-node wipe: firebase-admin bypasses the rules, so nothing but this
+// code stands between the prune and every thread at once.
+
+// The stored setting, raw: the caller normalises it (`retentionDaysOf`, the
+// same function the Admin tab reads it through).
+export async function readWaRetentionDays() {
+  const snap = await getDb().ref("settings/admin/waRetentionDays").get();
+  return snap.exists() ? snap.val() : null;
+}
+
+export async function readAllConversations() {
+  const snap = await getDb().ref("conversations").get();
+  return snap.exists() ? snap.val() || {} : {};
+}
+
+// One conversation's messages as stored, keyed by their child keys (an array
+// node's keys are its indices, which delete the same way).
+export async function readMessageNode(phoneKey) {
+  const snap = await getDb().ref("messages/" + sanitizeKey(phoneKey)).get();
+  return snap.exists() ? snap.val() || {} : {};
+}
+
+// One conversation's messages older than `before` (ms), keyed like
+// readMessageNode, for a thread the prune is NOT deleting (/code-review). A
+// query on `ts`, indexed in database.rules.json (`messages/$phoneKey`), so a
+// regular customer's thread costs the night only its old messages rather than
+// its whole history. A message with no `ts` comes too (null sorts first); a
+// `ts` that is a string does not (strings sort after numbers). The caller
+// filters either way. Both measured on the emulator through firebase-admin.
+//
+// **A `get()` on a query the rules do not index is REFUSED** ("Index not
+// defined"), not filtered for the SDK as a listener's is: measured on the
+// emulator. So until the rules carrying the index are published, the thread is
+// read whole, as before it, and the deploy order does not matter.
+let warnedNoIndex = false;
+export async function readOldMessages(phoneKey, before) {
+  const node = getDb().ref("messages/" + sanitizeKey(phoneKey));
+  let snap;
+  try {
+    snap = await node.orderByChild("ts").endAt(before - 1).get();
+  } catch (e) {
+    if (!/index not defined/i.test(String(e && e.message))) throw e;
+    if (!warnedNoIndex) {
+      warnedNoIndex = true;
+      console.warn("[wa-prune] messages/$phoneKey has no .indexOn ts yet (publish database.rules.json); reading threads whole");
+    }
+    snap = await node.get();
+  }
+  return snap.exists() ? snap.val() || {} : {};
+}
+
+// Deletes the conversation only if `stillOld(stored)` holds at the moment of
+// the write, so a message that arrived after the prune read the list keeps its
+// thread. Resolves true when it was deleted.
+export async function removeConversationIf(phoneKey, stillOld) {
+  let decided = false;
+  const r = await getDb().ref("conversations/" + sanitizeKey(phoneKey)).transaction(function (cur) {
+    // The first call may see null (nothing cached yet); returning it asks the
+    // server, which re-runs this with what is stored.
+    if (cur == null) { decided = false; return cur; }
+    decided = stillOld(cur);
+    return decided ? null : undefined; // undefined aborts: leave it as it is
+  });
+  return !!(r && r.committed && decided);
+}
+
+// Deletes the listed messages of one conversation in one write.
+export async function removeMessages(phoneKey, ids) {
+  if (!ids.length) return;
+  const patch = {};
+  ids.forEach(function (id) { patch[id] = null; });
+  await getDb().ref("messages/" + sanitizeKey(phoneKey)).update(patch);
 }

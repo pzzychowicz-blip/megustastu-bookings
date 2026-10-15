@@ -84,6 +84,7 @@ import { draftFromBooking } from "./lib/booking-fields";
 import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal, draftForSave, draftRefusal, formSeatClash, kitchenAsk } from "./lib/booking-save";
 import { normalizePhone, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
+import { draftPrefill } from "./lib/draft-check";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
@@ -383,7 +384,15 @@ import { activityWindow, retentionMs, retentionLabel } from "./lib/activity";
 // VITE_FB_TARGET=dev) so it can never appear in a real production build.
 import { useWhatsApp } from "./hooks/useWhatsApp";
 import { useWaSettings } from "./hooks/useWaSettings";
-import { InboxPanel } from "./components/whatsapp/InboxPanel";
+// v18.8.0 phase 9: the inbox and the photo viewer are LAZY, like Settings. As
+// static imports every restaurant downloaded the whole inbox at startup, the
+// module switched off included, and phase 8's draft check took the startup
+// bundle past Vite's 500 kB warning (502.53 kB). The hook above stays eager:
+// it is the data layer (the listeners, the unread count, Accept's seam), and
+// only the screens wait until they are opened. Mapped to `{default: …}` for the
+// `lazyChunk` reason the WaSimulator comment below gives.
+const InboxPanel = lazyChunk(function(){return import("./components/whatsapp/InboxPanel").then(function(m){return {default:m.InboxPanel};});},"WhatsApp inbox");
+const PhotoViewer = lazyChunk(function(){return import("./components/whatsapp/PhotoViewer").then(function(m){return {default:m.PhotoViewer};});},"Photo viewer");
 // v18.0.0 phase 5b — the simulator does not reach production through a STATIC
 // import. Measured on the phase-5a build: `WA_SANDBOX` folds to `false` and
 // Rollup did strip the WaSimulator COMPONENT (none of its UI strings survive),
@@ -414,7 +423,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.7.0"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.8.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1172,6 +1181,8 @@ function BookingApp({uid}){
   const setConfirmArchive = setModalFns.waarchive;
   const confirmDeleteConv = modalOpen.wadelete || null;     // phoneKey pending delete-confirm
   const setConfirmDeleteConv = setModalFns.wadelete;
+  const waPhoto = modalOpen.waphoto || null;                // v18.8.0: {phoneKey, msg} in the photo viewer
+  const setWaPhoto = setModalFns.waphoto;
   const showSim = !!modalOpen.sim;                          // sandbox-only simulator panel
   const setShowSim = setModalFns.sim;
   const [returnToInboxKey, setReturnToInboxKey] = useState(null);   // reopen the inbox here when an overlay closes
@@ -1301,6 +1312,7 @@ function BookingApp({uid}){
   const {
     can, isAdmin, enforceRoles, setEnforceRoles, rows: roleRows,
     activityRetentionDays, setActivityRetention,
+    waRetentionDays, setWaRetention,
     // v18.0.0 phase 4 — the module registry. `hasModule` is the gate every
     // module-owned surface asks, and it is checked BEFORE `can`: a module that
     // is off is hidden from everybody including an admin.
@@ -1410,10 +1422,14 @@ function BookingApp({uid}){
   // Sandbox-only console helpers: window.__waSim.*. The ctx is read through a ref
   // so the helpers always see live savers/conversations without rebinding. The
   // whole effect is dead-code-eliminated in a real prod build (WA_SANDBOX false).
+  // v18.8.0: the simulator writes messages through `simAppendMessage`, the
+  // hook's server-shaped writer, under the `appendMessage` name wa-sim.js
+  // calls: it writes to conversations nobody has open, which the guarded
+  // saver now refuses (its guard is per key, and only an open thread is read).
   const waSimCtxRef=useRef(null);
   waSimCtxRef.current={
     conversations:wa.conversations, messagesMap:wa.messagesMap, upsertConversation:wa.upsertConversation,
-    appendMessage:wa.appendMessage, saveBookings:saveBookings, clearAllWaData:wa.clearAllWaData,
+    appendMessage:wa.simAppendMessage, saveBookings:saveBookings, clearAllWaData:wa.clearAllWaData,
   };
   useEffect(function(){
     if(!WA_SANDBOX) return;
@@ -2399,6 +2415,20 @@ function BookingApp({uid}){
     setShowWaitlist(false);
     setShowForm(true);
   }
+  // v18.8.0 phase 8: "Add to waitlist" on a WhatsApp draft that does not fit.
+  // The party is the draft's (`draftPrefill`, the fields Accept opens the form
+  // with), and the phone goes through `phoneForSave` as the form's button does.
+  // Returns the sentence the card shows when the phone is refused, else null;
+  // a missing capability is said by the refusal toast. The inbox stays open:
+  // the card's button turns into "On the waitlist" once the entry is stored.
+  function addDraftToWaitlist(conv){
+    if(refused("waitlistManage"))return null;
+    const p=draftPrefill(conv,bookings);
+    const phoneRule=phoneForSave(p.phone,generalSettings.pinnedCountries,generalSettings.phonePrefix,false);
+    if(phoneRule.refusal)return phoneRule.refusal;
+    addToWaitlist({name:p.name,phone:cleanPhoneOf(phoneRule.phone),size:p.size,date:p.date,prefTime:p.time,notes:p.notes,preference:p.preference});
+    return null;
+  }
   // "Add to waitlist" from the booking form's no-tables banner: capture the
   // draft's fields as a waiting entry, close the form, flash the toast.
   function addFormToWaitlist(){
@@ -3081,7 +3111,7 @@ function BookingApp({uid}){
     // `escapeAction` names. `showInbox` is still read directly — the I key must
     // not re-open a panel that is already up.
     showInbox:showInbox,setShowInbox:setShowInbox,closeInbox:closeInbox,
-    setConfirmArchive:setConfirmArchive,setConfirmDeleteConv:setConfirmDeleteConv,
+    setConfirmArchive:setConfirmArchive,setConfirmDeleteConv:setConfirmDeleteConv,setWaPhoto:setWaPhoto,
     showSim:showSim,setShowSim:setShowSim,
     // v17.14.0 (/code-review): the waitlist panel's Escape close. It is here and
     // not merely in `escapeAction` because the OLD chain had no waitlist branch,
@@ -4748,6 +4778,8 @@ function BookingApp({uid}){
             customerSeek={customerSeek}
             activityRetentionDays={activityRetentionDays}
             onSetActivityRetention={setActivityRetention}
+            waRetentionDays={waRetentionDays}
+            onSetWaRetention={setWaRetention}
             reminders={reminders}
             onAddReminder={openNewReminder}
             onEditReminder={openEditReminder}
@@ -4775,9 +4807,10 @@ function BookingApp({uid}){
           because `?` opens Settings above the `anyModal` guard, so Admin is one
           keystroke away with the inbox up. Its listeners are detached by then,
           so it would render the last-loaded conversations, with live Send and
-          Delete controls, for a module the restaurant has turned off. */}<ModalPresence show={whatsappOn&&showInbox}>{whatsappOn&&showInbox?<InboxPanel
+          Delete controls, for a module the restaurant has turned off. */}<ModalPresence show={whatsappOn&&showInbox}>{whatsappOn&&showInbox?<Suspense fallback={null}><InboxPanel
           conversations={wa.conversations}
           messages={wa.messagesMap}
+          watchMessages={wa.watchMessages}
           templates={wa.templates}
           bookings={bookings}
           initialActiveKey={returnToInboxKey}
@@ -4785,6 +4818,7 @@ function BookingApp({uid}){
           query={waQuery} setQuery={setWaQuery} needsAction={waNeedsAction} setNeedsAction={setWaNeedsAction}
           onClose={closeInbox}
           onSend={wa.handleSendReply}
+          onSendMedia={wa.sendMedia}
           onAccept={wa.handleAcceptDraft}
           onDismiss={wa.handleDismissDraft}
           onSaveTemplates={wa.saveTemplates}
@@ -4802,7 +4836,10 @@ function BookingApp({uid}){
           onResend={wa.handleResend}
           onApplyModify={wa.handleApplyModify}
           onRecheck={wa.recheckConversation}
-          onOpenSim={WA_SANDBOX?function(){setShowSim(true);}:null} />:null}</ModalPresence>{confirmArchive?(function(){
+          onOpenPhoto={function(phoneKey,msg){setWaPhoto({phoneKey:phoneKey,msg:msg});}}
+          liveBookings={liveBookings} tableBlocks={tableBlocks} autoOptimizer={autoOptimizer}
+          waitlist={waitlist} onAddToWaitlist={addDraftToWaitlist}
+          onOpenSim={WA_SANDBOX?function(){setShowSim(true);}:null} /></Suspense>:null}</ModalPresence>{confirmArchive?(function(){
           const conv=wa.conversations.find(function(c){return c.phoneKey===confirmArchive;});
           const bk=conv&&conv.acceptedBookingId?bookings.find(function(b){return b.id===conv.acceptedBookingId;}):null;
           return <Overlay /* @static-height one sentence, chosen from the linked booking when it opens and not after */ onClose={function(){setConfirmArchive(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
@@ -4819,8 +4856,8 @@ function BookingApp({uid}){
               onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
               className="mgt-hover-scale"
               style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
-          ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.appendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
-          onClose={function(){setShowSim(false);}} /></Suspense>:null):null}<ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
+          ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,watchMessages:wa.watchMessages,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.simAppendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
+          onClose={function(){setShowSim(false);}} /></Suspense>:null):null}{/* v18.8.0: the photo viewer, after the simulator so it paints above it (MODAL_Z ranks it so) */}<ModalPresence show={!!waPhoto}>{waPhoto?<Suspense fallback={null}><PhotoViewer photo={waPhoto} onClose={function(){setWaPhoto(null);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
         // must sit above the Settings overlay. Same idiom as ReminderEditor:
         // `position` + `z-index` makes a stacking context and the subtree
         // stacks there whatever its fixed children declare, so `Overlay` is

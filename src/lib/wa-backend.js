@@ -29,9 +29,16 @@ import { auth } from "../firebase";
 import { WA_SANDBOX } from "./waSandbox";
 
 // Where the real pipeline lives:
-//   · DEV (dev server)     → the local harness on :3999
+//   · DEV (dev server)     → the local harness on :3999, on the SAME HOST as the
+//                            page (v18.8.0 follow-up): a phone that opened the
+//                            dev server at the Mac's LAN address reaches the
+//                            harness there, where "localhost" meant the phone
 //   · deployed sandbox     → same-origin ("") so /api/* hits the Vercel functions
-export const WA_BACKEND_URL = import.meta.env.DEV ? "http://localhost:3999" : "";
+// The host is read INSIDE the DEV branch, so a production build folds the
+// whole expression to "" and carries no `location` read (/code-review).
+export const WA_BACKEND_URL = import.meta.env.DEV
+  ? "http://" + (typeof location !== "undefined" && location.hostname ? location.hostname : "localhost") + ":3999"
+  : "";
 const FLAG_KEY = "mgt-wa-backend";
 
 // Backend mode is available wherever the sandbox surfaces are (dev server OR a
@@ -102,6 +109,30 @@ export async function sendViaBackend(phoneKey, text) {
 }
 
 
+// A photo or a PDF through `POST /api/wa-media` (v18.8.0): the file is the raw
+// body and its type the Content-Type; the caption and a document's name go in
+// two percent-encoded headers, so neither lands in a URL. Resolves the server's
+// answer once the message is SENT and stored (the listener then echoes it);
+// rejects with a readable message, which the composer shows beside the file it
+// kept, so sending again is one tap.
+export async function sendMediaViaBackend(phoneKey, blob, { mime, filename, caption }) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("not signed in");
+  const idToken = await user.getIdToken();
+  const headers = { "Content-Type": mime, Authorization: "Bearer " + idToken };
+  if (caption) headers["X-Caption"] = encodeURIComponent(caption);
+  if (filename) headers["X-Filename"] = encodeURIComponent(filename);
+  let res;
+  try {
+    res = await fetch(WA_BACKEND_URL + "/api/wa-media?phoneKey=" + encodeURIComponent(phoneKey), { method: "POST", headers, body: blob });
+  } catch {
+    throw new Error(import.meta.env.DEV ? "backend not running (npm run wa:backend)" : "could not reach the server");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}
+
 // Manual re-check — ask the server to re-read the conversation's recent thread
 // and re-run the LLM classification (api/wa-recheck). Unlike every other seam
 // here this is NOT a simulator affordance: it is a real staff feature, so it
@@ -127,4 +158,85 @@ export async function recheckViaBackend(phoneKey) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
   return data;
+}
+
+// ── A message's photo, voice note or document (v18.8.0) ─────────────────────
+// `GET /api/wa-media` streams the file Meta holds; it needs the staff token, so
+// an <img src> cannot ask for it. `fetchMedia` fetches it once, turns it into a
+// blob URL and keeps it per message, so the bubble's thumbnail and the photo
+// viewer share one download. Every `fetchMedia` takes a reference and every
+// `releaseMedia` gives one back; the URL is revoked a while after the last one
+// is given back (`MEDIA_KEEP_MS`), which keeps it across a thread reopened a
+// moment later and across StrictMode's mount, unmount, mount in DEV.
+//
+// A failure rejects with `.kind`: "expired" (410: Meta no longer has it),
+// "toolarge" (413) or "error" (anything else, retryable). A failed entry is
+// dropped at once, so the next fetch is a real retry.
+export const MEDIA_KEEP_MS = 60 * 1000;
+const mediaCache = new Map();
+
+function mediaError(kind, message) {
+  const e = new Error(message);
+  e.kind = kind;
+  return e;
+}
+
+async function loadMedia(phoneKey, msgId) {
+  const user = auth.currentUser;
+  if (!user) throw mediaError("error", "not signed in");
+  const idToken = await user.getIdToken();
+  let res;
+  try {
+    res = await fetch(WA_BACKEND_URL + "/api/wa-media?phoneKey=" + encodeURIComponent(phoneKey) + "&msgId=" + encodeURIComponent(msgId), {
+      headers: { Authorization: "Bearer " + idToken },
+    });
+  } catch {
+    throw mediaError("error", import.meta.env.DEV ? "backend not running (npm run wa:backend)" : "could not reach the server");
+  }
+  if (res.status === 410) throw mediaError("expired", "no longer on WhatsApp's servers");
+  if (res.status === 413) throw mediaError("toolarge", "too large to open here");
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw mediaError("error", data.error || ("HTTP " + res.status));
+  }
+  const blob = await res.blob();
+  return { url: URL.createObjectURL(blob), type: blob.type || res.headers.get("content-type") || "" };
+}
+
+export function fetchMedia(phoneKey, msgId) {
+  const key = phoneKey + "/" + msgId;
+  let e = mediaCache.get(key);
+  if (!e) {
+    e = { refs: 0, timer: null, value: null };
+    e.promise = loadMedia(phoneKey, msgId).then(
+      // Released and dropped while still loading: nobody holds it, so revoke now.
+      function (v) { e.value = v; if (mediaCache.get(key) !== e) URL.revokeObjectURL(v.url); return v; },
+      function (err) { if (mediaCache.get(key) === e) mediaCache.delete(key); throw err; },
+    );
+    mediaCache.set(key, e);
+  }
+  if (e.timer) { clearTimeout(e.timer); e.timer = null; }
+  e.refs++;
+  return e.promise;
+}
+
+export function releaseMedia(phoneKey, msgId) {
+  const key = phoneKey + "/" + msgId;
+  const e = mediaCache.get(key);
+  if (!e || e.refs <= 0) return;
+  e.refs--;
+  if (e.refs > 0 || e.timer) return;
+  e.timer = setTimeout(function () {
+    if (mediaCache.get(key) !== e || e.refs > 0) return;
+    mediaCache.delete(key);
+    if (e.value) URL.revokeObjectURL(e.value.url);
+  }, MEDIA_KEEP_MS);
+}
+
+// What a browser may open from a blob URL on this origin — the server's list
+// (api/wa-media.js INLINE_TYPES) less audio, which plays in the bubble. Anything
+// else is saved, never opened: an HTML or SVG file opened here runs as the app.
+const OPENS_INLINE = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif", "text/plain"];
+export function opensInline(type) {
+  return OPENS_INLINE.includes(String(type || "").split(";")[0].trim().toLowerCase());
 }

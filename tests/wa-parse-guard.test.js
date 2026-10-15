@@ -437,7 +437,11 @@ describe("injectSimInbound does not pay for a message it dropped", () => {
     expect(guard).toBeLessThan(schedule);
   });
   it("which is the guard api/wa-inbound.js already had", () => {
-    expect(read("api/wa-inbound.js")).toMatch(/if \(isText\) parseJobs\.push/);
+    // v18.8.0: the flag is `willParse` (a caption is parsed too), still asked
+    // only on the branch that stored the message.
+    const src = read("api/wa-inbound.js");
+    expect(src).toMatch(/if \(willParse\) parseJobs\.push/);
+    expect(src.indexOf("if (willParse) parseJobs.push")).toBeGreaterThan(src.indexOf("if (r.skipped) results.skipped++;"));
   });
 });
 

@@ -4,7 +4,9 @@
 // Owns the three NEW Firebase nodes (DEV project, this sandbox):
 //   conversations/{phoneKey}     — one object per conversation (KEYED — the
 //                                  production schema; matches api/_lib/rtdb.js)
-//   messages/{phoneKey}/{msgId}  — one object per message (KEYED)
+//   messages/{phoneKey}/{msgId}  — one object per message (KEYED). Since
+//                                  v18.8.0 listened to ONE conversation at a
+//                                  time, the open one (watchMessages)
 //   templates/                   — staff-editable quick replies (array), under
 //                                  a revGuard CAS on templatesRev since
 //                                  v17.16.8 — it has ONE writer (this client),
@@ -30,7 +32,7 @@
 // global anyModal logic and the return-to-inbox effect; the hook only calls
 // their setters.
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { ref, onValue, set, update } from "firebase/database";
 import { db } from "../firebase";
 import { dbError } from "../lib/dbError";
@@ -39,10 +41,19 @@ import { EMPTY_FORM } from "../lib/constants";
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
-import { matchCustomerByPhone, normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet } from "../lib/whatsapp";
-import { sendsViaServer, sendViaBackend, recheckViaBackend } from "../lib/wa-backend";
+import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch } from "../lib/whatsapp";
+import { sendsViaServer, sendViaBackend, sendMediaViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
+import { WA_SANDBOX } from "../lib/waSandbox";
+import { draftPrefill } from "../lib/draft-check";
+
+// A key `ref()` can take as ONE path segment. A conversation's key comes out of
+// a row's body (see conversationKeysRef), and `ref()` throws on . # $ [ ] and
+// treats "/" as a deeper path, so a listener is never built from anything else.
+function isPathKey(k) {
+  return typeof k === "string" && k.length > 0 && !/[.#$[\]/]/.test(k);
+}
 
 export function useWhatsApp({
   // v18.0.0 phase 5: `settings/admin.modules.whatsapp.enabled`, via App.
@@ -67,8 +78,11 @@ export function useWhatsApp({
   const [templates, setTemplates] = useState(DEFAULT_TEMPLATES);
 
   // Write-guard refs — flip true only after each node's first onValue returns.
+  // v18.8.0: `messages` is guarded PER KEY, because it is listened to per key
+  // (see watchMessages): a key joins the set when its first snapshot lands and
+  // leaves it when nobody watches it any more.
   const conversationsLoaded = useRef(false);
-  const messagesLoaded = useRef(false);
+  const messagesLoadedKeys = useRef(new Set());
   const templatesLoaded = useRef(false);
   const templatesSeeded = useRef(false);
   // v17.16.8: `templates` is one of the two WA nodes with a SINGLE writer (this
@@ -151,24 +165,68 @@ export function useWhatsApp({
     }, dbError("conversations"));
     return unsub;
   }, [on]);
-  useEffect(() => {
-    if (!on) return;
-    const unsub = onValue(ref(db, "messages"), (snap) => {
-      const val = snap.val() || {};
-      const map = {};
-      Object.keys(val).forEach((pk) => {
-        const node = val[pk];
-        const list = Array.isArray(node) ? node.filter(Boolean) : Object.values(node || {});
+  // ── Messages: ONE conversation at a time (v18.8.0) ─────────────────────────
+  // There is no permanent `messages` listener any more. It downloaded every
+  // message of every conversation on every device, at open and on each change,
+  // so a restaurant's whole WhatsApp history sat in the tablet's memory to show
+  // the one thread on screen — and grew with every conversation it ever had.
+  //
+  // `watchMessages(phoneKey)` is the seam instead: InboxPanel calls it for the
+  // conversation it shows (and the simulator for its customer), and the hook
+  // keeps one `onValue` per watched key, attached on the first watcher and
+  // detached on the last — the `useActivityFeed` precedent, a listener that
+  // lives as long as somebody is looking. It is reference-counted because two
+  // surfaces can watch the same key (the inbox and the simulator) and
+  // StrictMode mounts every effect twice. The returned function unwatches.
+  //
+  // `messagesMap` keeps its shape, `{ phoneKey: [msg, …] }`, holding only the
+  // watched keys. A key that is watched but whose first snapshot has not
+  // landed is ABSENT, never `[]`: ConversationView tells "still loading" from
+  // "this thread is empty" by that, so opening a conversation does not
+  // animate its last bubble in as though it had just arrived.
+  //
+  // `useCallback` on `[on]`: InboxPanel lists it in an effect's deps, and an
+  // identity that changed every render would detach and re-attach the
+  // listener on every render. It reads refs, a state setter and imports.
+  const watchersRef = useRef({}); // { phoneKey: { count, unsub } }
+  const watchMessages = useCallback(function (phoneKey) {
+    if (!on || !isPathKey(phoneKey)) return function () {};
+    const w = watchersRef.current[phoneKey];
+    if (w) {
+      w.count++;
+    } else {
+      const unsub = onValue(ref(db, "messages/" + phoneKey), (snap) => {
+        const node = snap.val();
+        const list = node ? (Array.isArray(node) ? node.filter(Boolean) : Object.values(node)) : [];
         // Dedup by message id (last wins), then sort by timestamp.
         const byId = {};
         list.forEach((m) => { if (m && m.id) byId[m.id] = m; });
-        map[pk] = Object.values(byId).sort((a, b) => (a.ts || 0) - (b.ts || 0));
-      });
-      messagesMapRef.current = map;
-      setMessagesMap(map);
-      messagesLoaded.current = true;
-    }, dbError("messages"));
-    return unsub;
+        const nextMap = Object.assign({}, messagesMapRef.current);
+        nextMap[phoneKey] = Object.values(byId).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+        messagesMapRef.current = nextMap;
+        setMessagesMap(nextMap);
+        messagesLoadedKeys.current.add(phoneKey);
+      }, dbError("messages/" + phoneKey));
+      watchersRef.current[phoneKey] = { count: 1, unsub };
+    }
+    let done = false;
+    return function unwatch() {
+      if (done) return;
+      done = true;
+      const cur = watchersRef.current[phoneKey];
+      if (!cur) return;
+      cur.count--;
+      if (cur.count > 0) return;
+      cur.unsub();
+      delete watchersRef.current[phoneKey];
+      messagesLoadedKeys.current.delete(phoneKey);
+      if (messagesMapRef.current[phoneKey]) {
+        const nextMap = Object.assign({}, messagesMapRef.current);
+        delete nextMap[phoneKey];
+        messagesMapRef.current = nextMap;
+        setMessagesMap(nextMap);
+      }
+    };
   }, [on]);
   useEffect(() => {
     if (!on) return;
@@ -243,18 +301,16 @@ export function useWhatsApp({
     setConversations(arr);
     set(ref(db, "conversations/" + phoneKey), obj).catch(function () {});
   }
-  function removeConversation(phoneKey) {
-    if (!conversationsLoaded.current) return;
-    const arr = conversationsRef.current.filter(function (c) { return c.phoneKey !== phoneKey; });
-    conversationsRef.current = arr;
-    setConversations(arr);
-    set(ref(db, "conversations/" + phoneKey), null).catch(function () {});
-  }
   // appendMessage — child-set at messages/{phoneKey}/{msg.id}: appending can
   // never overwrite a sibling the backend wrote a moment earlier.
+  // v18.8.0: refused unless THIS key's first snapshot has landed, i.e. the
+  // conversation is open and loaded. The two callers both write to the open
+  // thread (the client-mode mock send, and its delivery flip below); the
+  // simulator, which writes to any conversation, has its own writer
+  // (simAppendMessage) because it stands in for the server.
   function appendMessage(phoneKey, msg) {
-    if (!messagesLoaded.current) {
-      console.warn("[SAFE] Refused to write messages — initial read has not completed yet.");
+    if (!messagesLoadedKeys.current.has(phoneKey)) {
+      console.warn("[SAFE] Refused to write messages/" + phoneKey + " — its first read has not completed.");
       return;
     }
     const prevArr = messagesMapRef.current[phoneKey] || [];
@@ -265,8 +321,10 @@ export function useWhatsApp({
     set(ref(db, "messages/" + phoneKey + "/" + msg.id), msg).catch(function () {});
   }
   // patchMessage — update one message in place (status flips etc.).
+  // Same per-key guard: an update() of a message this device has not read
+  // could create a stub `{status}` where a deleted message was.
   function patchMessage(phoneKey, msgId, patch) {
-    if (!messagesLoaded.current) return;
+    if (!messagesLoadedKeys.current.has(phoneKey)) return;
     const prevArr = messagesMapRef.current[phoneKey] || [];
     const arr = prevArr.map(function (m) { return m.id === msgId ? Object.assign({}, m, patch) : m; });
     const nextMap = Object.assign({}, messagesMapRef.current); nextMap[phoneKey] = arr;
@@ -274,13 +332,15 @@ export function useWhatsApp({
     setMessagesMap(nextMap);
     update(ref(db, "messages/" + phoneKey + "/" + msgId), patch).catch(function () {});
   }
-  function removeMessages(phoneKey) {
-    if (!messagesLoaded.current) return;
-    const nextMap = Object.assign({}, messagesMapRef.current);
-    delete nextMap[phoneKey];
-    messagesMapRef.current = nextMap;
-    setMessagesMap(nextMap);
-    set(ref(db, "messages/" + phoneKey), null).catch(function () {});
+  // simAppendMessage — the SIMULATOR's message writer (sandbox only). In client
+  // mode wa-sim.js is the mock server: it writes inbound messages and the
+  // auto-ack to any conversation, open or not, as api/_lib/rtdb.js does. So it
+  // writes the way the server writes, a child-set of a fresh id that cannot
+  // overwrite a sibling, with no local mirror to update; the listener of a
+  // watched key echoes it. Dead in a production build (WA_SANDBOX).
+  function simAppendMessage(phoneKey, msg) {
+    if (!WA_SANDBOX || !on || !isPathKey(phoneKey) || !msg || !msg.id) return;
+    set(ref(db, "messages/" + phoneKey + "/" + msg.id), msg).catch(function () {});
   }
   function saveTemplates(next) {
     if (!templatesLoaded.current) {
@@ -352,7 +412,10 @@ export function useWhatsApp({
     if (sendsViaServer()) {
       const list = messagesMapRef.current[phoneKey] || [];
       const prev = list.find(function (m) { return m && m.id === msgId; });
-      if (!prev || !prev.text) return;
+      // A photo or a PDF is not re-sent from here: its `text` is the caption
+      // or the label "Photo", and re-posting that would send the WORD to the
+      // customer. MessageBubble offers no Retry on one; staff attach it again.
+      if (!prev || !prev.text || prev.media) return;
       sendViaBackend(phoneKey, prev.text).catch(function (e) {
         console.warn("[wa] backend resend failed:", e.message);
         if (setWriteWarning) setWriteWarning("WhatsApp resend failed: " + e.message);
@@ -364,27 +427,34 @@ export function useWhatsApp({
   }
   function simFailNextSend() { failNextSendRef.current = true; }
 
+  // handleSendMedia — a photo or a PDF, with the typed text as its caption
+  // (v18.8.0). Server-only: the client-side mock has no file store, so the
+  // composer offers the paperclip only where `sendsViaServer()` (see the
+  // returned `sendMedia`). Returns the promise, unlike a text send: the
+  // composer keeps the file and shows the failure beside it, so sending again
+  // is one tap, where a text's failure goes to the write-warning banner.
+  function handleSendMedia(phoneKey, blob, meta) {
+    return sendMediaViaBackend(phoneKey, blob, meta);
+  }
+
   // handleAcceptDraft: close inbox, pre-fill the booking form from the draft,
   // flag draftSourceRef so doSave flips the conversation on success, and set
   // returnToInboxKey so closing the form returns to the WA module.
-  function handleAcceptDraft(conv) {
+  // v18.8.0 phase 8: `over.time` opens the form at another time (a time chip
+  // on the draft card), and the fields come from `draftPrefill`
+  // (lib/draft-check.js), the rule the card's Add to waitlist reads too: the
+  // name is the draft's, the customer's or the WhatsApp profile's, the phone the conversation's with
+  // its "+", the seating indoor/outdoor or "auto".
+  function handleAcceptDraft(conv, over) {
     if (!conv || !conv.draftData) return;
-    const d = conv.draftData;
-    const match = matchCustomerByPhone(conv.phoneKey, bookings);
-    const prefilledName = (d.name && d.name.trim()) || (match && match.name) || "";
-    let prefilledPhone = conv.phone || conv.phoneKey || "+";
-    if (prefilledPhone && prefilledPhone.charAt(0) !== "+") prefilledPhone = "+" + prefilledPhone;
-    const size = Number(d.size) || 2;
-    const date = d.date || todayStr();
-    const time = d.time || "13:00";
-    // Seating preference from the parsed message (indoor/outdoor); "auto" when
-    // the customer didn't state one — the default. (See mergeDraft / mockParse.)
-    const preference = (d.preference === "indoor" || d.preference === "outdoor") ? d.preference : "auto";
+    const p = draftPrefill(conv, bookings);
+    const date = p.date;
+    const time = (over && over.time) || p.time;
     // v18.3.5: through App's `openNew`, which asks `bookingCreate` and clears a
     // waitlist entry left pending by a form closed unsaved (Save would have
     // taken that entry off the waitlist for this booking). Refused: nothing
     // below runs, and the inbox stays open under the refusal.
-    if (!openNew(Object.assign({}, EMPTY_FORM, { name: prefilledName, phone: prefilledPhone, date, time, size, preference, notes: d.notes || "", status: "confirmed", customDur: null, manualTables: [], preferredTables: [], returnOf: null }))) return;
+    if (!openNew(Object.assign({}, EMPTY_FORM, { name: p.name, phone: p.phone, date, time, size: p.size, preference: p.preference, notes: p.notes, status: "confirmed", customDur: null, manualTables: [], preferredTables: [], returnOf: null }))) return;
     draftSourceRef.current = conv.phoneKey;
     setReturnToInboxKey(conv.phoneKey);
     setShowInbox(false); setViewDate(date);
@@ -540,12 +610,32 @@ export function useWhatsApp({
   // owned by the caller (InboxPanel), so these just execute.
   function bulkArchive(keys) { (keys || []).forEach((k) => doArchive(k)); }
   function bulkUnarchive(keys) { (keys || []).forEach((k) => handleUnarchive(k)); }
-  function bulkDeleteConversations(keys) {
-    (keys || []).forEach((k) => { removeConversation(k); removeMessages(k); });
+  // v18.8.0 /code-review: Delete and bulk delete are ONE write per press, the
+  // conversation rows and their messages together (`conversationDeletePatch`).
+  // They were two `set(null)`s (`removeConversation`, `removeMessages`, gone),
+  // and messages whose row was gone could be reached by nothing: the inbox and
+  // the nightly prune both find a thread through its row. Guarded on the
+  // CONVERSATIONS read, not a per-key messages one: the messages of a thread
+  // nobody has open were never read, and a delete cannot write stale data
+  // over real data, which is what a loaded guard is for.
+  function deleteConversations(keys) {
+    if (!conversationsLoaded.current) return;
+    const patch = conversationDeletePatch(keys);
+    if (!Object.keys(patch).length) return;
+    const gone = new Set(keys);
+    const arr = conversationsRef.current.filter(function (c) { return !gone.has(c.phoneKey); });
+    if (arr.length !== conversationsRef.current.length) { conversationsRef.current = arr; setConversations(arr); }
+    if (Object.keys(messagesMapRef.current).some(function (k) { return gone.has(k); })) {
+      const nextMap = Object.assign({}, messagesMapRef.current);
+      gone.forEach(function (k) { delete nextMap[k]; });
+      messagesMapRef.current = nextMap;
+      setMessagesMap(nextMap);
+    }
+    update(ref(db), patch).catch(function (err) { console.error("[wa] delete failed", err); });
   }
+  function bulkDeleteConversations(keys) { deleteConversations(keys); }
   function doDeleteConversation(phoneKey) {
-    removeConversation(phoneKey);
-    removeMessages(phoneKey);
+    deleteConversations([phoneKey]);
     setConfirmDeleteConv(null);
   }
 
@@ -657,7 +747,13 @@ export function useWhatsApp({
   // atomically, so the simulator cannot leave half a conversation behind, and
   // each leaf is evaluated against `$phoneKey`'s own rule. The key union is
   // taken from BOTH refs — a conversation can have no messages yet, and a
-  // message subtree can outlive its conversation row.
+  // message subtree can outlive its conversation row. v18.8.0: the messages
+  // ref holds only the WATCHED keys now, so a message subtree whose
+  // conversation row is already gone is no longer seen here. Since the
+  // /code-review every delete in the app removes both halves in ONE write
+  // (`conversationDeletePatch`), and the prune deletes a thread's messages
+  // before its row, so the app no longer makes such a subtree. One made
+  // before is reached by neither this nor the prune, which walks rows.
   //
   // The keys are the SNAPSHOT keys, never `c.phoneKey`. That field is what the
   // listener groups rows BY, and it comes out of each row's body, so it can
@@ -677,12 +773,7 @@ export function useWhatsApp({
       ...conversationKeysRef.current,
       ...Object.keys(messagesMapRef.current || {}),
     ]);
-    const patch = {};
-    keys.forEach(function (k) {
-      if (!k) return;
-      patch["conversations/" + k] = null;
-      patch["messages/" + k] = null;
-    });
+    const patch = conversationDeletePatch([...keys]);
     if (!Object.keys(patch).length) return;
     update(ref(db), patch).catch(function () {});
   }
@@ -711,10 +802,7 @@ export function useWhatsApp({
       messagesMapRef.current = nextMap;
       setMessagesMap(nextMap);
     }
-    const patch = {};
-    patch["conversations/" + phoneKey] = null;
-    patch["messages/" + phoneKey] = null;
-    update(ref(db), patch).catch(function (err) { console.error("[wa] erase failed for one guest", err); });
+    update(ref(db), conversationDeletePatch([phoneKey])).catch(function (err) { console.error("[wa] erase failed for one guest", err); });
   }
 
   const unreadCount = conversations.filter((c) => c.unread && !c.archived).length;
@@ -724,13 +812,18 @@ export function useWhatsApp({
     conversations, messagesMap, templates,
     // savers (used by the simulator core — keyed shape, Phase 1b)
     patchConversation, upsertConversation, appendMessage, patchMessage,
-    removeConversation, removeMessages, saveTemplates, clearAllWaData, eraseConversation,
+    saveTemplates, clearAllWaData, eraseConversation,
+    // v18.8.0: the per-conversation listener seam, and the simulator's writer
+    watchMessages, simAppendMessage,
     // derived
     unreadCount,
     // draft seam (doSave calls completeDraftAccept, then linkBookingByPhone)
     draftSourceRef, takeDraftSource, completeDraftAccept, linkBookingByPhone,
     // handlers
     handleSendReply, handleResend, simFailNextSend,
+    // null where a send does not go through the server (the sandbox's client
+    // mock), which is what hides the paperclip there.
+    sendMedia: sendsViaServer() ? handleSendMedia : null,
     handleAcceptDraft, handleDismissDraft, handleMarkRead,
     handleDismissAcceptedBadge, handleMarkIntentHandled, autoHandleCancelIntent,
     recheckConversation,

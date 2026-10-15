@@ -43,8 +43,24 @@ import { useState, useRef, useEffect } from "react";
 
 const FALLBACK_MS = 120; // rAF-starved (hidden tab) → compute anyway after this
 
+// v18.8.0 phase 8: a result is kept WITH the deps it answers, and read only
+// while they are still the deps. The reset in the effect below runs after the
+// paint, so for one frame after a change the previous answer was on screen
+// beside the new question — measured in the WhatsApp inbox, where switching
+// conversations showed the last thread's "Fits at …" under the new draft's
+// time, and present in the booking form as well, one frame per edited field.
+// "Never a stale answer" was this hook's contract and the effect alone could
+// not keep it. The effect's reset stays: it is what sets `pending` and starts
+// the run.
+export function sameDeps(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (!Object.is(a[i], b[i])) return false;
+  return true;
+}
+const STALE = Object.freeze({ value: null, pending: true });
+
 export function useDeferredCompute(computeFn, deps) {
-  const [state, setState] = useState({ value: null, pending: true });
+  const [state, setState] = useState({ value: null, pending: true, deps: null });
   const fnRef = useRef(computeFn);
   fnRef.current = computeFn; // always the freshest closure
   const tokenRef = useRef(0);
@@ -60,7 +76,7 @@ export function useDeferredCompute(computeFn, deps) {
       started = true;
       const result = fnRef.current();
       if (tokenRef.current !== token) return; // superseded mid-compute
-      setState({ value: result, pending: false });
+      setState({ value: result, pending: false, deps: deps });
     }
     let paintTimer = null;
     const raf = requestAnimationFrame(function () {
@@ -77,5 +93,5 @@ export function useDeferredCompute(computeFn, deps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- caller-supplied dep list
   }, deps);
 
-  return state;
+  return state.deps && !sameDeps(state.deps, deps) ? STALE : state;
 }

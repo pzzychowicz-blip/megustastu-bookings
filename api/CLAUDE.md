@@ -22,7 +22,8 @@ indistinguishable from "no such endpoint": a 405 or a 401 would both confirm the
 is there. Fail-closed, and measured across five env values — absent, empty, `"0"`,
 `"true"` and `"1"` — where only the last opens it. **Since the phase-5 review those
 three are also excluded from a deployment by `.vercelignore`**, so PRODUCTION routes
-FOUR functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config`) and the `sandbox`
+SIX functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config` · `wa-media` ·
+`wa-prune`, the last two since v18.8.0) and the `sandbox`
 branch gets its three back through one appended `!api/wa-sim-*.js`. Since v18.4.3 that
 branch is GENERATED from main by `.github/workflows/sandbox.yml`, which writes the line;
 it is never written on main and never by hand. The runtime gate stays: two independent answers, and
@@ -51,12 +52,92 @@ shows 5.x. The override can go when Vercel's runtime loads ESM through `require(
 or when `jwks-rsa` stops requiring `jose` synchronously. Before deleting it, show one
 of those is true on a deployment, not locally.
 
+**`wa-media.js` — the media proxy (v18.8.0).** One function for both directions of a
+conversation's files, to keep the count low: GET views (phase 4), POST sends (phase 5).
+Three rules, each the reason for a line of it:
+- **Never trust a client media id.** The browser names a MESSAGE (`phoneKey` + `msgId`);
+  the id is read from the database (`getMessage`). It goes into a Graph path with the
+  restaurant's token on it, so one taken from a query string would let any signed-in
+  account fetch any media that token can reach. The id was checked when it was stored
+  (`sanitizeMedia`), and the URL Meta hands back is fetched with the token only on Meta's
+  hosts, over https (`isMediaHost`, `_lib/meta.js`).
+- **Streamed, never buffered.** Vercel caps a function's request and response body at
+  4.5 MB, and its guide says a streamed response does not have the cap; the bytes are
+  piped as they arrive (`pipeline(Readable.fromWeb(…), res)`). The cap here is the
+  browser's: over `MEDIA_VIEW_MAX` (16 MB) is 413, "open WhatsApp on the phone". The real
+  measurement needs a deployment (the plan's A5-6, after merge).
+- **Only harmless types keep their type.** A customer chooses what they send, and the
+  client opens a document from a blob URL on this origin, so an HTML or SVG file would run
+  as the app there. `INLINE_TYPES` (pictures without SVG, audio, PDF, plain text) keep
+  theirs; anything else is `application/octet-stream` with `attachment`, plus `nosniff`.
+  The client asks the same question (`opensInline`, `src/lib/wa-backend.js`).
+
+Guards in order: 405 → the staff gate (`staffAuthError`) → 400 → 404 → 410 (Meta answers
+4xx: it keeps a received file 7 days, a sent one 30) → 413 → 502. **Mock media:** while
+`WA_SEND_MODE` is mock, an id starting `MOCK.` is answered with a bundled sample of its
+kind (`_lib/mock-media/`: `photo.jpg`, `voice.ogg`, `menu.pdf`, a few kB each), read
+through static `new URL(…, import.meta.url)`s so the deployment's file tracing includes
+them. On a live deployment a MOCK id is 410. The harness routes it (`/api/wa-media`).
+**Phase 6: the simulator's customer sends one too.** Its id has ONE spelling,
+`mockMediaId` in `src/lib/wa-mock-media.js` (pure, shared with the server, imported in
+`src/` by the simulator's stubbed client alone), which `uploadMedia`'s mock calls as well.
+`/api/wa-sim-inbound` takes `media` as a KIND (`image` · `audio` · `document`) and mints the
+id itself; anything else, a `{kind, mediaId}` object included, is 400. A media id from a
+browser is what this function exists not to trust, sandbox or not. `inboundContent` lives in
+`_lib/inbound-core.js` (re-exported by `wa-inbound.js`), so a sim photo is read exactly as
+Meta's is.
+
+**The POST sends a photo or a PDF (phase 5).** The file is the RAW body (`bodyParser` off, so a 4 MB
+PDF costs 4 MB of Vercel's 4.5 MB request cap, not a base64 field's 5.3), its type the Content-Type,
+and the caption and a document's name ride in `X-Caption` / `X-Filename`, percent-encoded, so neither
+lands in a URL or a request log (the harness's CORS allows both headers). Guards in order: 405 → the
+staff gate → 400 (phoneKey, a header that does not decode, a caption over `WA_CAPTION_MAX`) → 415
+(only `WA_SEND_TYPES`: JPEG, PNG, PDF) → 413 (over `WA_SEND_MAX_BYTES`, 4.2 MiB, by Content-Length
+and again while reading) → 400 (empty, or the first bytes are not what the Content-Type says:
+`sniffType`) → 404 → 410 (the window) → 502. The body is read BEFORE the conversation, so a refusal
+never leaves a request half-read. Then `uploadMedia` (`POST /{phone-number-id}/media`, multipart)
+and `sendMedia`: **ONE `/messages` call, the caption inside it** (checklist A4-5; `sendText` and
+`sendMedia` share `postMessage`, the one function that POSTs a message). The outbound message is
+stored with `media` (through `sanitizeMedia`, so a sent name is cleaned before it is SENT too) and
+`authorEmail`, the snippet updated and the conversation un-archived, as `wa-send` does. In mock mode
+the upload returns `MOCK.<kind>.<random>`, which the GET above answers with the sample.
+
+**`wa-prune.js` — the nightly message prune (v18.8.0 phase 7).** Vercel Cron calls it at
+04:00 UTC (`vercel.json`'s `crons`, the first cron in the repo; `tests/sandbox-branch.test.js`
+fails a cron naming a function `main` does not deploy). It deletes WhatsApp messages older than
+`settings/admin.waRetentionDays` (a year by default), read through `retentionDaysOf`
+(`src/lib/retention.js`, a leaf, so Node ESM can import it), the function the Admin tab uses.
+Four rules:
+- **The secret first.** `CRON_SECRET` unset → 503 before anything is read. A wrong bearer → 401,
+  constant-time, before the method. Vercel sends the variable as a bearer token when the project
+  has it, so it is also what makes the cron work. It goes on BOTH projects; the Integrations panel
+  shows whether it is set.
+- **Per key, never a node.** A conversation goes on its own and a thread's old messages go as one
+  update of nulls under its key (`removeConversationIf`, `removeMessages`, `_lib/rtdb.js`).
+  firebase-admin bypasses the rules, so this code is the only limit on what it deletes.
+- **Re-check at the delete.** The conversation delete is a transaction asking "still expired?" of
+  what is stored, so a message that arrived mid-run keeps its thread.
+- **Age is the message's own `ts`.** In a live thread, no readable `ts` means keep. In a thread
+  being deleted it means go. No readable `lastMessageAt` means the conversation is never deleted.
+  Only a conversation created before the cutoff (or with no `createdAt`) is read at all
+  (`mayHoldOld`).
+
+It answers the counts and logs one line; an error in any thread makes it 500. Its tests are their own
+block in `tests/api-handlers.test.js`, outside the staff-gate `describe.each`, since its gate is the
+cron secret.
+
 **Tests (v18.4.5).** `tests/api-handlers.test.js` RUNS `wa-send`, `wa-recheck`, `wa-config`,
 `_lib/inbound-core.js` and `_lib/meta.js`: it replaces the three `firebase-admin` modules
 with an in-memory tree, so `_lib/rtdb.js` itself runs, and calls each handler with a
 request and a response object. A new handler joins its `describe.each` for the shared
-method and staff-auth gate. `wa-inbound.js` and the three `wa-sim-*` handlers are not run
-by any test yet (ROADMAP).
+method and staff-auth gate. **v18.8.0 runs the other four**: `wa-inbound` from a raw byte
+stream (`rawCall`, since `bodyParser` is off and the HMAC needs Meta's exact bytes), with a
+stub request context collecting what `waitUntil` was handed so a test can wait for the parse;
+and the three `wa-sim-*` handlers, whose 404 is swept over five env values, two methods and
+three tokens before their own gate is asked anything. **And `wa-media` both ways**: the GET joins the
+shared gate, and the POST's own refusals, the stored shape, and A4-5 as an assertion: one Graph
+`/messages` call per `wa-send` and per `wa-media` POST, an upload that is not one, and a caption that
+never becomes a second message (mutation-checked: a caption sent as its own text fails it).
 
 **A timestamp taken from a remote party** (the root `CLAUDE.md`'s Gotchas row, moved
 here verbatim on 2026-10-09; root keeps the rule in two sentences). **Clamp it to facts, not policies:** not finite or not positive → now; in the future → now (a delivery cannot be timestamped after it arrived, so this only absorbs clock skew); an OLD one is left alone, because a redelivery after an outage is real. The trap was `m.timestamp ? … : Date.now()` guarding `parseInt(m.timestamp, 10) * 1000` on a Meta webhook field (Meta sends SECONDS) — a ternary covering ABSENT, the one case that was never a problem. Measured with correctly-signed payloads (CT-WA-02): `"abc"` → `NaN` → **RTDB refuses the write** → 500 → **Meta redelivers for up to SEVEN DAYS**, so the customer's message is never stored and the function runs on a schedule for a week; `"-1"` → `windowExpiresAt` in 1970, so `api/wa-send.js` answers 410 forever and staff can never reply to that customer, with nothing on screen saying why; `99999999999` → a window in the year 5138. **Correct retry semantics plus a permanently-failing input is a retry loop**, and an input the database REFUSES is what turns a bad field into a bad week

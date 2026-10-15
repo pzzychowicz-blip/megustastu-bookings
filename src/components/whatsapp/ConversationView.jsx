@@ -15,18 +15,27 @@ import { DraftCard } from "./DraftCard";
 import { ReplyComposer } from "./ReplyComposer";
 import { LinkedBookingCard } from "./LinkedBookingCard";
 import { IntentBanner } from "./IntentBanner";
-import { R, T, FW, IC, H } from "../../lib/constants";
+import { R, T, FW, IC, H, M } from "../../lib/constants";
 import { formatDay } from "../../lib/day";
 import { guestsLabel } from "../../lib/booking-logic";
+import { onWaitlistFor } from "../../lib/draft-check";
+import { useDraftCheck } from "../../hooks/useDraftCheck";
+
+// How far a waiting draft dims while a new parse of it is in flight (v18.8.0
+// follow-up): faint enough that its values read as provisional, not so faint
+// that Accept looks disabled, since it still works.
+const REREAD_DIM = 0.55;
 
 // Within this many px of the bottom, the thread counts as showing its end.
 const AT_END_SLACK = 24;
 
 export function ConversationView({
-  conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack, phone,
+  conv, messages, onBack, onSend, onSendMedia, onAccept, onDismiss, templates, bookings, showBack, phone,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, compact,
-  onRecheck, regularMin, kbFold = false, onUnfold,
+  onRecheck, regularMin, kbFold = false, onUnfold, onOpenPhoto,
+  // v18.8.0 phase 8: what the draft check needs, from App through InboxPanel.
+  liveBookings, tableBlocks, autoOptimizer, waitlist, onAddToWaitlist,
 }) {
   // NO excludeBookingId. This used to pass conv.acceptedBookingId, which made the
   // header chip disagree with the booking form's for the same customer (Patryk:
@@ -46,6 +55,10 @@ export function ConversationView({
   const [histOpen, setHistOpen] = useState(false);
   const win = formatWindow(conv.windowExpiresAt);
   const threadRef = useRef(null);
+  // v18.8.0: a thread is listened to only while it is open, so `messages` is
+  // `undefined` until its first snapshot lands (InboxPanel), and `[]` means
+  // the thread is known to be empty.
+  const loaded = messages !== undefined;
   const msgsForConv = messages || [];
   // v18.4.0: `atEnd` is "the thread is showing its last message", kept by the
   // thread's own scroll handler. It decides whether a RESIZE follows the end.
@@ -91,11 +104,21 @@ export function ConversationView({
   const prevConvRef = useRef(conv.phoneKey);
   const lastId = msgsForConv.length ? msgsForConv[msgsForConv.length - 1].id : null;
   const prevLastIdRef = useRef(lastId);
+  // v18.8.0: whether `prevLastIdRef` was taken from a LOADED thread. The
+  // thread now arrives a moment after it opens, and the snapshot that brings
+  // it is the baseline, not a message that just landed: without this, every
+  // open animated the last bubble in.
+  const baselineRef = useRef(loaded);
   useEffect(() => {
     if (prevConvRef.current !== conv.phoneKey) {
       prevConvRef.current = conv.phoneKey;     // switched threads — reset baseline, no animation
       prevLastIdRef.current = lastId;
+      baselineRef.current = loaded;
       setAnimateId(null);
+      return;
+    }
+    if (!baselineRef.current) {
+      if (loaded) { baselineRef.current = true; prevLastIdRef.current = lastId; }
       return;
     }
     if (lastId && lastId !== prevLastIdRef.current) {
@@ -105,7 +128,7 @@ export function ConversationView({
     // v18.3.2: keyed on `lastId`, the value it compares, where it was keyed on
     // the message COUNT. An appended message moves both; a snapshot that swaps
     // the last message for a new one moves only the id, and now animates it.
-  }, [conv.phoneKey, lastId]);
+  }, [conv.phoneKey, lastId, loaded]);
 
   // ── "Booking confirmed" banner auto-dismiss ─────────────────────────────────
   // The big accepted banner used to sit in the thread until someone hit its ✕.
@@ -164,6 +187,18 @@ export function ConversationView({
       },
       (e) => { if (fresh()) setRecheck({ ok: false, msg: "Re-check failed: " + (e && e.message ? e.message : "unknown error") }); }
     );
+  }
+
+  // ── v18.8.0 phase 8: the draft checks the request ───────────────────────────
+  // Run after the paint (useDraftCheck); the card shows the answer. Whether
+  // the customer is already waiting for that day is read off the waitlist, so
+  // nothing about it is stored on the conversation.
+  const draftCheck = useDraftCheck(conv, { bookings, liveBookings, tableBlocks, autoOptimizer });
+  const onTheWaitlist = onWaitlistFor(waitlist, conv);
+  // "Suggest these" puts its reply in the box, never sends it.
+  const composerRef = useRef(null);
+  function suggestReply(text) {
+    if (composerRef.current) composerRef.current.insert(text);
   }
 
   const linkedBooking = conv.acceptedBookingId ? bookings.find((b) => b.id === conv.acceptedBookingId) : null;
@@ -291,6 +326,7 @@ export function ConversationView({
   // fold with the header; the thread and the reply box are all that is left.
   const draftWaiting = !!(conv.draftData && (conv.draftData.intent || "new_booking") === "new_booking")
     && conv.draftStatus !== "accepted" && conv.draftStatus !== "dismissed";
+  const rereading = draftWaiting && isParsing(conv);
   const foldedSays = showIntentBanner
     ? (intent === "cancel" ? "Cancellation request" : intent === "modify" ? "Change request" : "Request")
     : isParsing(conv) ? "Reading the message…"
@@ -356,7 +392,7 @@ export function ConversationView({
       ) : null}
       </Reveal>
       <div ref={threadRef} onScroll={onThreadScroll} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "14px" }}>
-        {msgsForConv.map((m) => <MessageBubble key={m.id} msg={m} isLast={m.id === animateId} onRetry={onResend} />)}
+        {msgsForConv.map((m) => <MessageBubble key={m.id} msg={m} isLast={m.id === animateId} onRetry={onResend} phoneKey={conv.phoneKey} onOpenPhoto={onOpenPhoto} />)}
       </div>
       {/* Parsing/typing indicator — eased in while the inbound is being parsed
           (conv.parsing, set by the sandbox inbound path; cleared when the draft
@@ -367,7 +403,11 @@ export function ConversationView({
             of CONTENT, not of surface. --wa-draft-border stays below as the
             shimmer bar's fill, where it is decoration rather than a rim. */}
         <div style={{ marginBottom: 12, padding: "12px 14px", borderRadius: R.card, background: "var(--wa-draft-bg)", border: "1px solid var(--border-card)", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ color: "var(--wa-draft-text)", display: "inline-flex" }}><DraftIcon size={IC.control} /></span>
+          {/* v18.8.0 follow-up: the icon breathes (`.mgt-dot-pulse`, the
+              loop DraftCard's "Checking the tables…" dot already uses) beside
+              the sweep below, so the card says "working" even where the bar is
+              out of the eye's way. */}
+          <span className="mgt-dot-pulse" style={{ color: "var(--wa-draft-text)", display: "inline-flex" }}><DraftIcon size={IC.control} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--wa-draft-text)", marginBottom: 6 }}>Reading the message…</div>
             <div className="mgt-shimmer" style={{ height: 8, borderRadius: R.pill, background: "var(--wa-draft-border)" }} />
@@ -375,9 +415,22 @@ export function ConversationView({
         </div>
       </Reveal>
       <Reveal show={draftCardShows && !kbFold} style={{ padding: "0 14px" }}>
-        <DraftCard conv={conv} onAccept={onAccept} onDismiss={onDismiss} onDismissAcceptedBadge={onDismissAcceptedBadge} compact={compact} />
+        {/* v18.8.0 follow-up: a waiting draft that is being read AGAIN (a
+            follow-up message, or Re-check) dims to `REREAD_DIM` until the new
+            parse lands, so its old values do not look final beside "Reading
+            the message…". The same `M.move` both ways: it is a state, not an
+            arrival or a departure. An accepted or dismissed card cannot be
+            changed by a parse, so it never dims. Still pressable meanwhile:
+            the parse may well change nothing. */}
+        <div aria-busy={rereading ? "true" : undefined} style={{ opacity: rereading ? REREAD_DIM : 1, transition: "opacity " + M.move }}>
+          <DraftCard
+            conv={conv} onAccept={onAccept} onDismiss={onDismiss} onDismissAcceptedBadge={onDismissAcceptedBadge} compact={compact}
+            check={draftCheck} onTheWaitlist={onTheWaitlist} onAddToWaitlist={onAddToWaitlist}
+            onSuggest={disabled ? null : suggestReply}
+          />
+        </div>
       </Reveal>
-      <ReplyComposer onSend={onSend} disabled={disabled} templates={templates} convLang={conv.language} />
+      <ReplyComposer ref={composerRef} onSend={onSend} onSendMedia={onSendMedia} threadKey={conv.phoneKey} disabled={disabled} templates={templates} convLang={conv.language} />
     </div>
   );
 }

@@ -48,7 +48,9 @@
 // for one browser, which is how the card and the refusal are tested.
 // 1: v18.6.0. 2: v18.6.1, `settings/layout.pickRules` (a build without it
 // saves the layout with the rules gone, and they read back as the default's).
-export const SCHEMA = 2;
+// 3: v18.8.0, `settings/admin.waRetentionDays` (a build without it saves the
+// admin node with the setting gone, and the nightly prune reads the default).
+export const SCHEMA = 3;
 
 export const SCHEMA_ENFORCE_KEY = "mgt.schemaEnforce";
 

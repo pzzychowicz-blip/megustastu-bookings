@@ -437,6 +437,11 @@ const FILLS = [
   { fill: "--wa-bubble-in", alpha: null, ink: "--text-primary", role: "label", what: "incoming chat bubble" },
   { fill: "--wa-draft-bg", alpha: null, ink: "--wa-draft-text", role: "label", what: "draft card" },
   { fill: "--wa-draft-bg", alpha: null, ink: "--wa-draft-text-dim", role: "label", what: "draft card (dim ink)" },
+  // v18.8.0 phase 8: the draft check's status line, plain text in its tone on
+  // the card's own fill ("Fits at 20:00" · "Kitchen may be busy…" · "No tables…").
+  { fill: "--wa-draft-bg", alpha: null, ink: "--success-text", role: "label", what: "draft check: fits" },
+  { fill: "--wa-draft-bg", alpha: null, ink: "--warn-text", role: "label", what: "draft check: kitchen may be busy" },
+  { fill: "--wa-draft-bg", alpha: null, ink: "--danger-text", role: "label", what: "draft check: no tables" },
   // --wa-accept-* and --wa-teal-* were deleted when the accepted-booking notice,
   // the linked-booking card and the past-bookings disclosure moved onto the
   // waitlist palette — the point of not keeping a second and third green.
@@ -728,6 +733,7 @@ describe("registry coverage", () => {
     "--wa-shimmer": "the parsing sweep, a moving gradient stop",
     "--wa-unread-ring": "a box-shadow, not a fill",
     "--wa-row-active-glow": "a box-shadow, not a fill",
+    "--wa-media-wait": "the box a loading photo stands in (v18.8.0): an icon, never text",
   };
   // v17.14.0: tokens matching the fill prefixes that are INK, not fill. Listing
   // one here is not an exemption — the assertion below requires it to be some

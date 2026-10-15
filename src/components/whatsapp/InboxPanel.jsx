@@ -102,11 +102,16 @@ const HEAD_TEXT_BTN = { display: "inline-flex", alignItems: "center", justifyCon
 
 export function InboxPanel({
   conversations, messages, templates, bookings, initialActiveKey,
-  onClose, onSend, onAccept, onDismiss, onSaveTemplates, onMarkRead,
+  // v18.8.0: `watchMessages(phoneKey)` from useWhatsApp — the open thread's
+  // listener. `messages` holds only the watched conversations.
+  watchMessages,
+  onClose, onSend, onSendMedia, onAccept, onDismiss, onSaveTemplates, onMarkRead,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
-  onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, onRecheck,
+  onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, onRecheck, onOpenPhoto,
   onBulkArchive, onBulkUnarchive, onBulkDelete,
   query, setQuery, needsAction, setNeedsAction,
+  // v18.8.0 phase 8: the draft check's inputs, and the waitlist it can add to.
+  liveBookings, tableBlocks, autoOptimizer, waitlist, onAddToWaitlist,
   // settings/general — the "Regular" threshold, so the conversation header's chip
   // reads identically to the booking form's (see regularChipLabel in customers.js).
   regularMin,
@@ -406,6 +411,14 @@ export function InboxPanel({
   useEffect(() => {
     if (activeKey) writeLastConv(activeKey);
   }, [activeKey]);
+  // v18.8.0: the open conversation, and only it, is listened to. Selecting a
+  // thread attaches `messages/<key>`; another selection, Back to the list or
+  // closing the inbox detaches it (the effect's cleanup). `watchMessages` is
+  // stable while the module is on (a `useCallback` in the hook).
+  useEffect(() => {
+    if (!activeKey || !watchMessages) return undefined;
+    return watchMessages(activeKey);
+  }, [activeKey, watchMessages]);
   // Drop the selection if the active conversation leaves the current tab.
   // v18.3.2: `activeKey` is listed too. Every door that selects picks from the
   // current tab, so a new selection passes and nothing runs differently; the
@@ -419,7 +432,9 @@ export function InboxPanel({
   }, [conversations, tab, activeKey]);
 
   const activeConv = activeKey ? conversations.find((c) => c.phoneKey === activeKey) : null;
-  const activeMessages = activeConv ? (messages[activeConv.phoneKey] || []) : [];
+  // `undefined` while the thread's first snapshot is on its way (see
+  // ConversationView's `loaded`), `[]` once it is known to be empty.
+  const activeMessages = activeConv ? messages[activeConv.phoneKey] : undefined;
   const kbFold = !!activeConv && typing === activeConv.phoneKey && short && !shown;
   const unreadCount = conversations.filter((c) => c.unread && !c.archived).length;
   const archivedCount = conversations.filter((c) => c.archived).length;
@@ -440,16 +455,19 @@ export function InboxPanel({
     <div onFocus={onViewFocus} onBlur={onViewBlur} onPointerDown={onViewPointerDown} style={{ flex: 1, minWidth: 0, display: twoPane || activeKey ? "flex" : "none", flexDirection: "column", height: "100%" }}>
       <ConversationView
         conv={activeConv} messages={activeMessages} onBack={() => setActiveKey(null)}
-        onSend={(t) => onSend(activeConv.phoneKey, t)} onAccept={() => onAccept(activeConv)} onDismiss={() => onDismiss(activeConv.phoneKey)}
+        onSend={(t) => onSend(activeConv.phoneKey, t)} onSendMedia={onSendMedia ? (blob, meta) => onSendMedia(activeConv.phoneKey, blob, meta) : null} onAccept={(over) => onAccept(activeConv, over)} onDismiss={() => onDismiss(activeConv.phoneKey)}
         templates={templates} bookings={bookings} showBack={!twoPane} phone={winW < 600} compact={compact}
         kbFold={kbFold} onUnfold={unfold}
         onArchive={onArchive} onUnarchive={onUnarchive} onDelete={onDelete}
         onCancelLinkedBooking={onCancelLinkedBooking} onOpenLinkedBooking={onOpenLinkedBooking}
         onDismissAcceptedBadge={onDismissAcceptedBadge} onMarkIntentHandled={onMarkIntentHandled}
         onResend={onResend ? (msgId) => onResend(activeConv.phoneKey, msgId) : undefined}
+        onOpenPhoto={onOpenPhoto ? (msg) => onOpenPhoto(activeConv.phoneKey, msg) : undefined}
         onApplyModify={onApplyModify}
         onRecheck={onRecheck}
         regularMin={regularMin}
+        liveBookings={liveBookings} tableBlocks={tableBlocks} autoOptimizer={autoOptimizer} waitlist={waitlist}
+        onAddToWaitlist={onAddToWaitlist ? () => onAddToWaitlist(activeConv) : null}
       />
     </div>
   ) : (twoPane ? (
