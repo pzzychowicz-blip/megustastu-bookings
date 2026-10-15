@@ -14,6 +14,7 @@
 // never reaches the startup bundle.
 
 import { normalizePhone, isPhoneKey, mediaLabel, WA_MAX_TEXT_LEN } from "./whatsapp.js";
+import { formatDay, localDay } from "./day.js";
 
 // secondsTs(raw, now) — a Meta timestamp (seconds since the epoch, usually as a
 // string) as ms, clamped to FACTS: not a positive finite number → now; in the
@@ -354,4 +355,44 @@ export function disconnectSentence(d) {
   const why = (d && DISCONNECT_WORDS[d.event]) || "Meta ended the connection";
   const reason = d && d.reason ? " (" + d.reason.toLowerCase().replace(/_/g, " ") + ")" : "";
   return "WhatsApp is disconnected from MGT: " + why + reason + ". Replies from MGT won't send until it is connected again in Settings → WhatsApp.";
+}
+
+// ── Settings → WhatsApp, "Business app connection" (v18.9.0) ─────────────────
+// What `waLink` says, in sentences: the section draws these and decides
+// nothing itself, so the words are tested where they are chosen. `state` is
+// "none" (never connected), "connected" or "disconnected". `today`
+// (YYYY-MM-DD) decides whether a date carries its year, as everywhere else.
+export function connectionLines(link, today) {
+  const l = link && typeof link === "object" ? link : null;
+  const day = function (at) { return formatDay(localDay(at), { today }); };
+  if (!l || !l.phoneNumberId) {
+    return { state: "none", lines: ["Not connected. MGT is not linked to the WhatsApp Business app on the restaurant phone."] };
+  }
+  const state = l.status === "disconnected" ? "disconnected" : "connected";
+  const lines = [];
+  if (state === "disconnected") lines.push(disconnectSentence(l.disconnect));
+  else lines.push("Connected" + (l.connectedAt ? " on " + day(l.connectedAt) : "") + (l.connectedBy ? " by " + l.connectedBy : "") + ".");
+  lines.push("Number id " + l.phoneNumberId + ".");
+
+  const c = l.contacts || {};
+  if (c.firstAt) lines.push("The phone's contacts arrived on " + day(c.firstAt) + ".");
+  else if (c.requestedAt) lines.push("The phone's contacts were asked for on " + day(c.requestedAt) + "; none have arrived yet.");
+  else lines.push("The phone's contacts have not been asked for.");
+
+  const h = l.history || {};
+  if (h.declined) lines.push("The phone declined to share its chat history.");
+  else if (h.doneAt) lines.push("Chat history imported on " + day(h.doneAt) + ".");
+  else if (typeof h.progress === "number" && Number.isFinite(h.progress)) lines.push("Chat history " + Math.round(h.progress) + "% imported.");
+  else if (h.requestedAt) lines.push("Chat history was asked for on " + day(h.requestedAt) + "; none has arrived yet.");
+  else lines.push("Chat history has not been asked for.");
+
+  if (l.phone && l.phone.isOnBizApp === false) {
+    lines.push("Meta says this number is not on the WhatsApp Business app" + (l.phone.platformType ? " (" + l.phone.platformType + ")" : "") + ".");
+  }
+  // The last event, unless it is the disconnection the first line already said.
+  const ev = l.lastEvent;
+  if (ev && ev.event && !(state === "disconnected" && l.disconnect && l.disconnect.at === ev.at)) {
+    lines.push("Last event from Meta: " + ev.event.toLowerCase().replace(/_/g, " ") + (ev.at ? " on " + day(ev.at) : "") + ".");
+  }
+  return { state, lines };
 }

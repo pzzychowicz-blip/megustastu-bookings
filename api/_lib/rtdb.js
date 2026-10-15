@@ -39,6 +39,7 @@ import { getDatabase } from "firebase-admin/database";
 import { getAuth } from "firebase-admin/auth";
 import { dbUrl, serviceAccount, staffEmails, requireStaffAllowList } from "./env.js";
 import { statusWins } from "../../src/lib/whatsapp.js";
+import { isAdminEntry, sanitizeRole } from "../../src/lib/roles.js";
 
 let cachedApp = null;
 let cachedDb = null;
@@ -128,6 +129,26 @@ export async function verifyStaffToken(idToken) {
   return assertStaffAllowed(await getAuth(ensureApp()).verifyIdToken(idToken));
 }
 
+// ── The admin gate (v18.9.0, api/wa-onboard.js) ─────────────────────────────
+// Connecting the restaurant's number to MGT is an admin's act. The answer is
+// the CLIENT's own question: `isAdminEntry` on the account's `/roles` row,
+// exactly what useRoles asks for `isAdmin`, so the server can neither let
+// through an account the app treats as staff nor refuse one it shows the
+// Connect link to. `settingsAdmin` is never governed by the enforcement flag
+// (`ALWAYS_ENFORCED`, roles.js), so the flag is not read: with it off, a
+// non-admin account still is not an admin. Asked AFTER verifyStaffToken.
+export async function assertWaAdmin(decoded) {
+  const uid = decoded && typeof decoded.uid === "string" ? decoded.uid : "";
+  const snap = uid ? await getDb().ref("roles/" + sanitizeKey(uid)).get() : null;
+  const entry = snap && snap.exists() ? sanitizeRole(snap.val(), uid) : null;
+  if (!isAdminEntry(entry)) {
+    const err = new Error("Not authorised: only an admin can connect the WhatsApp Business app.");
+    err.code = "NOT_ADMIN";
+    throw err;
+  }
+  return decoded;
+}
+
 // The HTTP mapping for what verifyStaffToken can throw, in ONE place. It was
 // five verbatim catch blocks across the five gated endpoints, which is the
 // condition that produces the next disagreement — and it had already produced
@@ -142,14 +163,16 @@ export async function verifyStaffToken(idToken) {
 //   403 — the token is fine and the ACCOUNT is not allowed, either because it
 //         is not on the list or because its email is unverified. Distinct from
 //         401 because re-authenticating can never fix either one; the two carry
-//         different MESSAGES because they need opposite fixes.
+//         different MESSAGES because they need opposite fixes. v18.9.0: or
+//         because the endpoint is an admin's and the account is not one
+//         (assertWaAdmin).
 //   401 — everything else: absent, expired or malformed token.
 export function staffAuthError(e) {
   const code = e && e.code;
   if (code === "NO_SERVICE_ACCOUNT" || code === "NO_STAFF_ALLOWLIST") {
     return { status: 503, error: e.message };
   }
-  if (code === "NOT_STAFF" || code === "EMAIL_UNVERIFIED") return { status: 403, error: e.message };
+  if (code === "NOT_STAFF" || code === "EMAIL_UNVERIFIED" || code === "NOT_ADMIN") return { status: 403, error: e.message };
   return { status: 401, error: "invalid token" };
 }
 

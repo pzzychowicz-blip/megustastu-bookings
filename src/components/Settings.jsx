@@ -30,7 +30,9 @@ import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE, textWidth } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, InlineAlert, ALERT_TONES, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE, textWidth } from "./atoms";
+import { connectionLines } from "../lib/wa-coexist";
+import { useIntegrationStatus } from "../hooks/useIntegrationStatus";
 import { BTN, R, M, T, FW, H, IC, SP, APP_NAME } from "../lib/constants";
 // v18.2.0: how TabBar lays its tabs out.
 import { tabColumns } from "../lib/tab-rows";
@@ -42,7 +44,7 @@ import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
 // v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay
 // order) — since v18.0.0 session 7's /code-review, lib/day.js's WEEKDAY_SHORT,
 // which this line used to copy byte for byte.
-import { WEEKDAY_SHORT as RULE_WD } from "../lib/day";
+import { WEEKDAY_SHORT as RULE_WD, todayStr } from "../lib/day";
 import { guestsLabel, countLabel } from "../lib/booking-logic";
 
 // v18.2.0 phase 51: a standing-booking row's switch + Delete RESERVE their
@@ -1169,7 +1171,10 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
 // every other settings section — NOT Section, which takes only {style, children}
 // and silently swallows a `title` prop.
 // Backed by settings/whatsapp (useWaSettings) — restaurant-wide, not per-device.
-function WhatsAppTabContent({ waSettings, onSaveWaSettings }) {
+//
+// v18.9.0: an admin also sees the Business app connection (`waLink`, which only
+// the server writes) and the door to the /wa-connect page.
+function WhatsAppTabContent({ waSettings, onSaveWaSettings, isAdmin, waLink }) {
   const s = waSettings || {};
   // Default-ON tri-state read, resolved ONCE: the toggle's state and the value
   // it writes are then obviously each other's inverse.
@@ -1200,7 +1205,60 @@ function WhatsAppTabContent({ waSettings, onSaveWaSettings }) {
             onClick={function () { onSaveWaSettings({ autoArchiveOnComplete: !autoArchive }); }} />
         </div>
       </Collapsible>
+      {isAdmin ? <BusinessAppSection waLink={waLink} /> : null}
     </div>
+  );
+}
+
+// ── Business app connection (v18.9.0) ───────────────────────────────────────
+// Whether MGT is linked to the WhatsApp Business app on the restaurant phone,
+// read from `waLink` (written by api/wa-onboard.js and by Meta's webhooks),
+// and the door to /wa-connect, the page that links it. Admins only, as the
+// endpoint is (assertWaAdmin asks the same isAdminEntry).
+//
+// The sentences are `connectionLines` (lib/wa-coexist.js). The one thing this
+// adds is wa-config's `phoneNumberIdMatches`: META_PHONE_NUMBER_ID names the
+// number replies are SENT from, and after a connection it must be set to the
+// connected number's id by hand, in Vercel. `false` is the only answer that
+// warns; `null` (nothing to compare, or the dev server, which has no functions)
+// says nothing.
+//
+// The link opens a new tab: the page is a separate document with its own CSP,
+// and the app stays where it was.
+function BusinessAppSection({ waLink }) {
+  const { status } = useIntegrationStatus();
+  const { state, lines } = connectionLines(waLink, todayStr());
+  const mismatch = !!(status && status.phoneNumberIdMatches === false);
+  const summary = state === "connected" ? "Connected" : state === "disconnected" ? "Disconnected" : "Not connected";
+  const text = { fontSize: T.body, color: "var(--text-primary)", textAlign: "left" };
+  return (
+    <Collapsible
+      title="Business app connection"
+      subtitle="MGT and the WhatsApp Business app on the restaurant phone, on one number. Admins only."
+      summary={summary}
+      defaultOpen={state !== "connected" || mismatch}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: SP.tight, paddingTop: SP.tight }}>
+        {state === "disconnected" ? <InlineAlert>{lines[0]}</InlineAlert> : null}
+        {lines.slice(state === "disconnected" ? 1 : 0).map(function (line) {
+          return <div key={line} style={text}>{line}</div>;
+        })}
+        {mismatch ? (
+          <InlineAlert tone={ALERT_TONES.warn.tone} tint={ALERT_TONES.warn.tint}>
+            META_PHONE_NUMBER_ID in this deployment is not the connected number&rsquo;s id. Replies from MGT go out from the number that variable names: set it to {waLink && waLink.phoneNumberId ? waLink.phoneNumberId : "the connected id"} in Vercel and redeploy.
+          </InlineAlert>
+        ) : null}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.base, paddingTop: SP.tight }}>
+          <a className="mgt-hover-scale mgt-press" href="/wa-connect" target="_blank" rel="noopener"
+            style={mkBtn({ minHeight: H.control, boxSizing: "border-box", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" })}>
+            {state === "none" ? "Connect the Business app" : "Connect again"}
+          </a>
+          <span style={{ fontSize: T.micro, color: "var(--text-muted)", textAlign: "left", flex: "1 1 200px" }}>
+            Opens in a new tab. Have the restaurant phone at hand: Meta asks for it on the way.
+          </span>
+        </div>
+      </div>
+    </Collapsible>
   );
 }
 
@@ -1294,7 +1352,9 @@ export function SettingsContent({
   onDirty,
   // WA sandbox (settings/whatsapp — useWaSettings)
   waSettings,
-  onSaveWaSettings
+  onSaveWaSettings,
+  // v18.9.0: the Business app connection (useWhatsApp's `waLink` listener)
+  waLink
 }) {
   // v17.8.0 unsaved-changes guard. Settings holds drafts that commit on BLUR
   // (GsTextField) or on an explicit Add/Rename (LayoutTabContent), so closing
@@ -1402,7 +1462,7 @@ export function SettingsContent({
     // and merely hidden, so `tab` would render the WhatsApp settings for a
     // restaurant whose module is off. `cur` is the id validated against
     // `visibleTabs`; it is the gate, and every other branch here uses it.
-    content = <WhatsAppTabContent waSettings={waSettings} onSaveWaSettings={onSaveWaSettings} />;
+    content = <WhatsAppTabContent waSettings={waSettings} onSaveWaSettings={onSaveWaSettings} isAdmin={isAdmin} waLink={waLink} />;
   } else if (cur === "reminders") {
     content = (
       <RemindersTabContent

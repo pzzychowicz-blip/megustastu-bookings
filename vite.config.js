@@ -209,6 +209,37 @@ function tenantPrivacy() {
   };
 }
 
+// ── v18.9.0: the /wa-connect page, a second document ─────────────────────────
+//
+// `wa-connect.html` is built by its OWN config (`vite.wa-connect.config.js`,
+// the second half of `npm run build`), into `dist/` beside the app, and
+// `vercel.json` rewrites `/wa-connect` to it with a CSP of its own that lets
+// Meta's SDK run (the app's CSP does not, and does not change).
+//
+// Its own build and not a second `input` here, because that was measured: as
+// a second input, the modules the two pages share (src/firebase.js, the
+// atoms, the constants, the stylesheet) left the app's entry (156.8 → 123.6
+// kB gz) for six shared chunks totalling 37.9, i.e. 4.6 kB gz more for the
+// app to load, and more requests, for a page an admin opens once. Built
+// apart, the app's output is what it was, and the page carries its own copy
+// of React and Firebase, which only that page downloads.
+//
+// The dev server serves every HTML file in the root and has no `vercel.json`,
+// so this middleware is the rewrite there: the published address works on
+// both, and the Settings link needs no DEV branch.
+function waConnectPage() {
+  return {
+    name: "mgt-wa-connect-page",
+    configureServer(server) {
+      server.middlewares.use(function (req, res, next) {
+        const [path, query] = (req.url || "").split("?");
+        if (path === "/wa-connect") req.url = "/wa-connect.html" + (query ? "?" + query : "");
+        next();
+      });
+    },
+  };
+}
+
 // /code-review: hoisted out of the manualChunks callback. A regex literal is
 // re-evaluated every time control reaches it, so inline these allocated two
 // RegExp objects per module id inspected, on every build.
@@ -225,7 +256,7 @@ export default defineConfig(function ({ command }) {
   // Exactly `WA_SANDBOX`'s two truthy cases; see the note above the plugin.
   const isSandbox = command === "serve" || process.env.VITE_FB_TARGET === "dev";
   return {
-  plugins: [react(), stripSimulator(isSandbox), tenantManifest(), tenantPrivacy()],
+  plugins: [react(), stripSimulator(isSandbox), tenantManifest(), tenantPrivacy(), waConnectPage()],
 
   // v18.6.0: which Vercel environment built this ("production", "preview", or
   // "" anywhere else). One reader, the schema gate: a PREVIEW build talks to the

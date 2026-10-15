@@ -36266,3 +36266,116 @@ Tests: a disconnection recorded, another event keeping the reason, a reconnectio
 event for another account or with nothing connected writing nothing, a change with no
 event; the sentence; the banner's source (the field it reads, the live region outside
 the Reveal). Settings → WhatsApp's status is phase 8.
+
+### Phase 8 — connecting the Business app: `/wa-connect` and `api/wa-onboard.js`
+
+**The server half** (`api/wa-onboard.js`, production's seventh function). `GET` answers
+`{appId, configId, graphVersion}` from two new environment variables, `META_APP_ID` and
+`META_ES_CONFIG_ID` (not secrets: both sit in the page's JavaScript once it runs), and is
+also the page's admin check. `POST {code, wabaId, phoneNumberId}` runs Meta's onboarding
+in its order: exchange the code at once (it lives 30 s), record `waLink`, subscribe the
+app to the account, ask for the contacts sync, ask for the history sync, read the number
+(`is_on_biz_app`, `platform_type`). Four rules, each a line of it:
+- **`waLink` is written before any sync is asked for**, so the number guard (phase 1)
+  accepts the sync's webhooks while `META_PHONE_NUMBER_ID` still names the old number. A
+  link that fails answers 500 and stops: a sync asked for then would be spent on webhooks
+  the guard refuses. A different number from the last one clears the old one's sync
+  records (`contacts`, `history`, `phone`, `subscribedAt`); `waContacts` stays, since it is
+  keyed by the customer's number.
+- **A failed subscribe skips both syncs** (`skipped`, with the reason): Meta runs each once,
+  within 24 hours, and one asked for while no webhook can arrive is lost. The number check
+  runs regardless; it changes nothing.
+- **The business token is never stored and never returned.** It can send as the restaurant
+  and read its chats, and the database is readable by every account that signs in. It
+  lives in the request's memory; the tests assert it is in no response and no write.
+- **Per step, never all-or-nothing**: `{ok, steps: [{id, ok, error?, skipped?}], phoneNumberId,
+  envNumber}`, 200 when every step succeeded and 502 when a Meta call failed.
+  `POST {retry: "subscribe" | "contacts" | "history" | "phone"}` runs one step again with
+  `META_WA_TOKEN` and the ids `waLink` holds, since the code is spent. Whether the system user
+  may make these calls on a converted account is a rehearsal finding (§3b).
+
+`envNumber` is `unset`, `same` or `different`: whether `META_PHONE_NUMBER_ID` is the number
+just connected, as a word and never the value (wa-config's rule). `wa-config` gains the two
+keys and `phoneNumberIdMatches` (a boolean, null when either side is missing).
+
+**The admin gate is stricter than the plan's text, on purpose.** The plan said that with
+`enforceRoles` off any allow-listed staff account passes. `assertWaAdmin`
+(`api/_lib/rtdb.js`, 403 `NOT_ADMIN`) is the client's own question instead,
+`isAdminEntry(sanitizeRole(roles/{uid}))`, as `useRoles.isAdmin` asks it: `settingsAdmin` is
+one of the always-enforced capabilities, so the client never reads `enforceRoles` for it
+either, and a server that let more people through than the screen would be the two
+disagreeing about who may connect the restaurant's number. Tested with the switch off.
+
+**The page** (`wa-connect.html` + `src/wa-connect/`). It signs in through `src/firebase.js`
+(same origin, same session, the DEV/PROD split intact), asks the GET, loads Meta's SDK on
+demand and calls `FB.login` with `loginOptions` (`src/lib/wa-connect.js`). Meta answers in
+two ways that arrive in either order, a window message naming the account and the number
+and the login callback carrying the code, so the POST goes the moment both are in hand;
+everything one attempt needs is local to that attempt, so a second attempt can never send
+the first one's code. `signupMessage` reads only an https `facebook.com` origin and checks
+the ids as the server does; a `FINISH` or `FINISH_ONLY_WABA` (a signup that takes the number
+off the Business app) is refused rather than half-connected. The result lists each step, a
+Try again on the four the server retries, the number id with Copy, and, unless `envNumber`
+is `same`, the line saying to set `META_PHONE_NUMBER_ID` and redeploy. No inline script, so
+the hash-pinned CSP has nothing to pin.
+
+**Its own build, because a second input moved the app.** Added as a second input to
+`vite.config.js`, the shared code split differently: the entry became `main-*.js`
+(123.55 kB gz) plus six shared chunks, +4.6 kB gz on every app open, for a page an admin
+opens once. `vite.wa-connect.config.js` builds it alone into the same `dist` (`npm run
+build` runs both); the app's entry is byte-for-byte the size it was (156.82 kB gz) and the
+page is 140.03. In dev, `waConnectPage()` (a `vite.config.js` middleware) rewrites
+`/wa-connect` to the HTML.
+
+**Two CSP rules, never two policies on one response.** `vercel.json`'s app rule is now
+`/((?!wa-connect).*)` and `/wa-connect(\.html)?` has its own: the app's policy without the
+boot-script hash, plus `script-src https://connect.facebook.net`, `connect-src` and
+`frame-src https://*.facebook.com`. A response carrying both would have both enforced,
+which blocks the SDK. `tests/csp.test.js` checks the two sources between them cover every
+path once, the page's policy is the app's plus exactly those additions, the app's names no
+Facebook host, the other four headers match, and the built page (when `dist` exists). The
+rewrite is exact, `public/sw.js` already leaves the path to the browser (`APP_NAV_RE`), and
+`tests/service-worker.test.js` lists it. Widen only by what the sandbox's console shows.
+
+**Settings → WhatsApp, admins only: "Business app connection".** A Collapsible, open unless
+connected, built from `connectionLines(waLink, today)` (`src/lib/wa-coexist.js`): never
+connected / connected on <day> by <who> / the disconnect sentence (phase 7) in a danger
+alert, then the number id, the contacts and history syncs in words, a number Meta says is
+not on the Business app, and the last event from Meta when it is not the disconnect. A warn
+alert when `phoneNumberIdMatches === false`, and a link to `/wa-connect` (a new tab:
+"Have the restaurant phone at hand"). `useIntegrationStatus` moved out of `AdminSettings`
+into its own hook so both read it. Admin → Integrations lists the two new keys.
+`tests/link-buttons.test.js` now sweeps all of `src`, so the page's two links are held to
+the same rule as the app's.
+
+**The local harness** routes `/api/wa-onboard`: the GET works, the POST answers 503 "Embedded
+Signup needs a deployment", because Meta only opens the flow for an https domain its app
+lists.
+
+**Checked live on the dev server against a stub server**, with `FB.login` replaced by one
+that posts Meta's message and returns a code (the real flow cannot run locally):
+`loginOptions("111")` reached `FB.login`; the POST carried `{code, wabaId, phoneNumberId}`
+and nothing else; a 502 with the contacts step failed showed "Connected, with a step to
+finish.", the step's error and Try again, the number id with Copy, and the
+`META_PHONE_NUMBER_ID` line; Try again posted `{retry: "contacts"}` and the step turned green;
+Copy put the id on the clipboard. **It found two faults, fixed here.** Nothing told a screen
+reader the answer: the status region beside the button went from "Connecting…" to empty,
+and the result arrived outside any live region. And a Try again that succeeds unmounts
+itself, which dropped keyboard focus to `<body>`. Now one rule, `resultHeadline`, draws the
+heading and fills a hidden `role="status"` (`retryAnnouncement` adds how the retried step
+went, Copy says "Number id copied."), and when the control holding focus has gone, focus
+moves to the heading (measured: after the first answer, and after an Enter on Try again).
+"Connect again" is disabled while a retry runs, so a retry's answer is always merged into
+the result it belongs to.
+
+Tests: the onboarding handler (the gate in the shared `describe.each` for GET and POST, the
+admin check with extras, denies and `enforceRoles` off, the GET and its 503, the 400s, the
+call order with the link before the syncs, the token in no response or write, a failed
+exchange, link or subscribe, one failed sync not stopping the other, a reconnect to another
+number, `envNumber`, each retry), `wa-config`'s new keys and boolean, the CSP pair, and
+`tests/wa-connect.test.js` (23: the login options, every message case, the steps against the
+server's `RETRYABLE`, the headline and announcements, the page's wiring and imports,
+`connectionLines`, the Settings section and App's prop). **Cannot be verified before a
+deployment** (the rehearsal, §3b): Meta's real popup and its messages, the CSP against the
+real SDK, the `extras` shape (to confirm with the App Dashboard's Embedded Signup Builder),
+and whether `META_WA_TOKEN` may retry a sync on a converted account.

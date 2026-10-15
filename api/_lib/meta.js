@@ -26,7 +26,10 @@ import { mockMediaId } from "../../src/lib/wa-mock-media.js";
 // webhook's `conversation` object touches nothing wa-inbound.js reads
 // (recipient_id, id, status). The WEBHOOK's version is set in the Meta app
 // dashboard, not here. Unexercised until go-live: WA_SEND_MODE is mock.
-const GRAPH_VERSION = "v26.0";
+// v18.9.0: exported, because the /wa-connect page initialises Meta's JS SDK
+// with the same version (api/wa-onboard.js hands it over): two copies of a
+// version are a version waiting to disagree.
+export const GRAPH_VERSION = "v26.0";
 
 // rawBody: Buffer|string of the EXACT bytes received (HMAC is byte-sensitive).
 export function verifySignature(rawBody, signatureHeader) {
@@ -167,4 +170,65 @@ export async function downloadMedia(url) {
   const res = await fetch(url, { headers: { Authorization: "Bearer " + token } });
   if (!res.ok) throw graphError(res, null);
   return res;
+}
+
+// ── Embedded Signup (v18.9.0, api/wa-onboard.js) ────────────────────────────
+// The calls that connect a WhatsApp Business app number to this app. Each one
+// takes its bearer as an ARGUMENT: at onboarding it is the business token the
+// signup code was exchanged for, which is never stored or returned, so it is
+// handed down rather than read from the environment. A retry later uses
+// META_WA_TOKEN, passed the same way. None of these looks at WA_SEND_MODE:
+// connecting a number is not a send, and there is nothing to mock it with.
+//
+// A failure throws with `.status` (graphError), Meta's message as the text.
+async function graphJson(method, path, token, body) {
+  const headers = { Authorization: "Bearer " + token };
+  if (body) headers["Content-Type"] = "application/json";
+  const res = await fetch("https://graph.facebook.com/" + GRAPH_VERSION + "/" + path, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw graphError(res, data);
+  return data || {};
+}
+
+// The code Embedded Signup returns lives 30 seconds. POSTed as a form, so the
+// app secret travels in a body and never in a URL a log could keep.
+export async function exchangeCode(code, appId, appSecret) {
+  const res = await fetch("https://graph.facebook.com/" + GRAPH_VERSION + "/oauth/access_token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: appId, client_secret: appSecret, code }).toString(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data || typeof data.access_token !== "string" || !data.access_token) throw graphError(res, data);
+  return data.access_token;
+}
+
+// Without this the account sends this app no webhooks at all.
+export function subscribeApp(wabaId, token) {
+  return graphJson("POST", wabaId + "/subscribed_apps", token);
+}
+
+// `smb_app_state_sync` (the phone's contacts) or `history` (its chats). Meta
+// allows each once, within 24 hours of onboarding; the answer is a request id,
+// and the data arrives later as webhooks.
+export async function requestSmbSync(phoneNumberId, syncType, token) {
+  const data = await graphJson("POST", phoneNumberId + "/smb_app_data", token, {
+    messaging_product: "whatsapp",
+    sync_type: syncType,
+  });
+  return typeof data.request_id === "string" ? data.request_id : null;
+}
+
+// Is the number on the Business app, and on which platform? The last check of
+// an onboarding: a coexistence number answers `is_on_biz_app: true`.
+export async function phoneInfo(phoneNumberId, token) {
+  const data = await graphJson("GET", phoneNumberId + "?fields=is_on_biz_app,platform_type", token);
+  return {
+    isOnBizApp: data.is_on_biz_app === true,
+    platformType: typeof data.platform_type === "string" ? data.platform_type : null,
+  };
 }

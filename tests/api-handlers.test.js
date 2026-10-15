@@ -117,6 +117,7 @@ import simSuggestHandler from "../api/wa-sim-suggest.js";
 import simGenerateHandler from "../api/wa-sim-generate.js";
 import mediaHandler, { MEDIA_VIEW_MAX, servedType, sniffType } from "../api/wa-media.js";
 import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "../api/wa-prune.js";
+import onboardHandler from "../api/wa-onboard.js";
 import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { numberIsOurs, makeNumberGuard } from "../api/_lib/coexist-core.js";
@@ -147,7 +148,7 @@ beforeEach(() => {
   vi.stubEnv("FIREBASE_SERVICE_ACCOUNT", '{"project_id":"test"}');
   ["WA_STAFF_EMAILS", "WA_SEND_MODE", "WA_LLM_MODE", "WA_DB_URL", "WA_ALLOW_UNSIGNED", "WA_SIM_ENABLED",
     "META_APP_SECRET", "META_WA_TOKEN", "META_PHONE_NUMBER_ID", "META_VERIFY_TOKEN", "GEMINI_API_KEY", "GEMINI_MODEL", "TENANT_WA_CONTEXT",
-    "CRON_SECRET",
+    "CRON_SECRET", "META_APP_ID", "META_ES_CONFIG_ID",
   ].forEach((k) => vi.stubEnv(k, ""));
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -163,6 +164,8 @@ describe.each([
   ["wa-config", configHandler, "GET", "POST"],
   ["wa-media", mediaHandler, "GET", "PUT"],
   ["wa-media (send)", mediaHandler, "POST", "PUT"],
+  ["wa-onboard", onboardHandler, "GET", "PUT"],
+  ["wa-onboard (connect)", onboardHandler, "POST", "PUT"],
 ])("%s — method and staff auth", (name, handler, method, wrong) => {
   it("answers 405 to the wrong method, before anything else", async () => {
     const res = await call(handler, { method: wrong, token: "staff" });
@@ -396,6 +399,237 @@ describe("wa-config", () => {
     expect((await config()).body.modes).toEqual({ llm: "mock", send: "mock" });
     vi.stubEnv("WA_LLM_MODE", "live");
     expect((await config()).body.modes).toEqual({ llm: "live", send: "mock" });
+  });
+
+  // v18.9.0: the /wa-connect page's two ids, and whether the environment's
+  // number is the one Embedded Signup connected — a boolean, never either id.
+  it("reports the Connect page's two keys", async () => {
+    vi.stubEnv("META_APP_ID", "111222333");
+    const res = await config();
+    expect(res.body.set).toMatchObject({ META_APP_ID: true, META_ES_CONFIG_ID: false });
+    expect(JSON.stringify(res.body)).not.toContain("111222333");
+  });
+  it("says whether META_PHONE_NUMBER_ID is the connected number, null when there is nothing to compare", async () => {
+    expect((await config()).body.phoneNumberIdMatches).toBe(null);
+    vi.stubEnv("META_PHONE_NUMBER_ID", "555000111");
+    expect((await config()).body.phoneNumberIdMatches).toBe(null);
+    fake.state.tree = { waLink: { phoneNumberId: "555000111" } };
+    expect((await config()).body.phoneNumberIdMatches).toBe(true);
+    fake.state.tree = { waLink: { phoneNumberId: "999888777" } };
+    const res = await config();
+    expect(res.body.phoneNumberIdMatches).toBe(false);
+    expect(JSON.stringify(res.body)).not.toMatch(/555000111|999888777/);
+  });
+});
+
+// ── api/wa-onboard.js (v18.9.0) ─────────────────────────────────────────────
+describe("wa-onboard", () => {
+  const WABA = "102030405060";
+  const PHONE = "908070605040";
+  const BIZ = "BIZ-TOKEN-never-kept";
+  const ADMIN = { roles: { u1: { role: "admin" } } };
+  const connect = (body, token = "staff") => call(onboardHandler, { method: "POST", token, body });
+  const ids = () => ({ code: "the-code", wabaId: WABA, phoneNumberId: PHONE });
+  // Meta, as far as onboarding meets it. Every call is recorded with what the
+  // database held when it was made, so the order can be asserted against it.
+  function meta({ fail = {} } = {}) {
+    const calls = [];
+    const f = vi.fn(async (url, init = {}) => {
+      const u = new URL(url);
+      const path = u.pathname.replace(/^\/v26\.0\//, "");
+      const body = typeof init.body === "string" ? init.body : "";
+      const step = path === "oauth/access_token" ? "exchange"
+        : path === WABA + "/subscribed_apps" ? "subscribe"
+        : path === PHONE + "/smb_app_data" ? (JSON.parse(body).sync_type === "history" ? "history" : "contacts")
+        : path === PHONE ? "phone" : "unknown";
+      calls.push({ step, method: init.method || "GET", auth: (init.headers || {}).Authorization || null, body, url,
+        linkedPhone: fake.read("waLink/phoneNumberId") || null });
+      if (fail[step]) return { ok: false, status: fail[step], json: async () => ({ error: { message: step + " refused" } }) };
+      const data = step === "exchange" ? { access_token: BIZ, token_type: "bearer" }
+        : step === "subscribe" ? { success: true }
+        : step === "contacts" || step === "history" ? { messaging_product: "whatsapp", request_id: "req-" + step }
+        : step === "phone" ? { is_on_biz_app: true, platform_type: "CLOUD_API", id: PHONE } : {};
+      return { ok: true, status: 200, json: async () => data };
+    });
+    f.calls = calls;
+    return f;
+  }
+  beforeEach(() => {
+    vi.stubEnv("META_APP_ID", "app-1");
+    vi.stubEnv("META_ES_CONFIG_ID", "cfg-1");
+    vi.stubEnv("META_APP_SECRET", "app-secret");
+  });
+
+  describe("the admin gate", () => {
+    it("refuses a staff account with no admin grant, writing nothing and calling nobody", async () => {
+      const f = meta(); vi.stubGlobal("fetch", f);
+      for (const tree of [{}, { roles: { u1: { role: "staff" } } }, { roles: { u1: { role: "manager" } } }]) {
+        fake.state.tree = tree;
+        const res = await connect(ids());
+        expect([res.statusCode, res.body.error]).toEqual([403, "Not authorised: only an admin can connect the WhatsApp Business app."]);
+        expect((await call(onboardHandler, { method: "GET", token: "staff" })).statusCode).toBe(403);
+      }
+      expect(f).not.toHaveBeenCalled();
+      expect(fake.state.writes).toEqual([]);
+    });
+    it("asks the client's question: an admin level, or the settingsAdmin extra, and never one under a deny", async () => {
+      const get = () => call(onboardHandler, { method: "GET", token: "staff" });
+      fake.state.tree = { roles: { u1: { role: "admin" } } };
+      expect((await get()).statusCode).toBe(200);
+      fake.state.tree = { roles: { u1: { role: "staff", extras: { settingsAdmin: true } } } };
+      expect((await get()).statusCode).toBe(200);
+      fake.state.tree = { roles: { u1: { role: "admin", denies: { settingsAdmin: true } } } };
+      expect((await get()).statusCode).toBe(403);
+    });
+    it("the enforcement flag does not open it: settingsAdmin is always enforced (roles.js ALWAYS_ENFORCED)", async () => {
+      fake.state.tree = { roles: { u1: { role: "staff" } }, settings: { admin: { enforceRoles: false } } };
+      expect((await call(onboardHandler, { method: "GET", token: "staff" })).statusCode).toBe(403);
+    });
+  });
+
+  describe("GET", () => {
+    it("hands the page the two ids and the Graph version its SDK must use", async () => {
+      fake.state.tree = ADMIN;
+      const res = await call(onboardHandler, { method: "GET", token: "staff" });
+      expect([res.statusCode, res.body]).toEqual([200, { appId: "app-1", configId: "cfg-1", graphVersion: "v26.0" }]);
+    });
+    it("503 while either id is unset", async () => {
+      fake.state.tree = ADMIN;
+      vi.stubEnv("META_ES_CONFIG_ID", "");
+      const res = await call(onboardHandler, { method: "GET", token: "staff" });
+      expect(res.statusCode).toBe(503);
+      expect(res.body.error).toMatch(/META_ES_CONFIG_ID/);
+    });
+  });
+
+  describe("POST, the onboarding", () => {
+    beforeEach(() => { fake.state.tree = JSON.parse(JSON.stringify(ADMIN)); });
+
+    it("400 without a code, or with ids that are not Meta's, before calling anyone", async () => {
+      const f = meta(); vi.stubGlobal("fetch", f);
+      for (const body of [{ wabaId: WABA, phoneNumberId: PHONE }, { code: 7, wabaId: WABA, phoneNumberId: PHONE },
+        Object.assign(ids(), { wabaId: "12/../me" }), Object.assign(ids(), { phoneNumberId: "abc123456" }), Object.assign(ids(), { phoneNumberId: undefined })]) {
+        expect((await connect(body)).statusCode).toBe(400);
+      }
+      expect(f).not.toHaveBeenCalled();
+      expect(fake.state.writes).toEqual([]);
+    });
+    it("503 without the app secret the exchange needs, before calling anyone", async () => {
+      vi.stubEnv("META_APP_SECRET", "");
+      const f = meta(); vi.stubGlobal("fetch", f);
+      expect((await connect(ids())).statusCode).toBe(503);
+      expect(f).not.toHaveBeenCalled();
+    });
+
+    it("runs Meta's steps in order, links the number BEFORE any sync, and answers each step", async () => {
+      vi.stubEnv("META_PHONE_NUMBER_ID", "111111111");
+      const f = meta(); vi.stubGlobal("fetch", f);
+      const res = await connect(ids());
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toEqual({ ok: true, phoneNumberId: PHONE, envNumber: "different",
+        steps: ["exchange", "link", "subscribe", "contacts", "history", "phone"].map((id) => ({ id, ok: true })) });
+      expect(f.calls.map((c) => c.step)).toEqual(["exchange", "subscribe", "contacts", "history", "phone"]);
+      // The code went in a form body, the secret with it, never in the URL.
+      const ex = f.calls[0];
+      expect(ex.method).toBe("POST");
+      expect(new URLSearchParams(ex.body).get("code")).toBe("the-code");
+      expect(new URLSearchParams(ex.body).get("client_id")).toBe("app-1");
+      expect(ex.url).not.toMatch(/app-secret|the-code/);
+      // Every later call carries the business token, and the syncs found the
+      // number already linked, so the number guard accepts their webhooks.
+      expect(f.calls.slice(1).every((c) => c.auth === "Bearer " + BIZ)).toBe(true);
+      expect(f.calls.filter((c) => c.step === "contacts" || c.step === "history").map((c) => c.linkedPhone)).toEqual([PHONE, PHONE]);
+      expect(fake.read("waLink")).toMatchObject({ status: "connected", wabaId: WABA, phoneNumberId: PHONE, connectedBy: "ana@example.com",
+        contacts: { requestId: "req-contacts" }, history: { requestId: "req-history" },
+        phone: { isOnBizApp: true, platformType: "CLOUD_API" } });
+      expect(typeof fake.read("waLink/subscribedAt")).toBe("number");
+    });
+
+    it("never stores or returns the business token", async () => {
+      vi.stubGlobal("fetch", meta());
+      const res = await connect(ids());
+      expect(JSON.stringify(res.body)).not.toContain(BIZ);
+      expect(JSON.stringify(fake.state.writes)).not.toContain(BIZ);
+      expect(JSON.stringify(fake.state.tree)).not.toContain(BIZ);
+    });
+
+    it("a refused exchange stops there: 502, nothing linked, nobody else called", async () => {
+      const f = meta({ fail: { exchange: 400 } }); vi.stubGlobal("fetch", f);
+      const res = await connect(ids());
+      expect([res.statusCode, res.body.steps]).toEqual([502, [{ id: "exchange", ok: false, error: "exchange refused" }]]);
+      expect(f.calls.map((c) => c.step)).toEqual(["exchange"]);
+      expect(fake.read("waLink")).toBeUndefined();
+    });
+
+    it("a failed subscribe skips both syncs, which Meta runs only once, and still checks the phone", async () => {
+      const f = meta({ fail: { subscribe: 500 } }); vi.stubGlobal("fetch", f);
+      const res = await connect(ids());
+      expect(res.statusCode).toBe(502);
+      expect(res.body.steps.map((s) => [s.id, s.ok, !!s.skipped])).toEqual([
+        ["exchange", true, false], ["link", true, false], ["subscribe", false, false],
+        ["contacts", false, true], ["history", false, true], ["phone", true, false]]);
+      expect(f.calls.map((c) => c.step)).toEqual(["exchange", "subscribe", "phone"]);
+      expect(fake.read("waLink/contacts")).toBeUndefined();
+    });
+
+    it("one failed sync does not stop the other", async () => {
+      vi.stubGlobal("fetch", meta({ fail: { contacts: 400 } }));
+      const res = await connect(ids());
+      expect(res.statusCode).toBe(502);
+      expect(res.body.steps.find((s) => s.id === "contacts")).toEqual({ id: "contacts", ok: false, error: "contacts refused" });
+      expect(res.body.steps.find((s) => s.id === "history")).toEqual({ id: "history", ok: true });
+    });
+
+    it("a failed link stops before the syncs: 500, and Meta's one sync is not spent", async () => {
+      fake.state.failWrite = (op, path) => path === "waLink";
+      const f = meta(); vi.stubGlobal("fetch", f);
+      const res = await connect(ids());
+      expect(res.statusCode).toBe(500);
+      expect(res.body.steps.map((s) => [s.id, s.ok])).toEqual([["exchange", true], ["link", false]]);
+      expect(f.calls.map((c) => c.step)).toEqual(["exchange"]);
+    });
+
+    it("reconnecting clears a disconnection; a different number forgets the old number's sync records", async () => {
+      vi.stubGlobal("fetch", meta({ fail: { contacts: 400, history: 400 } }));
+      fake.state.tree.waLink = { status: "disconnected", disconnect: { event: "PARTNER_REMOVED" }, phoneNumberId: PHONE, contacts: { firstAt: 5 } };
+      await connect(ids());
+      expect(fake.read("waLink/status")).toBe("connected");
+      expect(fake.read("waLink/disconnect")).toBeUndefined();
+      expect(fake.read("waLink/contacts")).toEqual({ firstAt: 5 });
+      fake.state.tree.waLink.phoneNumberId = "123123123";
+      await connect(ids());
+      expect(fake.read("waLink/contacts")).toBeUndefined();
+    });
+
+    it("says whether the environment's number is the one connected, as a word", async () => {
+      vi.stubGlobal("fetch", meta());
+      expect((await connect(ids())).body.envNumber).toBe("unset");
+      vi.stubEnv("META_PHONE_NUMBER_ID", PHONE);
+      expect((await connect(ids())).body.envNumber).toBe("same");
+    });
+  });
+
+  describe("POST, a retry", () => {
+    beforeEach(() => { fake.state.tree = JSON.parse(JSON.stringify(ADMIN)); });
+    it("400 for a step it does not know, and while nothing is connected", async () => {
+      vi.stubEnv("META_WA_TOKEN", "sys-token");
+      expect((await connect({ retry: "exchange" })).statusCode).toBe(400);
+      const res = await connect({ retry: "contacts" });
+      expect([res.statusCode, res.body.error]).toEqual([400, "Nothing is connected yet: connect the Business app first."]);
+    });
+    it("503 without the system user's token", async () => {
+      fake.state.tree.waLink = { wabaId: WABA, phoneNumberId: PHONE };
+      expect((await connect({ retry: "history" })).statusCode).toBe(503);
+    });
+    it("runs that one step with META_WA_TOKEN and the ids waLink holds", async () => {
+      vi.stubEnv("META_WA_TOKEN", "sys-token");
+      fake.state.tree.waLink = { status: "connected", wabaId: WABA, phoneNumberId: PHONE };
+      const f = meta(); vi.stubGlobal("fetch", f);
+      const res = await connect({ retry: "history" });
+      expect([res.statusCode, res.body.steps]).toEqual([200, [{ id: "history", ok: true }]]);
+      expect(f.calls.map((c) => [c.step, c.auth])).toEqual([["history", "Bearer sys-token"]]);
+      expect(fake.read("waLink/history/requestId")).toBe("req-history");
+    });
   });
 });
 

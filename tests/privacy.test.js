@@ -140,8 +140,12 @@ describe("the privacy notice — the generator", () => {
 describe("the privacy notice — the route", () => {
   // The dev server answers /privacy from a middleware; production only does
   // because of this line.
+  // v18.9.0: beside the /wa-connect page's, its only sibling.
   it("is served at /privacy by a rewrite in vercel.json", () => {
-    expect(VERCEL.rewrites).toEqual([{ source: "/privacy", destination: "/privacy.html" }]);
+    expect(VERCEL.rewrites).toEqual([
+      { source: "/privacy", destination: "/privacy.html" },
+      { source: "/wa-connect", destination: "/wa-connect.html" },
+    ]);
   });
 
   // The rewrite must not become a catch-all: the app is one page at "/", and a

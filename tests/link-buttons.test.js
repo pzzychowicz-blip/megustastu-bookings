@@ -27,7 +27,7 @@ const files = [];
     if (e.isDirectory()) walk(p);
     else if (/\.jsx$/.test(e.name)) files.push(p);
   }
-})(join(SRC, "components"));
+})(SRC);
 
 // Each opening <a …> tag, read brace- and quote-aware, so a `=>` or a `>` in
 // an expression does not end it.

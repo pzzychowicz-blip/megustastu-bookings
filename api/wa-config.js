@@ -30,7 +30,7 @@
 // deployment cannot answer, which is different from a key that is not set.
 
 import { env, llmMode, sendMode } from "./_lib/env.js";
-import { verifyStaffToken, staffAuthError } from "./_lib/rtdb.js";
+import { verifyStaffToken, staffAuthError, readWaLink } from "./_lib/rtdb.js";
 
 // Every key `api/_lib/env.js` reads, plus the two the harness/sandbox use. Kept
 // as a flat list rather than grouped, for the reason in the header: the grouping
@@ -43,7 +43,24 @@ const KEYS = [
   // v18.8.0 phase 7: without it the nightly prune (api/wa-prune.js) refuses to
   // run, and messages are kept past the period the privacy notice states.
   "CRON_SECRET",
+  // v18.9.0: the /wa-connect page's two ids (api/wa-onboard.js). Not secrets,
+  // but without both the Business app cannot be connected.
+  "META_APP_ID", "META_ES_CONFIG_ID",
 ];
+
+// v18.9.0: does META_PHONE_NUMBER_ID name the number Embedded Signup connected
+// (`waLink.phoneNumberId`)? A boolean, never either value, for the reason in the
+// header; `null` when there is nothing to compare (either side unset, or the
+// database could not be read). Settings → WhatsApp warns on `false`: replies
+// would go out from the environment's number, not the connected one.
+async function phoneNumberIdMatches() {
+  const envId = env("META_PHONE_NUMBER_ID", null);
+  if (!envId) return null;
+  let link = null;
+  try { link = await readWaLink(); } catch { return null; }
+  if (!link || !link.phoneNumberId) return null;
+  return String(link.phoneNumberId) === String(envId);
+}
 
 export default async function handler(req, res) {
   if (req.method !== "GET") { res.status(405).json({ error: "method not allowed" }); return; }
@@ -82,5 +99,6 @@ export default async function handler(req, res) {
   res.status(200).json({
     set,
     modes: { llm: llmMode(), send: sendMode() },
+    phoneNumberIdMatches: await phoneNumberIdMatches(),
   });
 }

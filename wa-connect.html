@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=17.4.2" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <!-- v18.9.0: the /wa-connect page (vercel.json rewrites /wa-connect here).
+         It connects the WhatsApp Business app to the app through Meta's
+         Embedded Signup, whose SDK only THIS page's CSP allows. No inline
+         script, on purpose: its CSP pins no hash, so one would be blocked in
+         production. The title is set by src/wa-connect/main.jsx from the app's
+         name constant. -->
+    <title>Connect WhatsApp</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/wa-connect/main.jsx"></script>
+  </body>
+</html>
