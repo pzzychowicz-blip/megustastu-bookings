@@ -262,6 +262,35 @@ export async function readMessageNode(phoneKey) {
   return snap.exists() ? snap.val() || {} : {};
 }
 
+// One conversation's messages older than `before` (ms), keyed like
+// readMessageNode, for a thread the prune is NOT deleting (/code-review). A
+// query on `ts`, indexed in database.rules.json (`messages/$phoneKey`), so a
+// regular customer's thread costs the night only its old messages rather than
+// its whole history. A message with no `ts` comes too (null sorts first); a
+// `ts` that is a string does not (strings sort after numbers). The caller
+// filters either way. Both measured on the emulator through firebase-admin.
+//
+// **A `get()` on a query the rules do not index is REFUSED** ("Index not
+// defined"), not filtered for the SDK as a listener's is: measured on the
+// emulator. So until the rules carrying the index are published, the thread is
+// read whole, as before it, and the deploy order does not matter.
+let warnedNoIndex = false;
+export async function readOldMessages(phoneKey, before) {
+  const node = getDb().ref("messages/" + sanitizeKey(phoneKey));
+  let snap;
+  try {
+    snap = await node.orderByChild("ts").endAt(before - 1).get();
+  } catch (e) {
+    if (!/index not defined/i.test(String(e && e.message))) throw e;
+    if (!warnedNoIndex) {
+      warnedNoIndex = true;
+      console.warn("[wa-prune] messages/$phoneKey has no .indexOn ts yet (publish database.rules.json); reading threads whole");
+    }
+    snap = await node.get();
+  }
+  return snap.exists() ? snap.val() || {} : {};
+}
+
 // Deletes the conversation only if `stillOld(stored)` holds at the moment of
 // the write, so a message that arrived after the prune read the list keeps its
 // thread. Resolves true when it was deleted.

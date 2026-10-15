@@ -35852,13 +35852,29 @@ its own commit.
    SDK's write fail on demand. The text send (`api/wa-send.js`) has the same shape and is
    unchanged; its failure goes to the write-warning banner, which offers no resend.
 
+4. **The prune read every long-lived thread whole, every night.** A conversation that began
+   before the cutoff can hold an old message, so it is read; after the first year that is
+   every regular customer, and each thread was downloaded in full to find the few messages
+   that just turned 12 months old. The header's "most nights read almost nothing" held only
+   in year one. A live thread is now asked only for its old messages, on a new
+   `.indexOn: ["ts"]` at `messages/$phoneKey` (`readOldMessages`); a thread that is going is
+   still read whole. **Measured on the emulator through firebase-admin:** with the index, the
+   query returns exactly the messages below the cutoff plus those with no `ts`. Without it,
+   `get()` is refused ("Index not defined"), where I had written that the server would
+   filter. So `readOldMessages` falls back to the whole read on that error alone, and the
+   deploy order does not matter. `npm run test:rules`: 307 passed. Three new prune tests
+   (the query and its bound, the fallback, the index in the rules).
+
 ### Deploy steps (Patryk)
 
 1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random
    value from `openssl rand -hex 32`, then redeploy each. Without it the nightly prune answers
    503 and deletes nothing. Settings → Admin → Integrations shows whether it is set.
-2. **PROD rules: no change.** Re-checked against the branch: `database.rules.json` is
-   untouched. `settings/admin` gains `waRetentionDays` inside its existing grant and `adminRev`
+2. **Publish `database.rules.json` to PROD (and DEV).** The only change is
+   `.indexOn: ["ts"]` on `messages/$phoneKey` (the `/code-review` above, item 4): no
+   permission moves, and the order against the app deploy does not matter, because without
+   the index the prune reads each thread whole, as before, and logs once that the index is
+   missing. `settings/admin` gains `waRetentionDays` inside its existing grant and `adminRev`
    pair; the one other config change is `vercel.json`'s cron.
 3. **Refresh every device after the deploy.** `SCHEMA` is 3, so a device still on the old
    build shows "This device needs refreshing" and writes nothing until it reloads.

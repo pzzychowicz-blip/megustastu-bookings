@@ -126,7 +126,7 @@
     },
 
     "messages": {
-      "$phoneKey": { ".write": "auth != null" }
+      "$phoneKey": { ".write": "auth != null", ".indexOn": ["ts"] }
     },
 
     "templates":         { ".write": "auth != null && newData.parent().child('templatesRev').val() === (data.parent().child('templatesRev').exists() ? data.parent().child('templatesRev').val() + 1 : 1)" },

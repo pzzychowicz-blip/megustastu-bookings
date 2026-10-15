@@ -172,7 +172,8 @@ describe("WA hardening — phoneKey is sanitized at the path boundary", () => {
     // 8 since v18.8.0: `getMessage`, the message api/wa-media.js reads a media id from.
     // 11 since phase 7: the prune's `readMessageNode`, `removeConversationIf` and
     // `removeMessages` (its keys come from the stored node, which they leave as is).
-    expect((src.match(/sanitizeKey\(phoneKey\)/g) || []).length).toBe(11);
+    // 12 since the /code-review: `readOldMessages`, the prune's query on `ts`.
+    expect((src.match(/sanitizeKey\(phoneKey\)/g) || []).length).toBe(12);
   });
 });
 

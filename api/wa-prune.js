@@ -27,7 +27,11 @@
 // conversation (its age is unknown) and goes with a deleted one (it belongs to
 // nothing then). A conversation with no readable `lastMessageAt` is never
 // deleted. Only threads that can hold an old message are read: a conversation
-// created inside the window cannot, so most nights read almost nothing.
+// created inside the window cannot. And of a live thread only its old messages
+// are read (`readOldMessages`, a query on the indexed `ts`), since after the
+// first year every regular customer's thread began before the cutoff, and
+// reading each whole every night would cost the restaurant's entire history
+// to delete a day's worth (/code-review). A thread that is going is read whole.
 //
 // **The messages go BEFORE the conversation** (/code-review). The prune finds
 // a thread through its conversation row, so a conversation deleted first and
@@ -44,7 +48,7 @@
 
 import crypto from "node:crypto";
 import { env } from "./_lib/env.js";
-import { readWaRetentionDays, readAllConversations, readMessageNode, removeConversationIf, removeMessages } from "./_lib/rtdb.js";
+import { readWaRetentionDays, readAllConversations, readMessageNode, readOldMessages, removeConversationIf, removeMessages } from "./_lib/rtdb.js";
 import { retentionDaysOf } from "../src/lib/retention.js";
 
 const DAY_MS = 86400000;
@@ -101,9 +105,9 @@ export default async function handler(req, res) {
     const conv = conversations[key];
     if (!mayHoldOld(conv, cutoff)) continue;
     try {
-      const node = await readMessageNode(key);
-      out.read++;
       const expired = conversationExpired(conv, cutoff);
+      const node = expired ? await readMessageNode(key) : await readOldMessages(key, cutoff);
+      out.read++;
       const ids = staleMessageIds(node, cutoff, expired);
       await removeMessages(key, ids);
       out.messages += ids.length;

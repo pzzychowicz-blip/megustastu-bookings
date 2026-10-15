@@ -33,7 +33,7 @@ import { readFileSync } from "node:fs";
 const fake = vi.hoisted(() => {
   // `failWrite(op, path)` → true makes that write throw (a database error the
   // code under test has to survive), before anything is changed.
-  const state = { tree: {}, writes: [], failWrite: null };
+  const state = { tree: {}, writes: [], queries: [], failWrite: null, noIndex: false };
   const parts = (p) => p.split("/").filter(Boolean);
   const read = (p) => parts(p).reduce((n, k) => (n != null && typeof n === "object" ? n[k] : undefined), state.tree);
   const write = (p, v) => {
@@ -43,9 +43,31 @@ const fake = vi.hoisted(() => {
     const last = ks[ks.length - 1];
     if (v === null || v === undefined) delete n[last]; else n[last] = v;
   };
+  const snapOf = (v) => ({ exists: () => v !== undefined && v !== null, val: () => (v === undefined ? null : v) });
   const db = {
     ref: (path) => ({
-      get: async () => { const v = read(path); return { exists: () => v !== undefined && v !== null, val: () => (v === undefined ? null : v) }; },
+      get: async () => snapOf(read(path)),
+      // v18.8.0 /code-review (api/wa-prune.js): `orderByChild(k).endAt(v)`,
+      // as RTDB orders it for this use: a child with no number at `k` (null)
+      // sorts first and is kept, a string sorts after every number and is not.
+      // Each query is recorded, so a test can see what the prune asked for.
+      orderByChild: (k) => ({
+        endAt: (end) => ({
+          get: async () => {
+            state.queries.push({ path, orderByChild: k, endAt: end });
+            // What the server answers a get() on a query it has no index for.
+            if (state.noIndex) throw new Error('Index not defined, add ".indexOn": "' + k + '", for path "/' + path + '", to the rules');
+            const node = read(path);
+            if (node == null || typeof node !== "object") return snapOf(undefined);
+            const out = {};
+            Object.keys(node).forEach((id) => {
+              const v = node[id] != null && typeof node[id] === "object" ? node[id][k] : undefined;
+              if (v === undefined || v === null || (typeof v === "number" && v <= end)) out[id] = node[id];
+            });
+            return snapOf(Object.keys(out).length ? out : undefined);
+          },
+        }),
+      }),
       set: async (v) => {
         if (state.failWrite && state.failWrite("set", path)) throw new Error("database unavailable");
         state.writes.push({ op: "set", path, value: v }); write(path, v);
@@ -117,7 +139,9 @@ const openConv = (extra) => Object.assign({ phoneKey: KEY, phone: KEY, windowExp
 beforeEach(() => {
   fake.state.tree = {};
   fake.state.writes = [];
+  fake.state.queries = [];
   fake.state.failWrite = null;
+  fake.state.noIndex = false;
   vi.stubEnv("FIREBASE_SERVICE_ACCOUNT", '{"project_id":"test"}');
   ["WA_STAFF_EMAILS", "WA_SEND_MODE", "WA_LLM_MODE", "WA_DB_URL", "WA_ALLOW_UNSIGNED", "WA_SIM_ENABLED",
     "META_APP_SECRET", "META_WA_TOKEN", "META_PHONE_NUMBER_ID", "META_VERIFY_TOKEN", "GEMINI_API_KEY", "GEMINI_MODEL", "TENANT_WA_CONTEXT",
@@ -1372,6 +1396,44 @@ describe("wa-prune", () => {
     fake.state.failWrite = null;
     expect((await prune()).body).toMatchObject({ ok: true, conversations: 1, messages: 0, errors: 0 });
     expect(fake.state.tree.conversations[KEY]).toBeUndefined();
+  });
+
+  // /code-review: after the first year every regular's thread began before the
+  // cutoff, and each was read WHOLE every night. A live thread is now asked
+  // only for what is older than the cutoff, on the indexed `ts`.
+  it("a live thread is read through the ts query, only up to the cutoff; a thread that is going is read whole", async () => {
+    vi.stubEnv("CRON_SECRET", CRON);
+    const live = "+34600000002";
+    fake.state.tree = {
+      settings: { admin: { waRetentionDays: 90 } },
+      conversations: {
+        [KEY]: { phoneKey: KEY, createdAt: ago(300), lastMessageAt: ago(120) },
+        [live]: { phoneKey: live, createdAt: ago(400), lastMessageAt: ago(1) },
+      },
+      messages: {
+        [KEY]: { a: msg("a", ago(120)) },
+        [live]: { old: msg("old", ago(100)), "new": msg("new", ago(1)), nots: msg("nots") },
+      },
+    };
+    const res = await prune();
+    expect(res.body).toMatchObject({ ok: true, conversations: 1, messages: 2, read: 2 });
+    expect(fake.state.queries).toEqual([{ path: "messages/" + live, orderByChild: "ts", endAt: res.body.cutoff - 1 }]);
+    expect(Object.keys(fake.state.tree.messages[live]).sort()).toEqual(["new", "nots"]);
+  });
+  it("before the index is published the query is refused, and the thread is read whole instead", async () => {
+    vi.stubEnv("CRON_SECRET", CRON);
+    fake.state.noIndex = true;
+    fake.state.tree = {
+      conversations: { [KEY]: { phoneKey: KEY, createdAt: ago(800), lastMessageAt: ago(1) } },
+      messages: { [KEY]: { old: msg("old", ago(400)), "new": msg("new", ago(1)) } },
+    };
+    const res = await prune();
+    expect(res.body).toMatchObject({ ok: true, messages: 1, errors: 0 });
+    expect(Object.keys(fake.state.tree.messages[KEY])).toEqual(["new"]);
+  });
+  it("the index the query needs is in the rules, where the thread's messages are", () => {
+    const rules = JSON.parse(readFileSync(new URL("../database.rules.json", import.meta.url), "utf8")).rules;
+    expect(rules.messages.$phoneKey[".indexOn"]).toEqual(["ts"]);
   });
 
   it("reads the setting through the one normaliser: absent, null, 0 or junk is a year, and a tiny number is the 30-day floor", async () => {

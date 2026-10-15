@@ -256,6 +256,26 @@ the walker found at least twelve and that `bookings` is *not* among them (it is
 guarded per-child by the `updatedAt` CAS, not by a rev), so a walker that starts
 returning nothing fails loudly instead of making the whole sweep vacuous.
 
+## v18.8.0 — `.indexOn: ["ts"]` on `messages/$phoneKey`, for the nightly prune
+
+No permission changes. `api/wa-prune.js` asks each live conversation only for its
+messages older than the retention cutoff (`orderByChild("ts").endAt(cutoff - 1)`,
+`readOldMessages` in `api/_lib/rtdb.js`) instead of reading the whole thread every
+night. After the first year every regular customer's thread began before the cutoff,
+so the whole-thread read grew with the restaurant's entire WhatsApp history.
+
+**Two facts measured on the emulator through firebase-admin**, both of which decide
+the code:
+- With the index, the query returns the messages with `ts` below the cutoff and the
+  ones with no `ts` (null sorts first), and not a `ts` stored as a string (strings
+  sort after numbers). The prune filters the answer again either way.
+- **Without the index, `get()` on the query is REFUSED** ("Index not defined, add
+  ".indexOn": "ts" …"). A listener would be served with a warning and filtered in
+  the SDK; a one-shot read is not. So `readOldMessages` catches exactly that error
+  and reads the thread whole, as before. The deploy order does not matter: until
+  these rules are published the prune costs what it did, and it logs once that the
+  index is missing.
+
 ## v18.6.0 — `schema` + `schemaRev`, the eighteenth rev pair, and it only goes up
 
 `/schema` is `{ v: N }`: the highest schema number any build has announced
