@@ -24,12 +24,14 @@ import { env } from "./env.js";
 import {
   readWaLink, readWaContactsFor, updateWaContacts, stampWaLinkOnce,
   getConversation, upsertConversation, appendMessage, sanitizeKey, findMessageByWamid, updateMessage,
+  readMessageNode, writeImportedThread, transactWaLink,
 } from "./rtdb.js";
 import { inboundContent } from "./inbound-core.js";
 import { snippet, mediaSnippet } from "../../src/lib/whatsapp.js";
 import {
   contactPlan, contactPatch, secondsTs, webhookPhoneKey,
   echoRecord, echoConvPatch, changedMessageId, editedMessage, editedText, editPatch, revokePatch,
+  historyStatus, historyRecord, historyConvPatch, historyDeclined, historyProgress,
 } from "../../src/lib/wa-coexist.js";
 
 // The fields this file handles. `messages` is not among them: it stays in
@@ -181,8 +183,133 @@ export async function handleEchoes(value, results, now = Date.now()) {
   }
 }
 
+// ── History: the chats the phone already held ───────────────────────────────
+// importThread(thread, now) → how many messages it stored. One read of the
+// thread's messages (what is already stored is skipped: a redelivered chunk
+// rewrites nothing), one of its conversation, and ONE root update of both
+// (`writeImportedThread`). A message with no wamid is skipped (no key to keep
+// it once), and so are an edit or a delete: the thread comes as it stands.
+// Direction is whether the message is FROM the thread's customer.
+export async function importThread(thread, now = Date.now()) {
+  const phoneKey = webhookPhoneKey(thread && thread.id);
+  if (!phoneKey) return 0;
+  const msgs = Array.isArray(thread.messages) ? thread.messages : [];
+  const node = await readMessageNode(phoneKey);
+  const have = new Set();
+  Object.keys(node).forEach(function (k) {
+    have.add(k);
+    const p = node[k] && node[k].providerMsgId;
+    if (typeof p === "string" && p) have.add(sanitizeKey(p));
+  });
+  const records = [];
+  let oldest = Infinity, newest = -Infinity, line = "";
+  msgs.forEach(function (m) {
+    if (!m || typeof m !== "object" || m.type === "edit" || m.type === "revoke") return;
+    const wamid = typeof m.id === "string" && m.id ? m.id : null;
+    if (!wamid) return;
+    const content = inboundContent(m);
+    const ts = secondsTs(m.timestamp, now);
+    if (ts < oldest) oldest = ts;
+    if (ts >= newest) { newest = ts; line = content.snippet; }
+    const key = sanitizeKey(wamid);
+    if (have.has(key)) return;
+    have.add(key);
+    const incoming = webhookPhoneKey(m.from) === phoneKey;
+    records.push(historyRecord(key, wamid, content, ts, incoming, historyStatus(m, incoming)));
+  });
+  if (newest === -Infinity) return 0;
+  const conv = await getConversation(phoneKey);
+  await writeImportedThread(phoneKey, records, historyConvPatch(conv, { phoneKey, oldest, newest, snippet: snippet(line), now }));
+  return records.length;
+}
+
+// attachHistoryMedia(value, m, now) — a `history` change's own `messages[]`:
+// the media of a photo or a file imported as a placeholder, under the same
+// wamid. Its customer is `from`, or `to` when it is the restaurant's own (the
+// business number is the change's `display_phone_number`). Found → the
+// placeholder takes the media and its caption or label; not found (it came
+// before its thread) → stored whole, and the thread's import, finding it
+// stored, leaves it. Answers "applied", "stored", "skipped" or "ignored".
+export async function attachHistoryMedia(value, m, now = Date.now()) {
+  const wamid = m && typeof m.id === "string" && m.id ? m.id : null;
+  if (!wamid) return "ignored";
+  const content = inboundContent(m);
+  if (!content.media) return "skipped";
+  const biz = webhookPhoneKey(value.metadata && value.metadata.display_phone_number);
+  const fromKey = webhookPhoneKey(m.from);
+  const incoming = !biz || fromKey !== biz;
+  const phoneKey = incoming ? fromKey : webhookPhoneKey(m.to);
+  if (!phoneKey) return "ignored";
+  const found = await findMessageByWamid(phoneKey, wamid);
+  if (found) {
+    if (found.msg && found.msg.media) return "skipped";
+    await updateMessage(phoneKey, found.key, { media: content.media, text: content.text });
+    return "applied";
+  }
+  const ts = secondsTs(m.timestamp, now);
+  await appendMessage(phoneKey, historyRecord(sanitizeKey(wamid), wamid, content, ts, incoming, historyStatus(m, incoming)));
+  return "stored";
+}
+
+// handleHistory(value, results, now) — one `history` change. A declined
+// share (2593109) is recorded on `waLink.history` and nothing else. Each
+// thread is imported on its own; the chunk's progress is recorded after its
+// threads. Counted as `results.history` (messages stored or given media).
+//
+// **A chunk with a thread that failed answers `{ retry: true }`**, which
+// api/wa-inbound.js turns into a 500 so Meta sends the chunk again. History
+// is sent ONCE, so a thread dropped is a thread lost; every write here is
+// keyed, so the resend skips what landed and writes only what did not.
+export async function handleHistory(value, results, now = Date.now()) {
+  const items = Array.isArray(value.history) ? value.history : [];
+  const follow = Array.isArray(value.messages) ? value.messages : [];
+  if (!items.length && !follow.length && !historyDeclined(value)) { results.ignored++; return undefined; }
+  let retry = false;
+  if (historyDeclined(value)) {
+    await transactWaLink("history", function (cur) { return Object.assign({}, cur || {}, { declined: true, at: now }); });
+    results.events++;
+  }
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    if (historyDeclined(item)) {
+      await transactWaLink("history", function (cur) { return Object.assign({}, cur || {}, { declined: true, at: now }); });
+      results.events++;
+      continue;
+    }
+    let failed = false;
+    for (const thread of Array.isArray(item.threads) ? item.threads : []) {
+      try {
+        results.history += await importThread(thread, now);
+      } catch (e) {
+        failed = true;
+        results.errors++;
+        console.error("[wa-inbound] history thread failed:", e.message);
+      }
+    }
+    if (failed) retry = true;
+    // Progress is recorded even after a failed thread: what it says is how far
+    // Meta has got, and the resend brings the thread, not a new figure.
+    if (item.metadata) await transactWaLink("history", function (cur) { return historyProgress(cur, item.metadata, now); });
+  }
+  for (const m of follow) {
+    try {
+      const r = await attachHistoryMedia(value, m, now);
+      if (r === "applied" || r === "stored") results.history++;
+      else if (r === "skipped") results.skipped++;
+      else results.ignored++;
+    } catch (e) {
+      retry = true;
+      results.errors++;
+      console.error("[wa-inbound] history media failed:", e.message);
+    }
+  }
+  return retry ? { retry: true } : undefined;
+}
+
 // The handler for each coexistence field, as api/wa-inbound.js dispatches.
+// A handler may answer `{ retry: true }`: the delivery is then answered 500.
 export const COEXIST_HANDLERS = {
   smb_app_state_sync: handleStateSync,
   smb_message_echoes: handleEchoes,
+  history: handleHistory,
 };

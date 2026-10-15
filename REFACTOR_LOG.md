@@ -36146,3 +36146,55 @@ renders the bubble by calling it (the phone tag and no Retry, MGT's status and R
 "edited", the deleted state); `tests/wa-rtdb-hardening.test.js`'s count of sanitised
 message paths is 14. **Not checked live yet**: the simulator's echo, edit and delete
 events are phase 9, and the live DEV pass runs then.
+
+### Phase 5 — the chats the phone already held (`history`)
+
+Once after onboarding, and only if the business agreed on the phone, Meta sends the
+Business app's 1:1 chats of the last 180 days in three phases of chunks.
+`handleHistory` (`api/_lib/coexist-core.js`) imports each thread with `importThread`:
+one read of its messages (anything already stored, by key or by `providerMsgId`, is
+skipped, so a resent chunk writes nothing twice), one of its conversation, and **one
+root update** (`writeImportedThread`, `api/_lib/rtdb.js`, which builds both kinds of
+path from one sanitised key and writes nowhere but `messages/<key>/` and
+`conversations/<key>/`). A message is `in` when it is from the thread's customer;
+`imported: true`; the restaurant's side is tagged "phone" and takes its status from
+`history_context` (`historyStatus`). Content goes through `inboundContent`. Edits,
+deletes and messages with no wamid are not imported.
+
+The conversation (`historyConvPatch`, `src/lib/wa-coexist.js`): a NEW one is created
+read, `autoAckSent: true` (an existing customer: "new customers only" needs no other
+gate), with no 24h window (Meta opens none for a message from before onboarding), and
+archived when its newest message is over a week old (`WA_IMPORT_ARCHIVE_MS`). An
+EXISTING one is settled for the auto-reply, its line and time move only forward, and
+**its `createdAt` moves BACK to the oldest imported message**: the nightly prune reads
+only conversations created before its cutoff (`mayHoldOld`), so an import into a newer
+conversation would otherwise keep 180-day-old messages past retention. Never parsed.
+
+A photo or a file arrives as a `media_placeholder` ("Photo or file — open WhatsApp on
+the phone to see it"), and its media follows in a later `history` change carrying
+`value.messages[]` under the same id (`attachHistoryMedia`): found, the placeholder takes
+the media and its caption or label; not found yet, it is stored whole and the thread's
+import leaves it. Its customer is `from`, or `to` for the restaurant's own (the business
+number being the change's `display_phone_number`).
+
+`waLink.history` (a transaction, `transactWaLink`): `progress` and `phase` only move
+forward, as chunks may arrive out of order, `at`, and `doneAt` once at 100
+(`historyProgress`); error 2593109 (sharing declined) sets `declined: true` and imports
+nothing.
+
+**A chunk with a thread that failed is answered 500** (the handler answers
+`{ retry: true }`, `api/wa-inbound.js` turns it into a 500). History is sent once, so a
+dropped thread would be lost, and every write is keyed, so Meta's resend writes only
+what did not land. Phase B (the parse) is now scheduled before that answer, so a text
+stored in the same delivery is still parsed; in the old total-failure case there was
+nothing to schedule, so that path is unchanged.
+
+**Rehearsal risk, unchanged:** Vercel caps a request body at 4.5 MB and Meta says one
+history webhook can describe thousands of messages. The rehearsal records chunk sizes.
+
+Tests: a recent thread end to end (directions, statuses, the tag, the conversation, no
+window, no auto-reply or parse, progress, ONE root update under the thread's two paths
+only), an old thread archived, a resent chunk, an import into a live conversation
+(`createdAt` back, nothing else back), the placeholder and its media, media before its
+thread and the restaurant's own, a declined share, skipped kinds, a failed thread
+answered 500 and recovered by the resend; the planners. The hardening pin is 15.

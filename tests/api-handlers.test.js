@@ -120,7 +120,7 @@ import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "
 import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { numberIsOurs, makeNumberGuard } from "../api/_lib/coexist-core.js";
-import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT } from "../src/lib/wa-coexist.js";
+import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyStatus, WA_IMPORT_ARCHIVE_MS } from "../src/lib/wa-coexist.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
 import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE } from "../src/lib/whatsapp.js";
@@ -1159,6 +1159,134 @@ describe("echoConvPatch / editedText / editPatch / revokePatch", () => {
     expect(editPatch({ text: "x" }, null, 5)).toBeNull();
     expect(revokePatch({ direction: "out", text: "x" }, 5)).toEqual({ text: WA_REVOKED_OUT, media: null, revokedAt: 5 });
     expect(revokePatch({ direction: "in", revokedAt: 1 }, 5)).toBeNull();
+  });
+});
+
+// ── Phase 5: the chats the phone already held (history) ─────────────────────
+const BIZ = "34600000000";
+const secsAgo = (n) => String(Math.floor(Date.now() / 1000) - n);
+const histMsg = (id, from, ago, extra) => Object.assign({ from, id, timestamp: secsAgo(ago), type: "text", text: { body: "msg " + id }, history_context: { status: "READ" } }, extra);
+const deliverHistory = (history, extra) => deliverChange("history", Object.assign(forNumber("111"), { history }, extra));
+const chunk = (threads, meta) => ({ metadata: Object.assign({ phase: 0, chunk_order: 1, progress: 40 }, meta), threads });
+const DAY = 24 * 3600;
+
+describe("wa-inbound — the chats the phone already held (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("a recent thread is imported read, settled, with no window, never parsed or answered; progress is recorded", async () => {
+    const res = await deliverHistory([chunk([{ id: "34600111222", messages: [
+      histMsg("wamid.H1", "34600111222", 7200),
+      histMsg("wamid.H2", BIZ, 3600, { history_context: { status: "DELIVERED" } }),
+    ] }])]);
+    expect(res.body).toMatchObject({ ok: true, history: 2, messages: 0, errors: 0 });
+    const [a, b] = msgsAt(KEY);
+    expect(a).toMatchObject({ id: "wamid_H1", direction: "in", status: "delivered", imported: true, text: "msg wamid.H1" });
+    expect(a.source).toBeUndefined();
+    expect(b).toMatchObject({ id: "wamid_H2", direction: "out", source: "phone", status: "delivered", imported: true });
+    const c = convAt(KEY);
+    expect(c).toMatchObject({ unread: false, autoAckSent: true, archived: false, lastMessageAt: b.ts, createdAt: a.ts, lastMessageSnippet: "msg wamid.H2" });
+    expect(c.windowExpiresAt).toBeUndefined();
+    expect(msgsAt(KEY).filter((m) => m.isAutoAck)).toEqual([]);
+    expect(scheduled).toEqual([]);
+    expect(fake.read("waLink/history")).toMatchObject({ progress: 40, phase: 0 });
+    // One root update for the thread: its messages and its conversation's fields.
+    const root = fake.state.writes.filter((w) => w.op === "update" && w.path === "");
+    expect(root).toHaveLength(1);
+    expect(Object.keys(root[0].value).every((k) => k.startsWith("messages/" + KEY + "/") || k.startsWith("conversations/" + KEY + "/"))).toBe(true);
+  });
+  it("a thread with nothing newer than a week goes straight to Archived", async () => {
+    await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 10 * DAY)] }])]);
+    expect(convAt(KEY)).toMatchObject({ archived: true, unread: false });
+  });
+  it("a resent chunk stores nothing twice", async () => {
+    const h = [chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600)] }])];
+    await deliverHistory(h);
+    const res = await deliverHistory(h);
+    expect([res.statusCode, res.body]).toMatchObject([200, { history: 0 }]);
+    expect(msgsAt(KEY)).toHaveLength(1);
+  });
+  it("into a live conversation: createdAt moves back to the oldest import, nothing else of it moves back", async () => {
+    const win = Date.now() + 5000;
+    const live = openConv({ createdAt: Date.now() - 60000, lastMessageAt: Date.now() - 1000, lastMessageSnippet: "live", unread: true, windowExpiresAt: win, archived: false });
+    fake.state.tree = { conversations: { [KEY]: live } };
+    await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 30 * DAY)] }])]);
+    const c = convAt(KEY);
+    expect(c).toMatchObject({ lastMessageSnippet: "live", unread: true, windowExpiresAt: win, archived: false, autoAckSent: true });
+    expect(c.createdAt).toBe(msgsAt(KEY)[0].ts);
+  });
+  it("a photo comes as a placeholder, and its media follows under the same id", async () => {
+    await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.P1", "34600111222", 600, { type: "media_placeholder", text: undefined })] }])]);
+    expect(msgsAt(KEY)[0]).toMatchObject({ text: "Photo or file — open WhatsApp on the phone to see it" });
+    const res = await deliverChange("history", Object.assign(forNumber("111"), { messages: [
+      { from: "34600111222", id: "wamid.P1", timestamp: secsAgo(600), type: "image", image: { id: "777", mime_type: "image/jpeg", caption: "la mesa" } },
+    ] }));
+    expect(res.body).toMatchObject({ history: 1, messages: 0 });
+    expect(msgsAt(KEY)).toHaveLength(1);
+    expect(msgsAt(KEY)[0]).toMatchObject({ text: "la mesa", media: { kind: "image", mediaId: "777" }, imported: true });
+  });
+  it("media that comes before its thread is stored whole, and the thread leaves it; the restaurant's own goes to its customer", async () => {
+    await deliverChange("history", Object.assign(forNumber("111"), { messages: [
+      { from: BIZ, to: "34600111222", id: "wamid.P2", timestamp: secsAgo(900), type: "document", document: { id: "778", mime_type: "application/pdf", filename: "carta.pdf" } },
+    ] }));
+    expect(msgsAt(KEY)[0]).toMatchObject({ direction: "out", source: "phone", media: { kind: "document", filename: "carta.pdf" } });
+    await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.P2", BIZ, 900, { type: "media_placeholder", text: undefined })] }])]);
+    expect(msgsAt(KEY)).toHaveLength(1);
+    expect(msgsAt(KEY)[0].media).toMatchObject({ mediaId: "778" });
+  });
+  it("a business that declined to share its history is recorded, and nothing is imported", async () => {
+    const res = await deliverHistory([{ errors: [{ code: 2593109, title: "History sharing declined" }] }]);
+    expect(res.body).toMatchObject({ ok: true, events: 1, history: 0 });
+    expect(fake.read("waLink/history")).toMatchObject({ declined: true });
+    expect(fake.read("conversations")).toBeUndefined();
+  });
+  it("an edit, a delete and a message with no id are not imported", async () => {
+    await deliverHistory([chunk([{ id: "34600111222", messages: [
+      histMsg("", "34600111222", 600),
+      histMsg("wamid.E", "34600111222", 600, { type: "edit", edit: { original_message_id: "x", message: { type: "text", text: { body: "y" } } } }),
+      histMsg("wamid.R", "34600111222", 600, { type: "revoke", revoke: { original_message_id: "x" } }),
+    ] }])]);
+    expect(fake.read("messages")).toBeUndefined();
+  });
+  it("a chunk with a thread that failed is answered 500, and its resend imports that thread without doubling the others", async () => {
+    const h = [chunk([
+      { id: "34600111222", messages: [histMsg("wamid.A1", "34600111222", 600)] },
+      { id: "34600999888", messages: [histMsg("wamid.B1", "34600999888", 600)] },
+    ])];
+    const realRef = fake.db.ref;
+    fake.db.ref = (path) => { if (path === "messages/+34600999888") throw new Error("database unreachable"); return realRef(path); };
+    let res;
+    try { res = await deliverHistory(h); } finally { fake.db.ref = realRef; }
+    expect([res.statusCode, res.body]).toMatchObject([500, { history: 1, errors: 1 }]);
+    res = await deliverHistory(h);
+    expect([res.statusCode, res.body]).toMatchObject([200, { history: 1, errors: 0 }]);
+    expect(msgsAt(KEY)).toHaveLength(1);
+    expect(msgsAt("+34600999888")).toHaveLength(1);
+  });
+});
+
+describe("historyConvPatch / historyProgress / historyStatus", () => {
+  const now = 2000000000000;
+  it("a new conversation is archived only when its newest message is over a week old", () => {
+    expect(historyConvPatch(null, { phoneKey: KEY, oldest: 1, newest: now - WA_IMPORT_ARCHIVE_MS + 1, snippet: "x", now })).toMatchObject({ archived: false, archivedAt: null });
+    expect(historyConvPatch(null, { phoneKey: KEY, oldest: 1, newest: now - WA_IMPORT_ARCHIVE_MS - 1, snippet: "x", now })).toMatchObject({ archived: true, archivedAt: now });
+  });
+  it("an existing conversation's createdAt only moves back, its time only forward", () => {
+    expect(historyConvPatch({ createdAt: 50, lastMessageAt: 500 }, { oldest: 10, newest: 100, snippet: "x", now })).toEqual({ autoAckSent: true, createdAt: 10 });
+    expect(historyConvPatch({ createdAt: 5, lastMessageAt: 50 }, { oldest: 10, newest: 100, snippet: "x", now })).toEqual({ autoAckSent: true, lastMessageAt: 100, lastMessageSnippet: "x" });
+  });
+  it("progress and phase only move forward, and done is stamped once at 100", () => {
+    const a = historyProgress(null, { progress: 60, phase: 1 }, 1);
+    expect(historyProgress(a, { progress: 40, phase: 0 }, 2)).toMatchObject({ progress: 60, phase: 1, at: 2 });
+    const done = historyProgress(a, { progress: 100, phase: 2 }, 3);
+    expect(done.doneAt).toBe(3);
+    expect(historyProgress(done, { progress: 100 }, 4).doneAt).toBe(3);
+    expect(historyProgress(null, { progress: 250 }, 1).progress).toBe(100);
+  });
+  it("the phone's statuses read as this app's; a customer's message is delivered", () => {
+    expect(historyStatus({ history_context: { status: "PLAYED" } }, false)).toBe("read");
+    expect(historyStatus({ history_context: { status: "error" } }, false)).toBe("failed");
+    expect(historyStatus({}, false)).toBe("sent");
+    expect(historyStatus({ history_context: { status: "READ" } }, true)).toBe("delivered");
   });
 });
 

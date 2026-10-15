@@ -240,6 +240,8 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
 const OTHER_LABEL = {
   image: "Photo", audio: "Audio", document: "Document", video: "Video", sticker: "Sticker",
   location: "Location", contacts: "Contact card", reaction: "Reaction", interactive: "Reply", button: "Reply",
+  // v18.9.0: an imported photo or file, until its media follows (history).
+  media_placeholder: "Photo or file",
 };
 export function inboundContent(m) {
   const type = m && typeof m.type === "string" ? m.type : "";

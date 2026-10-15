@@ -253,6 +253,9 @@ export default async function handler(req, res) {
   const results = { messages: 0, statuses: 0, echoes: 0, edits: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 };
   const parseJobs = []; // phase-B work: one LLM parse per stored text message
   const isOurs = makeNumberGuard();
+  // v18.9.0: a coexistence handler that must be sent again (a history chunk
+  // with a thread that failed) says so; the delivery is then answered 500.
+  let retry = false;
   try {
     const entries = Array.isArray(payload.entry) ? payload.entry : [];
     for (const entry of entries) {
@@ -285,7 +288,8 @@ export default async function handler(req, res) {
         const coexist = Object.prototype.hasOwnProperty.call(COEXIST_HANDLERS, field) ? COEXIST_HANDLERS[field] : null;
         if (!coexist) { results.ignored++; continue; } // a field this webhook does not handle
         try {
-          await coexist(value, results);
+          const out = await coexist(value, results);
+          if (out && out.retry) retry = true;
         } catch (e) {
           results.errors++;
           console.error("[wa-inbound] " + field + " processing failed:", e.message);
@@ -295,17 +299,6 @@ export default async function handler(req, res) {
   } catch (e) {
     console.error("[wa-inbound] payload processing error:", e);
   }
-  // Retry semantics: 200 tells Meta "delivered, don't retry". If EVERYTHING in
-  // the payload failed (e.g. the database was unreachable), answer 500 so Meta
-  // redelivers later — the wamid-keyed idempotency makes the retry safe.
-  // v18.9.0: "everything" is every counter but `errors`, so a payload of
-  // contacts or history that all failed is retried as a payload of messages is.
-  const done = Object.keys(results).reduce((n, k) => (k === "errors" ? n : n + results[k]), 0);
-  if (results.errors > 0 && done === 0) {
-    res.status(500).json({ error: "processing failed", ...results });
-    return;
-  }
-
   // ── Phase B: LLM parse + draft patch, after the response ───────────────────
   // One readOperatingHours per payload (was per message). Jobs run sequentially
   // — a payload virtually never carries >1 text message from the same webhook.
@@ -326,5 +319,19 @@ export default async function handler(req, res) {
       }
     })());
   }
+  // Retry semantics: 200 tells Meta "delivered, don't retry". If EVERYTHING in
+  // the payload failed (e.g. the database was unreachable), answer 500 so Meta
+  // redelivers later — the wamid-keyed idempotency makes the retry safe.
+  // v18.9.0: "everything" is every counter but `errors`, so a payload of
+  // contacts or history that all failed is retried as a payload of messages is.
+  const done = Object.keys(results).reduce((n, k) => (k === "errors" ? n : n + results[k]), 0);
+  // v18.9.0: or when a handler asked to be sent again (`retry`). Phase B is
+  // scheduled first, so a text stored in the same delivery is still parsed:
+  // the resend finds it stored and skips it, parse and all.
+  if ((results.errors > 0 && done === 0) || retry) {
+    res.status(500).json({ error: "processing failed", ...results });
+    return;
+  }
+
   res.status(200).json({ ok: true, ...results });
 }

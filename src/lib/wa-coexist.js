@@ -212,3 +212,93 @@ export function revokePatch(stored, ts) {
   if (!stored || stored.revokedAt) return null;
   return { text: stored.direction === "in" ? WA_REVOKED_IN : WA_REVOKED_OUT, media: null, revokedAt: ts };
 }
+
+// ── History: the chats the phone already held (history) ──────────────────────
+// Once, after onboarding and only if the business agreed on the phone, Meta
+// sends the Business app's 1:1 chats of the last 180 days, in three phases
+// (0: the last day, 1: to 90 days, 2: to 180), each in chunks:
+//   history[] = [{ metadata: { phase, chunk_order, progress },
+//                  threads: [{ id: <customer's number>, messages: [ … ] }] }]
+// Each message is shaped as a webhook message, plus `history_context.status`.
+// A photo or a file comes as a `media_placeholder`, and its media follows in a
+// later `history` change carrying `value.messages[]` with the same id (within
+// 14 days only). A business that said no gets error 2593109 instead.
+//
+// What an imported chat is (Patryk, 2026-10-15): read, never parsed, never
+// auto-replied, and archived when nothing in it is newer than a week, so the
+// inbox opens on today's customers and not on six months of the phone.
+export const WA_HISTORY_DECLINED = 2593109;
+export const WA_IMPORT_ARCHIVE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// What the phone says became of a message the restaurant sent, as this app's
+// statuses. A customer's own message is "delivered", as a live one is.
+const HISTORY_STATUS = { PENDING: "sending", SENT: "sent", DELIVERED: "delivered", READ: "read", PLAYED: "read", ERROR: "failed" };
+export function historyStatus(m, incoming) {
+  if (incoming) return "delivered";
+  const ctx = m && m.history_context;
+  const s = ctx && typeof ctx.status === "string" ? ctx.status.toUpperCase() : "";
+  return HISTORY_STATUS[s] || "sent";
+}
+
+// historyRecord(msgId, wamid, content, ts, incoming, status) — an imported
+// message. `imported: true` says where it came from; the restaurant's side
+// is tagged "phone", which is where it was typed.
+export function historyRecord(msgId, wamid, content, ts, incoming, status) {
+  const msg = {
+    id: msgId, direction: incoming ? "in" : "out",
+    text: String((content && content.text) || "").slice(0, WA_MAX_TEXT_LEN), ts, status,
+    isAutoAck: false, channel: "whatsapp", providerMsgId: wamid || null, imported: true,
+  };
+  if (!incoming) msg.source = WA_SOURCE_PHONE;
+  if (content && content.media) msg.media = content.media;
+  return msg;
+}
+
+// historyConvPatch(existing, { phoneKey, oldest, newest, snippet, now }) —
+// what an imported thread does to its conversation. A NEW conversation is
+// created read, settled for the auto-reply (an existing customer), with no
+// 24h window (Meta opens none for a message from before onboarding), and in
+// Archived when its newest message is over a week old. An EXISTING one is
+// settled too; its line and time move only forward, and its `createdAt`
+// moves BACK to the oldest imported message, because the nightly prune reads
+// only a conversation created before its cutoff (`mayHoldOld`,
+// api/wa-prune.js): left alone, an imported message older than the
+// conversation would outlive the retention it is under.
+export function historyConvPatch(existing, o) {
+  const patch = { autoAckSent: true };
+  if (!existing) {
+    const old = o.newest < o.now - WA_IMPORT_ARCHIVE_MS;
+    return Object.assign(patch, {
+      phoneKey: o.phoneKey, phone: o.phoneKey, channel: "whatsapp",
+      createdAt: o.oldest, lastMessageAt: o.newest, lastMessageSnippet: o.snippet, unread: false,
+      acceptedBookingId: null, draftStatus: null, draftData: null,
+      archived: old, archivedAt: old ? o.now : null,
+    });
+  }
+  if (!(Number(existing.lastMessageAt) > o.newest)) {
+    patch.lastMessageAt = o.newest;
+    patch.lastMessageSnippet = o.snippet;
+  }
+  if (!(Number(existing.createdAt) <= o.oldest)) patch.createdAt = o.oldest;
+  return patch;
+}
+
+// Did the business decline to share its history? Meta answers 2593109 on the
+// history item (or, defensively, on the change itself).
+export function historyDeclined(x) {
+  return !!(x && Array.isArray(x.errors) && x.errors.some(function (e) { return e && Number(e.code) === WA_HISTORY_DECLINED; }));
+}
+
+// historyProgress(cur, meta, now) → `waLink.history` after one chunk: the
+// progress (0–100) and the phase only move forward, since chunks may arrive
+// out of order, and `doneAt` is stamped once, at 100.
+export function historyProgress(cur, meta, now) {
+  const next = Object.assign({}, cur && typeof cur === "object" ? cur : {});
+  const p = Number(meta && meta.progress);
+  if (Number.isFinite(p)) next.progress = Math.max(Number(next.progress) || 0, Math.min(100, Math.max(0, p)));
+  const ph = Number(meta && meta.phase);
+  if (Number.isFinite(ph)) next.phase = Math.max(Number(next.phase) || 0, ph);
+  next.at = now;
+  if (next.progress >= 100 && !next.doneAt) next.doneAt = now;
+  return next;
+}

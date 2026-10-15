@@ -286,6 +286,27 @@ export async function stampWaLinkOnce(path, value) {
   return !!(r && r.committed && wrote);
 }
 
+// Rewrites `waLink/<path>` through `fn(current)` in a transaction, so two
+// webhooks landing together each build on the other (history progress).
+export async function transactWaLink(path, fn) {
+  await getDb().ref("waLink/" + path).transaction(function (cur) { return fn(cur); });
+}
+
+// ── An imported chat (v18.9.0, history) ─────────────────────────────────────
+// One thread in ONE multi-path update at the root: its new messages, each
+// whole under its own key, and its conversation's fields one path each, so
+// nothing else in the conversation is replaced. The paths are built here, at
+// the sanitising boundary, and only under `messages/<key>/` and
+// `conversations/<key>/`: the Admin SDK bypasses the rules, and a root update
+// is the one write that could reach anything.
+export async function writeImportedThread(phoneKey, records, convPatch) {
+  const k = sanitizeKey(phoneKey);
+  const patch = {};
+  (records || []).forEach(function (m) { patch["messages/" + k + "/" + sanitizeKey(m.id)] = m; });
+  Object.keys(convPatch || {}).forEach(function (f) { patch["conversations/" + k + "/" + f] = convPatch[f]; });
+  if (Object.keys(patch).length) await getDb().ref().update(patch);
+}
+
 // ── The phone's address book (v18.9.0) ──────────────────────────────────────
 // `waContacts/<phoneKey>` = `{ name, first?, at }` (src/lib/wa-coexist.js
 // decides it). Read per key, for the keys one webhook names, so a delivery
