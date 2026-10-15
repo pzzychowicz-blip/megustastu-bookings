@@ -15,11 +15,16 @@ import { DraftCard } from "./DraftCard";
 import { ReplyComposer } from "./ReplyComposer";
 import { LinkedBookingCard } from "./LinkedBookingCard";
 import { IntentBanner } from "./IntentBanner";
-import { R, T, FW, IC, H } from "../../lib/constants";
+import { R, T, FW, IC, H, M } from "../../lib/constants";
 import { formatDay } from "../../lib/day";
 import { guestsLabel } from "../../lib/booking-logic";
 import { onWaitlistFor } from "../../lib/draft-check";
 import { useDraftCheck } from "../../hooks/useDraftCheck";
+
+// How far a waiting draft dims while a new parse of it is in flight (v18.8.0
+// follow-up): faint enough that its values read as provisional, not so faint
+// that Accept looks disabled, since it still works.
+const REREAD_DIM = 0.55;
 
 // Within this many px of the bottom, the thread counts as showing its end.
 const AT_END_SLACK = 24;
@@ -321,6 +326,7 @@ export function ConversationView({
   // fold with the header; the thread and the reply box are all that is left.
   const draftWaiting = !!(conv.draftData && (conv.draftData.intent || "new_booking") === "new_booking")
     && conv.draftStatus !== "accepted" && conv.draftStatus !== "dismissed";
+  const rereading = draftWaiting && isParsing(conv);
   const foldedSays = showIntentBanner
     ? (intent === "cancel" ? "Cancellation request" : intent === "modify" ? "Change request" : "Request")
     : isParsing(conv) ? "Reading the message…"
@@ -409,11 +415,20 @@ export function ConversationView({
         </div>
       </Reveal>
       <Reveal show={draftCardShows && !kbFold} style={{ padding: "0 14px" }}>
-        <DraftCard
-          conv={conv} onAccept={onAccept} onDismiss={onDismiss} onDismissAcceptedBadge={onDismissAcceptedBadge} compact={compact}
-          check={draftCheck} onTheWaitlist={onTheWaitlist} onAddToWaitlist={onAddToWaitlist}
-          onSuggest={disabled ? null : suggestReply}
-        />
+        {/* v18.8.0 follow-up: a waiting draft that is being read AGAIN (a
+            follow-up message, or Re-check) dims to `REREAD_DIM` until the new
+            parse lands, so its old values do not look final beside "Reading
+            the message…". The same `M.move` both ways: it is a state, not an
+            arrival or a departure. An accepted or dismissed card cannot be
+            changed by a parse, so it never dims. Still pressable meanwhile:
+            the parse may well change nothing. */}
+        <div aria-busy={rereading ? "true" : undefined} style={{ opacity: rereading ? REREAD_DIM : 1, transition: "opacity " + M.move }}>
+          <DraftCard
+            conv={conv} onAccept={onAccept} onDismiss={onDismiss} onDismissAcceptedBadge={onDismissAcceptedBadge} compact={compact}
+            check={draftCheck} onTheWaitlist={onTheWaitlist} onAddToWaitlist={onAddToWaitlist}
+            onSuggest={disabled ? null : suggestReply}
+          />
+        </div>
       </Reveal>
       <ReplyComposer ref={composerRef} onSend={onSend} onSendMedia={onSendMedia} threadKey={conv.phoneKey} disabled={disabled} templates={templates} convLang={conv.language} />
     </div>

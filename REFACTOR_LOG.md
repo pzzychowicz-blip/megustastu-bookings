@@ -35940,6 +35940,14 @@ its own commit.
    the row chip (64px) takes the same rule. `.mgt-shimmer::after` joins the stylesheet's
    CRITICAL_SELECTORS: without it the bar just sits still.
 
+3. **A waiting draft dims while it is read again.** On a follow-up message or a Re-check the old
+   draft stayed at full strength under "Reading the message…", so values about to change looked
+   final. Its card now sits at `REREAD_DIM` (0.55) with `aria-busy` while `isParsing`, on
+   `M.move` both ways (a state, so neither direction curve's case), and stays pressable, since
+   the parse may change nothing. Only a waiting draft: an accepted or dismissed card cannot be
+   changed by a parse. Measured on DEV through a Re-check, sampled each frame: 0.91 at 68 ms,
+   0.55 by 269 ms, held for the whole parse, then 0.71 → 1.00 over 190 ms when it landed.
+
 ### Deploy steps (Patryk)
 
 1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random
