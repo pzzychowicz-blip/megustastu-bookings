@@ -35,6 +35,7 @@ import { sanitizeAdminSettings } from "../src/hooks/useRoles.js";
 // carry paragraphs explaining which writes are deliberately NOT logged, and a
 // raw read would match the explanation instead of the code.
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { conversationDeletePatch } from "../src/lib/whatsapp.js";
 
 const RULES = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "..", "database.rules.json"), "utf8"
@@ -578,8 +579,10 @@ describe("the writer hook points", () => {
     expect(body).toMatch(/if\(key\) wa\.eraseConversation\(key\);/);
     const hook = stripComments(readFileSync(new URL("../src/hooks/useWhatsApp.js", import.meta.url), "utf8")).join("\n");
     const erase = hook.slice(hook.indexOf("function eraseConversation"), hook.indexOf("const unreadCount"));
-    expect(erase).toMatch(/patch\["conversations\/" \+ phoneKey\] = null;/);
-    expect(erase).toMatch(/patch\["messages\/" \+ phoneKey\] = null;/);
+    // v18.8.0 /code-review: through the one delete patch the inbox's Delete
+    // uses too, which nulls both halves of the key in one write.
+    expect(erase).toMatch(/update\(ref\(db\), conversationDeletePatch\(\[phoneKey\]\)\)/);
+    expect(conversationDeletePatch(["+34600111222"])).toEqual({ "conversations/+34600111222": null, "messages/+34600111222": null });
     // Not gated on the listeners having loaded: with the module off they never do.
     expect(erase).not.toMatch(/Loaded\.current/);
     expect(erase).toMatch(/if \(!isPhoneKey\(phoneKey\)\) return;/);

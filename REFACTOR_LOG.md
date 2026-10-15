@@ -35831,6 +35831,17 @@ its own commit.
    the delete keeps its row but loses any message with no readable `ts`, which nothing in this
    app writes.
 
+2. **The inbox's Delete was two writes, and a comment said the prune would clean up after it.**
+   `doDeleteConversation` and bulk delete each made two `set(null)` calls (the row, then the
+   messages), and nothing reaches a thread's messages once its row is gone: the inbox and the
+   prune both find a thread through its row. Both deletes are now ONE multi-path update,
+   `conversationDeletePatch(keys)` (`lib/whatsapp.js`), which `eraseConversation` and
+   `clearAllWaData` use as well. The unused single-half `removeConversation` and
+   `removeMessages` are removed, so the two-write shape cannot come back by being called.
+   `tests/wa-rtdb-hardening.test.js` tests the patch and checks that every delete in the hook
+   goes through it. On DEV, a seeded conversation deleted from the Archived tab left neither
+   `conversations/<key>` nor `messages/<key>`.
+
 ### Deploy steps (Patryk)
 
 1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random

@@ -41,7 +41,7 @@ import { EMPTY_FORM } from "../lib/constants";
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
-import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet } from "../lib/whatsapp";
+import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch } from "../lib/whatsapp";
 import { sendsViaServer, sendViaBackend, sendMediaViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
@@ -301,13 +301,6 @@ export function useWhatsApp({
     setConversations(arr);
     set(ref(db, "conversations/" + phoneKey), obj).catch(function () {});
   }
-  function removeConversation(phoneKey) {
-    if (!conversationsLoaded.current) return;
-    const arr = conversationsRef.current.filter(function (c) { return c.phoneKey !== phoneKey; });
-    conversationsRef.current = arr;
-    setConversations(arr);
-    set(ref(db, "conversations/" + phoneKey), null).catch(function () {});
-  }
   // appendMessage — child-set at messages/{phoneKey}/{msg.id}: appending can
   // never overwrite a sibling the backend wrote a moment earlier.
   // v18.8.0: refused unless THIS key's first snapshot has landed, i.e. the
@@ -338,20 +331,6 @@ export function useWhatsApp({
     messagesMapRef.current = nextMap;
     setMessagesMap(nextMap);
     update(ref(db, "messages/" + phoneKey + "/" + msgId), patch).catch(function () {});
-  }
-  // NOT the per-key guard: deleting a conversation from the list (bulk
-  // delete, or one that is not open) must take its messages with it, and the
-  // messages of a conversation nobody has open were never read. A per-key
-  // delete cannot write stale data over real data, which is what a loaded
-  // guard is for (eraseConversation below makes the same argument); the
-  // conversations guard is the one its partner, removeConversation, asks.
-  function removeMessages(phoneKey) {
-    if (!conversationsLoaded.current) return;
-    const nextMap = Object.assign({}, messagesMapRef.current);
-    delete nextMap[phoneKey];
-    messagesMapRef.current = nextMap;
-    setMessagesMap(nextMap);
-    set(ref(db, "messages/" + phoneKey), null).catch(function () {});
   }
   // simAppendMessage — the SIMULATOR's message writer (sandbox only). In client
   // mode wa-sim.js is the mock server: it writes inbound messages and the
@@ -631,12 +610,32 @@ export function useWhatsApp({
   // owned by the caller (InboxPanel), so these just execute.
   function bulkArchive(keys) { (keys || []).forEach((k) => doArchive(k)); }
   function bulkUnarchive(keys) { (keys || []).forEach((k) => handleUnarchive(k)); }
-  function bulkDeleteConversations(keys) {
-    (keys || []).forEach((k) => { removeConversation(k); removeMessages(k); });
+  // v18.8.0 /code-review: Delete and bulk delete are ONE write per press, the
+  // conversation rows and their messages together (`conversationDeletePatch`).
+  // They were two `set(null)`s (`removeConversation`, `removeMessages`, gone),
+  // and messages whose row was gone could be reached by nothing: the inbox and
+  // the nightly prune both find a thread through its row. Guarded on the
+  // CONVERSATIONS read, not a per-key messages one: the messages of a thread
+  // nobody has open were never read, and a delete cannot write stale data
+  // over real data, which is what a loaded guard is for.
+  function deleteConversations(keys) {
+    if (!conversationsLoaded.current) return;
+    const patch = conversationDeletePatch(keys);
+    if (!Object.keys(patch).length) return;
+    const gone = new Set(keys);
+    const arr = conversationsRef.current.filter(function (c) { return !gone.has(c.phoneKey); });
+    if (arr.length !== conversationsRef.current.length) { conversationsRef.current = arr; setConversations(arr); }
+    if (Object.keys(messagesMapRef.current).some(function (k) { return gone.has(k); })) {
+      const nextMap = Object.assign({}, messagesMapRef.current);
+      gone.forEach(function (k) { delete nextMap[k]; });
+      messagesMapRef.current = nextMap;
+      setMessagesMap(nextMap);
+    }
+    update(ref(db), patch).catch(function (err) { console.error("[wa] delete failed", err); });
   }
+  function bulkDeleteConversations(keys) { deleteConversations(keys); }
   function doDeleteConversation(phoneKey) {
-    removeConversation(phoneKey);
-    removeMessages(phoneKey);
+    deleteConversations([phoneKey]);
     setConfirmDeleteConv(null);
   }
 
@@ -750,9 +749,11 @@ export function useWhatsApp({
   // taken from BOTH refs — a conversation can have no messages yet, and a
   // message subtree can outlive its conversation row. v18.8.0: the messages
   // ref holds only the WATCHED keys now, so a message subtree whose
-  // conversation row is already gone is no longer seen here; every delete in
-  // the app removes both halves in one write, and the daily prune
-  // (api/wa-prune.js) clears such a subtree once it is old.
+  // conversation row is already gone is no longer seen here. Since the
+  // /code-review every delete in the app removes both halves in ONE write
+  // (`conversationDeletePatch`), and the prune deletes a thread's messages
+  // before its row, so the app no longer makes such a subtree. One made
+  // before is reached by neither this nor the prune, which walks rows.
   //
   // The keys are the SNAPSHOT keys, never `c.phoneKey`. That field is what the
   // listener groups rows BY, and it comes out of each row's body, so it can
@@ -772,12 +773,7 @@ export function useWhatsApp({
       ...conversationKeysRef.current,
       ...Object.keys(messagesMapRef.current || {}),
     ]);
-    const patch = {};
-    keys.forEach(function (k) {
-      if (!k) return;
-      patch["conversations/" + k] = null;
-      patch["messages/" + k] = null;
-    });
+    const patch = conversationDeletePatch([...keys]);
     if (!Object.keys(patch).length) return;
     update(ref(db), patch).catch(function () {});
   }
@@ -806,10 +802,7 @@ export function useWhatsApp({
       messagesMapRef.current = nextMap;
       setMessagesMap(nextMap);
     }
-    const patch = {};
-    patch["conversations/" + phoneKey] = null;
-    patch["messages/" + phoneKey] = null;
-    update(ref(db), patch).catch(function (err) { console.error("[wa] erase failed for one guest", err); });
+    update(ref(db), conversationDeletePatch([phoneKey])).catch(function (err) { console.error("[wa] erase failed for one guest", err); });
   }
 
   const unreadCount = conversations.filter((c) => c.unread && !c.archived).length;
@@ -819,7 +812,7 @@ export function useWhatsApp({
     conversations, messagesMap, templates,
     // savers (used by the simulator core — keyed shape, Phase 1b)
     patchConversation, upsertConversation, appendMessage, patchMessage,
-    removeConversation, removeMessages, saveTemplates, clearAllWaData, eraseConversation,
+    saveTemplates, clearAllWaData, eraseConversation,
     // v18.8.0: the per-conversation listener seam, and the simulator's writer
     watchMessages, simAppendMessage,
     // derived

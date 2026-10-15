@@ -52,6 +52,25 @@ export function snippet(text) {
   return String(text == null ? "" : text).slice(0, WA_SNIPPET_LEN);
 }
 
+// conversationDeletePatch(keys) — the ONE write that deletes conversations
+// (v18.8.0 /code-review): each key's conversation row AND its messages, as a
+// multi-path update at the database root, so neither half can outlive the
+// other. The inbox's Delete and bulk delete were two writes, and messages left
+// without their row are out of everyone's reach: the inbox lists conversations,
+// and so does the nightly prune (api/wa-prune.js). Per key, never a whole node,
+// since the rules grant `$phoneKey` and refuse a wipe. A key that cannot be one
+// path segment is skipped: `update()` throws on . # $ [ ] and reads "/" as a
+// deeper path.
+export function conversationDeletePatch(keys) {
+  const patch = {};
+  (keys || []).forEach(function (k) {
+    if (typeof k !== "string" || !k || /[.#$[\]/]/.test(k)) return;
+    patch["conversations/" + k] = null;
+    patch["messages/" + k] = null;
+  });
+  return patch;
+}
+
 // ── Media on a message (v18.8.0) ──────────────────────────────────────────
 // A photo, a voice note or a document is stored as METADATA beside the
 // message's text, never as bytes: `media: { kind, mediaId, mime, filename?,

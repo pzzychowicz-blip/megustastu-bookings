@@ -13,6 +13,7 @@ import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { staffEmails, requireStaffAllowList } from "../api/_lib/env.js";
 import { sanitizeKey, staffAuthError, assertStaffAllowed } from "../api/_lib/rtdb.js";
+import { conversationDeletePatch } from "../src/lib/whatsapp.js";
 
 const DEV_DB_URL = "https://megustastu-bookings-dev-default-rtdb.europe-west1.firebasedatabase.app";
 
@@ -172,5 +173,39 @@ describe("WA hardening — phoneKey is sanitized at the path boundary", () => {
     // 11 since phase 7: the prune's `readMessageNode`, `removeConversationIf` and
     // `removeMessages` (its keys come from the stored node, which they leave as is).
     expect((src.match(/sanitizeKey\(phoneKey\)/g) || []).length).toBe(11);
+  });
+});
+
+// v18.8.0 /code-review: the inbox's Delete was two writes, the conversation row
+// and then its messages, and messages whose row is gone are reached by nothing
+// (the inbox and the nightly prune both find a thread through its row).
+describe("WA hardening — a deleted conversation takes its messages in the same write", () => {
+  it("one patch holds both halves of every key, and nothing else", () => {
+    expect(conversationDeletePatch(["+34600111222", "+44700900123"])).toEqual({
+      "conversations/+34600111222": null, "messages/+34600111222": null,
+      "conversations/+44700900123": null, "messages/+44700900123": null,
+    });
+  });
+  it("skips a key that is not one path segment, and never names a whole node", () => {
+    const patch = conversationDeletePatch(["", "a/b", "a.b", "a#b", "a$b", "a[b", "a]b", null, 7, undefined]);
+    expect(patch).toEqual({});
+    expect(conversationDeletePatch(null)).toEqual({});
+  });
+  it("every delete in the hook goes through it, as one update at the root", () => {
+    const hook = stripComments(readFileSync(new URL("../src/hooks/useWhatsApp.js", import.meta.url), "utf8")).join("\n");
+    // No single-half delete is left to call.
+    expect(hook).not.toMatch(/set\(ref\(db, "(conversations|messages)\/" \+ \w+\), null\)/);
+    expect(hook).not.toMatch(/function remove(Conversation|Messages)\b/);
+    const body = (name) => {
+      const i = hook.indexOf("function " + name + "(");
+      expect(i, name).toBeGreaterThan(-1);
+      return hook.slice(i, hook.indexOf("\n  }\n", i));
+    };
+    for (const name of ["deleteConversations", "eraseConversation", "clearAllWaData"]) {
+      expect(body(name), name).toContain("conversationDeletePatch(");
+      expect(body(name), name).toMatch(/update\(ref\(db\), (patch|conversationDeletePatch\()/);
+    }
+    expect(body("bulkDeleteConversations")).toContain("deleteConversations(keys)");
+    expect(body("doDeleteConversation")).toContain("deleteConversations([phoneKey])");
   });
 });
