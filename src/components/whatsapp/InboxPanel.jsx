@@ -110,6 +110,8 @@ export function InboxPanel({
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, onRecheck, onOpenPhoto,
   onBulkArchive, onBulkUnarchive, onBulkDelete,
   query, setQuery, needsAction, setNeedsAction,
+  // v18.8.0 phase 8: the draft check's inputs, and the waitlist it can add to.
+  liveBookings, tableBlocks, autoOptimizer, waitlist, onAddToWaitlist,
   // settings/general — the "Regular" threshold, so the conversation header's chip
   // reads identically to the booking form's (see regularChipLabel in customers.js).
   regularMin,
@@ -453,7 +455,7 @@ export function InboxPanel({
     <div onFocus={onViewFocus} onBlur={onViewBlur} onPointerDown={onViewPointerDown} style={{ flex: 1, minWidth: 0, display: twoPane || activeKey ? "flex" : "none", flexDirection: "column", height: "100%" }}>
       <ConversationView
         conv={activeConv} messages={activeMessages} onBack={() => setActiveKey(null)}
-        onSend={(t) => onSend(activeConv.phoneKey, t)} onSendMedia={onSendMedia ? (blob, meta) => onSendMedia(activeConv.phoneKey, blob, meta) : null} onAccept={() => onAccept(activeConv)} onDismiss={() => onDismiss(activeConv.phoneKey)}
+        onSend={(t) => onSend(activeConv.phoneKey, t)} onSendMedia={onSendMedia ? (blob, meta) => onSendMedia(activeConv.phoneKey, blob, meta) : null} onAccept={(over) => onAccept(activeConv, over)} onDismiss={() => onDismiss(activeConv.phoneKey)}
         templates={templates} bookings={bookings} showBack={!twoPane} phone={winW < 600} compact={compact}
         kbFold={kbFold} onUnfold={unfold}
         onArchive={onArchive} onUnarchive={onUnarchive} onDelete={onDelete}
@@ -464,6 +466,8 @@ export function InboxPanel({
         onApplyModify={onApplyModify}
         onRecheck={onRecheck}
         regularMin={regularMin}
+        liveBookings={liveBookings} tableBlocks={tableBlocks} autoOptimizer={autoOptimizer} waitlist={waitlist}
+        onAddToWaitlist={onAddToWaitlist ? () => onAddToWaitlist(activeConv) : null}
       />
     </div>
   ) : (twoPane ? (

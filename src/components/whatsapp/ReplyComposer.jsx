@@ -16,7 +16,7 @@
 // state would follow the user to the next customer and be sent there. Every
 // piece of attachment state carries its key and is read only for its own.
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useImperativeHandle } from "react";
 import { Reveal, mkSolidBtn, InlineAlert } from "../atoms";
 import { CloseIcon } from "../Icons";
 import { TemplatesIcon, PaperclipIcon, FileIcon } from "./WaIcons";
@@ -127,7 +127,7 @@ function AttachChip({ att, busy, onRemove }) {
   );
 }
 
-export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMedia, threadKey }) {
+export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMedia, threadKey, ref }) {
   // The text is kept PER THREAD, like the attachment below: this component is
   // not remounted when the conversation changes, so one string followed you to
   // the next customer, and since v18.8.0 that string can be a photo's caption.
@@ -201,6 +201,11 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
     setTxt((cur) => (cur ? cur + " " + text : text));
     if (areaRef.current) areaRef.current.focus();
   }
+  // v18.8.0 phase 8: the draft card's "Suggest these" puts its reply in here
+  // the way a template chip does (after what is typed, then the focus), so
+  // staff read it and press Send themselves. No deps: the handle is rebuilt
+  // each render, so it always writes to the open thread.
+  useImperativeHandle(ref, () => ({ insert: insertTemplate }));
   async function onPick(e) {
     const f = e.target.files && e.target.files[0];
     e.target.value = ""; // so picking the same file again still fires

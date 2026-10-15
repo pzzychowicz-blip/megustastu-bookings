@@ -35648,3 +35648,115 @@ session):
   (no `/api` there).
 
 Main bundle 139.57 kB gz (+0.06, the Admin section); 3,316 tests; lint 63 warnings; style OK.
+
+### Phase 8 — the draft checks the request before Accept
+
+**What was missing.** The draft card said what the customer asked for and nothing about whether
+the restaurant could take it, so a full evening was found out only once the booking form had
+opened over the inbox (Patryk, 2026-10-06; the ROADMAP entry this closes).
+
+**The check is the booking form's own** (`src/lib/draft-check.js`, pure), composed as
+BookingFormModal composes `availScan` and `kitchenScan`, so the card and the form it opens
+cannot disagree:
+- `draftCheckable(conv)`: a new booking still waiting for a decision, with a size, a date and a
+  time that `sanitizeParse`'s own predicates accept. Anything less is a question for the
+  customer.
+- `draftAvailability`: `trialFits` with the form's `noResh` (`!optimizerActiveFor`), and when
+  nothing fits `findTimes` + `formatSugg`; then `getKitchenLoad` plus this party against
+  `KITCHEN_TABLE_LIMIT`, and when that is reached `findKitchenFriendlyTimes`. A closed day asks
+  nothing else. A time Save would refuse (before opening, after `lastStartMins`) is not called a
+  fit, and the times nearby are still offered.
+- `nearestTimes`: the four times nearest the one asked (a tie goes to the earlier), in clock
+  order.
+- `draftCheckLine`: one sentence per outcome and its tone: "Fits at 20:00", "Kitchen may be
+  busy at 20:00", "No tables for 12 at 20:30", "23:00 is outside opening hours", "Closed on that
+  day".
+- `draftPrefill`: Accept's rule for the name, the phone (with its "+") and the fallbacks, moved
+  out of `useWhatsApp` so Accept and Add to waitlist fill the same fields.
+- `onWaitlistFor`: derived from the waitlist (the same normalised phone, the same date), so
+  nothing is stored on the conversation.
+
+**After the paint.** `useDraftCheck` (hooks) runs it through `useDeferredCompute`, keyed on the
+draft's size, date, time and seating, the bookings, the table blocks, the optimiser and the day's
+hours. Not on `liveBookings`, which App rebuilds on its 15-second tick: the card would blank and
+re-check four times a minute.
+
+**On the card** (`DraftCheck` in `DraftCard.jsx`, in the compact bar and the full card):
+- "Checking the tables…" with a pulsing dot while it runs, then the line in its tone with a mark.
+- "Accept at:" and a chip per other time. A chip is Accept at that time (`onAccept({ time })` →
+  `handleAcceptDraft(conv, over)`).
+- With no table: **Add to waitlist** (App's `addDraftToWaitlist`: asks `waitlistManage`, runs the
+  phone through `phoneForSave` as the form's door does, and shows a refusal under the card), which
+  then reads **On the waitlist**.
+- **Suggest these** (or Suggest a reply): `availabilityReply(lang, …)` in `whatsapp.js` writes
+  the reply in the customer's language, English or Spanish, with the day spelled out, and puts it
+  in the reply box through the composer's new `insert` handle. Nothing is sent.
+- The answer is spoken by an always-mounted status region.
+- `DraftCheck` is keyed to the conversation, so a switch replaces it. Before the key, the old
+  line folded over the new thread for 126 ms (measured).
+
+**`TimeChip`** (`AvailBanner.jsx`). The booking form's suggestion chips were `<span onClick>`,
+unreachable from a keyboard; they are `<button type="button">` now, and the card uses the same
+component. Measured identical (49.66×20 px; only `text-align` differs), and Enter on a focused
+chip picks its time without saving the form.
+
+**`useDeferredCompute` never hands back an answer to another question.** Its reset runs in an
+effect, after the paint, so for one frame after a change the previous answer stood under the new
+question: measured in the inbox, where a switch read "Fits at 20:30" under the next draft's
+time, and the booking form had the same frame on every edited field. A result is now stored with
+the deps it answers and read only while they are still the deps (`sameDeps`, `STALE`). The
+collapse while re-checking is unchanged: that was already the hook's contract (Patryk's).
+
+**Found by running it, fixed here.** Add to waitlist turned into a status chip of its own: a
+content-box `<span>` 44px tall beside 36px buttons, and narrower, so on a 1280px tablet the row
+re-wrapped and the control moved 460px from under the finger that pressed it, and the press
+dropped a keyboard user's focus to `<body>`. It is one button in one box now: `WAIT_W` 130px (the
+wider label in the button's type: 129.0 against 128.6), and once done `aria-disabled` (never
+`disabled`, which makes Chrome blur it) with `mgt-nopress`. The status region adds "On the
+waitlist." Re-measured with a real click: (42, 636) 130×36 before and after, Suggest these
+unmoved, focus kept, the label changing 278ms later as the write echoes.
+
+**Tests** (3,316 → 3,357):
+- `tests/draft-check.test.js` (new, 28):
+  - which drafts are checked;
+  - agreement with `trialFits` for an empty evening, a full one, completed visits, a busy kitchen,
+    one party fewer, a table block, a closed day, times outside the hours, the optimiser off, and
+    the seating asked;
+  - `nearestTimes`;
+  - `draftPrefill`, with source pins that Accept and the waitlist both read it;
+  - `onWaitlistFor`;
+  - `availabilityReply` in English and Spanish;
+  - source pins for the deferred hook, the chip, Suggest and the waitlist button;
+  - `sameDeps` and the stale guard.
+- `tests/phone-countries.test.js`: App's `phoneForSave(` count is 2, and `addDraftToWaitlist` is
+  pinned to it.
+- `tests/contrast.test.js`: the three inks on `--wa-draft-bg`, in all four themes.
+
+Mutation-checked:
+- the kitchen counted without this party fails;
+- the outside-hours branch removed fails;
+- a bad ink in the registry fails in all four themes;
+- the stale guard removed fails;
+- the waitlist button made `disabled`, or split back into a chip, fails.
+
+**Verified on DEV** (the simulator's canned drafts, backend mode off for the run and on again
+after):
+- English, 2 guests tomorrow at 20:00: "Fits at 20:00".
+- Spanish, 12 guests Friday 16.10 at 20:30, with a 20-guest test booking at 20:00:
+  - "No tables for 12 at 20:30", with chips 17:15, 17:30, 17:45 and 18:00;
+  - the 17:30 chip opened the form at 17:30 for 12, which placed them on tables 3–7;
+  - Suggest these put the Spanish reply in the box with the cursor at its end;
+  - Add to waitlist stored the entry, and removing it from the waitlist panel turned the button
+    back by itself.
+- Without that booking the same draft read "Kitchen may be busy at 20:30", with no chips (no
+  quieter time had a table for 12).
+- The full card at 1024×1366.
+- Not measured: the fold when a booking changes under an open card. The page was hidden for that
+  part of the session (`requestAnimationFrame` did not fire), and a reading then measures the
+  throttling. It is the shared `Reveal`, measured both ways in `tests/motion.test.js`.
+- All the test data was removed afterwards: the booking, the waitlist entry, and the two
+  conversations (archived).
+
+Main bundle 142.47 kB gz (+2.90). By the sourcemap, against phase 7: DraftCard +2.9 kB raw,
+`whatsapp.js` +2.2, `draft-check.js` +2.1, the rest under 0.5 each. The main chunk is 502.53 kB
+raw, past Vite's 500 kB warning for the first time. 3,357 tests; lint 63 warnings; style OK.

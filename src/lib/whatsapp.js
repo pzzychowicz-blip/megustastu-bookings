@@ -200,6 +200,75 @@ export const AUTO_ACK_TEXT = {
   es: "¡Gracias por su mensaje! Le contestaremos en breve.",
 };
 
+// ── v18.8.0 phase 8: "Suggest these" ────────────────────────────────────────
+// The reply the draft card offers when a request does not fit (or lands on the
+// kitchen's busiest quarter): written in code, put into the reply box and
+// NEVER sent, so staff read and send it themselves. Spanish takes the formal
+// register of the templates and the auto-reply above ("le", "su"). A language
+// the app has no text for gets English; no language at all gets Spanish, as
+// the template chips do.
+//   reason   "full" (no table) · "kitchen" (a table, but the kitchen is at its
+//            limit) · "hours" (outside opening hours)
+//   alts     the times on the card's chips, in clock order
+//   waitlist offer the waitlist too (only meaningful with "full"), or, as
+//            "added", say the customer is on it already
+const DAYS_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const DAYS_ES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MONTHS_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+// "Friday 16 October" / "viernes 16 de octubre". A date that is not ISO is
+// returned as it came: the reply is a suggestion, and staff will see it.
+export function spokenDay(iso, lang) {
+  const m = typeof iso === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso) : null;
+  if (!m) return String(iso || "");
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  const day = dt.getUTCDate();
+  return lang === "es"
+    ? DAYS_ES[dt.getUTCDay()] + " " + day + " de " + MONTHS_ES[dt.getUTCMonth()]
+    : DAYS_EN[dt.getUTCDay()] + " " + day + " " + MONTHS_EN[dt.getUTCMonth()];
+}
+
+function joinOr(items, lang) {
+  if (items.length <= 1) return items.join("");
+  return items.slice(0, -1).join(", ") + (lang === "es" ? " o " : " or ") + items[items.length - 1];
+}
+
+export function availabilityReply(lang, o) {
+  const es = (lang || "es") === "es";
+  const alts = (o && o.alts) || [];
+  const day = spokenDay(o.date, es ? "es" : "en");
+  const size = Number(o.size);
+  if (es) {
+    const las = alts.map(function (t) { return "las " + t; });
+    if (o.reason === "kitchen") {
+      return "A las " + o.time + " del " + day + " tenemos la cocina muy llena. ¿Le iría bien "
+        + joinOr(alts.map(function (t) { return "a las " + t; }), "es") + "?";
+    }
+    if (o.reason === "hours") {
+      return "Lo sentimos, no aceptamos reservas a las " + o.time + "."
+        + (alts.length ? " El " + day + " podemos ofrecerle " + joinOr(las, "es") + "." : "");
+    }
+    let s = "Lo sentimos, no tenemos mesa para " + size + " a las " + o.time + " del " + day + ".";
+    if (alts.length) s += " Podemos ofrecerle " + joinOr(las, "es") + ".";
+    if (o.waitlist === "added") s += " Le hemos apuntado en la lista de espera y le avisaremos si se libera una mesa.";
+    else if (o.waitlist) s += (alts.length ? " Si lo prefiere," : " Si lo desea,") + " le apuntamos en la lista de espera y le avisamos si se libera una mesa.";
+    return s;
+  }
+  if (o.reason === "kitchen") {
+    return "At " + o.time + " on " + day + " our kitchen is at its busiest. Would " + joinOr(alts, "en") + " suit you instead?";
+  }
+  if (o.reason === "hours") {
+    return "Sorry, we don't take bookings at " + o.time + "."
+      + (alts.length ? " On " + day + " we could offer " + joinOr(alts, "en") + "." : "");
+  }
+  let s = "Sorry, we have no table for " + size + " at " + o.time + " on " + day + ".";
+  if (alts.length) s += " We could offer " + joinOr(alts, "en") + ".";
+  if (o.waitlist === "added") s += " We've put you on our waitlist and will let you know if a table frees up.";
+  else if (o.waitlist) s += (alts.length ? " Or we can" : " We can") + " put you on our waitlist and let you know if a table frees up.";
+  return s;
+}
+
 // Phone-identity primitives — complementarity contract (applied at the v16.0.0
 // prod sync): `src/lib/customers.js` is now the ONE home of normalizePhone /
 // formatPhone / matchCustomerByPhone (ported verbatim from here; its

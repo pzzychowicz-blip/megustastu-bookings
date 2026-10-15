@@ -84,6 +84,7 @@ import { draftFromBooking } from "./lib/booking-fields";
 import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal, draftForSave, draftRefusal, formSeatClash, kitchenAsk } from "./lib/booking-save";
 import { normalizePhone, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
+import { draftPrefill } from "./lib/draft-check";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
@@ -2406,6 +2407,20 @@ function BookingApp({uid}){
     pendingWaitlistRef.current=w.id;
     setShowWaitlist(false);
     setShowForm(true);
+  }
+  // v18.8.0 phase 8: "Add to waitlist" on a WhatsApp draft that does not fit.
+  // The party is the draft's (`draftPrefill`, the fields Accept opens the form
+  // with), and the phone goes through `phoneForSave` as the form's button does.
+  // Returns the sentence the card shows when the phone is refused, else null;
+  // a missing capability is said by the refusal toast. The inbox stays open:
+  // the card's button turns into "On the waitlist" once the entry is stored.
+  function addDraftToWaitlist(conv){
+    if(refused("waitlistManage"))return null;
+    const p=draftPrefill(conv,bookings);
+    const phoneRule=phoneForSave(p.phone,generalSettings.pinnedCountries,generalSettings.phonePrefix,false);
+    if(phoneRule.refusal)return phoneRule.refusal;
+    addToWaitlist({name:p.name,phone:cleanPhoneOf(phoneRule.phone),size:p.size,date:p.date,prefTime:p.time,notes:p.notes,preference:p.preference});
+    return null;
   }
   // "Add to waitlist" from the booking form's no-tables banner: capture the
   // draft's fields as a waiting entry, close the form, flash the toast.
@@ -4815,6 +4830,8 @@ function BookingApp({uid}){
           onApplyModify={wa.handleApplyModify}
           onRecheck={wa.recheckConversation}
           onOpenPhoto={function(phoneKey,msg){setWaPhoto({phoneKey:phoneKey,msg:msg});}}
+          liveBookings={liveBookings} tableBlocks={tableBlocks} autoOptimizer={autoOptimizer}
+          waitlist={waitlist} onAddToWaitlist={addDraftToWaitlist}
           onOpenSim={WA_SANDBOX?function(){setShowSim(true);}:null} />:null}</ModalPresence>{confirmArchive?(function(){
           const conv=wa.conversations.find(function(c){return c.phoneKey===confirmArchive;});
           const bk=conv&&conv.acceptedBookingId?bookings.find(function(b){return b.id===conv.acceptedBookingId;}):null;

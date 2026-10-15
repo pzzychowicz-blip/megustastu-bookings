@@ -41,11 +41,12 @@ import { EMPTY_FORM } from "../lib/constants";
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
-import { matchCustomerByPhone, normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet } from "../lib/whatsapp";
+import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet } from "../lib/whatsapp";
 import { sendsViaServer, sendViaBackend, sendMediaViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
 import { WA_SANDBOX } from "../lib/waSandbox";
+import { draftPrefill } from "../lib/draft-check";
 
 // A key `ref()` can take as ONE path segment. A conversation's key comes out of
 // a row's body (see conversationKeysRef), and `ref()` throws on . # $ [ ] and
@@ -460,24 +461,21 @@ export function useWhatsApp({
   // handleAcceptDraft: close inbox, pre-fill the booking form from the draft,
   // flag draftSourceRef so doSave flips the conversation on success, and set
   // returnToInboxKey so closing the form returns to the WA module.
-  function handleAcceptDraft(conv) {
+  // v18.8.0 phase 8: `over.time` opens the form at another time (a time chip
+  // on the draft card), and the fields come from `draftPrefill`
+  // (lib/draft-check.js), the rule the card's Add to waitlist reads too: the
+  // name is the draft's or the customer's, the phone the conversation's with
+  // its "+", the seating indoor/outdoor or "auto".
+  function handleAcceptDraft(conv, over) {
     if (!conv || !conv.draftData) return;
-    const d = conv.draftData;
-    const match = matchCustomerByPhone(conv.phoneKey, bookings);
-    const prefilledName = (d.name && d.name.trim()) || (match && match.name) || "";
-    let prefilledPhone = conv.phone || conv.phoneKey || "+";
-    if (prefilledPhone && prefilledPhone.charAt(0) !== "+") prefilledPhone = "+" + prefilledPhone;
-    const size = Number(d.size) || 2;
-    const date = d.date || todayStr();
-    const time = d.time || "13:00";
-    // Seating preference from the parsed message (indoor/outdoor); "auto" when
-    // the customer didn't state one — the default. (See mergeDraft / mockParse.)
-    const preference = (d.preference === "indoor" || d.preference === "outdoor") ? d.preference : "auto";
+    const p = draftPrefill(conv, bookings);
+    const date = p.date;
+    const time = (over && over.time) || p.time;
     // v18.3.5: through App's `openNew`, which asks `bookingCreate` and clears a
     // waitlist entry left pending by a form closed unsaved (Save would have
     // taken that entry off the waitlist for this booking). Refused: nothing
     // below runs, and the inbox stays open under the refusal.
-    if (!openNew(Object.assign({}, EMPTY_FORM, { name: prefilledName, phone: prefilledPhone, date, time, size, preference, notes: d.notes || "", status: "confirmed", customDur: null, manualTables: [], preferredTables: [], returnOf: null }))) return;
+    if (!openNew(Object.assign({}, EMPTY_FORM, { name: p.name, phone: p.phone, date, time, size: p.size, preference: p.preference, notes: p.notes, status: "confirmed", customDur: null, manualTables: [], preferredTables: [], returnOf: null }))) return;
     draftSourceRef.current = conv.phoneKey;
     setReturnToInboxKey(conv.phoneKey);
     setShowInbox(false); setViewDate(date);
