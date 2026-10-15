@@ -35760,3 +35760,18 @@ after):
 Main bundle 142.47 kB gz (+2.90). By the sourcemap, against phase 7: DraftCard +2.9 kB raw,
 `whatsapp.js` +2.2, `draft-check.js` +2.1, the rest under 0.5 each. The main chunk is 502.53 kB
 raw, past Vite's 500 kB warning for the first time. 3,357 tests; lint 63 warnings; style OK.
+
+### Deploy steps (Patryk)
+
+1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random
+   value from `openssl rand -hex 32`, then redeploy each. Without it the nightly prune answers
+   503 and deletes nothing. Settings → Admin → Integrations shows whether it is set.
+2. **PROD rules: no change.** Re-checked against the branch: `database.rules.json` is
+   untouched. `settings/admin` gains `waRetentionDays` inside its existing grant and `adminRev`
+   pair; the one other config change is `vercel.json`'s cron.
+3. **Refresh every device after the deploy.** `SCHEMA` is 3, so a device still on the old
+   build shows "This device needs refreshing" and writes nothing until it reloads.
+
+After the merge: tick A4-1 and A4-5 in the go-live checklist. A5-6 is the live test on the
+sandbox: a photo each way with a real phone, a voice note in, a PDF each way, the 4.5 MB
+measurement, and the first cron run in Vercel's logs.

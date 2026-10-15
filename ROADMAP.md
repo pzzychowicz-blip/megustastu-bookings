@@ -19,15 +19,8 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **One code change gates the WhatsApp go-live** (2026-09-19 plan, § A4 of
-  `megustastu-bookings context/WhatsApp module/MGT_WhatsApp_Cloud_API_Go-Live_Plan.md`).
-  **Photos in the inbox** — staff send the menu as a picture and customers send
-  photos back, while `api/_lib/meta.js` sends text only and `api/wa-inbound.js` stores
-  any non-text message as `"[image message]"`; Meta holds the files (7 days received,
-  30 days sent), so nothing new is stored here. **When it ships, the privacy notice
-  gains a line about photos** (`public/privacy.html`, both languages). (The Graph v26.0 bump and the stale Gemini comment
-  shipped in v18.3.1; set the Meta app's WEBHOOK version to v26.0 in the dashboard at
-  go-live, since the code cannot.)
+- **At WhatsApp go-live, set the Meta app's WEBHOOK version to v26.0** in the dashboard.
+  The Graph calls moved to v26.0 in v18.3.1, and the code cannot change the webhook's.
 
 - **WhatsApp coexistence — the Business app and the Cloud API on one number**
   (decided 2026-09-21, go-live plan § 3a–3b). Replaces the ops-SIM migration: the groups
@@ -59,7 +52,7 @@ session and keeping it in sync.
   (c) read the free-tier requests per minute and per day in AI Studio → Rate limits,
   which Google no longer publishes in the docs.
 
-The next seven come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
+The entries marked `#N` come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
 in its register, and the report
 (`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
 evidence for each.
@@ -109,8 +102,6 @@ evidence for each.
   5.5%, 4%. About 15 whole-database loads a day, so the plan's download limit is
   reached at about 22 MB, roughly three years off at this rate. `REFACTOR_LOG.md`
   v18.5.0 has the table and DEV's node-by-node sizes. Not read: the peak-load graph.
-
-- **Before WhatsApp goes live (#8):** set a retention period (SECURITY.md §3 lists the retention as open).
 
 - **The public repository (#12): restrict the browser API keys by HTTP referrer**
   (decided 2026-10-08: the DEV key first, PROD after a week on DEV shows nothing). The
@@ -195,3 +186,9 @@ Nothing at present.
 
 The **2026-07-24 `/engineering:tech-debt` scan's feature shortlist** is spent: its last
 two ideas, deposits reporting and structured guest tags, shipped in v18.5.0.
+
+- **A voice note becomes a booking draft** (Patryk, 2026-10-14, after go-live checklist
+  item A5-7). v18.8.0 stores and plays a customer's voice note, and nothing reads it: the
+  parse runs on text only. Gemini takes audio, so the note could be fetched as the media
+  proxy fetches it (`mediaInfo` + `downloadMedia`, `api/_lib/meta.js`) and parsed like a
+  message.
