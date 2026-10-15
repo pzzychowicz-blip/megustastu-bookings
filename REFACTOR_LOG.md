@@ -36091,3 +36091,58 @@ Tests: the webhook end to end (add, remove per key, out-of-order, non-contacts i
 names cleaned, the number guard, a failed write answered 500), the planner, the naming
 rule run rather than read (W4's two source checks became behaviour checks plus a check
 that both components call it), `draftPrefill`'s new step, the erase patch.
+
+### Phases 3–4 — phone replies, and what a customer edits or deletes
+
+**Phone replies (`smb_message_echoes`).** What staff send from the WhatsApp Business app
+comes back as an echo, `to` being the customer. `handleEchoes` (`api/_lib/coexist-core.js`)
+stores each as an outgoing message keyed by its wamid, `source: "phone"`, status `sent`
+(`echoRecord`), its content read by `inboundContent` like a customer's, so a photo keeps
+its media id and its caption is its text. The conversation (`echoConvPatch`, in
+`src/lib/wa-coexist.js` for the simulator): read; out of Archived unless muted (phase 6's
+"Not a customer"); `autoAckSent: true`, so a customer the restaurant wrote to first never
+gets the auto-reply; the 24h window untouched, since only the customer's own message
+opens it; the snippet and time only move forward, so a late echo never makes an older
+reply the last line. A conversation the phone starts is created with `processInbound`'s
+shape, minus the window. Never parsed. An echo already stored, or the echo of a message
+MGT sent itself (found by `providerMsgId`), is skipped. The conversation is written
+before the message, as `processInbound` does, so a redelivery after a failed message
+write writes both again. Each echo is counted on its own (`results.echoes`), and one
+failing does not stop the next.
+
+**Edits and deletes (`messages`, types `edit` and `revoke`).** A customer may edit for 15
+minutes and delete for two days. `applyMessageChange` finds the message the change names
+(`findMessageByWamid`: its wamid as the key, else a scan for `providerMsgId`, for a
+message MGT sent) and patches it in place (`updateMessage`): an edit sets `text` and
+`editedAt` (`editedText` reads a text's body or a photo's caption, so an edited caption
+that comes without the media id keeps the photo, and a caption edited away leaves the
+photo's label); a delete sets the text to "Message deleted by the customer" ("… on the
+phone" for staff's own), drops the media and sets `revokedAt`, and is final (a later edit
+changes nothing). No new bubble, no parse; the draft stays (Patryk). When the changed
+message is the conversation's last, the list's line follows it, so a deleted message's
+words do not stay on screen there. An edit of a message never stored (sent before
+onboarding, or pruned) is kept as a new message under the edit's id and takes the
+ordinary road; a delete of one has nothing to delete. The same function handles an echoed
+edit or delete. Counted as `results.edits`.
+
+**`131060`.** A message only the Business app can show arrives as `unsupported` with error
+131060 under coexistence; `inboundContent` stores "Couldn't show this message here — check
+the WhatsApp Business app" (`WA_UNSUPPORTED_LINE`) instead of "Message — open WhatsApp on
+the phone to see it", which reads like an ordinary sticker.
+
+**The bubble.** A phone reply says "· phone" in the meta row where a reply from MGT says
+how far it got (with a title saying where it was sent from), and has no Retry: MGT did
+not send it. "· edited" beside the time, either side. A deleted message keeps its place,
+its line in italic at 0.75 opacity (opacity, so it reads on both bubble fills), and draws
+no media. The photo viewer captions a phone photo "Sent from the phone".
+
+No `SCHEMA` raise: messages are read raw and only `update()`d by the browser
+(`src/lib/whatsapp.js`'s media note says why). Tests: `tests/api-handlers.test.js` runs
+the webhook for each case (a new and an archived conversation, muted, late, redelivered,
+MGT's own echo, a photo, no number or wamid, staff's delete, one echo failing; an edit,
+a delete with a photo then an edit after it, both with the original missing, the
+`providerMsgId` path), the planners and the 131060 line; `tests/wa-bubble.test.js`
+renders the bubble by calling it (the phone tag and no Retry, MGT's status and Retry,
+"edited", the deleted state); `tests/wa-rtdb-hardening.test.js`'s count of sanitised
+message paths is 14. **Not checked live yet**: the simulator's echo, edit and delete
+events are phase 9, and the live DEV pass runs then.

@@ -225,6 +225,30 @@ export async function updateMessageStatusByWamid(phoneKey, wamid, status) {
   return false;
 }
 
+// v18.9.0: the stored message a customer's edit or delete is about, as
+// `{ key, msg }`, or null. Its own wamid is the key of every message the
+// webhook stored (one get); a message sent FROM MGT is keyed by its own id and
+// carries the wamid as `providerMsgId`, which needs the thread read (the
+// receipts above do the same).
+export async function findMessageByWamid(phoneKey, wamid) {
+  const key = sanitizeKey(wamid);
+  const direct = await getMessage(phoneKey, key);
+  if (direct) return { key, msg: direct };
+  const node = await getDb().ref("messages/" + sanitizeKey(phoneKey)).get();
+  if (!node.exists()) return null;
+  const all = node.val() || {};
+  for (const k of Object.keys(all)) {
+    if (all[k] && all[k].providerMsgId === wamid) return { key: k, msg: all[k] };
+  }
+  return null;
+}
+
+// v18.9.0: patch one stored message in place (update() semantics, null deletes
+// a field) — an edit's new text, a delete's empty one.
+export async function updateMessage(phoneKey, key, patch) {
+  await getDb().ref("messages/" + sanitizeKey(phoneKey) + "/" + sanitizeKey(key)).update(patch);
+}
+
 // ── Settings (read-only, for the LLM prompt constraints) ─────────────────────
 // v15 schema: settings/operatingHours holds per-day {open,close} (weekHours).
 // Returned as-is; gemini.js folds it into the prompt. Null when unset.

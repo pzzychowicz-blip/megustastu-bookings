@@ -96,6 +96,12 @@ export const WA_MEDIA_KINDS = ["image", "audio", "document"];
 // The line every other kind gets: a video, a sticker, a location, a contact
 // card. Decided 2026-10-14: those stay on the phone.
 export const WA_OPEN_ON_PHONE = "open WhatsApp on the phone to see it";
+// v18.9.0: a message the WhatsApp Business app shows and the Cloud API cannot
+// carry, which Meta delivers under coexistence as `unsupported` with error
+// 131060 (a poll, a view-once photo, …). Its own line, because "open WhatsApp
+// on the phone" would read as an ordinary photo or sticker.
+export const WA_UNSUPPORTED_CODE = 131060;
+export const WA_UNSUPPORTED_LINE = "Couldn't show this message here — check the WhatsApp Business app";
 // Meta's media ids are digits; the simulator's are "MOCK.<kind>.<id>". The id
 // goes into a Graph API path, so anything else is not an id, and it must START
 // with a letter or digit, or ".." would be a path segment that climbs.

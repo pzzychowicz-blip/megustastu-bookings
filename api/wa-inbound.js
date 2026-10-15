@@ -46,9 +46,9 @@ import { verifySignature } from "./_lib/meta.js";
 import { parseMessage, mockParse } from "./_lib/gemini.js";
 import { processInbound, applyParse, inboundContent } from "./_lib/inbound-core.js";
 import { updateMessageStatusByWamid, readOperatingHours, getConversation } from "./_lib/rtdb.js";
-import { makeNumberGuard, COEXIST_HANDLERS } from "./_lib/coexist-core.js";
+import { makeNumberGuard, COEXIST_HANDLERS, applyMessageChange } from "./_lib/coexist-core.js";
 import { normalizePhone, isPhoneKey } from "../src/lib/whatsapp.js";
-import { secondsTs } from "../src/lib/wa-coexist.js";
+import { secondsTs, webhookPhoneKey, editedMessage } from "../src/lib/wa-coexist.js";
 
 export const config = { api: { bodyParser: false } };
 
@@ -126,8 +126,22 @@ async function handleMessagesChange(value, results, parseJobs) {
   });
 
   // ── Inbound messages (phase A: store fast, parse later) ───────────
-  for (const m of Array.isArray(value.messages) ? value.messages : []) {
+  for (const raw of Array.isArray(value.messages) ? value.messages : []) {
     try {
+      let m = raw;
+      // v18.9.0: a customer's EDIT or DELETE changes the message it names and
+      // adds none (applyMessageChange, _lib/coexist-core.js), and is never
+      // parsed. An edit of a message we never stored is kept as a new message
+      // under the edit's own id, so what the customer said is not lost; a
+      // delete of one has nothing to delete.
+      if (m && (m.type === "edit" || m.type === "revoke")) {
+        const key = webhookPhoneKey(m.from);
+        const r = key ? await applyMessageChange(key, m) : "invalid";
+        if (r === "applied") { results.edits++; continue; }
+        if (r !== "missing" || m.type === "revoke") { results.skipped++; continue; }
+        m = editedMessage(m);
+        if (!m) { results.skipped++; continue; }
+      }
       // v18.8.0: a photo, a voice note or a document is stored with its
       // media; a caption is parsed like a text (see inboundContent).
       const content = inboundContent(m);
@@ -236,7 +250,7 @@ export default async function handler(req, res) {
 
   // v18.9.0: one counter per kind of record, plus `ignored` (a change for
   // another number, or a field this webhook does not handle).
-  const results = { messages: 0, statuses: 0, echoes: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 };
+  const results = { messages: 0, statuses: 0, echoes: 0, edits: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 };
   const parseJobs = []; // phase-B work: one LLM parse per stored text message
   const isOurs = makeNumberGuard();
   try {

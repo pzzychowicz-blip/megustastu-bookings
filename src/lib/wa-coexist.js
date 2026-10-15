@@ -12,7 +12,7 @@
 // extension (api/CLAUDE.md). Imported in src/ by the simulator alone, which a
 // production build loads through a dead dynamic import.
 
-import { normalizePhone, isPhoneKey } from "./whatsapp.js";
+import { normalizePhone, isPhoneKey, mediaLabel, WA_MAX_TEXT_LEN } from "./whatsapp.js";
 
 // secondsTs(raw, now) — a Meta timestamp (seconds since the epoch, usually as a
 // string) as ms, clamped to FACTS: not a positive finite number → now; in the
@@ -99,4 +99,116 @@ export function contactPatch(items, stored, now) {
     count++;
   });
   return { patch, count };
+}
+
+// ── Phone replies (smb_message_echoes) ───────────────────────────────────────
+// A message staff send from the WhatsApp Business app on the phone comes back
+// as an ECHO: `message_echoes[]`, each shaped like an inbound message but with
+// `from` = the restaurant and `to` = the customer. It is stored as an outgoing
+// message with `source: "phone"`, so the thread in MGT is the whole
+// conversation, whichever of the two the reply was typed on.
+export const WA_SOURCE_PHONE = "phone";
+
+// echoRecord(msgId, wamid, content, ts) — the stored message. `content` is what
+// `inboundContent` made of it (the text, the media). Its status stays "sent":
+// Meta reports delivery for what the API sent, and the bubble shows "phone" in
+// that place anyway.
+export function echoRecord(msgId, wamid, content, ts) {
+  const msg = {
+    id: msgId, direction: "out", source: WA_SOURCE_PHONE,
+    text: String((content && content.text) || ""), ts, status: "sent",
+    isAutoAck: false, channel: "whatsapp", providerMsgId: wamid || null,
+  };
+  if (content && content.media) msg.media = content.media;
+  return msg;
+}
+
+// echoConvPatch(existing, { phoneKey, phone, ts, snippet }) — what a phone reply
+// does to its conversation (Patryk, 2026-10-15):
+//   · it is READ — staff answered it, on the phone
+//   · it comes back out of Archived, as a reply from MGT does (`api/wa-send.js`)
+//     — unless the conversation is muted ("Not a customer"), which stays put
+//   · the auto-reply is settled: a customer the restaurant has written to from
+//     the phone is not a new customer (`autoAckSent: true`)
+//   · the 24h window is NOT touched: only the customer's own message opens it
+//   · the snippet and time move only FORWARD, so a delayed echo never makes an
+//     older reply the conversation's last line
+// A conversation the phone started is created here, with the shape
+// `processInbound` creates one with, minus the window.
+export function echoConvPatch(existing, o) {
+  const patch = { unread: false, autoAckSent: true };
+  if (!existing) {
+    return Object.assign(patch, {
+      phoneKey: o.phoneKey, phone: o.phone || o.phoneKey, channel: "whatsapp",
+      createdAt: o.ts, lastMessageAt: o.ts, lastMessageSnippet: o.snippet,
+      acceptedBookingId: null, draftStatus: null, draftData: null,
+      archived: false, archivedAt: null,
+    });
+  }
+  if (!(Number(existing.lastMessageAt) > o.ts)) {
+    patch.lastMessageAt = o.ts;
+    patch.lastMessageSnippet = o.snippet;
+  }
+  if (existing.archived && !existing.muted) { patch.archived = false; patch.archivedAt = null; }
+  return patch;
+}
+
+// ── A customer edits or deletes a message (messages: edit / revoke) ─────────
+// WhatsApp lets a customer EDIT a message for 15 minutes and DELETE it for
+// everyone for two days, and under coexistence Meta tells the business. The
+// thread follows the customer (Patryk, 2026-10-15): an edit replaces the text
+// and marks the bubble "edited"; a delete replaces the text with a line saying
+// so and drops the media. Neither is parsed again — a draft already made from
+// the first version stays, and staff see the change in the thread. The same
+// two arrive as ECHOES when staff edit or delete on the phone.
+export const WA_REVOKED_IN = "Message deleted by the customer";
+export const WA_REVOKED_OUT = "Message deleted on the phone";
+
+// The id of the message an edit or a delete is about, or null.
+export function changedMessageId(m) {
+  const t = m && m.type;
+  const body = t === "edit" ? m.edit : t === "revoke" ? m.revoke : null;
+  const id = body && body.original_message_id;
+  return typeof id === "string" && id ? id : null;
+}
+
+// The message an edit carries, as a webhook message of its own type, so
+// `inboundContent` can read it when the original is not stored (it arrived
+// before onboarding, or was pruned): the edit is then kept as a new message,
+// under the edit's own id. Null when the edit carries no message.
+export function editedMessage(m) {
+  const inner = m && m.type === "edit" && m.edit && m.edit.message;
+  if (!inner || typeof inner !== "object") return null;
+  const type = typeof inner.type === "string" && inner.type ? inner.type : inner.text ? "text" : "";
+  return Object.assign({}, inner, { type, id: m.id, from: m.from, to: m.to, timestamp: m.timestamp });
+}
+
+// The new text an edit carries: a text's body, or a photo's or a document's
+// caption. Null when it carries neither, which leaves nothing to apply. Read
+// here rather than through `inboundContent` because an edited caption may come
+// without the media id, and `inboundContent` would read that as a message that
+// stays on the phone.
+export function editedText(m) {
+  const inner = editedMessage(m);
+  if (!inner) return null;
+  if (inner.type === "text") return inner.text && typeof inner.text.body === "string" ? inner.text.body : null;
+  const body = inner.type ? inner[inner.type] : null;
+  return body && typeof body === "object" && typeof body.caption === "string" ? body.caption : null;
+}
+
+// editPatch(stored, text, ts) → the patch of a stored message, or null when
+// there is nothing to apply: it was deleted already (a delete is final). A
+// photo keeps its photo, and a caption edited away leaves the photo's label.
+export function editPatch(stored, text, ts) {
+  if (!stored || stored.revokedAt || typeof text !== "string") return null;
+  const t = text.trim() ? text.slice(0, WA_MAX_TEXT_LEN) : stored.media ? mediaLabel(stored.media) : "";
+  return { text: t, editedAt: ts };
+}
+
+// revokePatch(stored, ts) → the patch that deletes a message's content, or null
+// when it is gone already. The record stays, so the thread keeps its shape and
+// a later edit of it finds something to refuse.
+export function revokePatch(stored, ts) {
+  if (!stored || stored.revokedAt) return null;
+  return { text: stored.direction === "in" ? WA_REVOKED_IN : WA_REVOKED_OUT, media: null, revokedAt: ts };
 }

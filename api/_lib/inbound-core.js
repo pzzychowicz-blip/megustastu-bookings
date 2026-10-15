@@ -27,7 +27,7 @@
 // message id is the sanitized wamid, so a redelivery targets the same RTDB
 // path; we additionally skip the whole upsert when the message already exists.
 
-import { normalizePhone, isPhoneKey, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, mediaLabel, mediaSnippet } from "../../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet } from "../../src/lib/whatsapp.js";
 import { simMediaMessage } from "../../src/lib/wa-mock-media.js";
 import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours } from "./rtdb.js";
 import { sendText } from "./meta.js";
@@ -232,6 +232,8 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
 //               text, a photo without one is not parsed at all.
 //   audio     → `media` (`voice: true` for a voice note) + "Voice message" /
 //               "Audio"; never parsed (no caption exists).
+//   unsupported with error 131060 (v18.9.0) → WA_UNSUPPORTED_LINE: a message
+//               only the Business app can show, under coexistence.
 //   anything else, or a media message whose id is not one → one line naming
 //               the kind and saying it stays on the phone (decided
 //               2026-10-14). It used to be "[image message]".
@@ -252,6 +254,10 @@ export function inboundContent(m) {
       const caption = type !== "audio" && typeof src.caption === "string" ? src.caption.trim() : "";
       return { text: caption || mediaLabel(media), media, snippet: mediaSnippet(media, caption), parseText: caption || null };
     }
+  }
+  // v18.9.0: a message only the Business app can show (coexistence, 131060).
+  if (type === "unsupported" && Array.isArray(m.errors) && m.errors.some((e) => e && Number(e.code) === WA_UNSUPPORTED_CODE)) {
+    return { text: WA_UNSUPPORTED_LINE, media: null, snippet: WA_UNSUPPORTED_LINE, parseText: null };
   }
   const line = (OTHER_LABEL[type] || "Message") + " — " + WA_OPEN_ON_PHONE;
   return { text: line, media: null, snippet: line, parseText: null };

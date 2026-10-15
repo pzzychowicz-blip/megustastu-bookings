@@ -120,10 +120,10 @@ import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "
 import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { numberIsOurs, makeNumberGuard } from "../api/_lib/coexist-core.js";
-import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX } from "../src/lib/wa-coexist.js";
+import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT } from "../src/lib/wa-coexist.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
-import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX } from "../src/lib/whatsapp.js";
+import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE } from "../src/lib/whatsapp.js";
 import { simMediaMessage } from "../src/lib/wa-mock-media.js";
 
 // A request as Vercel hands it over (the body already parsed) and a response
@@ -670,7 +670,7 @@ describe("wa-inbound — the handshake, the method, the signature", () => {
   });
   it("answers 200 to a signed payload with nothing in it", async () => {
     const res = await deliver({});
-    expect([res.statusCode, res.body]).toEqual([200, { ok: true, messages: 0, statuses: 0, echoes: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 }]);
+    expect([res.statusCode, res.body]).toEqual([200, { ok: true, messages: 0, statuses: 0, echoes: 0, edits: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 }]);
   });
 });
 
@@ -1025,12 +1025,153 @@ describe("numberIsOurs / makeNumberGuard", () => {
   });
 });
 
+// ── Phases 3–4: phone replies (smb_message_echoes), edits and deletes ───────
+const echo = (extra) => Object.assign({ from: "34600000000", to: "34600111222", id: "wamid.E1", timestamp: nowSecs(), type: "text", text: { body: "Hola Ana, ¿a qué hora venís?" } }, extra);
+const deliverEchoes = (echoes) => deliverChange("smb_message_echoes", Object.assign(forNumber("111"), { message_echoes: echoes }));
+const editOf = (orig, body, extra) => inMsg(Object.assign({ id: "wamid.ED1", type: "edit", edit: { original_message_id: orig, message: { type: "text", text: { body } } } }, extra));
+const revokeOf = (orig, extra) => inMsg(Object.assign({ id: "wamid.RV1", type: "revoke", revoke: { original_message_id: orig } }, extra));
+
+describe("wa-inbound — phone replies (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("an echo is an outgoing message tagged phone, keyed by its wamid; a new conversation is read, settled, with no window", async () => {
+    const res = await deliverEchoes([echo()]);
+    expect(res.body).toMatchObject({ ok: true, echoes: 1, messages: 0, errors: 0 });
+    const msgs = msgsAt(KEY);
+    expect(msgs).toHaveLength(1); // no auto-reply beside it
+    expect(fake.read("messages/" + KEY + "/wamid_E1")).toMatchObject({
+      direction: "out", source: "phone", text: "Hola Ana, ¿a qué hora venís?", status: "sent", isAutoAck: false, providerMsgId: "wamid.E1",
+    });
+    const c = convAt(KEY);
+    expect(c).toMatchObject({ phoneKey: KEY, unread: false, autoAckSent: true, archived: false, lastMessageSnippet: "Hola Ana, ¿a qué hora venís?" });
+    expect(c.windowExpiresAt).toBeUndefined();
+    expect(scheduled).toEqual([]); // never parsed
+  });
+  it("an echo marks the conversation read and brings it out of Archived, and leaves the window alone", async () => {
+    const win = Date.now() + 5000;
+    fake.state.tree = { conversations: { [KEY]: openConv({ unread: true, archived: true, archivedAt: 5, windowExpiresAt: win, lastMessageAt: 1 }) } };
+    await deliverEchoes([echo()]);
+    expect(convAt(KEY)).toMatchObject({ unread: false, archived: false, windowExpiresAt: win });
+    expect(convAt(KEY).archivedAt).toBeUndefined(); // null deletes the key, as in RTDB
+  });
+  it("a muted conversation (not a customer) stays archived", async () => {
+    fake.state.tree = { conversations: { [KEY]: openConv({ muted: true, archived: true, archivedAt: 5, lastMessageAt: 1 }) } };
+    await deliverEchoes([echo()]);
+    expect(convAt(KEY)).toMatchObject({ archived: true, archivedAt: 5, unread: false });
+  });
+  it("an echo delivered late does not make an older reply the conversation's last line", async () => {
+    fake.state.tree = { conversations: { [KEY]: openConv({ lastMessageAt: Date.now(), lastMessageSnippet: "newer" }) } };
+    await deliverEchoes([echo({ timestamp: String(Math.floor(Date.now() / 1000) - 3600) })]);
+    expect(convAt(KEY).lastMessageSnippet).toBe("newer");
+    expect(msgsAt(KEY)).toHaveLength(1);
+  });
+  it("a redelivered echo, and the echo of a message MGT sent itself, are skipped", async () => {
+    fake.state.tree = { messages: { [KEY]: { out1: { id: "out1", direction: "out", text: "x", ts: 1, providerMsgId: "wamid.MGT" } } } };
+    await deliverEchoes([echo()]);
+    const res = await deliverEchoes([echo(), echo({ id: "wamid.MGT" })]);
+    expect(res.body).toMatchObject({ echoes: 0, skipped: 2 });
+    expect(msgsAt(KEY)).toHaveLength(2);
+  });
+  it("a photo sent from the phone keeps its media id, and its caption is the text", async () => {
+    await deliverEchoes([echo({ type: "image", image: { id: "123456", mime_type: "image/jpeg", caption: "La terraza" } })]);
+    expect(fake.read("messages/" + KEY + "/wamid_E1")).toMatchObject({ text: "La terraza", media: { kind: "image", mediaId: "123456" } });
+    expect(convAt(KEY).lastMessageSnippet).toBe("Photo · La terraza");
+  });
+  it("an echo with no customer number, or no wamid, is ignored and writes nothing", async () => {
+    const res = await deliverEchoes([echo({ to: "" }), echo({ id: "" })]);
+    expect(res.body).toMatchObject({ echoes: 0, ignored: 2 });
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("staff deleting a phone reply on the phone empties it on the MGT side too", async () => {
+    await deliverEchoes([echo()]);
+    const res = await deliverEchoes([echo({ id: "wamid.E2", type: "revoke", revoke: { original_message_id: "wamid.E1" } })]);
+    expect(res.body).toMatchObject({ edits: 1, echoes: 0 });
+    expect(fake.read("messages/" + KEY + "/wamid_E1")).toMatchObject({ text: WA_REVOKED_OUT, source: "phone" });
+    expect(msgsAt(KEY)).toHaveLength(1);
+  });
+  it("one failing echo is counted and the next is still stored", async () => {
+    fake.state.failWrite = (op, path) => path.endsWith("wamid_E1");
+    const res = await deliverEchoes([echo(), echo({ id: "wamid.E2" })]);
+    expect([res.statusCode, res.body]).toMatchObject([200, { echoes: 1, errors: 1 }]);
+  });
+});
+
+describe("wa-inbound — a customer edits or deletes a message (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("an edit replaces the stored text and marks it edited: no new bubble, no parse, and the list's line follows", async () => {
+    await deliver(hola());
+    const before = scheduled.length;
+    const res = await deliver({ messages: [editOf("wamid.IN1", "hola, mesa para 2")] });
+    expect(res.body).toMatchObject({ edits: 1, messages: 0 });
+    expect(inbound()).toHaveLength(1);
+    expect(inbound()[0]).toMatchObject({ id: "wamid_IN1", text: "hola, mesa para 2" });
+    expect(inbound()[0].editedAt).toBeGreaterThan(0);
+    expect(scheduled).toHaveLength(before);
+    expect(convAt(KEY).lastMessageSnippet).toBe("hola, mesa para 2");
+  });
+  it("a delete replaces the text with a line saying so and drops the photo; an edit after it changes nothing", async () => {
+    await deliver({ messages: [inMsg({ type: "image", image: { id: "123456", mime_type: "image/jpeg", caption: "mi foto" } })] });
+    const res = await deliver({ messages: [revokeOf("wamid.IN1")] });
+    expect(res.body).toMatchObject({ edits: 1 });
+    const [m] = inbound();
+    expect(m).toMatchObject({ text: WA_REVOKED_IN });
+    expect(m.media).toBeUndefined();
+    expect(m.revokedAt).toBeGreaterThan(0);
+    expect(convAt(KEY).lastMessageSnippet).toBe(WA_REVOKED_IN);
+    expect((await deliver({ messages: [editOf("wamid.IN1", "back again")] })).body).toMatchObject({ edits: 0, skipped: 1 });
+    expect(inbound()[0].text).toBe(WA_REVOKED_IN);
+  });
+  it("an edit whose original was never stored is kept as a new message under the edit's id", async () => {
+    const res = await deliver({ messages: [editOf("wamid.GONE", "mesa para 3")] });
+    expect(res.body).toMatchObject({ messages: 1, edits: 0 });
+    expect(inbound()).toEqual([expect.objectContaining({ id: "wamid_ED1", text: "mesa para 3" })]);
+  });
+  it("a delete whose original was never stored has nothing to delete", async () => {
+    const res = await deliver({ messages: [revokeOf("wamid.GONE")] });
+    expect(res.body).toMatchObject({ skipped: 1, messages: 0 });
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("an edit or a delete finds a message by its providerMsgId too", async () => {
+    fake.state.tree = { messages: { [KEY]: { in7: { id: "in7", direction: "in", text: "old", ts: 1, providerMsgId: "wamid.X" } } } };
+    await deliver({ messages: [editOf("wamid.X", "new")] });
+    expect(fake.read("messages/" + KEY + "/in7")).toMatchObject({ text: "new" });
+  });
+});
+
+describe("echoConvPatch / editedText / editPatch / revokePatch", () => {
+  it("the snippet and time move only forward; a muted conversation stays archived", () => {
+    expect(echoConvPatch({ lastMessageAt: 100 }, { ts: 50, snippet: "x" })).toEqual({ unread: false, autoAckSent: true });
+    expect(echoConvPatch({ lastMessageAt: 100 }, { ts: 100, snippet: "x" })).toMatchObject({ lastMessageAt: 100, lastMessageSnippet: "x" });
+    expect(echoConvPatch({ archived: true, muted: true }, { ts: 1, snippet: "x" })).not.toHaveProperty("archived");
+    expect(echoConvPatch({ archived: true }, { ts: 1, snippet: "x" })).toMatchObject({ archived: false, archivedAt: null });
+  });
+  it("an edit's text is a text's body or a caption, with or without a type on the edited message", () => {
+    expect(editedText({ type: "edit", edit: { message: { type: "text", text: { body: "a" } } } })).toBe("a");
+    expect(editedText({ type: "edit", edit: { message: { text: { body: "b" } } } })).toBe("b");
+    expect(editedText({ type: "edit", edit: { message: { type: "image", image: { caption: "c" } } } })).toBe("c");
+    expect(editedText({ type: "edit", edit: { message: { type: "sticker", sticker: {} } } })).toBeNull();
+    expect(editedText({ type: "edit" })).toBeNull();
+  });
+  it("a caption edited away leaves the photo's label; a deleted message takes no edit and no second delete", () => {
+    expect(editPatch({ text: "x", media: { kind: "image", mediaId: "1" } }, "  ", 5)).toEqual({ text: "Photo", editedAt: 5 });
+    expect(editPatch({ text: "x", revokedAt: 1 }, "y", 5)).toBeNull();
+    expect(editPatch({ text: "x" }, null, 5)).toBeNull();
+    expect(revokePatch({ direction: "out", text: "x" }, 5)).toEqual({ text: WA_REVOKED_OUT, media: null, revokedAt: 5 });
+    expect(revokePatch({ direction: "in", revokedAt: 1 }, 5)).toBeNull();
+  });
+});
+
 describe("inboundContent", () => {
   it("a text that is only spaces is stored and not parsed", () => {
     expect(inboundContent({ type: "text", text: { body: "  " } })).toEqual({ text: "  ", media: null, snippet: "  ", parseText: null });
   });
   it("an audio's caption, should one ever arrive, is not read", () => {
     expect(inboundContent({ type: "audio", audio: { id: "1", caption: "hola" } })).toMatchObject({ text: "Audio", parseText: null });
+  });
+  it("a message only the Business app can show (131060) says so; another unsupported one is a message to read on the phone", () => {
+    expect(inboundContent({ type: "unsupported", errors: [{ code: 131060, title: "Unsupported" }] })).toEqual({ text: WA_UNSUPPORTED_LINE, media: null, snippet: WA_UNSUPPORTED_LINE, parseText: null });
+    expect(inboundContent({ type: "unsupported", errors: [{ code: 131051 }] }).text).toBe("Message — open WhatsApp on the phone to see it");
   });
   it("a message with no type at all is a message to read on the phone", () => {
     expect(inboundContent({}).text).toBe("Message — open WhatsApp on the phone to see it");
