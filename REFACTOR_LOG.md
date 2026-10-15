@@ -35965,6 +35965,15 @@ its own commit.
    the attached file while sending take the same class on the same condition; not measured
    live.
 
+6. **A phone on the network reaches the local WhatsApp backend** (dev tooling only). The DEV
+   app called the harness at `http://localhost:3999`, which on the iPhone meant the iPhone, so
+   backend mode there broke every send and the paperclip (shown only in backend mode) could
+   not be tested. `WA_BACKEND_URL` now takes the page's host in DEV, and the harness answers
+   CORS for private-network origins as well as localhost (`DEV_ORIGIN_RE`); it already
+   listened on every interface. A production build still calls `/api/*` on its own origin.
+   Signing in on a phone also needs the phone's origin on the DEV API key's website
+   restrictions, which Patryk added for `http://192.168.1.34:5173/*`.
+
 ### Deploy steps (Patryk)
 
 1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random

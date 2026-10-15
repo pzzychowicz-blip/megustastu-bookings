@@ -29,9 +29,13 @@ import { auth } from "../firebase";
 import { WA_SANDBOX } from "./waSandbox";
 
 // Where the real pipeline lives:
-//   · DEV (dev server)     → the local harness on :3999
+//   · DEV (dev server)     → the local harness on :3999, on the SAME HOST as the
+//                            page (v18.8.0 follow-up): a phone that opened the
+//                            dev server at the Mac's LAN address reaches the
+//                            harness there, where "localhost" meant the phone
 //   · deployed sandbox     → same-origin ("") so /api/* hits the Vercel functions
-export const WA_BACKEND_URL = import.meta.env.DEV ? "http://localhost:3999" : "";
+const DEV_HOST = typeof location !== "undefined" && location.hostname ? location.hostname : "localhost";
+export const WA_BACKEND_URL = import.meta.env.DEV ? "http://" + DEV_HOST + ":3999" : "";
 const FLAG_KEY = "mgt-wa-backend";
 
 // Backend mode is available wherever the sandbox surfaces are (dev server OR a

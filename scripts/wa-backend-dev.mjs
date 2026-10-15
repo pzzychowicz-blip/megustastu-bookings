@@ -10,7 +10,8 @@
 //     NEVER set that on Vercel — Meta signatures are enforced there)
 //   · adapts node's (req,res) to the Vercel handler shape (req.query +
 //     res.status().json()/send() chain)
-//   · CORS for the Vite dev app (localhost:5176) — needed locally because the
+//   · CORS for the Vite dev app (localhost, or a LAN device on a private
+//     address: DEV_ORIGIN_RE) — needed locally because the
 //     app and this harness are different ports; in production /api/* is same-
 //     origin on Vercel and no CORS applies
 //   · routes:  GET  /health             liveness + active modes
@@ -106,9 +107,16 @@ function readBody(req) {
 // generateCustomerReply now lives in api/_lib/gemini.js (imported above) so the
 // online api/wa-sim-suggest and this /dev route share one prompt + Gemini call.
 
+// The dev app on this machine (localhost) or on a device on the same network,
+// which opens the dev server at this machine's private address (v18.8.0
+// follow-up: the iPhone and the tablet). Private ranges only; the harness
+// already listens on every interface, so this changes what a BROWSER on the
+// LAN may read, not what can reach it.
+const DEV_ORIGIN_RE = /^http:\/\/(localhost|127\.0\.0\.1|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}):\d+$/;
+
 function cors(req, res) {
   const origin = req.headers.origin || "";
-  if (/^http:\/\/localhost:\d+$/.test(origin)) {
+  if (DEV_ORIGIN_RE.test(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Headers", "authorization, content-type, x-caption, x-filename");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
