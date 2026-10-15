@@ -176,10 +176,13 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
       setBusyKey(key);
       setNoteState(null);
       try {
-        await onSendMedia(att.blob, { mime: att.mime, filename: att.kind === "document" ? att.name : "", caption });
+        const r = await onSendMedia(att.blob, { mime: att.mime, filename: att.kind === "document" ? att.name : "", caption });
         setAttState((cur) => (cur && cur.key === key ? null : cur));
         // The text was this thread's caption, wherever you are now.
         setTxt("", key);
+        // The customer has it, and the thread does not (the server could not
+        // store it): said here, so nobody sends it a second time.
+        if (r && r.stored === false) setNoteState({ key, text: "Sent to the customer, but it could not be saved in this thread. Don’t send it again." });
       } catch (e) {
         // The server says "send failed: <Meta's reason>"; the sentence already says it.
         const why = e && e.message ? e.message.replace(/^send failed:\s*/i, "") : "unknown error";

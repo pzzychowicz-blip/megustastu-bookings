@@ -164,6 +164,12 @@ describe("the reply composer keeps its text and its file with their thread", () 
   it("a sent caption is cleared in the thread it was sent from, wherever staff are now", () => {
     expect(Composer).toMatch(/setTxt\("", key\);/);
   });
+  // /code-review: the server answers `stored: false` when the customer got the
+  // file and the database did not take it; a failure there invited a resend.
+  it("a file the customer got but the thread could not keep is said, and not kept to send again", () => {
+    expect(Composer).toMatch(/const r = await onSendMedia\(/);
+    expect(Composer).toMatch(/if \(r && r\.stored === false\) setNoteState\(\{ key, text: "Sent to the customer, but it could not be saved in this thread\. Don’t send it again\." \}\);/);
+  });
 });
 
 describe("the simulator's media (wa-mock-media.js)", () => {

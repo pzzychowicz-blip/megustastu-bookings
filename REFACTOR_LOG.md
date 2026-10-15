@@ -35842,6 +35842,16 @@ its own commit.
    goes through it. On DEV, a seeded conversation deleted from the Archived tab left neither
    `conversations/<key>` nor `messages/<key>`.
 
+3. **A photo the customer received could be reported as not sent.** Once Meta has accepted
+   the message, a failure to store it escaped as a 500, the composer said "Couldn't send …
+   The file is still attached", and a second press sent the same file again. Reproduced with
+   a database double that refuses the message write. `POST /api/wa-media` now answers 200 with
+   `stored: false` (a failed conversation-line update after a stored message is only logged),
+   and the composer clears the file and says "Sent to the customer, but it could not be saved
+   in this thread. Don't send it again." Not reproduced on DEV: nothing there makes the Admin
+   SDK's write fail on demand. The text send (`api/wa-send.js`) has the same shape and is
+   unchanged; its failure goes to the write-warning banner, which offers no resend.
+
 ### Deploy steps (Patryk)
 
 1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random

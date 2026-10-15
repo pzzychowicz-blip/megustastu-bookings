@@ -46,7 +46,10 @@ const fake = vi.hoisted(() => {
   const db = {
     ref: (path) => ({
       get: async () => { const v = read(path); return { exists: () => v !== undefined && v !== null, val: () => (v === undefined ? null : v) }; },
-      set: async (v) => { state.writes.push({ op: "set", path, value: v }); write(path, v); },
+      set: async (v) => {
+        if (state.failWrite && state.failWrite("set", path)) throw new Error("database unavailable");
+        state.writes.push({ op: "set", path, value: v }); write(path, v);
+      },
       update: async (patch) => {
         if (state.failWrite && state.failWrite("update", path)) throw new Error("database unavailable");
         state.writes.push({ op: "update", path, value: patch });
@@ -1184,6 +1187,21 @@ describe("wa-media POST — a photo or a PDF sent", () => {
     await sendFile();
     expect(convAt(KEY).archived).toBe(false);
     expect("archivedAt" in convAt(KEY)).toBe(false);
+  });
+
+  // /code-review: Meta had the photo, the database write failed, and the
+  // answer was a 500, so the composer said "Couldn't send … still attached"
+  // and a second press sent the customer the same photo twice.
+  it("a send that reached the customer is a 200 even when storing it fails, and says it was not stored", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    fake.state.failWrite = (op, path) => op === "set" && path.startsWith("messages/");
+    const res = await sendFile({ caption: "La carta" });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, stored: false, status: "delivered" });
+    expect(msgsAt(KEY)).toEqual([]);
+    expect(console.error).toHaveBeenCalledWith(expect.stringMatching(/sent, but not stored/), "database unavailable");
+    fake.state.failWrite = null;
+    expect((await sendFile()).body).toMatchObject({ ok: true, stored: true });
   });
 
   it("the photo it stored opens: in mock mode the GET answers the bundled sample for the stored id", async () => {

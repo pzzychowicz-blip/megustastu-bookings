@@ -54,7 +54,8 @@
 // half-sent request behind it. Then ONE upload and ONE /messages call
 // (`sendMedia`: the caption is inside the message), and the outbound message is
 // stored with `media` and `authorEmail`, the snippet updated and the
-// conversation un-archived, as api/wa-send.js does for a text.
+// conversation un-archived, as api/wa-send.js does for a text. Once Meta has
+// it, a failed store is still a 200, with `stored: false`: the file went.
 //
 // ── Mock media ───────────────────────────────────────────────────────────────
 // The simulator's ids are `MOCK.<kind>.<id>`. While WA_SEND_MODE is mock, a
@@ -291,11 +292,28 @@ async function send(req, res) {
   // message is kept without `media` rather than not at all.
   if (media) msg.media = media;
   else console.error("[wa-media] Meta's media id did not pass the stored check; kept the message without it");
-  await appendMessage(phoneKey, msg);
-  const patch = { lastMessageAt: ts, lastMessageSnippet: snippet(mediaSnippet(media || { kind }, text)) };
-  if (conv.archived) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
-  await upsertConversation(phoneKey, patch);
-  res.status(200).json({ ok: true, msgId, wamid: sent.wamid || null, status: sent.status, mediaId });
+  // The customer HAS it now, whatever the database says next (/code-review).
+  // A failed write was a 500, the composer then said "Couldn't send … still
+  // attached", and a second press sent the same file twice. So a store that
+  // fails is a 200 that says so (`stored: false`), and the composer tells
+  // staff it went and is not in the thread, instead of offering it again.
+  let stored = true;
+  try {
+    await appendMessage(phoneKey, msg);
+  } catch (e) {
+    stored = false;
+    console.error("[wa-media] sent, but not stored:", e && e.message);
+  }
+  if (stored) {
+    const patch = { lastMessageAt: ts, lastMessageSnippet: snippet(mediaSnippet(media || { kind }, text)) };
+    if (conv.archived) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
+    try {
+      await upsertConversation(phoneKey, patch);
+    } catch (e) {
+      console.error("[wa-media] stored, but the conversation line was not updated:", e && e.message);
+    }
+  }
+  res.status(200).json({ ok: true, stored, msgId, wamid: sent.wamid || null, status: sent.status, mediaId });
 }
 
 export default async function handler(req, res) {
