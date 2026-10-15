@@ -35248,8 +35248,11 @@ re-attach per render. `messagesMap` keeps its shape and holds only the watched k
   `baselineRef` takes the baseline from the first LOADED render.
 - **`clearAllWaData`** (the simulator's hard reset) still deletes every conversation key
   plus every watched key; a message subtree whose conversation row is already gone is no
-  longer seen there. Every delete in the app removes both halves in one write, and the
-  daily prune (phase 7) clears such a subtree once it is old.
+  longer seen there. ~~Every delete in the app removes both halves in one write, and the
+  daily prune (phase 7) clears such a subtree once it is old.~~ Neither was true when
+  written: the inbox's Delete made two writes, and the prune finds a thread only through its
+  conversation row. The `/code-review` below (item 2) made every delete one write, which is
+  what keeps such a subtree from existing.
 
 **Verified on DEV** (the Firebase connection's own listen table,
 `db._repo.persistentConnection_.listens`): inbox closed → `/conversations` only; inbox
