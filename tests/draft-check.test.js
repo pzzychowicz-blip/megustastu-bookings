@@ -173,6 +173,18 @@ describe("draftPrefill — one rule for Accept and for the waitlist", () => {
     expect(draftPrefill(conv({ name: "Pau" }), list).name).toBe("Pau");
     expect(draftPrefill(conv({}, { phone: "34600111222" }), []).phone).toBe("+34600111222");
   });
+  it("then the WhatsApp profile name, last: typed and known names win over it", () => {
+    const list = [bk({ name: "Ana López", phone: "+34600111222", status: "completed", date: "2099-01-01" })];
+    // A real customer who types no name, and is not known yet.
+    expect(draftPrefill(conv({}, { profileName: " Patryk " }), []).name).toBe("Patryk");
+    // Known on this phone: the name staff have is kept.
+    expect(draftPrefill(conv({}, { profileName: "Patryk" }), list).name).toBe("Ana López");
+    // Typed in the message: that wins over both.
+    expect(draftPrefill(conv({ name: "Pau" }, { profileName: "Patryk" }), list).name).toBe("Pau");
+    // Nothing anywhere, or a profile name that is not text: empty, as before.
+    expect(draftPrefill(conv({}), []).name).toBe("");
+    expect(draftPrefill(conv({}, { profileName: 42 }), []).name).toBe("");
+  });
   it("Accept's fallbacks for a draft it opens anyway", () => {
     const p = draftPrefill({ phoneKey: "+44", draftData: { preference: "indoor", notes: "terrace" } }, []);
     expect(p).toMatchObject({ size: 2, time: "13:00", preference: "indoor", notes: "terrace" });

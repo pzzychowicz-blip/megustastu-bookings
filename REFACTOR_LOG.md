@@ -35904,6 +35904,26 @@ its own commit.
    unmounts on Back and its text and file go with it, as before; my first reading of this
    finding was taken there, at 526px, and measured that rather than the slot.
 
+### Follow-up (2026-10-15, before the merge)
+
+1. **Accept fills Name from the WhatsApp profile name** (Patryk: "the parsing stopped finding
+   the name"). It had not stopped. Measured on DEV through the harness with live Gemini: four
+   phrasings ("soy Marta Ruiz", a "Gracias, Lucía" sign-off, a follow-up "My name is John
+   Smith", "this is Peter") and a Re-check each put the name in the draft, and Accept filled
+   the form with it. What a real phone did differently was not type a name: the sandbox
+   conversation from Patryk's own phone (14.10) held a `profileName`, which Meta sends with
+   every message, and no message naming him, so `draftPrefill` had nothing to read. It now
+   falls back to the profile name LAST: the name typed in the message, else the name on this
+   phone's past bookings, else the profile name (Patryk's order; a profile name is a nickname
+   or an emoji as often as a name). Accept and Add to waitlist both read `draftPrefill`, so
+   both gain it. Verified on DEV: a simulated customer whose profile is "Lucía Gómez" writing
+   "Mesa para 2 mañana a las 14:00" opens the form with Name "Lucía Gómez". The simulator's
+   customer has the profile name "Sim Customer" unless the panel gives one, so a simulated
+   draft that states no name now opens with that. Locally the harness timed every parse out
+   at 15 s first: the `.env.local` it was copied from pinned `GEMINI_MODEL=gemini-3.1-flash-lite`;
+   without the line it uses the default, `gemini-3.5-flash-lite`, which answered in about 5 s.
+   A local file, not in the repo.
+
 ### Deploy steps (Patryk)
 
 1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random

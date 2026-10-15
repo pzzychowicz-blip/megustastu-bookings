@@ -443,7 +443,7 @@ export function useWhatsApp({
   // v18.8.0 phase 8: `over.time` opens the form at another time (a time chip
   // on the draft card), and the fields come from `draftPrefill`
   // (lib/draft-check.js), the rule the card's Add to waitlist reads too: the
-  // name is the draft's or the customer's, the phone the conversation's with
+  // name is the draft's, the customer's or the WhatsApp profile's, the phone the conversation's with
   // its "+", the seating indoor/outdoor or "auto".
   function handleAcceptDraft(conv, over) {
     if (!conv || !conv.draftData) return;

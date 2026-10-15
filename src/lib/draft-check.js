@@ -124,17 +124,27 @@ export function draftCheckLine(draft, r) {
 }
 
 // The booking a draft becomes: the fields Accept opens the form with and the
-// waitlist entry takes. One rule for the name (the draft's, else the customer's
-// from their bookings) and for the phone (the conversation's, with its "+"), so
-// the two doors cannot fill them differently. The fallbacks are Accept's: a
-// draft with no usable time still opens the form, at 13:00, for staff to fix.
+// waitlist entry takes. One rule for the name and for the phone (the
+// conversation's, with its "+"), so the two doors cannot fill them
+// differently. The fallbacks are Accept's: a draft with no usable time still
+// opens the form, at 13:00, for staff to fix.
+//
+// The name, in order: the one the customer TYPED (the parse's), else the one
+// on this phone's past bookings (a name staff typed or confirmed), else the
+// WhatsApp profile name Meta sends with every message (`profileName`).
+// v18.8.0 follow-up (Patryk's order, 2026-10-15): a real customer rarely types
+// their name, so from a real phone the field opened empty while the
+// conversation held the profile name all along; the parse only ever read the
+// text. The profile name is last because it is whatever the customer calls
+// themselves on WhatsApp, a nickname or an emoji as often as a name.
 export function draftPrefill(conv, bookings) {
   const d = conv.draftData || {};
   const match = matchCustomerByPhone(conv.phoneKey, bookings);
   let phone = conv.phone || conv.phoneKey || "+";
   if (phone && phone.charAt(0) !== "+") phone = "+" + phone;
+  const profile = typeof conv.profileName === "string" ? conv.profileName.trim() : "";
   return {
-    name: (d.name && d.name.trim()) || (match && match.name) || "",
+    name: (d.name && d.name.trim()) || (match && match.name) || profile,
     phone: phone,
     size: Number(d.size) || 2,
     date: d.date || todayStr(),
