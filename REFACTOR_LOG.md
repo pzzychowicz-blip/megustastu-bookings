@@ -35878,6 +35878,14 @@ its own commit.
    photo. The backend harness on :3999 was another process with no database access, so
    it was stubbed rather than used.
 
+6. **Text typed while a file uploaded was erased when it arrived.** The box stays editable
+   during the upload, and a success cleared the whole draft. Now the draft as it was sent is
+   taken off the front of whatever is there, and the rest stays. Measured on DEV with the
+   media POST stubbed to answer after 1.5 s: caption "Our menu", Enter, then " Shall I book
+   you?" typed during the upload; the request carried "Our menu", and the box was left
+   holding "Shall I book you?". A draft edited in the middle during the upload is kept
+   whole: what was sent can no longer be told apart from it.
+
 ### Deploy steps (Patryk)
 
 1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random

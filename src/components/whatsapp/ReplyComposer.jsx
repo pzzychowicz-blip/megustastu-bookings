@@ -173,13 +173,17 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
     if (att) {
       if (busy || captionLong || !onSendMedia) return;
       const key = threadKey;
+      // The draft as it was sent. The box stays editable during the upload, so
+      // what is typed after it must survive the send (/code-review): the sent
+      // caption is taken off the front, and anything else is left as it is.
+      const sent = txt;
       setBusyKey(key);
       setNoteState(null);
       try {
         const r = await onSendMedia(att.blob, { mime: att.mime, filename: att.kind === "document" ? att.name : "", caption });
         setAttState((cur) => (cur && cur.key === key ? null : cur));
         // The text was this thread's caption, wherever you are now.
-        setTxt("", key);
+        setTxt((cur) => (cur.startsWith(sent) ? cur.slice(sent.length).replace(/^\s+/, "") : cur), key);
         // The customer has it, and the thread does not (the server could not
         // store it): said here, so nobody sends it a second time.
         if (r && r.stored === false) setNoteState({ key, text: "Sent to the customer, but it could not be saved in this thread. Don’t send it again." });

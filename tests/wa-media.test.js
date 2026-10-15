@@ -163,7 +163,13 @@ describe("the reply composer keeps its text and its file with their thread", () 
     expect(Composer).toMatch(/const preparing = readyKey !== null && readyKey === threadKey;/);
   });
   it("a sent caption is cleared in the thread it was sent from, wherever staff are now", () => {
-    expect(Composer).toMatch(/setTxt\("", key\);/);
+    expect(Composer).toMatch(/setTxt\(\(cur\) => \(cur\.startsWith\(sent\) \? cur\.slice\(sent\.length\)\.replace\(\/\^\\s\+\/, ""\) : cur\), key\);/);
+  });
+  // /code-review: the box stays editable during the upload, and a success
+  // cleared the whole draft, so whatever was typed meanwhile was lost.
+  it("text typed while the file uploads survives the send", () => {
+    expect(Composer).toMatch(/const sent = txt;/);
+    expect(Composer).not.toMatch(/setTxt\("", key\)/);
   });
   // /code-review: the server answers `stored: false` when the customer got the
   // file and the database did not take it; a failure there invited a resend.
