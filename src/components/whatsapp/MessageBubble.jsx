@@ -95,7 +95,12 @@ function MediaPhoto({ phoneKey, msg, onOpenPhoto }) {
     return (
       <div ref={boxRef} role="img" aria-label="Photo, loading" style={Object.assign({}, box, {
         display: "flex", alignItems: "center", justifyContent: "center", background: "var(--wa-media-wait)",
-      })}><span className="mgt-dot-pulse" style={{ opacity: 0.6, display: "flex" }}><PhotoIcon size={IC.chrome} /></span></div>
+      })}>
+        {/* The dim and the pulse on two spans: a running animation overrides an
+            inline opacity on the same element, so on one span the icon breathed
+            up to full strength (/code-review). */}
+        <span style={{ opacity: 0.6, display: "flex" }}><span className="mgt-dot-pulse" style={{ display: "flex" }}><PhotoIcon size={IC.chrome} /></span></span>
+      </div>
     );
   }
   return (
