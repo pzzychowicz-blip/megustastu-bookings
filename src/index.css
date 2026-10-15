@@ -577,6 +577,11 @@
      value — the two-names-for-one-concept trap CLAUDE.md names, and the
      reason a green surface could sit outside the green family's audit. */
   --wa-draft-bg: rgba(254, 252, 232, 0.6);  --wa-draft-border: rgba(253, 224, 71, 0.65);  --wa-draft-text: #854d0e;  --wa-draft-text-dim: #713f12;
+  /* v18.8.0 follow-up: the parsing sweep's highlight. It was read with a
+     fallback and never defined, so every theme drew a 0.18 BLUE over the
+     yellow bar, which measured as next to invisible (Patryk: "parsing should
+     show that something is working"). The draft ink, so it reads on the bar. */
+  --wa-shimmer: rgba(133, 77, 14, 0.45);
   --wa-btn-open: rgb(0, 122, 255);
   --wa-btn-handled: rgb(13, 148, 136);
   --wa-unread-dot: #dc2626;
@@ -876,6 +881,7 @@
   --wa-divider: rgba(255, 255, 255, 0.1);
   --wa-bubble-in: rgba(255, 255, 255, 0.1);   --wa-bubble-in-border: rgba(255, 255, 255, 0.14);
   --wa-draft-bg: rgba(72, 60, 15, 0.3);  --wa-draft-border: rgba(253, 224, 71, 0.4);  --wa-draft-text: #fde68a;  --wa-draft-text-dim: #fcd34d;
+  --wa-shimmer: rgba(253, 230, 138, 0.6);
   /* v17.9.1: light halo on the dark plan (see :root for the reasoning) */
   --glyph-halo: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
 }
@@ -1687,11 +1693,21 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; }
    nothing arrives and nothing leaves and neither direction curve describes
    it — the same documented exception as .mgt-dot-pulse. Same for mgt-spin
    below, which is linear for the same reason. */
-@keyframes mgt-shimmer { from { background-position: -160px 0; } to { background-position: 160px 0; } }
-.mgt-shimmer {
-  background-image: linear-gradient(90deg, transparent 0%, var(--wa-shimmer, rgba(0,122,255,0.18)) 50%, transparent 100%);
-  background-size: 160px 100%;
-  background-repeat: no-repeat;
+/* v18.8.0 follow-up: the highlight is a ::after band 40% of the bar wide,
+   moved by TRANSFORM from just off the left edge to just off the right one
+   (250% of its own width = the bar's full width), where the old sweep moved
+   a 160px background from -160px to +160px and so never crossed more than
+   the first 320px of a ~440px bar, repainting every frame as it went. At
+   rest (and once reduced motion has collapsed the loop) the band sits off
+   the left edge, so a stopped sweep leaves a plain bar and the words. */
+@keyframes mgt-shimmer { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+.mgt-shimmer { position: relative; overflow: hidden; }
+.mgt-shimmer::after {
+  content: "";
+  position: absolute; top: 0; bottom: 0; left: 0; width: 40%;
+  background-image: linear-gradient(90deg, transparent 0%, var(--wa-shimmer) 50%, transparent 100%);
+  transform: translateX(-100%);
+  pointer-events: none;
   animation: mgt-shimmer 1100ms ease-in-out infinite;
 }
 

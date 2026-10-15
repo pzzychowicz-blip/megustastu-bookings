@@ -397,7 +397,11 @@ export function ConversationView({
             of CONTENT, not of surface. --wa-draft-border stays below as the
             shimmer bar's fill, where it is decoration rather than a rim. */}
         <div style={{ marginBottom: 12, padding: "12px 14px", borderRadius: R.card, background: "var(--wa-draft-bg)", border: "1px solid var(--border-card)", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ color: "var(--wa-draft-text)", display: "inline-flex" }}><DraftIcon size={IC.control} /></span>
+          {/* v18.8.0 follow-up: the icon breathes (`.mgt-dot-pulse`, the
+              loop DraftCard's "Checking the tables…" dot already uses) beside
+              the sweep below, so the card says "working" even where the bar is
+              out of the eye's way. */}
+          <span className="mgt-dot-pulse" style={{ color: "var(--wa-draft-text)", display: "inline-flex" }}><DraftIcon size={IC.control} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--wa-draft-text)", marginBottom: 6 }}>Reading the message…</div>
             <div className="mgt-shimmer" style={{ height: 8, borderRadius: R.pill, background: "var(--wa-draft-border)" }} />

@@ -62,6 +62,7 @@ const CRITICAL_SELECTORS = [
   ".mgt-appear",                      // fade-in-to-own-opacity (timeline ghosts)
   ".mgt-fade-in",                     // Settings tab crossfade
   ".mgt-dot-pulse",                   // the "busy" toast dot
+  ".mgt-shimmer::after",              // the WhatsApp parsing sweep (v18.8.0 follow-up): gone, the bar just sits still
   ".mgt-ac-row",                      // row/card/panel tint — AND their resting fill
   ".mgt-glyph",                       // floor-plan table hover halo + press dim
   "[data-kbd] .mgt-glyph:focus",      // the plan table's keyboard ring (:focus-visible does not match SVG)
