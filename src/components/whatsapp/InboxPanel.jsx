@@ -31,7 +31,8 @@ import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
 import { SelectIcon, FlaskIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
 import { CloseIcon, EditIcon, TrashIcon } from "../Icons";
-import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Reveal, MODAL_TITLE_ATTR } from "../atoms";
+import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Reveal, InlineAlert, MODAL_TITLE_ATTR } from "../atoms";
+import { disconnectSentence } from "../../lib/wa-coexist";
 import { R, T, FW, M, IC, H } from "../../lib/constants";
 // v18.2.0 /code-review: "3 selected", "Delete 3 conversations?" keep their count and word together.
 import { countLabel } from "../../lib/booking-logic";
@@ -446,6 +447,7 @@ export function InboxPanel({
   const activeMessages = activeConv ? messages[activeConv.phoneKey] : undefined;
   const kbFold = !!activeConv && typing === activeConv.phoneKey && short && !shown;
   const unreadCount = conversations.filter((c) => c.unread && !c.archived && !c.muted).length;
+  const linkDown = !!(waLink && waLink.status === "disconnected");
   const archivedCount = conversations.filter((c) => c.archived).length;
 
   const listEl = (
@@ -548,6 +550,19 @@ export function InboxPanel({
             <button onClick={() => setShowTpl(true)} title="Edit templates (T)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), HEAD_TEXT_BTN)}><EditIcon size={IC.inline} />Edit templates</button>
           </div>
           <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1, order: twoPane ? 0 : 1, marginLeft: twoPane ? 0 : "auto" })}><CloseIcon size={IC.chrome} /></button>
+        </div>
+        {/* v18.9.0: the WhatsApp Business app's connection is broken (Meta's
+            account_update, recorded on waLink by the server): every device's
+            inbox says so, and why, until it is connected again. Inside the
+            title bar's fold, so it makes room while a reply is typed; the
+            `role="alert"` is always mounted, outside the Reveal, so the
+            disconnection is announced when it happens. */}
+        <div role="alert">
+          <Reveal show={linkDown}>
+            <div style={{ padding: "8px 14px 0" }}>
+              <InlineAlert>{disconnectSentence(waLink && waLink.disconnect)}</InlineAlert>
+            </div>
+          </Reveal>
         </div>
         {/* Search + Needs-action filter toolbar — filters the list + ↑/↓ nav.
             Order (Patryk, 2026-07-16): Select, then Needs action, then the

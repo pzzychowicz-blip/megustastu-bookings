@@ -289,7 +289,7 @@ export default async function handler(req, res) {
         const coexist = Object.prototype.hasOwnProperty.call(COEXIST_HANDLERS, field) ? COEXIST_HANDLERS[field] : null;
         if (!coexist) { results.ignored++; continue; } // a field this webhook does not handle
         try {
-          const out = await coexist(value, results);
+          const out = await coexist(value, results, undefined, { wabaId: entry && entry.id ? String(entry.id) : "" });
           if (out && out.retry) retry = true;
         } catch (e) {
           results.errors++;

@@ -120,7 +120,7 @@ import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "
 import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { numberIsOurs, makeNumberGuard } from "../api/_lib/coexist-core.js";
-import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyStatus, WA_IMPORT_ARCHIVE_MS } from "../src/lib/wa-coexist.js";
+import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyStatus, WA_IMPORT_ARCHIVE_MS, disconnectSentence } from "../src/lib/wa-coexist.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
 import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE } from "../src/lib/whatsapp.js";
@@ -1322,6 +1322,50 @@ describe("wa-inbound and the simulator — a muted conversation (v18.9.0)", () =
     const r = await injectSimInbound({ phone: KEY, text: "Mesa para 4 personas mañana a las 21:00", name: "Sim" }, (p) => { later = p; });
     expect(r).toMatchObject({ skipped: false, muted: true });
     expect(later).toBeNull();
+  });
+});
+
+// ── Phase 7: the connection itself (account_update) ─────────────────────────
+const accountEvent = (event, info) => deliverChange("account_update", Object.assign({ phone_number: "34600000000", event }, info ? { disconnection_info: info } : {}));
+
+describe("wa-inbound — the connection's own events (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+  const linked = () => ({ waLink: { status: "connected", wabaId: "WABA", phoneNumberId: "111" } });
+
+  it("a disconnection of the connected account is recorded: status, why, and the last event", async () => {
+    fake.state.tree = linked();
+    const res = await accountEvent("PARTNER_REMOVED", { reason: "USER_ACTION", initiated_by: "BUSINESS" });
+    expect(res.body).toMatchObject({ ok: true, events: 1 });
+    const l = fake.read("waLink");
+    expect(l).toMatchObject({ status: "disconnected", wabaId: "WABA", phoneNumberId: "111" });
+    expect(l.disconnect).toMatchObject({ event: "PARTNER_REMOVED", reason: "USER_ACTION", initiatedBy: "BUSINESS" });
+    expect(l.lastEvent).toEqual(l.disconnect);
+  });
+  it("another event keeps the reason staff are shown; a reconnection clears it", async () => {
+    fake.state.tree = linked();
+    await accountEvent("ACCOUNT_OFFBOARDED");
+    await accountEvent("VERIFIED_ACCOUNT");
+    expect(fake.read("waLink")).toMatchObject({ status: "disconnected", disconnect: { event: "ACCOUNT_OFFBOARDED" }, lastEvent: { event: "VERIFIED_ACCOUNT" } });
+    await accountEvent("ACCOUNT_RECONNECTED");
+    const l = fake.read("waLink");
+    expect(l.status).toBe("connected");
+    expect(l.disconnect).toBeUndefined();
+  });
+  it("an event about another account, or with nothing connected, is ignored and writes nothing", async () => {
+    fake.state.tree = { waLink: { status: "connected", wabaId: "OTHER" } };
+    expect((await accountEvent("PARTNER_REMOVED")).body).toMatchObject({ ignored: 1, events: 0 });
+    fake.state.tree = {};
+    expect((await accountEvent("PARTNER_REMOVED")).body).toMatchObject({ ignored: 1, events: 0 });
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("a change with no event is ignored", async () => {
+    fake.state.tree = linked();
+    expect((await deliverChange("account_update", { phone_number: "34600000000" })).body).toMatchObject({ ignored: 1 });
+  });
+  it("the banner's sentence names the event in words and the reason as given", () => {
+    expect(disconnectSentence({ event: "PARTNER_REMOVED", reason: "USER_ACTION" })).toMatch(/^WhatsApp is disconnected from MGT: the connection was removed .* \(user action\)\. Replies from MGT won't send/);
+    expect(disconnectSentence({ event: "ACCOUNT_OFFBOARDED" })).toMatch(/opened at least every 14 days/);
+    expect(disconnectSentence(null)).toMatch(/Meta ended the connection/);
   });
 });
 

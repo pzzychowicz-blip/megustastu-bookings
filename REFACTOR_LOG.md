@@ -36235,3 +36235,34 @@ read, still archived, the window moved), the webhook (no parse queued) and the s
 inbound (none scheduled), the client mode (`tests/wa-sim-feedback.test.js`), and the
 parse-guard pin, which now reads `willParse && !r.muted`. **Not checked live yet**
 (phase 9's pass: the header at phone width, the icon at 14px).
+
+### Phase 7 — the connection's own events (`account_update`) and the inbox banner
+
+`handleAccountUpdate` (`api/_lib/coexist-core.js`) records a coexistence number leaving
+MGT or coming back on `waLink` (`linkAfterEvent`, `src/lib/wa-coexist.js`):
+`PARTNER_REMOVED` and `ACCOUNT_OFFBOARDED` set `status: "disconnected"` and
+`disconnect: {event, reason?, initiatedBy?, at}`; `ACCOUNT_RECONNECTED` sets `connected`
+and deletes `disconnect`; every event is `lastEvent`. `disconnect` is kept apart from
+`lastEvent` so an unrelated event after a disconnection does not replace the reason
+staff are shown. Strings from Meta go through `cleanContactName` (no control
+characters, 80 at most).
+
+**Which account.** An `account_update` carries no phone-number id, so the number guard
+passes it; the handler asks instead whether the delivery's `entry.id` (the WABA) is
+`waLink.wabaId`, which `api/wa-inbound.js` now hands every coexistence handler as a
+fourth argument. With no link at all it is ignored: the sandbox's Meta app also holds
+the test number's account, and an event about that one must not put a red banner on
+the inbox.
+
+**The banner.** With `waLink.status === "disconnected"` the inbox shows, under its title
+bar on every device, "WhatsApp is disconnected from MGT: <why>. Replies from MGT won't
+send until it is connected again in Settings → WhatsApp." (`disconnectSentence`: the
+event in words, Meta's reason lower-cased after it). An `InlineAlert` in a `Reveal`,
+inside an always-mounted `role="alert"`, and inside the title bar's fold, so it makes
+room while a reply is typed. `wa-coexist.js` is now imported by the inbox too, which is
+a lazy chunk (the startup bundle did not move).
+
+Tests: a disconnection recorded, another event keeping the reason, a reconnection, an
+event for another account or with nothing connected writing nothing, a change with no
+event; the sentence; the banner's source (the field it reads, the live region outside
+the Reveal). Settings → WhatsApp's status is phase 8.

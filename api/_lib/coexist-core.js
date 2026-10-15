@@ -24,7 +24,7 @@ import { env } from "./env.js";
 import {
   readWaLink, readWaContactsFor, updateWaContacts, stampWaLinkOnce,
   getConversation, upsertConversation, appendMessage, sanitizeKey, findMessageByWamid, updateMessage,
-  readMessageNode, writeImportedThread, transactWaLink,
+  readMessageNode, writeImportedThread, transactWaLink, updateWaLink,
 } from "./rtdb.js";
 import { inboundContent } from "./inbound-core.js";
 import { snippet, mediaSnippet } from "../../src/lib/whatsapp.js";
@@ -32,6 +32,7 @@ import {
   contactPlan, contactPatch, secondsTs, webhookPhoneKey,
   echoRecord, echoConvPatch, changedMessageId, editedMessage, editedText, editPatch, revokePatch,
   historyStatus, historyRecord, historyConvPatch, historyDeclined, historyProgress,
+  accountEvent, linkAfterEvent,
 } from "../../src/lib/wa-coexist.js";
 
 // The fields this file handles. `messages` is not among them: it stays in
@@ -306,10 +307,34 @@ export async function handleHistory(value, results, now = Date.now()) {
   return retry ? { retry: true } : undefined;
 }
 
-// The handler for each coexistence field, as api/wa-inbound.js dispatches.
-// A handler may answer `{ retry: true }`: the delivery is then answered 500.
+// ── The connection: account_update ───────────────────────────────────────────
+// handleAccountUpdate(value, results, now, { wabaId }) — a disconnection or a
+// reconnection of the number Embedded Signup connected, recorded on `waLink`
+// (`linkAfterEvent`): `status`, `disconnect` (why, for the banner) and
+// `lastEvent`. An account_update carries no phone-number id, so the number
+// guard lets every one through; this one asks instead whether the event is
+// about the CONNECTED account: the delivery's `entry.id` is the WABA, and it
+// must be `waLink.wabaId`. With no link at all (the mock sandbox, a deployment
+// never connected) there is nothing to describe, so it is ignored: the
+// sandbox's Meta app holds the test number's account too, and an event about
+// that one must not put a red banner on the inbox.
+export async function handleAccountUpdate(value, results, now = Date.now(), ctx = {}) {
+  const ev = accountEvent(value, now);
+  if (!ev) { results.ignored++; return; }
+  const link = await readWaLink();
+  const wabaId = link && link.wabaId ? String(link.wabaId) : "";
+  if (!wabaId || (ctx.wabaId && String(ctx.wabaId) !== wabaId)) { results.ignored++; return; }
+  await updateWaLink(linkAfterEvent(ev));
+  results.events++;
+}
+
+// The handler for each coexistence field, as api/wa-inbound.js dispatches:
+// `(value, results, now, { wabaId })`, the last being the delivery's
+// `entry.id`. A handler may answer `{ retry: true }`: the delivery is then
+// answered 500.
 export const COEXIST_HANDLERS = {
   smb_app_state_sync: handleStateSync,
   smb_message_echoes: handleEchoes,
   history: handleHistory,
+  account_update: handleAccountUpdate,
 };

@@ -286,6 +286,12 @@ export async function stampWaLinkOnce(path, value) {
   return !!(r && r.committed && wrote);
 }
 
+// Updates `waLink`'s own fields (update() semantics: null deletes a field).
+// The keys are this code's (`linkAfterEvent`), never a webhook's.
+export async function updateWaLink(patch) {
+  await getDb().ref("waLink").update(patch);
+}
+
 // Rewrites `waLink/<path>` through `fn(current)` in a transaction, so two
 // webhooks landing together each build on the other (history progress).
 export async function transactWaLink(path, fn) {

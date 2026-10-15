@@ -9,8 +9,9 @@
 // without a deployment.
 //
 // Imported under Node ESM by api/_lib, so every specifier carries its `.js`
-// extension (api/CLAUDE.md). Imported in src/ by the simulator alone, which a
-// production build loads through a dead dynamic import.
+// extension (api/CLAUDE.md). Imported in src/ by the simulator and by the
+// inbox (the disconnection banner's sentence), which is a lazy chunk, so it
+// never reaches the startup bundle.
 
 import { normalizePhone, isPhoneKey, mediaLabel, WA_MAX_TEXT_LEN } from "./whatsapp.js";
 
@@ -301,4 +302,56 @@ export function historyProgress(cur, meta, now) {
   next.at = now;
   if (next.progress >= 100 && !next.doneAt) next.doneAt = now;
   return next;
+}
+
+// ── The connection itself (account_update) ───────────────────────────────────
+// Meta tells the business's partner when a coexistence number leaves it or
+// comes back: PARTNER_REMOVED (the business disconnected MGT, in the Business
+// app or in Business Suite; `disconnection_info: { reason, initiated_by }`),
+// ACCOUNT_OFFBOARDED (the number left the connection: the app was not opened
+// for 14 days, or was reinstalled elsewhere), ACCOUNT_RECONNECTED. Any other
+// event is only recorded as the last one seen.
+//
+// `waLink.status` is what the inbox banner and Settings read, and
+// `waLink.disconnect` says why, kept apart from `lastEvent` so an unrelated
+// event after a disconnection does not replace the reason staff are shown.
+export const WA_DISCONNECT_EVENTS = ["PARTNER_REMOVED", "ACCOUNT_OFFBOARDED"];
+export const WA_RECONNECT_EVENT = "ACCOUNT_RECONNECTED";
+
+// What one event is, as `{ event, reason?, initiatedBy?, at }`, or null.
+export function accountEvent(value, now) {
+  const event = value && typeof value.event === "string" ? value.event.trim().toUpperCase() : "";
+  if (!event) return null;
+  const info = value.disconnection_info && typeof value.disconnection_info === "object" ? value.disconnection_info : {};
+  const out = { event, at: now };
+  const reason = cleanContactName(info.reason);
+  const by = cleanContactName(info.initiated_by);
+  if (reason) out.reason = reason;
+  if (by) out.initiatedBy = by;
+  return out;
+}
+
+// linkAfterEvent(ev) → the `waLink` fields one event changes (a patch: a key
+// set to null is deleted).
+export function linkAfterEvent(ev) {
+  const patch = { lastEvent: ev };
+  if (WA_DISCONNECT_EVENTS.indexOf(ev.event) >= 0) {
+    patch.status = "disconnected";
+    patch.disconnect = ev;
+  } else if (ev.event === WA_RECONNECT_EVENT) {
+    patch.status = "connected";
+    patch.disconnect = null;
+  }
+  return patch;
+}
+
+// The sentence the inbox's banner and Settings show for a disconnection.
+const DISCONNECT_WORDS = {
+  PARTNER_REMOVED: "the connection was removed in the WhatsApp Business app or in Business Suite",
+  ACCOUNT_OFFBOARDED: "the number left the connection (the WhatsApp Business app must be opened at least every 14 days)",
+};
+export function disconnectSentence(d) {
+  const why = (d && DISCONNECT_WORDS[d.event]) || "Meta ended the connection";
+  const reason = d && d.reason ? " (" + d.reason.toLowerCase().replace(/_/g, " ") + ")" : "";
+  return "WhatsApp is disconnected from MGT: " + why + reason + ". Replies from MGT won't send until it is connected again in Settings → WhatsApp.";
 }
