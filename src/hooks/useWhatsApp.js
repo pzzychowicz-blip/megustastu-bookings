@@ -76,6 +76,13 @@ export function useWhatsApp({
   const [conversations, setConversations] = useState([]);
   const [messagesMap, setMessagesMap] = useState({}); // { phoneKey: [msg, …] }
   const [templates, setTemplates] = useState(DEFAULT_TEMPLATES);
+  // v18.9.0 — coexistence. `contacts` is the restaurant phone's address book as
+  // the Business app synced it (`waContacts`, keyed by phone key); `waLink` is
+  // the record of the number's connection to the Business app (server-only,
+  // read here). Both are written by the backend alone, so neither has a saver.
+  const [contacts, setContacts] = useState({});
+  const [waLink, setWaLink] = useState(null);
+  const contactsRef = useRef({});
 
   // Write-guard refs — flip true only after each node's first onValue returns.
   // v18.8.0: `messages` is guarded PER KEY, because it is listened to per key
@@ -164,6 +171,25 @@ export function useWhatsApp({
       conversationsLoaded.current = true;
     }, dbError("conversations"));
     return unsub;
+  }, [on]);
+  // v18.9.0: the phone's contacts and the Business-app link. Read whole: the
+  // address book is names keyed by phone, a few hundred small rows, and every
+  // conversation row needs it to name itself. Written only by the backend
+  // (api/_lib/coexist-core.js); the browser's one write is Delete customer's
+  // per-key erase below.
+  useEffect(() => {
+    if (!on) return;
+    const unsubContacts = onValue(ref(db, "waContacts"), (snap) => {
+      const val = snap.val();
+      const next = val && typeof val === "object" && !Array.isArray(val) ? val : {};
+      contactsRef.current = next;
+      setContacts(next);
+    }, dbError("waContacts"));
+    const unsubLink = onValue(ref(db, "waLink"), (snap) => {
+      const val = snap.val();
+      setWaLink(val && typeof val === "object" ? val : null);
+    }, dbError("waLink"));
+    return () => { unsubContacts(); unsubLink(); };
   }, [on]);
   // ── Messages: ONE conversation at a time (v18.8.0) ─────────────────────────
   // There is no permanent `messages` listener any more. It downloaded every
@@ -447,7 +473,7 @@ export function useWhatsApp({
   // its "+", the seating indoor/outdoor or "auto".
   function handleAcceptDraft(conv, over) {
     if (!conv || !conv.draftData) return;
-    const p = draftPrefill(conv, bookings);
+    const p = draftPrefill(conv, bookings, contactsRef.current);
     const date = p.date;
     const time = (over && over.time) || p.time;
     // v18.3.5: through App's `openNew`, which asks `bookingCreate` and clears a
@@ -780,7 +806,7 @@ export function useWhatsApp({
 
   // eraseConversation(phoneKey) — v18.3.1: the WhatsApp half of "Delete
   // customer & all data" (SECURITY.md §3). One atomic update nulls
-  // conversations/<key> and messages/<key>.
+  // conversations/<key>, messages/<key> and, since v18.9.0, waContacts/<key>.
   //
   // Deliberately NOT gated on the loaded refs the savers above check, and not on
   // the module being on: those gates stop a stale device WRITING data over real
@@ -802,7 +828,16 @@ export function useWhatsApp({
       messagesMapRef.current = nextMap;
       setMessagesMap(nextMap);
     }
-    update(ref(db), conversationDeletePatch([phoneKey])).catch(function (err) { console.error("[wa] erase failed for one guest", err); });
+    // v18.9.0: and the MGT copy of the phone's contact for the number (Patryk,
+    // 2026-10-15). The confirm tells staff to delete it from the phone too:
+    // MGT cannot, and the phone is the master, so an edit there brings it back.
+    if (contactsRef.current[phoneKey]) {
+      const nextContacts = Object.assign({}, contactsRef.current);
+      delete nextContacts[phoneKey];
+      contactsRef.current = nextContacts;
+      setContacts(nextContacts);
+    }
+    update(ref(db), conversationDeletePatch([phoneKey], { contacts: true })).catch(function (err) { console.error("[wa] erase failed for one guest", err); });
   }
 
   const unreadCount = conversations.filter((c) => c.unread && !c.archived).length;
@@ -810,6 +845,8 @@ export function useWhatsApp({
   return {
     // data
     conversations, messagesMap, templates,
+    // v18.9.0: the phone's synced contacts and the Business-app link
+    contacts, waLink,
     // savers (used by the simulator core — keyed shape, Phase 1b)
     patchConversation, upsertConversation, appendMessage, patchMessage,
     saveTemplates, clearAllWaData, eraseConversation,

@@ -5,7 +5,7 @@
 // is disabled when the 24h service window has expired.
 
 import { useState, useRef, useEffect } from "react";
-import { matchCustomerByPhone, regularChipLabel, formatPhone, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
+import { matchCustomerByPhone, regularChipLabel, conversationName, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
 import { Reveal, mkSolidBtn, mkDangerBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { RecheckIcon, ArchiveIcon, DraftIcon, RestoreIcon } from "./WaIcons";
@@ -34,6 +34,8 @@ export function ConversationView({
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, compact,
   onRecheck, regularMin, kbFold = false, onUnfold, onOpenPhoto,
+  // v18.9.0: the phone's synced contacts, and whether the first sync landed.
+  contacts, contactsSynced = false,
   // v18.8.0 phase 8: what the draft check needs, from App through InboxPanel.
   liveBookings, tableBlocks, autoOptimizer, waitlist, onAddToWaitlist,
 }) {
@@ -49,9 +51,14 @@ export function ConversationView({
   // v18.2.0 (W4): the number ONCE. An unknown sender's title was the raw key
   // "+447811223344" followed by "+44 7811223344"; now the title is the
   // formatted number and the grey number beside it appears only under a name.
-  const named = !!(match && match.name);
-  const displayName = named ? match.name : formatPhone(conv.phone || conv.phoneKey);
-  const phoneDisplay = named ? formatPhone(conv.phone || conv.phoneKey) : null;
+  // v18.9.0: the name is `conversationName`'s — the phone's contact first.
+  const { title: displayName, phoneLine: phoneDisplay } = conversationName(conv, bookings, contacts);
+  // v18.9.0: "Not saved on the restaurant phone" — only once the first contact
+  // sync has landed (`waLink.contacts.firstAt`). Before it, a number missing
+  // from the synced contacts means "not synced yet", and saying "not saved"
+  // would be a guess. The phone is the master (Patryk, 2026-10-15): saving the
+  // number there is how the name reaches MGT, so the hint says where to do it.
+  const notOnPhone = !!(contactsSynced && contacts && !contacts[conv.phoneKey]);
   const [histOpen, setHistOpen] = useState(false);
   const win = formatWindow(conv.windowExpiresAt);
   const threadRef = useRef(null);
@@ -352,6 +359,7 @@ export function ConversationView({
         <span style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", minWidth: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
         {phoneDisplay ? <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span> : null}
         {regularChip}
+        {notOnPhone ? <OutlineChip tone="neutral" size="small" title="Save this number in the WhatsApp Business app's contacts and its name shows here">Not saved on the restaurant phone</OutlineChip> : null}
         {acceptedBadge}
         {conv.archived ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }}><ArchiveIcon size={IC.inline} />Archived</OutlineChip> : null}
         {windowEl}

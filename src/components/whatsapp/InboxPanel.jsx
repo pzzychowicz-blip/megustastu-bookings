@@ -25,7 +25,7 @@ import { useState, useEffect, useRef } from "react";
 import { useWinW } from "../../hooks/useWinW";
 import { useWinH } from "../../hooks/useWinH";
 import { useShortViewport } from "../../hooks/useShortViewport";
-import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, matchCustomerByPhone, intentBannerVisible } from "../../lib/whatsapp";
+import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, conversationSearchNames, intentBannerVisible } from "../../lib/whatsapp";
 import { ConversationList } from "./ConversationList";
 import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
@@ -102,6 +102,9 @@ const HEAD_TEXT_BTN = { display: "inline-flex", alignItems: "center", justifyCon
 
 export function InboxPanel({
   conversations, messages, templates, bookings, initialActiveKey,
+  // v18.9.0: the phone's synced contacts (`waContacts`) and the Business-app
+  // link (`waLink`), both from useWhatsApp.
+  contacts, waLink,
   // v18.8.0: `watchMessages(phoneKey)` from useWhatsApp — the open thread's
   // listener. `messages` holds only the watched conversations.
   watchMessages,
@@ -175,9 +178,10 @@ export function InboxPanel({
   function matchesFilters(c) {
     if (needsAction && !isActionable(c)) return false;
     if (!q) return true;
-    const m = matchCustomerByPhone(c.phoneKey, bookings);
-    const name = (m ? m.name : (c.phone || c.phoneKey)) || "";
-    return name.toLowerCase().includes(q)
+    // v18.9.0: every name the conversation has (the phone's contact, its
+    // booking, its WhatsApp profile), so a thread the contact now names is still
+    // found by the name on its booking.
+    return conversationSearchNames(c, bookings, contacts).some((n) => n.toLowerCase().includes(q))
       || String(c.phone || c.phoneKey || "").toLowerCase().includes(q)
       || String(c.lastMessageSnippet || "").toLowerCase().includes(q);
   }
@@ -447,7 +451,7 @@ export function InboxPanel({
     <div inert={twoPane && kbFold} style={{ width: twoPane ? (kbFold ? 0 : LIST_W) : "100%", flexShrink: 0, borderRight: twoPane && !kbFold ? "1px solid var(--wa-divider)" : "none", background: "var(--wa-list-bg)", height: "100%", overflow: "hidden", display: twoPane || !activeKey ? "flex" : "none", flexDirection: "column", transition: twoPane ? "width " + M.shift : undefined }}>
       {/* keyed by tab → Inbox⇄Archived switch crossfades the list */}
       <div key={tab} className="mgt-fade-in" style={{ flex: 1, minHeight: 0, minWidth: twoPane ? LIST_W : 0, display: "flex", flexDirection: "column" }}>
-        <ConversationList conversations={filteredConvs} activeKey={activeKey} onSelect={setActiveKey} bookings={bookings} archivedView={tab === "archived"} emptyLabel={filtersActive ? "No matches." : undefined} selectMode={selectMode} selected={selected} onToggleSelect={toggleSelect} />
+        <ConversationList conversations={filteredConvs} activeKey={activeKey} onSelect={setActiveKey} bookings={bookings} contacts={contacts} archivedView={tab === "archived"} emptyLabel={filtersActive ? "No matches." : undefined} selectMode={selectMode} selected={selected} onToggleSelect={toggleSelect} />
       </div>
     </div>
   );
@@ -456,7 +460,9 @@ export function InboxPanel({
       <ConversationView
         conv={activeConv} messages={activeMessages} onBack={() => setActiveKey(null)}
         onSend={(t) => onSend(activeConv.phoneKey, t)} onSendMedia={onSendMedia ? (blob, meta) => onSendMedia(activeConv.phoneKey, blob, meta) : null} onAccept={(over) => onAccept(activeConv, over)} onDismiss={() => onDismiss(activeConv.phoneKey)}
-        templates={templates} bookings={bookings} showBack={!twoPane} phone={winW < 600} compact={compact}
+        templates={templates} bookings={bookings} contacts={contacts}
+        contactsSynced={!!(waLink && waLink.contacts && waLink.contacts.firstAt)}
+        showBack={!twoPane} phone={winW < 600} compact={compact}
         kbFold={kbFold} onUnfold={unfold}
         onArchive={onArchive} onUnarchive={onUnarchive} onDelete={onDelete}
         onCancelLinkedBooking={onCancelLinkedBooking} onOpenLinkedBooking={onOpenLinkedBooking}

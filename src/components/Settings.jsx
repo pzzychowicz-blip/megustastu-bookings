@@ -1389,7 +1389,8 @@ export function SettingsContent({
     // tab itself is open to every account; the list's rule is not).
     content = <CustomersTabContent key={customerSeek || ""} seekQuery={customerSeek || ""} bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} regularMinDefault={generalSettings ? generalSettings.regularMin : 2}
       tagList={tagList} onSaveTagList={onSaveTagList} tagError={tagError} onClearTagError={onClearTagError} canEditTags={can("settingsWrite")} onDirty={reportDirty}
-      guestTags={guestTags} onSetCustomerTag={onSetCustomerTag} canEditGuestTags={can("bookingEdit")} />;
+      guestTags={guestTags} onSetCustomerTag={onSetCustomerTag} canEditGuestTags={can("bookingEdit")}
+      whatsappOn={typeof hasModule === "function" && hasModule("whatsapp")} />;
   } else if (cur === "vouchers") {
     // v18.0.0: gift vouchers — the records AND their configuration, because a
     // voucher setting is edited where vouchers are.

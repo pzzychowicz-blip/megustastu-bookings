@@ -36037,3 +36037,57 @@ reaching neither the ack nor the parse) and the guard (env id, connected id, not
 configured, one read per delivery, an unreadable `waLink` answered 500). Sabotaged twice:
 a guard that always answers yes fails four, a dispatch that sends every field down the
 messages road fails two.
+
+### Phase 2 — the phone's contacts name the inbox (`waContacts`)
+
+**Server.** `smb_app_state_sync` (`handleStateSync`, `api/_lib/coexist-core.js`): each
+`state_sync[]` contact becomes `waContacts/<phoneKey>` = `{name, first?, at}`, an add
+(or an edit, which Meta sends as an add) sets it and a remove deletes it, in ONE per-key
+`update()` of the node per webhook. What an item becomes is decided in
+`src/lib/wa-coexist.js` (`contactPlan`, `contactPatch`), so the simulator's client mode
+(phase 9) stores a contact the way the server does. Only the keys a webhook names are
+read (`readWaContactsFor`), so a delivery costs what it carries, not the size of the
+address book. A change older than the stored one is skipped (an edit delivered out of
+order never brings an old name back); a remove leaves no marker, so an add delivered
+after the remove that followed it brings the contact back, a stale name at worst.
+Names lose control characters, collapse their whitespace and stop at 80 characters. A
+contact saved with no name is stored with `name: ""`: saved, naming nothing. Every
+contact is kept, suppliers and staff included (Patryk). The first batch stamps
+`waLink.contacts.firstAt` once (`stampWaLinkOnce`, a transaction). The Meta timestamp
+rule is `secondsTs` now, in the shared file; `inboundTs` calls it.
+
+**Rules.** `waContacts/$phoneKey: auth != null`, no whole-node grant: the Admin SDK is
+the principal writer, so it takes `conversations`' shape and joins the Rule of law's
+closed list. The browser's one write is Delete customer's per-key erase. Rules suite:
+a per-key write and erase pass, another key survives, a whole-node wipe or replace is
+refused, and `waLink` refuses every browser write at any depth (it has no grant; phase 7
+writes it). **DEV and PROD need the rules published.**
+
+**Client.** `useWhatsApp` listens to `waContacts` and `waLink` (module-gated, `dbError`).
+**One naming rule**, `conversationName(conv, bookings, contacts)` in `lib/whatsapp.js`:
+the phone's contact, then the newest booking's name, then the WhatsApp profile name,
+then the formatted number. The row, the open conversation's header and
+`describeConversation` each spelled the booking match out for themselves; all three
+read it now. The profile name as a third step is new on screen (Patryk's order): a
+first-time sender reads by the name they gave WhatsApp instead of their number. The
+inbox's search matches every name a conversation has (`conversationSearchNames`), so a
+thread the contact now names is still found by its booking's name. **"Not saved on the
+restaurant phone"**, a neutral chip in the conversation header, appears for a number
+with no contact once `waLink.contacts.firstAt` is set; before the first sync, missing
+means "not synced yet". `draftPrefill`'s name order is typed → phone contact → bookings
+→ profile, for Accept and Add to waitlist alike.
+
+**Delete customer** also deletes the number's `waContacts` key
+(`conversationDeletePatch(keys, { contacts: true })`), and its confirm adds, with
+WhatsApp on and a phone on the customer, "Also delete them from the restaurant phone's
+contacts: MGT can't reach the phone." **A deviation from the plan, on purpose:** the
+plan had `clearAllWaData` (the simulator's reset) erase contacts too. It does not, and
+neither does the inbox's Delete: deleting a chat is not deleting the contact on the
+phone, and Meta allows the full contact sync once, so a copy deleted by mistake stays
+gone until the phone edits that contact. That matters most on the sandbox, which will
+hold the rehearsal number's real contacts.
+
+Tests: the webhook end to end (add, remove per key, out-of-order, non-contacts ignored,
+names cleaned, the number guard, a failed write answered 500), the planner, the naming
+rule run rather than read (W4's two source checks became behaviour checks plus a check
+that both components call it), `draftPrefill`'s new step, the erase patch.

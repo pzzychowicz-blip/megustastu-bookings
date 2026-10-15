@@ -21,7 +21,8 @@
 // a redelivery rewrites the same records rather than adding new ones.
 
 import { env } from "./env.js";
-import { readWaLink } from "./rtdb.js";
+import { readWaLink, readWaContactsFor, updateWaContacts, stampWaLinkOnce } from "./rtdb.js";
+import { contactPlan, contactPatch } from "../../src/lib/wa-coexist.js";
 
 // The fields this file handles. `messages` is not among them: it stays in
 // api/wa-inbound.js, which owns the async parse.
@@ -67,3 +68,32 @@ export function makeNumberGuard(readLink = readWaLink) {
     return numberIsOurs(pid, envId, link && link.phoneNumberId);
   };
 }
+
+// ── Contacts: smb_app_state_sync ─────────────────────────────────────────────
+// The phone's address book, one webhook per batch: after onboarding every
+// contact once (requested by api/wa-onboard.js, phase 8), then each add, edit
+// or remove as it happens on the phone. The phone is the master (Patryk,
+// 2026-10-15): MGT never writes a name back, because Meta has no API for it.
+//
+// The first batch to land stamps `waLink.contacts.firstAt`. Before it, a number
+// missing from waContacts means "not synced yet"; after it, "not saved on the
+// restaurant phone", which the open conversation says (phase 2's hint).
+export async function handleStateSync(value, results, now = Date.now()) {
+  const items = Array.isArray(value.state_sync) ? value.state_sync : [];
+  const keys = [];
+  items.forEach(function (it) {
+    const p = contactPlan(it, now);
+    if (p && keys.indexOf(p.phoneKey) < 0) keys.push(p.phoneKey);
+  });
+  if (!keys.length) { results.ignored++; return; }
+  const stored = await readWaContactsFor(keys);
+  const { patch, count } = contactPatch(items, stored, now);
+  await updateWaContacts(patch);
+  results.contacts += count;
+  await stampWaLinkOnce("contacts/firstAt", now);
+}
+
+// The handler for each coexistence field, as api/wa-inbound.js dispatches.
+export const COEXIST_HANDLERS = {
+  smb_app_state_sync: handleStateSync,
+};

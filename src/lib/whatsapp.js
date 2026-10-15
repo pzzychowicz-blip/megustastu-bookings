@@ -61,12 +61,22 @@ export function snippet(text) {
 // since the rules grant `$phoneKey` and refuse a wipe. A key that cannot be one
 // path segment is skipped: `update()` throws on . # $ [ ] and reads "/" as a
 // deeper path.
-export function conversationDeletePatch(keys) {
+//
+// v18.9.0: `{ contacts: true }` also deletes the MGT copy of the phone's contact
+// for the number (`waContacts/<key>`). Delete customer passes it, because the
+// name a customer is saved under is their data too (Patryk, 2026-10-15); the
+// inbox's Delete and the simulator's reset do not, since deleting a chat is not
+// deleting the contact on the phone, and the contact sync Meta allows after
+// onboarding runs once, so a copy deleted by mistake does not come back until
+// the phone edits that contact.
+export function conversationDeletePatch(keys, opts) {
   const patch = {};
+  const contacts = !!(opts && opts.contacts);
   (keys || []).forEach(function (k) {
     if (typeof k !== "string" || !k || /[.#$[\]/]/.test(k)) return;
     patch["conversations/" + k] = null;
     patch["messages/" + k] = null;
+    if (contacts) patch["waContacts/" + k] = null;
   });
   return patch;
 }
@@ -309,6 +319,49 @@ import { formatPhone as _formatPhone, matchCustomerByPhone as _matchByPhone, nor
 // extension because api/_lib imports this module under Node ESM.
 import { isReadableTime, countLabel } from "./booking-logic.js";
 import { isReadableDate, formatDay, localDay } from "./day.js";
+
+// ── What a conversation is called (v18.9.0) ────────────────────────────────
+// conversationName(conv, bookings, contacts) → `{ title, phoneLine, source }`:
+// the ONE naming rule, read by the conversation row, the open conversation's
+// header and `describeConversation` (each spelled the booking match out for
+// itself until this version). In order, the first that has a name:
+//
+//   contact  — the name the restaurant phone saves this number under
+//              (`waContacts`, synced from the WhatsApp Business app). The phone
+//              is the master: staff named this person themselves.
+//   booking  — the newest booking with this phone (`matchCustomerByPhone`)
+//   profile  — the name the customer gave WhatsApp (Meta sends it with every
+//              message), often a nickname, hence last
+//   phone    — the formatted number
+//
+// `phoneLine` is the formatted number when the title is a name, else null (the
+// title already is the number). Bookings and Settings → Customers keep their
+// own names: a contact renames the conversation, never a booking.
+export function conversationName(conv, bookings, contacts) {
+  const key = conv ? conv.phoneKey : null;
+  const number = conv ? _formatPhone(conv.phone || conv.phoneKey || "") || "" : "";
+  const contact = key && contacts ? contacts[key] : null;
+  const cName = contact && typeof contact.name === "string" ? contact.name.trim() : "";
+  if (cName) return { title: cName, phoneLine: number || null, source: "contact" };
+  const match = key ? _matchByPhone(key, bookings || []) : null;
+  if (match && match.name) return { title: match.name, phoneLine: number || null, source: "booking" };
+  const profile = conv && typeof conv.profileName === "string" ? conv.profileName.trim() : "";
+  if (profile) return { title: profile, phoneLine: number || null, source: "profile" };
+  return { title: number, phoneLine: null, source: "phone" };
+}
+
+// The names a conversation can be FOUND by in the inbox's search: every one of
+// the above that it has, so a search for the booking name finds a thread the
+// phone's contact now names (v18.9.0).
+export function conversationSearchNames(conv, bookings, contacts) {
+  const out = [];
+  const contact = conv && contacts ? contacts[conv.phoneKey] : null;
+  if (contact && contact.name) out.push(String(contact.name));
+  const match = conv ? _matchByPhone(conv.phoneKey, bookings || []) : null;
+  if (match && match.name) out.push(String(match.name));
+  if (conv && conv.profileName) out.push(String(conv.profileName));
+  return out;
+}
 
 // Human-readable relative time ("2 min ago", "yesterday", "3 days ago").
 export function formatRelativeTime(ts) {
@@ -573,9 +626,9 @@ export function sortConversations(conversations, archivedView) {
 // clash and late clauses do.
 export function describeConversation(conv, opts) {
   if (!conv) return "";
-  const bookings = (opts && opts.bookings) || [];
-  const match = _matchByPhone(conv.phoneKey, bookings);
   const parts = [];
+  // v18.9.0: the title is `conversationName`'s, the one naming rule the row and
+  // the header read too.
   // `match.name` is whatever the newest matching booking carries, and a booking
   // can legitimately have none — a walk-in saved without one. Falling through to
   // the number keeps the label a name rather than opening it with an empty
@@ -583,12 +636,12 @@ export function describeConversation(conv, opts) {
   // an empty first part.
   // v18.2.0 (W4): an unmatched conversation is titled by its FORMATTED number,
   // as the row and the conversation header now show it.
-  const title = (match && match.name) || _formatPhone(conv.phone || conv.phoneKey || "") || "";
-  if (title) parts.push(title);
+  const named = conversationName(conv, (opts && opts.bookings) || [], opts && opts.contacts);
+  if (named.title) parts.push(named.title);
   // The number is spoken only when it is not already the name — an unmatched
   // conversation is titled by its number, and saying it twice is noise.
   // …and only then is the number a second, separate clause.
-  if (match && match.name && (conv.phone || conv.phoneKey)) parts.push(_formatPhone(conv.phone || conv.phoneKey));
+  if (named.phoneLine) parts.push(named.phoneLine);
   if (conv.unread) parts.push("unread");
   if (conv.archived) parts.push("archived");
   const intent = (conv.draftData && conv.draftData.intent) || null;

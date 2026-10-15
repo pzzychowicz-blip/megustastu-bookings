@@ -2423,7 +2423,7 @@ function BookingApp({uid}){
   // the card's button turns into "On the waitlist" once the entry is stored.
   function addDraftToWaitlist(conv){
     if(refused("waitlistManage"))return null;
-    const p=draftPrefill(conv,bookings);
+    const p=draftPrefill(conv,bookings,wa.contacts);
     const phoneRule=phoneForSave(p.phone,generalSettings.pinnedCountries,generalSettings.phonePrefix,false);
     if(phoneRule.refusal)return phoneRule.refusal;
     addToWaitlist({name:p.name,phone:cleanPhoneOf(phoneRule.phone),size:p.size,date:p.date,prefTime:p.time,notes:p.notes,preference:p.preference});
@@ -4809,6 +4809,8 @@ function BookingApp({uid}){
           so it would render the last-loaded conversations, with live Send and
           Delete controls, for a module the restaurant has turned off. */}<ModalPresence show={whatsappOn&&showInbox}>{whatsappOn&&showInbox?<Suspense fallback={null}><InboxPanel
           conversations={wa.conversations}
+          contacts={wa.contacts}
+          waLink={wa.waLink}
           messages={wa.messagesMap}
           watchMessages={wa.watchMessages}
           templates={wa.templates}

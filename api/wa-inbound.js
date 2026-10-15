@@ -46,8 +46,9 @@ import { verifySignature } from "./_lib/meta.js";
 import { parseMessage, mockParse } from "./_lib/gemini.js";
 import { processInbound, applyParse, inboundContent } from "./_lib/inbound-core.js";
 import { updateMessageStatusByWamid, readOperatingHours, getConversation } from "./_lib/rtdb.js";
-import { makeNumberGuard } from "./_lib/coexist-core.js";
+import { makeNumberGuard, COEXIST_HANDLERS } from "./_lib/coexist-core.js";
 import { normalizePhone, isPhoneKey } from "../src/lib/whatsapp.js";
+import { secondsTs } from "../src/lib/wa-coexist.js";
 
 export const config = { api: { bodyParser: false } };
 
@@ -97,12 +98,10 @@ function scheduleAfterResponse(promise) {
 // EXPORTED so it can be tested at all — it decides the 24h service window, which
 // is the difference between staff being able to answer a customer and not. The
 // rule v17.8.0 wrote down for `placeWaitlist` and `presenceState`.
+// v18.9.0: the rule itself is `secondsTs` (src/lib/wa-coexist.js), which the
+// coexistence fields' timestamps (contacts, phone replies, history) share.
 export function inboundTs(raw) {
-  const now = Date.now();
-  if (raw === undefined || raw === null || raw === "") return now;
-  const ms = parseInt(raw, 10) * 1000;
-  if (!Number.isFinite(ms) || ms <= 0) return now;
-  return Math.min(ms, now);
+  return secondsTs(raw, Date.now());
 }
 
 // inboundContent(m) — what one webhook message becomes: moved to
@@ -268,8 +267,15 @@ export default async function handler(req, res) {
           console.warn("[wa-inbound] ignored a " + field + " change for another number (" + value.metadata.phone_number_id + ")");
           continue;
         }
-        if (field === "messages") await handleMessagesChange(value, results, parseJobs);
-        else results.ignored++; // a field this webhook does not handle (yet)
+        if (field === "messages") { await handleMessagesChange(value, results, parseJobs); continue; }
+        const coexist = Object.prototype.hasOwnProperty.call(COEXIST_HANDLERS, field) ? COEXIST_HANDLERS[field] : null;
+        if (!coexist) { results.ignored++; continue; } // a field this webhook does not handle
+        try {
+          await coexist(value, results);
+        } catch (e) {
+          results.errors++;
+          console.error("[wa-inbound] " + field + " processing failed:", e.message);
+        }
       }
     }
   } catch (e) {

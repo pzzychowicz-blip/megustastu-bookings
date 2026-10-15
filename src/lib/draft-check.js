@@ -137,14 +137,20 @@ export function draftCheckLine(draft, r) {
 // conversation held the profile name all along; the parse only ever read the
 // text. The profile name is last because it is whatever the customer calls
 // themselves on WhatsApp, a nickname or an emoji as often as a name.
-export function draftPrefill(conv, bookings) {
+// v18.9.0 (Patryk, 2026-10-15): the name the restaurant phone saves this number
+// under comes second, after the typed one and before the bookings': staff
+// chose it, on the phone that is the master of names (`contacts` is
+// `waContacts`, keyed by phone; absent reads as none).
+export function draftPrefill(conv, bookings, contacts) {
   const d = conv.draftData || {};
   const match = matchCustomerByPhone(conv.phoneKey, bookings);
   let phone = conv.phone || conv.phoneKey || "+";
   if (phone && phone.charAt(0) !== "+") phone = "+" + phone;
   const profile = typeof conv.profileName === "string" ? conv.profileName.trim() : "";
+  const contact = contacts && contacts[conv.phoneKey];
+  const saved = contact && typeof contact.name === "string" ? contact.name.trim() : "";
   return {
-    name: (d.name && d.name.trim()) || (match && match.name) || profile,
+    name: (d.name && d.name.trim()) || saved || (match && match.name) || profile,
     phone: phone,
     size: Number(d.size) || 2,
     date: d.date || todayStr(),

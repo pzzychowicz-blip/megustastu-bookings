@@ -249,6 +249,39 @@ export async function readWaLink() {
   return snap.exists() ? snap.val() || null : null;
 }
 
+// Stamps `waLink/<path>` with `value` unless something is already there, and
+// resolves true when this call wrote it — "the first contact sync landed" is a
+// moment, and a later webhook must not move it.
+export async function stampWaLinkOnce(path, value) {
+  let wrote = false;
+  const r = await getDb().ref("waLink/" + path).transaction(function (cur) {
+    if (cur != null) { wrote = false; return undefined; }
+    wrote = true;
+    return value;
+  });
+  return !!(r && r.committed && wrote);
+}
+
+// ── The phone's address book (v18.9.0) ──────────────────────────────────────
+// `waContacts/<phoneKey>` = `{ name, first?, at }` (src/lib/wa-coexist.js
+// decides it). Read per key, for the keys one webhook names, so a delivery
+// costs what it carries rather than the size of the address book.
+export async function readWaContactsFor(phoneKeys) {
+  const out = {};
+  await Promise.all(phoneKeys.map(async function (k) {
+    const snap = await getDb().ref("waContacts/" + sanitizeKey(k)).get();
+    if (snap.exists()) out[k] = snap.val();
+  }));
+  return out;
+}
+// One per-key update: a key set to null is deleted. Never the whole node — the
+// Admin SDK bypasses the rules, so this is the only limit on what it replaces.
+export async function updateWaContacts(patch) {
+  const safe = {};
+  Object.keys(patch).forEach(function (k) { safe[sanitizeKey(k)] = patch[k]; });
+  if (Object.keys(safe).length) await getDb().ref("waContacts").update(safe);
+}
+
 // ── Retention (v18.8.0 phase 7, api/wa-prune.js) ─────────────────────────────
 // What the nightly prune reads and deletes. Deletes go PER KEY (a conversation)
 // and PER MESSAGE (a multi-path update of nulls under one conversation), never

@@ -120,6 +120,7 @@ import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "
 import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { numberIsOurs, makeNumberGuard } from "../api/_lib/coexist-core.js";
+import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX } from "../src/lib/wa-coexist.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
 import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX } from "../src/lib/whatsapp.js";
@@ -915,6 +916,88 @@ describe("wa-inbound — the number guard (v18.9.0)", () => {
     } finally {
       fake.db.ref = realRef;
     }
+  });
+});
+
+// ── Phase 2: the phone's contacts (smb_app_state_sync) ──────────────────────
+const contactItem = (phone, action, full, first, secs) => ({
+  type: "contact", action,
+  contact: { full_name: full, first_name: first, phone_number: phone },
+  metadata: { timestamp: String(secs || Math.floor(Date.now() / 1000) - 60) },
+});
+const syncContacts = (items) => deliverChange("smb_app_state_sync", Object.assign(forNumber("111"), { state_sync: items }));
+
+describe("wa-inbound — the phone's contacts (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("an add is stored per key, named, and counted; the first batch stamps waLink.contacts.firstAt", async () => {
+    const res = await syncContacts([contactItem("34600111222", "add", "Ana López", "Ana"), contactItem("34600999888", "add", "Proveedor Pescado", "")]);
+    expect(res.body).toMatchObject({ contacts: 2, errors: 0 });
+    expect(fake.read("waContacts/" + KEY)).toMatchObject({ name: "Ana López", first: "Ana" });
+    expect(fake.read("waContacts/+34600999888")).toMatchObject({ name: "Proveedor Pescado" });
+    expect("first" in fake.read("waContacts/+34600999888")).toBe(false);
+    const firstAt = fake.read("waLink/contacts/firstAt");
+    expect(firstAt).toBeGreaterThan(0);
+    // A later batch does not move the moment the first one landed.
+    await syncContacts([contactItem("34600111222", "add", "Ana L.", "Ana")]);
+    expect(fake.read("waLink/contacts/firstAt")).toBe(firstAt);
+    expect(fake.read("waContacts/" + KEY).name).toBe("Ana L.");
+  });
+  it("a remove deletes the key and nothing else; the write is per key, never the node", async () => {
+    fake.state.tree = { waContacts: { [KEY]: { name: "Ana", at: 1000 }, "+34999": { name: "Pau", at: 1000 } } };
+    await syncContacts([contactItem("34600111222", "remove", "Ana", "Ana")]);
+    expect(fake.read("waContacts/" + KEY)).toBeUndefined();
+    expect(fake.read("waContacts/+34999")).toMatchObject({ name: "Pau" });
+    expect(fake.state.writes.filter((w) => w.path === "waContacts")).toEqual([{ op: "update", path: "waContacts", value: { [KEY]: null } }]);
+  });
+  it("an edit older than what is stored never replaces it (out of order)", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    fake.state.tree = { waContacts: { [KEY]: { name: "Ana (new)", at: (now - 10) * 1000 } } };
+    await syncContacts([contactItem("34600111222", "add", "Ana (old)", "", now - 100)]);
+    expect(fake.read("waContacts/" + KEY).name).toBe("Ana (new)");
+  });
+  it("an item that is not a contact, or has no usable number, writes nothing and is ignored", async () => {
+    const res = await syncContacts([{ type: "label", action: "add" }, contactItem("", "add", "Nobody", ""), contactItem("+", "add", "Plus", "")]);
+    expect(res.body).toMatchObject({ contacts: 0, ignored: 1 });
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("names are cleaned: control characters out, whitespace collapsed, capped", async () => {
+    await syncContacts([contactItem("34600111222", "add", "  Ana\u0000\n  López\t" + "x".repeat(200), "Ana")]);
+    const c = fake.read("waContacts/" + KEY);
+    expect(c.name.startsWith("Ana López x")).toBe(true);
+    expect(c.name.length).toBe(WA_CONTACT_NAME_MAX);
+  });
+  it("a contact for another number's change is ignored by the guard", async () => {
+    vi.stubEnv("META_PHONE_NUMBER_ID", "999");
+    const res = await syncContacts([contactItem("34600111222", "add", "Ana", "Ana")]);
+    expect(res.body).toMatchObject({ ignored: 1, contacts: 0 });
+    expect(fake.read("waContacts/" + KEY)).toBeUndefined();
+  });
+  it("a failed write is an error, so Meta sends the batch again", async () => {
+    fake.state.failWrite = (op, path) => path === "waContacts";
+    const res = await syncContacts([contactItem("34600111222", "add", "Ana", "Ana")]);
+    expect([res.statusCode, res.body]).toMatchObject([500, { errors: 1 }]);
+  });
+});
+
+describe("contactPlan / contactPatch", () => {
+  const now = 2000000000000;
+  it("keys by the normalised number, keeps a nameless contact as saved, and deletes on remove", () => {
+    expect(contactPlan(contactItem("34 600-111-222", "add", "", "", 1900000000), now)).toEqual({ phoneKey: KEY, at: 1900000000000, contact: { name: "", at: 1900000000000 } });
+    expect(contactPlan(contactItem("34600111222", "remove", "Ana", "", 1900000000), now)).toEqual({ phoneKey: KEY, at: 1900000000000, contact: null });
+    expect(contactPlan(contactItem("34600111222", "add", "", "Ana", 1900000000), now).contact).toEqual({ name: "Ana", at: 1900000000000 });
+    expect(contactPlan({ type: "contact", contact: "nope" }, now)).toBeNull();
+    expect(contactPlan(null, now)).toBeNull();
+  });
+  it("a timestamp in the future is now, a missing one is now", () => {
+    expect(contactPlan(contactItem("34600111222", "add", "Ana", "", 9999999999), now).at).toBe(now);
+    expect(contactPlan({ type: "contact", action: "add", contact: { full_name: "Ana", phone_number: "34600111222" } }, now).at).toBe(now);
+  });
+  it("within one batch the later change to a key wins, in either order", () => {
+    const a = contactItem("34600111222", "add", "First", "", 1900000000);
+    const b = contactItem("34600111222", "add", "Second", "", 1900000100);
+    expect(contactPatch([a, b], {}, now).patch[KEY].name).toBe("Second");
+    expect(contactPatch([b, a], {}, now).patch[KEY].name).toBe("Second");
   });
 });
 

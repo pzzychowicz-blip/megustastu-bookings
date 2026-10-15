@@ -581,8 +581,11 @@ describe("the writer hook points", () => {
     const erase = hook.slice(hook.indexOf("function eraseConversation"), hook.indexOf("const unreadCount"));
     // v18.8.0 /code-review: through the one delete patch the inbox's Delete
     // uses too, which nulls both halves of the key in one write.
-    expect(erase).toMatch(/update\(ref\(db\), conversationDeletePatch\(\[phoneKey\]\)\)/);
+    // v18.9.0: and the MGT copy of the phone's contact (`{ contacts: true }`),
+    // which the inbox's Delete leaves alone.
+    expect(erase).toMatch(/update\(ref\(db\), conversationDeletePatch\(\[phoneKey\], \{ contacts: true \}\)\)/);
     expect(conversationDeletePatch(["+34600111222"])).toEqual({ "conversations/+34600111222": null, "messages/+34600111222": null });
+    expect(conversationDeletePatch(["+34600111222"], { contacts: true })).toEqual({ "conversations/+34600111222": null, "messages/+34600111222": null, "waContacts/+34600111222": null });
     // Not gated on the listeners having loaded: with the module off they never do.
     expect(erase).not.toMatch(/Loaded\.current/);
     expect(erase).toMatch(/if \(!isPhoneKey\(phoneKey\)\) return;/);
