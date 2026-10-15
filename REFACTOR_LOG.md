@@ -35927,17 +35927,20 @@ its own commit.
 2. **The parsing indicator can be seen** (Patryk: "parsing a message should show that something
    is working"). It was there: "Reading the message…" over a shimmer bar, and "parsing…" on the
    conversation's row, measured on DEV for the whole 5.5 s of a Re-check. What made it look
-   still: `--wa-shimmer` was read with a fallback and never defined in either theme (only its
-   entry in `tests/contrast.test.js`'s DECORATIVE list existed), so the sweep was a 0.18 blue
-   over the yellow bar, and it moved a 160px background from −160 to +160px, never crossing
-   more than the first 320px of a 475px bar. Now `--wa-shimmer` is the draft ink at 0.45 (light)
+   still: the sweep never painted. It was a background-image on the bar itself, and the bar
+   (and the row's chip) carries an inline `background`, whose shorthand resets
+   background-image and beats a class (/code-review, measured: `background-image: none`).
+   `--wa-shimmer` was also never defined in either theme (only its entry in
+   `tests/contrast.test.js`'s DECORATIVE list existed). Now `--wa-shimmer` is the draft ink at 0.45 (light)
    and `#fde68a` at 0.6 (dark), drawn by a `::after` band 40% of the bar wide that a TRANSFORM
    carries edge to edge (`translateX(-100%)` → `250%`, the same 1100ms ease-in-out loop, so
    DESIGN.md's loop exception is unchanged and the sweep no longer repaints), and the card's
    draft icon breathes with `.mgt-dot-pulse`, as the draft check's "Checking the tables…" dot
    does. At rest, and once reduced motion collapses the loop, the band sits off the left edge.
    Measured on DEV in both themes: the band's computed transform moves across the bar, and
-   the row chip (64px) takes the same rule. `.mgt-shimmer::after` joins the stylesheet's
+   the row chip (64px) takes the same rule. The band is `z-index: -1` inside an
+   `isolation: isolate` host (/code-review), so it passes behind the chip's "parsing…" rather
+   than over it. `.mgt-shimmer::after` joins the stylesheet's
    CRITICAL_SELECTORS: without it the bar just sits still.
 
 3. **A waiting draft dims while it is read again.** On a follow-up message or a Re-check the old
