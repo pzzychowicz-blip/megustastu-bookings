@@ -35948,6 +35948,14 @@ its own commit.
    changed by a parse. Measured on DEV through a Re-check, sampled each frame: 0.91 at 68 ms,
    0.55 by 269 ms, held for the whole parse, then 0.71 → 1.00 over 190 ms when it landed.
 
+4. **A photo fades in over its waiting box** (`.mgt-appear`, `--t-move` ease-out, the timeline
+   ghosts' entrance) where it replaced the box in one frame. An opacity transition on `onLoad`
+   was tried first and measured as never starting: a blob decodes before the first paint, so the
+   image was never drawn at 0. A photo already downloaded still stands as the box for a frame
+   (the IntersectionObserver gate), so the fade replaces that flash and plays on reopening a
+   thread too. Measured on DEV: box at 111 ms, the photo 0 → 1.00 between 138 and 371 ms, cold
+   and reopened alike.
+
 ### Deploy steps (Patryk)
 
 1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random

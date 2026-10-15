@@ -98,8 +98,17 @@ function MediaPhoto({ phoneKey, msg, onOpenPhoto }) {
       /* @no-lift a 240px photo scaled 8% grows 19px past the bubble it sits in; the press dip and the pointer say it opens */
       className="mgt-press" autoFocus={handOn} onClick={() => { if (onOpenPhoto) onOpenPhoto(msg); }}
       aria-label="Open photo" title="Open photo"
-      style={{ padding: 0, border: 0, background: "none", borderRadius: R.inset, cursor: onOpenPhoto ? "zoom-in" : "default", display: "block" }}>
-      <img src={m.url} alt="" draggable="false" style={Object.assign({}, box, { objectFit: "cover" })} />
+      style={{ padding: 0, border: 0, background: "var(--wa-media-wait)", borderRadius: R.inset, cursor: onOpenPhoto ? "zoom-in" : "default", display: "block" }}>
+      {/* v18.8.0 follow-up: the photo fades in over the waiting box's own fill
+          (`.mgt-appear`, --t-move ease-out, the timeline ghosts' entrance),
+          where it replaced the box in one frame. A keyframe on mount and not
+          an opacity transition on `onLoad`: a blob decodes before the first
+          paint, so the transition measured as never starting. A photo already
+          downloaded still stands as the box for a frame first (the
+          IntersectionObserver gate above), so this replaces that flash rather
+          than animating history. No way out to animate: a photo leaves only
+          with its whole thread. */}
+      <img className="mgt-appear" src={m.url} alt="" draggable="false" style={Object.assign({}, box, { objectFit: "cover" })} />
     </button>
   );
 }
