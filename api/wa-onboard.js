@@ -156,6 +156,10 @@ export default async function handler(req, res) {
       res.status(400).json({ error: "Nothing is connected yet: connect the Business app first." });
       return;
     }
+    if (link.sim === true) {
+      res.status(400).json({ error: "The connection is the sandbox simulator's: there is nothing at Meta to try again." });
+      return;
+    }
     const token = env("META_WA_TOKEN", null);
     if (!token) { res.status(503).json({ error: "META_WA_TOKEN is not set, so a step cannot be tried again." }); return; }
     answer(res, await syncSteps(link, token, now, body.retry), { phoneNumberId: String(link.phoneNumberId), envNumber: envNumberState(link.phoneNumberId) });
@@ -183,6 +187,9 @@ export default async function handler(req, res) {
       status: "connected", wabaId, phoneNumberId,
       connectedAt: now, connectedBy: String(decoded.email || ""),
       disconnect: null,
+      // A real connection over one the sandbox's simulator made: no longer
+      // the simulator's (api/_lib/sim-events.js leaves a real one alone).
+      sim: null,
     };
     // Another number than the one connected before: what was recorded about
     // the old one's syncs is not this one's. The contacts themselves stay

@@ -126,6 +126,7 @@ import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
 import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE } from "../src/lib/whatsapp.js";
 import { simMediaMessage } from "../src/lib/wa-mock-media.js";
+import { simHistoryValue, simEchoValue, simContent, SIM_HISTORY_RECENT, SIM_HISTORY_OLD, SIM_HISTORY_PHOTO_ID, SIM_WABA_ID, SIM_PHONE_NUMBER_ID } from "../src/lib/wa-sim-coexist.js";
 
 // A request as Vercel hands it over (the body already parsed) and a response
 // that records the one answer a handler gives.
@@ -601,6 +602,15 @@ describe("wa-onboard", () => {
       expect(fake.read("waLink/contacts")).toBeUndefined();
     });
 
+    // v18.9.0 phase 9: a real connection over the sandbox simulator's.
+    it("a real connection over a simulated one is no longer the simulator's", async () => {
+      fake.state.tree.waLink = { status: "connected", wabaId: SIM_WABA_ID, phoneNumberId: SIM_PHONE_NUMBER_ID, sim: true };
+      vi.stubGlobal("fetch", meta());
+      expect((await connect(ids())).statusCode).toBe(200);
+      expect(fake.read("waLink")).toMatchObject({ wabaId: WABA, phoneNumberId: PHONE });
+      expect(fake.read("waLink/sim")).toBeUndefined();
+    });
+
     it("says whether the environment's number is the one connected, as a word", async () => {
       vi.stubGlobal("fetch", meta());
       expect((await connect(ids())).body.envNumber).toBe("unset");
@@ -616,6 +626,14 @@ describe("wa-onboard", () => {
       expect((await connect({ retry: "exchange" })).statusCode).toBe(400);
       const res = await connect({ retry: "contacts" });
       expect([res.statusCode, res.body.error]).toEqual([400, "Nothing is connected yet: connect the Business app first."]);
+    });
+    it("400 for a connection the sandbox's simulator made, calling nobody", async () => {
+      vi.stubEnv("META_WA_TOKEN", "sys-token");
+      fake.state.tree.waLink = { status: "connected", wabaId: SIM_WABA_ID, phoneNumberId: SIM_PHONE_NUMBER_ID, sim: true };
+      const f = meta(); vi.stubGlobal("fetch", f);
+      const res = await connect({ retry: "contacts" });
+      expect([res.statusCode, res.body.error]).toEqual([400, "The connection is the sandbox simulator's: there is nothing at Meta to try again."]);
+      expect(f).not.toHaveBeenCalled();
     });
     it("503 without the system user's token", async () => {
       fake.state.tree.waLink = { wabaId: WABA, phoneNumberId: PHONE };
@@ -1707,6 +1725,139 @@ describe("the simulator endpoints, enabled and signed in", () => {
     const res = await call(simGenerateHandler, { token: "staff", body: { hint: "x" } });
     expect([res.statusCode, res.body.error]).toEqual([400, "GEMINI_API_KEY not set"]);
     expect(fake.state.writes).toEqual([]);
+  });
+});
+
+// ── api/wa-sim-inbound.js — the Business app's events (v18.9.0) ──────────────
+describe("wa-sim-inbound — the WhatsApp Business app's events (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("WA_SIM_ENABLED", "1"));
+  const ev = (event, extra) => call(simInboundHandler, { token: "staff", body: Object.assign({ event }, extra || {}) });
+  const REAL = { status: "connected", wabaId: "102030405060", phoneNumberId: "908070605040" };
+  const R = "+" + SIM_HISTORY_RECENT;
+  const O = "+" + SIM_HISTORY_OLD;
+
+  it("400 to an event it does not know, and to a phone's event with no phone or no text: a body with an event is never a message", async () => {
+    const unknown = await ev("nonsense", { phone: KEY, text: "hola" });
+    expect([unknown.statusCode, unknown.body.error]).toEqual([400, "Unknown event."]);
+    expect((await ev("toString", { phone: KEY })).statusCode).toBe(400);
+    expect((await ev("contact", { name: "Ana" })).statusCode).toBe(400);
+    expect((await ev("echo", { phone: KEY, text: "  " })).statusCode).toBe(400);
+    expect((await ev("edit", { phone: KEY })).statusCode).toBe(400);
+    expect(fake.state.writes).toEqual([]);
+  });
+
+  it("contact: saved on the phone, stamping the first sync once; removed again", async () => {
+    const res = await ev("contact", { phone: KEY, name: "Lucía (terraza)" });
+    expect([res.statusCode, res.body.results.contacts]).toEqual([200, 1]);
+    expect(fake.read("waContacts/" + KEY)).toMatchObject({ name: "Lucía (terraza)", first: "Lucía" });
+    const first = fake.read("waLink/contacts/firstAt");
+    expect(typeof first).toBe("number");
+    await ev("contact", { phone: KEY, remove: true });
+    expect(fake.read("waContacts/" + KEY)).toBeUndefined();
+    expect(fake.read("waLink/contacts/firstAt")).toBe(first);
+  });
+
+  it("echo: a reply from the phone is stored as one, and its conversation is read and back in the Inbox", async () => {
+    fake.state.tree = { conversations: { [KEY]: openConv({ unread: true, archived: true, archivedAt: 5, lastMessageAt: 1 }) } };
+    const res = await ev("echo", { phone: KEY, text: "  Os esperamos a las 21:00  " });
+    expect([res.statusCode, res.body.results.echoes]).toEqual([200, 1]);
+    const [m] = msgsAt(KEY);
+    expect(m).toMatchObject({ direction: "out", source: "phone", text: "Os esperamos a las 21:00", status: "sent" });
+    expect(m.providerMsgId).toMatch(/^wamid-SIMECHO-/);
+    expect(convAt(KEY)).toMatchObject({ unread: false, archived: false, lastMessageSnippet: "Os esperamos a las 21:00" });
+  });
+
+  it("edit and revoke: the customer's newest message that is not deleted, its line in the list following", async () => {
+    fake.state.tree = {
+      conversations: { [KEY]: openConv({ lastMessageAt: 20, lastMessageSnippet: "a las 9" }) },
+      messages: { [KEY]: {
+        in1: { id: "in1", direction: "in", text: "mesa para 2", ts: 10, providerMsgId: "wamid.A" },
+        out1: { id: "out1", direction: "out", text: "¡Claro!", ts: 15 },
+        in2: { id: "in2", direction: "in", text: "a las 9", ts: 20, providerMsgId: "wamid.B" },
+      } },
+    };
+    const edit = await ev("edit", { phone: KEY, text: "a las 10" });
+    expect([edit.statusCode, edit.body.outcome]).toEqual([200, "applied"]);
+    expect(fake.read("messages/" + KEY + "/in2")).toMatchObject({ text: "a las 10" });
+    expect(typeof fake.read("messages/" + KEY + "/in2/editedAt")).toBe("number");
+    expect(convAt(KEY).lastMessageSnippet).toBe("a las 10");
+    await ev("revoke", { phone: KEY });
+    expect(fake.read("messages/" + KEY + "/in2")).toMatchObject({ text: WA_REVOKED_IN });
+    expect(convAt(KEY).lastMessageSnippet).toBe(WA_REVOKED_IN);
+    await ev("revoke", { phone: KEY });
+    expect(fake.read("messages/" + KEY + "/in1")).toMatchObject({ text: WA_REVOKED_IN });
+    expect(fake.read("messages/" + KEY + "/out1/text")).toBe("¡Claro!");
+    const none = await ev("revoke", { phone: KEY });
+    expect([none.statusCode, none.body.error]).toEqual([409, "That conversation has no message from the customer to delete."]);
+  });
+
+  it("history: two chats, the old one straight to Archived, read and settled, its photo a placeholder; a second import stores nothing", async () => {
+    const res = await ev("history");
+    expect([res.statusCode, res.body.results.history]).toEqual([200, 6]);
+    expect(convAt(R)).toMatchObject({ archived: false, unread: false, autoAckSent: true, lastMessageSnippet: "Perfecto, a nombre de Lucía. ¡Gracias!" });
+    expect(convAt(O)).toMatchObject({ archived: true, unread: false, autoAckSent: true });
+    expect("windowExpiresAt" in convAt(R)).toBe(false);
+    const recent = msgsAt(R);
+    expect(recent.map((m) => [m.direction, m.imported, m.source || null])).toEqual([["in", true, null], ["out", true, "phone"], ["in", true, null], ["in", true, null]]);
+    expect(recent[1].status).toBe("read");
+    expect(recent[2].text).toBe("Photo or file — open WhatsApp on the phone to see it");
+    expect(fake.read("waLink/history")).toMatchObject({ progress: 100, phase: 0 });
+    const writes = fake.state.writes.length;
+    const again = await ev("history");
+    expect(again.body.results.history).toBe(0);
+    expect(fake.state.writes.slice(writes).filter((w) => /^messages|^$/.test(w.path) && JSON.stringify(w.value).includes("wamid-SIMHIST"))).toEqual([]);
+    expect(msgsAt(R)).toHaveLength(4);
+  });
+
+  it("history-media: the placeholder takes its photo and the caption", async () => {
+    await ev("history");
+    const res = await ev("history-media");
+    expect([res.statusCode, res.body.results.history]).toEqual([200, 1]);
+    const photo = fake.read("messages/" + R + "/" + SIM_HISTORY_PHOTO_ID);
+    expect(photo.text).toBe("La terraza");
+    expect(photo.media).toMatchObject({ kind: "image", mime: "image/jpeg" });
+    expect(photo.media.mediaId).toMatch(/^MOCK\.image\./);
+    expect((await ev("history-media")).body.results.skipped).toBe(1);
+  });
+
+  it("connect, disconnect, reconnect, forget: a connection marked as the simulator's, and its banner", async () => {
+    const early = await ev("disconnect");
+    expect([early.statusCode, early.body.error]).toEqual([409, "Connect (simulated) first."]);
+    vi.stubEnv("META_PHONE_NUMBER_ID", "555000111");
+    expect((await ev("connect")).statusCode).toBe(200);
+    expect(fake.read("waLink")).toMatchObject({ status: "connected", wabaId: SIM_WABA_ID, phoneNumberId: "555000111", sim: true, connectedBy: "ana@example.com" });
+    expect((await ev("disconnect")).body.results.events).toBe(1);
+    expect(fake.read("waLink")).toMatchObject({ status: "disconnected", disconnect: { event: "PARTNER_REMOVED", reason: "USER_REQUESTED", initiatedBy: "BUSINESS" } });
+    await ev("reconnect");
+    expect(fake.read("waLink/status")).toBe("connected");
+    expect(fake.read("waLink/disconnect")).toBeUndefined();
+    expect((await ev("forget")).body.removed).toBe(true);
+    expect(fake.read("waLink")).toBeUndefined();
+    expect((await ev("forget")).body.removed).toBe(false);
+  });
+
+  it("leaves a REAL connection alone: every event that writes waLink is 409, and nothing is written", async () => {
+    fake.state.tree = { waLink: Object.assign({}, REAL) };
+    for (const [event, extra] of [["contact", { phone: KEY, name: "Ana" }], ["history"], ["connect"], ["disconnect"], ["reconnect"], ["forget"]]) {
+      const res = await ev(event, extra);
+      expect([event, res.statusCode, res.body.error]).toEqual([event, 409, "A real Business-app connection is recorded on this database, so the simulator leaves it alone."]);
+    }
+    expect(fake.state.writes).toEqual([]);
+    expect(fake.read("waLink")).toEqual(REAL);
+    // A link that holds only a sync's stamp is no connection, and is fair game.
+    fake.state.tree = { waLink: { contacts: { firstAt: 5 } } };
+    expect((await ev("connect")).statusCode).toBe(200);
+  });
+
+  it("the client mode's reading of each message it builds agrees with the server's", () => {
+    const now = 1_800_000_000_000;
+    const msgs = simHistoryValue(now).history[0].threads.flatMap((t) => t.messages)
+      .concat(simEchoValue({ phone: KEY, text: "Os esperamos", now }).message_echoes);
+    expect(msgs).toHaveLength(7);
+    msgs.forEach((m) => {
+      const server = inboundContent(m);
+      expect([m.id, simContent(m)]).toEqual([m.id, { text: server.text, media: server.media, snippet: server.snippet }]);
+    });
   });
 });
 

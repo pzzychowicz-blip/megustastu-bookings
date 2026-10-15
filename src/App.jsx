@@ -1430,6 +1430,8 @@ function BookingApp({uid}){
   waSimCtxRef.current={
     conversations:wa.conversations, messagesMap:wa.messagesMap, upsertConversation:wa.upsertConversation,
     appendMessage:wa.simAppendMessage, saveBookings:saveBookings, clearAllWaData:wa.clearAllWaData,
+    // v18.9.0: the coexistence events (simulateCoexist) read and write these too.
+    patchConversation:wa.patchConversation, patchMessage:wa.patchMessage, contacts:wa.contacts, waLink:wa.waLink, simSetContacts:wa.simSetContacts,
   };
   useEffect(function(){
     if(!WA_SANDBOX) return;
@@ -4860,7 +4862,7 @@ function BookingApp({uid}){
               onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
               className="mgt-hover-scale"
               style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
-          ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,watchMessages:wa.watchMessages,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.simAppendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
+          ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,watchMessages:wa.watchMessages,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.simAppendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend,patchMessage:wa.patchMessage,contacts:wa.contacts,waLink:wa.waLink,simSetContacts:wa.simSetContacts}}
           onClose={function(){setShowSim(false);}} /></Suspense>:null):null}{/* v18.8.0: the photo viewer, after the simulator so it paints above it (MODAL_Z ranks it so) */}<ModalPresence show={!!waPhoto}>{waPhoto?<Suspense fallback={null}><PhotoViewer photo={waPhoto} onClose={function(){setWaPhoto(null);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
         // must sit above the Settings overlay. Same idiom as ReminderEditor:
         // `position` + `z-index` makes a stacking context and the subtree

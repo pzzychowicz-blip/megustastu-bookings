@@ -36379,3 +36379,80 @@ server's `RETRYABLE`, the headline and announcements, the page's wiring and impo
 deployment** (the rehearsal, §3b): Meta's real popup and its messages, the CSP against the
 real SDK, the `extras` shape (to confirm with the App Dashboard's Embedded Signup Builder),
 and whether `META_WA_TOKEN` may retry a sync on a converted account.
+
+### Phase 9 — the simulator's coexistence events
+
+The sandbox's WhatsApp simulator can now play the Business app on the restaurant phone, so
+every coexistence surface can be seen without Meta. A new section in the panel, "WhatsApp
+Business app (coexistence)", has eleven buttons: save or remove a contact, reply from the
+phone, the customer edits or deletes their last message, import chat history, the photo for
+the imported chat, and connect (simulated) / disconnect / reconnect / forget. The first five
+act on the conversation picked under "Reply as customer".
+
+**One description of each event, two ways to store it.** `src/lib/wa-sim-coexist.js` (new,
+pure, shared with the server) builds each event as Meta's webhook `value`. In **backend
+mode** the panel POSTs `{ event, … }` to `/api/wa-sim-inbound`, and `api/_lib/sim-events.js`
+(new) hands the value to the handler the real webhook uses (`handleStateSync`,
+`handleEchoes`, `applyMessageChange`, `handleHistory`, `handleAccountUpdate`), so a simulated
+event is stored exactly as Meta's would be. A body with an `event` is never read as a
+customer message. In **client mode** `simulateCoexist` (`src/lib/wa-sim.js`) stores the four
+the browser can write (a contact, a phone reply, an edit or delete, the history) through the
+same pure planners and the hook's savers. Two planners moved out of
+`api/_lib/coexist-core.js` into `src/lib/wa-coexist.js` for that: `threadPlan` (what one
+imported thread stores) and `changeLine` (a conversation's line after an edit or delete).
+The browser has no write on `waLink` and never writes a message's media, so the photo and
+the connection are backend-only. The panel disables them in client mode and the rule says
+so: `simEventRefusal`, one table (`SIM_EVENTS`) asked by both halves.
+
+**A real connection is left alone.** The sandbox runs on DEV Firebase, which is where the
+rehearsal's real connection will be recorded. Any event that writes `waLink` (contacts and
+history stamp it too) is refused with 409 while `waLink` holds a connection the simulator did
+not make (`simMayTouchLink`: no link, a link with no ids, or `sim: true`). A simulated
+connection is `sim: true` and names a WABA in a range no real id is in. Settings says
+"Simulated by the sandbox's WhatsApp simulator: nothing at Meta is connected." under its
+first line. "Forget" removes it in a transaction that asks `sim === true` of what is stored
+(`removeSimWaLink`). A real onboarding over a simulated link clears `sim`, and the onboarding
+retry refuses a simulated link ("there is nothing at Meta to try again"). Disconnect and
+reconnect need a simulated connection first.
+
+**The history import** brings two chats under fixed ids, so a second import stores nothing
+(the server skips what is stored; client mode, which cannot read an unopened thread, leaves
+a chat that is already there and says so). One chat is from this week and stays in the
+Inbox, the other is forty days old and goes straight to Archived. The recent one holds a
+restaurant reply read on the phone and a photo placeholder, which "Photo for the imported
+chat" fills (the later `history` change Meta sends with `messages[]`). Client mode reads a
+message with `simContent`, since the browser cannot import `inboundContent`. A test holds
+the two to one answer for every message the events build.
+
+**Checked live on the dev server, client mode, DEV Firebase.** Import: "6 messages". The
+recent chat was in the Inbox, read, with the restaurant's reply tagged "phone" and the
+"Photo or file — open WhatsApp on the phone to see it" line. The old chat was in Archived,
+dated Sun 06.09. A second press answered "Both chats are here already". Edit: the bubble's
+meta line read "edited". Reply from the phone: tagged "phone", and the row read "just now"
+with it as its line. Delete: "Message deleted by the customer", italic and muted, with the
+"edited" mark gone. Phase 6's mute at 375px: "Not a customer" archived it (Archived 3 → 4),
+the row carried the mute mark, the open chat a "Not a customer" chip with Re-check · Customer
+again · Delete on one row, and "Customer again" sent it back (4 → 3). **Save as contact was
+refused: `PERMISSION_DENIED`.** DEV's published rules do not have the `waContacts/$phoneKey`
+grant yet (the rules ship in phase 10 and need publishing); the panel shows the refusal in
+its failure line. Backend mode and the connection events cannot run here (the local harness
+has no database credentials), so they are covered by the handler tests and checked on the
+sandbox after merge.
+
+**Found while checking, not yet fixed: a bubble's time has no day.** `MessageBubble` writes
+`formatClockTime(ts)` alone, which was harmless while a thread held a day or two. An
+imported history puts months of messages in one thread with nothing saying which day each
+is from: the two-day-old messages read "00:47". The fix is a decision for Patryk (a date in
+the meta line of a message not from today, or day separators in the thread).
+
+Also: the panel's nine section headings were nine copies of one style and are one
+`SECTION_HEAD` now. Adding a tenth had tipped `tests/style-check.test.js`' weight ratchet to
+29.9%, so the ratio moved by de-duplication, not by demoting anything.
+
+Tests: `tests/wa-sim-coexist.test.js` (new, 16: the refusal table, the builders, the two
+lifted planners, client mode through recorded savers, backend mode through a mocked post),
+the events against the in-memory database in `tests/api-handlers.test.js` (each event, the
+real link left alone, idempotent history, which a mutant ignoring stored keys fails, and the
+agreement test), the onboarding's `sim` handling, the Settings line, and
+`tests/wa-sim-not-in-prod.test.js`: only the stubbed `wa-sim.js` imports the new module, and
+its marker `wamid-SIMHIST` is in no built chunk.

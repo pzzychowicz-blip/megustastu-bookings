@@ -69,6 +69,11 @@ const SIM_MARKERS = [
 // chunks were still emitted, and wrong the moment they stopped being. The source
 // is the right place: it is what proves a marker is a real string rather than
 // one renamed out of existence, and it stays true however the build changes.
+// v18.9.0: markers of the simulator modules the SERVER shares, which the build
+// does not stub (their importers are checked instead), and the file each lives in.
+const SHARED_SIM_MARKERS = ["wamid-SIMHIST"];
+const SHARED_SIM_SOURCES = ["src/lib/wa-sim-coexist.js"];
+
 const SIM_SOURCES = [
   "src/lib/wa-sim.js",
   "src/lib/wa-sim-scenarios.js",
@@ -143,7 +148,27 @@ describe("the WhatsApp simulator cannot reach production", () => {
         if (/from "\.{1,2}\/(lib\/)?wa-mock-media/.test(stripComments(readFileSync(p, "utf8")).join("\n"))) importers.push(p.slice(join(ROOT, "src").length + 1));
       }
     })(join(ROOT, "src"));
-    expect(importers).toEqual(["lib/wa-backend-sim.js"]);
+    // v18.9.0: and the simulator's coexistence events, which build the
+    // imported chat's photo from it (and are themselves reached only from the
+    // stubbed wa-sim.js, the test below).
+    expect(importers.sort()).toEqual(["lib/wa-backend-sim.js", "lib/wa-sim-coexist.js"]);
+  });
+
+  // v18.9.0: the coexistence events are shared with the server
+  // (api/_lib/sim-events.js) the way the mock media is, so the build does not
+  // stub them either. In src/ only the stubbed wa-sim.js may import them.
+  it("in src/, only the stubbed simulator core imports the coexistence events", () => {
+    const importers = [];
+    (function walk(dir) {
+      for (const n of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, n.name);
+        if (n.isDirectory()) { walk(p); continue; }
+        if (!/\.(js|jsx)$/.test(n.name) || n.name === "wa-sim-coexist.js") continue;
+        if (/from "\.{1,2}\/(lib\/)?wa-sim-coexist/.test(stripComments(readFileSync(p, "utf8")).join("\n"))) importers.push(p.slice(join(ROOT, "src").length + 1));
+      }
+    })(join(ROOT, "src"));
+    expect(importers).toEqual(["lib/wa-sim.js"]);
+    expect(read("vite.config.js")).toContain('"src/lib/wa-sim.js"');
   });
 
   it("App reaches the simulator only through a dynamic import", () => {
@@ -180,7 +205,7 @@ describe("the WhatsApp simulator cannot reach production", () => {
     // every lazy chunk including the simulator's, which is not a leak — dropping
     // it here is what keeps the markers below meaningful rather than drowned.
     js = js.replace(/\[\s*"assets\/[^\]]*\]/g, "");
-    const found = SIM_MARKERS.filter((m) => js.includes(m));
+    const found = SIM_MARKERS.concat(SHARED_SIM_MARKERS).filter((m) => js.includes(m));
     expect(
       found,
       "simulator code was built into a production chunk. Either vite.config.js' "
@@ -224,6 +249,8 @@ describe("the WhatsApp simulator cannot reach production", () => {
     // of the simulator at all.
     const src = SIM_SOURCES.map((p) => readFileSync(join(ROOT, p), "utf8")).join("\n");
     const missing = SIM_MARKERS.filter((m) => !src.includes(m));
+    const shared = SHARED_SIM_SOURCES.map((p) => readFileSync(join(ROOT, p), "utf8")).join("\n");
+    missing.push(...SHARED_SIM_MARKERS.filter((m) => !shared.includes(m)));
     expect(
       missing,
       "these markers appear nowhere in the simulator's own source, so the "

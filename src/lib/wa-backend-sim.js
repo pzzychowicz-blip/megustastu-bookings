@@ -88,6 +88,27 @@ export async function postSimInbound({ phone, text, name, agoMs = 0, media }) {
   return data;
 }
 
+// v18.9.0 — one of the WhatsApp Business app's coexistence events (a contact,
+// a phone reply, the customer's edit or delete, the chat history, the
+// connection going and coming back), POSTed as `{ event, ...params }` to the
+// staff-auth /api/wa-sim-inbound, which builds Meta's webhook and stores it
+// through the real webhook's handlers (api/_lib/sim-events.js). The same
+// endpoint on the DEV harness and online: "connect" and "forget" are not
+// webhooks at all, so there is no unsigned-webhook route for these.
+export async function postSimEvent(event, params) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("not signed in");
+  const idToken = await user.getIdToken();
+  const res = await fetch(WA_BACKEND_URL + "/api/wa-sim-inbound", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
+    body: JSON.stringify(Object.assign({}, params || {}, { event })),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}
+
 // Route a simulated inbound through the real pipeline when backend mode is ON:
 //   · DEV    → the local harness's unsigned /api/wa-inbound (Meta-shaped payload)
 //   · online → the staff-auth /api/wa-sim-inbound (no public-webhook exposure)

@@ -183,6 +183,13 @@ describe("connectionLines — Settings → WhatsApp's words for waLink", () => {
     expect(r.lines).toContain("Meta says this number is not on the WhatsApp Business app (CLOUD_API).");
   });
 
+  // v18.9.0 phase 9: a connection the sandbox's simulator recorded says so.
+  it("a simulated connection says nothing at Meta is behind it, right after the first line", () => {
+    const r = connectionLines({ status: "connected", phoneNumberId: "999000000000002", sim: true }, TODAY);
+    expect(r.lines.slice(0, 3)).toEqual(["Connected.", "Simulated by the sandbox's WhatsApp simulator: nothing at Meta is connected.", "Number id 999000000000002."]);
+    expect(connectionLines({ status: "connected", phoneNumberId: "1", sim: "true" }, TODAY).lines.join(" ")).not.toMatch(/Simulated/);
+  });
+
   it("disconnected: the reason leads, and the same event is not said twice", () => {
     const ev = { event: "PARTNER_REMOVED", reason: "USER_REQUESTED", at: at("2026-10-15") };
     const r = connectionLines({ status: "disconnected", phoneNumberId: "1", disconnect: ev, lastEvent: ev }, TODAY);

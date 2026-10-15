@@ -27,11 +27,11 @@ import {
   readMessageNode, writeImportedThread, transactWaLink, updateWaLink,
 } from "./rtdb.js";
 import { inboundContent } from "./inbound-core.js";
-import { snippet, mediaSnippet } from "../../src/lib/whatsapp.js";
+import { snippet } from "../../src/lib/whatsapp.js";
 import {
   contactPlan, contactPatch, secondsTs, webhookPhoneKey,
-  echoRecord, echoConvPatch, changedMessageId, editedMessage, editedText, editPatch, revokePatch,
-  historyStatus, historyRecord, historyConvPatch, historyDeclined, historyProgress,
+  echoRecord, echoConvPatch, changedMessageId, editedMessage, editedText, editPatch, revokePatch, changeLine,
+  historyRecord, historyStatus, historyConvPatch, historyDeclined, historyProgress, threadPlan,
   accountEvent, linkAfterEvent,
 } from "../../src/lib/wa-coexist.js";
 
@@ -130,8 +130,7 @@ export async function applyMessageChange(phoneKey, m, now = Date.now()) {
   await updateMessage(phoneKey, found.key, patch);
   const conv = await getConversation(phoneKey);
   if (conv && Number(conv.lastMessageAt) === Number(stored.ts)) {
-    const line = stored.media && !patch.revokedAt ? mediaSnippet(stored.media, (editedText(m) || "").trim()) : patch.text;
-    await upsertConversation(phoneKey, { lastMessageSnippet: snippet(line) });
+    await upsertConversation(phoneKey, { lastMessageSnippet: snippet(changeLine(stored, patch, editedText(m))) });
   }
   return "applied";
 }
@@ -188,40 +187,22 @@ export async function handleEchoes(value, results, now = Date.now()) {
 // importThread(thread, now) → how many messages it stored. One read of the
 // thread's messages (what is already stored is skipped: a redelivered chunk
 // rewrites nothing), one of its conversation, and ONE root update of both
-// (`writeImportedThread`). A message with no wamid is skipped (no key to keep
-// it once), and so are an edit or a delete: the thread comes as it stands.
-// Direction is whether the message is FROM the thread's customer.
+// (`writeImportedThread`). What the thread stores is `threadPlan`
+// (src/lib/wa-coexist.js), which the simulator's client mode asks too.
 export async function importThread(thread, now = Date.now()) {
-  const phoneKey = webhookPhoneKey(thread && thread.id);
-  if (!phoneKey) return 0;
-  const msgs = Array.isArray(thread.messages) ? thread.messages : [];
-  const node = await readMessageNode(phoneKey);
+  if (!webhookPhoneKey(thread && thread.id)) return 0;
+  const node = await readMessageNode(webhookPhoneKey(thread.id));
   const have = new Set();
   Object.keys(node).forEach(function (k) {
     have.add(k);
     const p = node[k] && node[k].providerMsgId;
     if (typeof p === "string" && p) have.add(sanitizeKey(p));
   });
-  const records = [];
-  let oldest = Infinity, newest = -Infinity, line = "";
-  msgs.forEach(function (m) {
-    if (!m || typeof m !== "object" || m.type === "edit" || m.type === "revoke") return;
-    const wamid = typeof m.id === "string" && m.id ? m.id : null;
-    if (!wamid) return;
-    const content = inboundContent(m);
-    const ts = secondsTs(m.timestamp, now);
-    if (ts < oldest) oldest = ts;
-    if (ts >= newest) { newest = ts; line = content.snippet; }
-    const key = sanitizeKey(wamid);
-    if (have.has(key)) return;
-    have.add(key);
-    const incoming = webhookPhoneKey(m.from) === phoneKey;
-    records.push(historyRecord(key, wamid, content, ts, incoming, historyStatus(m, incoming)));
-  });
-  if (newest === -Infinity) return 0;
-  const conv = await getConversation(phoneKey);
-  await writeImportedThread(phoneKey, records, historyConvPatch(conv, { phoneKey, oldest, newest, snippet: snippet(line), now }));
-  return records.length;
+  const plan = threadPlan(thread, have, inboundContent, sanitizeKey, now);
+  if (!plan || plan.newest === -Infinity) return 0;
+  const conv = await getConversation(plan.phoneKey);
+  await writeImportedThread(plan.phoneKey, plan.records, historyConvPatch(conv, { phoneKey: plan.phoneKey, oldest: plan.oldest, newest: plan.newest, snippet: snippet(plan.line), now }));
+  return plan.records.length;
 }
 
 // attachHistoryMedia(value, m, now) — a `history` change's own `messages[]`:

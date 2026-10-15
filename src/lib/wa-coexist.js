@@ -13,7 +13,7 @@
 // inbox (the disconnection banner's sentence), which is a lazy chunk, so it
 // never reaches the startup bundle.
 
-import { normalizePhone, isPhoneKey, mediaLabel, WA_MAX_TEXT_LEN } from "./whatsapp.js";
+import { normalizePhone, isPhoneKey, mediaLabel, mediaSnippet, WA_MAX_TEXT_LEN } from "./whatsapp.js";
 import { formatDay, localDay } from "./day.js";
 
 // secondsTs(raw, now) — a Meta timestamp (seconds since the epoch, usually as a
@@ -215,6 +215,15 @@ export function revokePatch(stored, ts) {
   return { text: stored.direction === "in" ? WA_REVOKED_IN : WA_REVOKED_OUT, media: null, revokedAt: ts };
 }
 
+// changeLine(stored, patch, text) — the conversation's line in the list after
+// an edit or a delete of its LAST message (the caller decides that it is the
+// last): a photo keeps its photo's line with the new caption, anything else
+// shows the patched text, so a deleted message's words do not stay on screen.
+// `text` is the edit's new text (editedText), or null for a delete.
+export function changeLine(stored, patch, text) {
+  return stored && stored.media && !patch.revokedAt ? mediaSnippet(stored.media, (text || "").trim()) : patch.text;
+}
+
 // ── History: the chats the phone already held (history) ──────────────────────
 // Once, after onboarding and only if the business agreed on the phone, Meta
 // sends the Business app's 1:1 chats of the last 180 days, in three phases
@@ -283,6 +292,40 @@ export function historyConvPatch(existing, o) {
   }
   if (!(Number(existing.createdAt) <= o.oldest)) patch.createdAt = o.oldest;
   return patch;
+}
+
+// threadPlan(thread, have, contentOf, keyOf, now) → what one imported thread
+// stores, or null when it is not a thread of a number: `{ phoneKey, records,
+// oldest, newest, line }`. `have` is the set of keys already stored (a
+// message in it is not written again, and a redelivered chunk writes nothing);
+// `contentOf` reads a webhook message (the server's `inboundContent`), `keyOf`
+// makes its storage key (the server's `sanitizeKey`). A message with no wamid
+// is skipped (no key to keep it once), and so are an edit and a delete: the
+// thread comes as it stands. Direction is whether the message is FROM the
+// thread's customer. `newest` is -Infinity when nothing in it had a wamid, and
+// the caller then writes nothing at all.
+export function threadPlan(thread, have, contentOf, keyOf, now) {
+  const phoneKey = webhookPhoneKey(thread && thread.id);
+  if (!phoneKey) return null;
+  const msgs = Array.isArray(thread.messages) ? thread.messages : [];
+  const seen = new Set(have || []);
+  const records = [];
+  let oldest = Infinity, newest = -Infinity, line = "";
+  msgs.forEach(function (m) {
+    if (!m || typeof m !== "object" || m.type === "edit" || m.type === "revoke") return;
+    const wamid = typeof m.id === "string" && m.id ? m.id : null;
+    if (!wamid) return;
+    const content = contentOf(m);
+    const ts = secondsTs(m.timestamp, now);
+    if (ts < oldest) oldest = ts;
+    if (ts >= newest) { newest = ts; line = content.snippet; }
+    const key = keyOf(wamid);
+    if (seen.has(key)) return;
+    seen.add(key);
+    const incoming = webhookPhoneKey(m.from) === phoneKey;
+    records.push(historyRecord(key, wamid, content, ts, incoming, historyStatus(m, incoming)));
+  });
+  return { phoneKey, records, oldest, newest, line };
 }
 
 // Did the business decline to share its history? Meta answers 2593109 on the
@@ -372,6 +415,9 @@ export function connectionLines(link, today) {
   const lines = [];
   if (state === "disconnected") lines.push(disconnectSentence(l.disconnect));
   else lines.push("Connected" + (l.connectedAt ? " on " + day(l.connectedAt) : "") + (l.connectedBy ? " by " + l.connectedBy : "") + ".");
+  // A connection the sandbox's simulator recorded (api/_lib/sim-events.js):
+  // said, because nothing at Meta is behind it.
+  if (l.sim === true) lines.push("Simulated by the sandbox's WhatsApp simulator: nothing at Meta is connected.");
   lines.push("Number id " + l.phoneNumberId + ".");
 
   const c = l.contacts || {};

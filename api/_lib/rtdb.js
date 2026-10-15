@@ -321,6 +321,19 @@ export async function transactWaLink(path, fn) {
   await getDb().ref("waLink/" + path).transaction(function (cur) { return fn(cur); });
 }
 
+// Removes `waLink` when the sandbox's simulator made it (`sim: true`) and
+// resolves whether it did. A transaction that asks of what is stored, so a
+// real connection recorded a moment earlier is never what "Forget" deletes.
+// Only api/_lib/sim-events.js calls it.
+export async function removeSimWaLink() {
+  let removed = false;
+  await getDb().ref("waLink").transaction(function (cur) {
+    removed = !!(cur && cur.sim === true);
+    return removed ? null : undefined;
+  });
+  return removed;
+}
+
 // ── An imported chat (v18.9.0, history) ─────────────────────────────────────
 // One thread in ONE multi-path update at the root: its new messages, each
 // whole under its own key, and its conversation's fields one path each, so

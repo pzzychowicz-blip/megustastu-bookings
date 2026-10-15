@@ -368,6 +368,19 @@ export function useWhatsApp({
     if (!WA_SANDBOX || !on || !isPathKey(phoneKey) || !msg || !msg.id) return;
     set(ref(db, "messages/" + phoneKey + "/" + msg.id), msg).catch(function () {});
   }
+  // simSetContacts — the SIMULATOR's contacts writer (sandbox only, v18.9.0):
+  // one multi-path update of `waContacts` children (a contact, or null to
+  // remove it), the shape api/_lib/rtdb.js's updateWaContacts writes. Each
+  // path is checked on its own against the per-key grant, which is all the
+  // rules give a browser. Resolves when the server has it, so the panel can
+  // say a refusal. Dead in a production build (WA_SANDBOX).
+  function simSetContacts(patch) {
+    if (!WA_SANDBOX || !on || !patch) return Promise.resolve(false);
+    const clean = {};
+    Object.keys(patch).forEach(function (k) { if (isPathKey(k)) clean[k] = patch[k]; });
+    if (!Object.keys(clean).length) return Promise.resolve(false);
+    return update(ref(db, "waContacts"), clean).then(function () { return true; });
+  }
   function saveTemplates(next) {
     if (!templatesLoaded.current) {
       console.warn("[SAFE] Refused to write templates — initial read has not completed yet.");
@@ -863,7 +876,7 @@ export function useWhatsApp({
     patchConversation, upsertConversation, appendMessage, patchMessage,
     saveTemplates, clearAllWaData, eraseConversation,
     // v18.8.0: the per-conversation listener seam, and the simulator's writer
-    watchMessages, simAppendMessage,
+    watchMessages, simAppendMessage, simSetContacts,
     // derived
     unreadCount,
     // draft seam (doSave calls completeDraftAccept, then linkBookingByPhone)

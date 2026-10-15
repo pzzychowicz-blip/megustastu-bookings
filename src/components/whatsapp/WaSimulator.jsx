@@ -18,11 +18,15 @@ import { S, BTN, R, T, FW, IC } from "../../lib/constants";
 import { sortConversations } from "../../lib/whatsapp";
 import { countLabel } from "../../lib/booking-logic";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
-import { simulateInbound } from "../../lib/wa-sim";
+import { simulateInbound, simulateCoexist } from "../../lib/wa-sim";
 import { backendEnabled, setBackendEnabled, backendHealth, WA_BACKEND_URL } from "../../lib/wa-backend";
 import { suggestCustomerReply, generateScenario, simErrorText, backendInbound } from "../../lib/wa-backend-sim";
 import { WA_SANDBOX } from "../../lib/waSandbox";
 import { FlaskIcon, DiceIcon, PhotoIcon, PlayIcon, FileIcon } from "./WaIcons";
+
+// Every section's heading, written once (v18.9.0: it was nine copies of one
+// style, and the coexistence section would have been the tenth).
+const SECTION_HEAD = { fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)" };
 
 export function WaSimulator({ ctx, onClose }) {
   // The footer's line and whether it reports a failure (v18.4.5: a failure is
@@ -141,6 +145,28 @@ export function WaSimulator({ ctx, onClose }) {
       .then(function () { run.onBackend(null); }, function (e) { run.onBackend(e); });
     if (caption) setCustText("");
   }
+  // ── The WhatsApp Business app (v18.9.0, coexistence) — what the restaurant
+  // phone sends once the number is shared with MGT: a contact saved or removed,
+  // a reply typed on the phone, the customer editing or deleting a message,
+  // the chats the phone already held, and the connection itself. The first
+  // three act on the conversation picked above. Client mode stores what the
+  // browser can write; the imported photo and the connection are the
+  // server's alone (simulateCoexist says so when they are pressed).
+  const [coName, setCoName] = useState("");
+  const [coText, setCoText] = useState("");
+  const [coBusy, setCoBusy] = useState(false);
+  function runCoexist(event, extra) {
+    if (coBusy) return;
+    const params = Object.assign({ phone: custConv ? (custConv.phone || custConv.phoneKey) : undefined }, extra || {});
+    setCoBusy(true);
+    setStatus("Business app → " + event + "…");
+    simulateCoexist(event, params, ctx)
+      .then(function (line) {
+        setStatus(line);
+        if (event === "echo") setCoText("");
+      }, function (e) { setFailure(event + ": " + simErrorText(e)); })
+      .finally(function () { setCoBusy(false); });
+  }
   async function suggestReply() {
     if (!custConv || suggesting) return;
     setSuggesting(true);
@@ -223,7 +249,7 @@ export function WaSimulator({ ctx, onClose }) {
       <Section>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
           <div>
-            <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)" }}>{backendLabel}</div>
+            <div style={{ ...SECTION_HEAD }}>{backendLabel}</div>
             <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 2 }}>
               {backendOn
                 ? (import.meta.env.DEV
@@ -243,7 +269,7 @@ export function WaSimulator({ ctx, onClose }) {
       ) : null}
 
       <Section>
-        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><DiceIcon size={IC.control} />Generate scenario (Gemini)</div>
+        <div style={{ ...SECTION_HEAD, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><DiceIcon size={IC.control} />Generate scenario (Gemini)</div>
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginBottom: 8 }}>Gemini invents a fresh, varied customer message (new sender) and runs it through the live pipeline — variety beyond the canned scenarios. Optional steer below; leave blank to surprise.</div>
         <input className="mgt-hover-scale" aria-label="Optional steer for the generated scenario" value={genHint} onChange={(e) => setGenHint(e.target.value)} placeholder="Optional steer — e.g. birthday for 10, running late, cancel…" style={Object.assign({}, mkInp(), { marginBottom: 8 })} />
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -253,7 +279,7 @@ export function WaSimulator({ ctx, onClose }) {
       </Section>
 
       <Section>
-        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Reply as customer</div>
+        <div style={{ ...SECTION_HEAD, marginBottom: 8 }}>Reply as customer</div>
         {custList.length === 0 ? (
           <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>No conversations yet — fire a scenario first.</div>
         ) : (
@@ -289,7 +315,43 @@ export function WaSimulator({ ctx, onClose }) {
       </Section>
 
       <Section>
-        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Sample data</div>
+        <div style={{ ...SECTION_HEAD, marginBottom: 6 }}>WhatsApp Business app (coexistence)</div>
+        <div style={{ fontSize: T.small, color: "var(--text-muted)", marginBottom: 8 }}>What the restaurant phone sends once the number is shared with MGT. Contacts, phone replies and the customer's edits act on the conversation picked above.</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <Fld label="Name saved on the phone">
+            {(id) => <input id={id} className="mgt-hover-scale" value={coName} onChange={(e) => setCoName(e.target.value)} style={mkInp()} placeholder="Lucía (terraza)" />}
+          </Fld>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="mgt-hover-scale" disabled={!custConv || coBusy} onClick={() => runCoexist("contact", { name: coName })} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: S.accent })}>Save as contact</button>
+            <button className="mgt-hover-scale" disabled={!custConv || coBusy} onClick={() => runCoexist("contact", { remove: true })} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)" })}>Remove contact</button>
+          </div>
+          <Fld label="Text (a reply from the phone, or the customer's edit)">
+            {(id) => <textarea id={id} className="mgt-hover-scale" value={coText} onChange={(e) => setCoText(e.target.value)} rows={2} style={mkArea()} />}
+          </Fld>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="mgt-hover-scale" disabled={!custConv || coBusy} onClick={() => runCoexist("echo", { text: coText })} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: S.accent })}>Reply from the phone</button>
+            <button className="mgt-hover-scale" disabled={!custConv || coBusy} onClick={() => runCoexist("edit", { text: coText })} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)" })}>Customer edits last message</button>
+            <button className="mgt-hover-scale" disabled={!custConv || coBusy} onClick={() => runCoexist("revoke")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)" })}>Customer deletes last message</button>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="mgt-hover-scale" disabled={coBusy} onClick={() => runCoexist("history")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--wa-sim-accent)" })}>Import chat history</button>
+            <button className="mgt-hover-scale" disabled={!backendOn || coBusy} onClick={() => runCoexist("history-media")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--wa-sim-accent)" })}>Photo for the imported chat</button>
+          </div>
+          <div style={{ fontSize: T.small, color: "var(--text-muted)" }}>History brings two chats: one from this week, which stays in the Inbox, and one from forty days ago, which goes straight to Archived. Its photo comes as a placeholder until the second button sends it.</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="mgt-hover-scale" disabled={!backendOn || coBusy} onClick={() => runCoexist("connect")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: S.accent })}>Connect (simulated)</button>
+            <button className="mgt-hover-scale" disabled={!backendOn || coBusy} onClick={() => runCoexist("disconnect")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)" })}>Disconnect</button>
+            <button className="mgt-hover-scale" disabled={!backendOn || coBusy} onClick={() => runCoexist("reconnect")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)" })}>Reconnect</button>
+            <button className="mgt-hover-scale" disabled={!backendOn || coBusy} onClick={() => runCoexist("forget")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)" })}>Forget</button>
+          </div>
+          <div style={{ fontSize: T.small, color: "var(--text-muted)" }}>{backendOn
+            ? "Each goes through the real webhook's handlers. The connection is marked as the simulator's, and nothing here touches a real one recorded on this database."
+            : "Backend mode only for the photo and the connection: the browser cannot write either."}</div>
+        </div>
+      </Section>
+
+      <Section>
+        <div style={{ ...SECTION_HEAD, marginBottom: 8 }}>Sample data</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.today })} onClick={onSeed}>Seed sample bookings</button>
           <button className="mgt-hover-scale" style={mkDangerBtn({ minHeight: 40, padding: "8px 12px" })} onClick={onClearBookings}>Clear WA-SIM bookings</button>
@@ -299,20 +361,20 @@ export function WaSimulator({ ctx, onClose }) {
       </Section>
 
       <Section>
-        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Send failure (test Retry)</div>
+        <div style={{ ...SECTION_HEAD, marginBottom: 8 }}>Send failure (test Retry)</div>
         <button className="mgt-hover-scale mgt-press" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.del, width: "100%" })} onClick={onFailNext}>Make next staff reply fail</button>
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Client mode only. Then send a reply in the inbox — the bubble shows “failed” with a Retry button. (Backend mode handles failures server-side.)</div>
       </Section>
 
       <Section>
-        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Busy moment</div>
+        <div style={{ ...SECTION_HEAD, marginBottom: 8 }}>Busy moment</div>
         <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 14px", background: "var(--wa-sim-accent)", width: "100%" })} onClick={onBurst}>Simulate a burst (ongoing + new)</button>
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Moves the open conversations forward (a draft adds a detail, a confirmed booking asks to change, an unhandled request gets a nudge) and adds a couple of new ones.</div>
       </Section>
 
       {Object.keys(groups).map((g) => (
         <Section key={g}>
-          <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>{g}</div>
+          <div style={{ ...SECTION_HEAD, marginBottom: 8 }}>{g}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {groups[g].map((s) => (
               <div key={s.id}>
@@ -325,7 +387,7 @@ export function WaSimulator({ ctx, onClose }) {
       ))}
 
       <Section>
-        <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 10 }}>Custom message</div>
+        <div style={{ ...SECTION_HEAD, marginBottom: 10 }}>Custom message</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <Fld label="Phone">{(id) => <input id={id} className="mgt-hover-scale" value={form.phone} onChange={upd("phone")} style={mkInp()} placeholder="+34600000000" />}</Fld>
           <Fld label="Language">
