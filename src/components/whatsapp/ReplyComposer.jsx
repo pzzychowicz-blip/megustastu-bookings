@@ -113,9 +113,11 @@ function AttachChip({ att, busy, onRemove }) {
       background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)",
       color: "var(--text-primary)",
     }}>
+      {/* v18.8.0 follow-up: the file breathes (`.mgt-dot-pulse`) while it is
+          sent, beside "Sending…", as MessageBubble's media do while they load. */}
       {photo
-        ? <img src={att.url} alt="" style={{ width: H.control, height: H.control, objectFit: "cover", borderRadius: R.inset, flexShrink: 0 }} />
-        : <span style={{ display: "flex", flexShrink: 0 }}><FileIcon size={IC.chrome} /></span>}
+        ? <img className={busy ? "mgt-dot-pulse" : undefined} src={att.url} alt="" style={{ width: H.control, height: H.control, objectFit: "cover", borderRadius: R.inset, flexShrink: 0 }} />
+        : <span className={busy ? "mgt-dot-pulse" : undefined} style={{ display: "flex", flexShrink: 0 }}><FileIcon size={IC.chrome} /></span>}
       <span style={{ minWidth: 0, flex: 1 }}>
         <span style={{ display: "block", fontSize: T.body, fontWeight: FW.semi, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
         <span style={{ display: "block", fontSize: T.small, color: "var(--text-muted)" }}>{busy ? "Sending…" : fileSizeLabel(att.size)}</span>

@@ -28,6 +28,11 @@ import { RetryIcon, PlayIcon, FileIcon, PhotoIcon } from "./WaIcons";
 // 78% cap on a 375px phone.
 const THUMB = 240;
 
+// v18.8.0 follow-up: while a file is on its way (the photo's waiting box, Play
+// and the document row while they fetch) its icon breathes with
+// `.mgt-dot-pulse`, the loop the draft check's "Checking the tables…" dot
+// uses, so a wait of a few seconds reads as work rather than as a dead label.
+
 const TOO_LARGE = "Too large to open here — open WhatsApp on the phone";
 const GONE = "no longer on WhatsApp";
 
@@ -90,7 +95,7 @@ function MediaPhoto({ phoneKey, msg, onOpenPhoto }) {
     return (
       <div ref={boxRef} role="img" aria-label="Photo, loading" style={Object.assign({}, box, {
         display: "flex", alignItems: "center", justifyContent: "center", background: "var(--wa-media-wait)",
-      })}><span style={{ opacity: 0.6, display: "flex" }}><PhotoIcon size={IC.chrome} /></span></div>
+      })}><span className="mgt-dot-pulse" style={{ opacity: 0.6, display: "flex" }}><PhotoIcon size={IC.chrome} /></span></div>
     );
   }
   return (
@@ -141,7 +146,7 @@ function MediaAudio({ phoneKey, msg }) {
         onClick={(e) => { if (loading) return; setHandOn(pressedWithFocus(e)); setWant(true); }}
         aria-disabled={loading ? "true" : undefined}
         aria-label={"Play " + label.toLowerCase()} title={"Play " + label.toLowerCase()}
-        style={Object.assign({}, roundBtn, { opacity: loading ? 0.6 : 1, cursor: loading ? "default" : "pointer" })}><PlayIcon size={IC.chrome} /></button>
+        style={Object.assign({}, roundBtn, { opacity: loading ? 0.6 : 1, cursor: loading ? "default" : "pointer" })}><span className={loading ? "mgt-dot-pulse" : undefined} style={{ display: "flex" }}><PlayIcon size={IC.chrome} /></span></button>
       <span style={{ fontSize: T.body, fontWeight: FW.medium }}>{loading ? "Loading…" : label}</span>
     </div>
   );
@@ -218,7 +223,7 @@ function MediaDocument({ phoneKey, msg }) {
         padding: "6px 10px", minHeight: H.control, borderRadius: R.inset, cursor: loading ? "default" : "pointer",
         background: "transparent", color: "inherit", border: "1.5px solid currentColor",
       }}>
-      <span style={{ display: "flex", flexShrink: 0 }}><FileIcon size={IC.chrome} /></span>
+      <span className={loading ? "mgt-dot-pulse" : undefined} style={{ display: "flex", flexShrink: 0 }}><FileIcon size={IC.chrome} /></span>
       <span style={{ minWidth: 0, flex: 1 }}>
         <span style={{ display: "block", fontSize: T.body, fontWeight: FW.semi, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
         <span style={{ display: "block", fontSize: T.small, opacity: 0.8 }}>

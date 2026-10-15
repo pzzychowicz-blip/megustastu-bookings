@@ -35956,6 +35956,15 @@ its own commit.
    thread too. Measured on DEV: box at 111 ms, the photo 0 → 1.00 between 138 and 371 ms, cold
    and reopened alike.
 
+5. **A file on its way breathes.** The photo's waiting box, Play and the document row while they
+   fetch, and the attached file while it is sent, were a static label ("Loading…", "Opening…",
+   "Sending…") over a wait of up to a few seconds. Their icon (the thumbnail, for an attached
+   photo) now takes `.mgt-dot-pulse`, the draft check's loop, only while waiting. Measured on
+   DEV with `/api/wa-media` held 1.5 s: the waiting box and the document row's icon run
+   `mgt-dot-pulse` during the wait and drop it once the file is there. The voice note's Play and
+   the attached file while sending take the same class on the same condition; not measured
+   live.
+
 ### Deploy steps (Patryk)
 
 1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random
