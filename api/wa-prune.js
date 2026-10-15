@@ -29,6 +29,15 @@
 // deleted. Only threads that can hold an old message are read: a conversation
 // created inside the window cannot, so most nights read almost nothing.
 //
+// **The messages go BEFORE the conversation** (/code-review). The prune finds
+// a thread through its conversation row, so a conversation deleted first and
+// messages that then failed to delete would be kept for ever, past the period
+// the privacy notice states. In this order a failure leaves the conversation,
+// and the next night finds it again: its messages, or its now-empty thread.
+// The cost is one race: a thread that comes alive in the moment between the
+// read and the transaction keeps its row and loses a message with no readable
+// `ts`, which no writer in this app produces.
+//
 // Deletes go per conversation and per message, never a whole node: this runs
 // through firebase-admin, which bypasses the rules, so nothing but this code
 // limits what it can remove. It answers the counts and logs one line.
@@ -94,14 +103,13 @@ export default async function handler(req, res) {
     try {
       const node = await readMessageNode(key);
       out.read++;
-      let gone = false;
-      if (conversationExpired(conv, cutoff)) {
-        gone = await removeConversationIf(key, function (cur) { return conversationExpired(cur, cutoff); });
-        if (gone) out.conversations++;
-      }
-      const ids = staleMessageIds(node, cutoff, gone);
+      const expired = conversationExpired(conv, cutoff);
+      const ids = staleMessageIds(node, cutoff, expired);
       await removeMessages(key, ids);
       out.messages += ids.length;
+      if (expired && await removeConversationIf(key, function (cur) { return conversationExpired(cur, cutoff); })) {
+        out.conversations++;
+      }
     } catch (e) {
       out.errors++;
       console.error("[wa-prune] " + key + ":", e && e.message);

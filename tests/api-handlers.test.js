@@ -31,7 +31,9 @@ import { Readable, Writable } from "node:stream";
 import { readFileSync } from "node:fs";
 
 const fake = vi.hoisted(() => {
-  const state = { tree: {}, writes: [] };
+  // `failWrite(op, path)` → true makes that write throw (a database error the
+  // code under test has to survive), before anything is changed.
+  const state = { tree: {}, writes: [], failWrite: null };
   const parts = (p) => p.split("/").filter(Boolean);
   const read = (p) => parts(p).reduce((n, k) => (n != null && typeof n === "object" ? n[k] : undefined), state.tree);
   const write = (p, v) => {
@@ -46,6 +48,7 @@ const fake = vi.hoisted(() => {
       get: async () => { const v = read(path); return { exists: () => v !== undefined && v !== null, val: () => (v === undefined ? null : v) }; },
       set: async (v) => { state.writes.push({ op: "set", path, value: v }); write(path, v); },
       update: async (patch) => {
+        if (state.failWrite && state.failWrite("update", path)) throw new Error("database unavailable");
         state.writes.push({ op: "update", path, value: patch });
         Object.keys(patch).forEach((k) => write(path + "/" + k, patch[k]));
       },
@@ -53,6 +56,7 @@ const fake = vi.hoisted(() => {
       // with null and retry with the stored value; this calls it once, with
       // the stored value, which is the call that decides.
       transaction: async (fn) => {
+        if (state.failWrite && state.failWrite("transaction", path)) throw new Error("database unavailable");
         const cur = read(path);
         const next = fn(cur === undefined ? null : cur);
         if (next === undefined) return { committed: false, snapshot: { exists: () => cur != null, val: () => cur } };
@@ -110,6 +114,7 @@ const openConv = (extra) => Object.assign({ phoneKey: KEY, phone: KEY, windowExp
 beforeEach(() => {
   fake.state.tree = {};
   fake.state.writes = [];
+  fake.state.failWrite = null;
   vi.stubEnv("FIREBASE_SERVICE_ACCOUNT", '{"project_id":"test"}');
   ["WA_STAFF_EMAILS", "WA_SEND_MODE", "WA_LLM_MODE", "WA_DB_URL", "WA_ALLOW_UNSIGNED", "WA_SIM_ENABLED",
     "META_APP_SECRET", "META_WA_TOKEN", "META_PHONE_NUMBER_ID", "META_VERIFY_TOKEN", "GEMINI_API_KEY", "GEMINI_MODEL", "TENANT_WA_CONTEXT",
@@ -1311,6 +1316,44 @@ describe("wa-prune", () => {
       expect(w.op === "transaction" ? w.value : Object.values(w.value).every((v) => v === null)).toBe(w.op === "transaction" ? null : true);
     }
     expect(console.log).toHaveBeenCalledWith(expect.stringMatching(/^\[wa-prune\] kept 90 days .*removed 1 conversation\(s\) and 6 message\(s\), read 3 thread\(s\), 0 error\(s\)$/));
+  });
+
+  // /code-review: the thread was deleted FIRST, so a failed message delete
+  // left its messages behind with no conversation, and the prune walks
+  // conversations only: kept for ever. Messages go first now, and a failure
+  // leaves the conversation for the next night to find again.
+  it("a failed message delete never orphans a thread: the conversation stays, and the next night finishes the job", async () => {
+    vi.stubEnv("CRON_SECRET", CRON);
+    fake.state.tree = {
+      settings: { admin: { waRetentionDays: 90 } },
+      conversations: { [KEY]: { phoneKey: KEY, createdAt: ago(300), lastMessageAt: ago(120) } },
+      messages: { [KEY]: { a: msg("a", ago(300)), b: msg("b", ago(120)) } },
+    };
+    fake.state.failWrite = (op, path) => op === "update" && path.startsWith("messages/");
+    const first = await prune();
+    expect(first.statusCode).toBe(500);
+    expect(first.body).toMatchObject({ ok: false, conversations: 0, messages: 0, errors: 1 });
+    expect(fake.state.tree.conversations[KEY]).toBeTruthy();
+    expect(Object.keys(fake.state.tree.messages[KEY]).sort()).toEqual(["a", "b"]);
+
+    fake.state.failWrite = null;
+    const second = await prune();
+    expect(second.body).toMatchObject({ ok: true, conversations: 1, messages: 2, errors: 0 });
+    expect(fake.state.tree.conversations[KEY]).toBeUndefined();
+    expect(fake.state.tree.messages[KEY]).toEqual({});
+  });
+  it("a failed conversation delete leaves an empty thread that the next night deletes", async () => {
+    vi.stubEnv("CRON_SECRET", CRON);
+    fake.state.tree = {
+      conversations: { [KEY]: { phoneKey: KEY, createdAt: ago(800), lastMessageAt: ago(400) } },
+      messages: { [KEY]: { a: msg("a", ago(400)) } },
+    };
+    fake.state.failWrite = (op) => op === "transaction";
+    expect((await prune()).body).toMatchObject({ ok: false, conversations: 0, messages: 1, errors: 1 });
+    expect(fake.state.tree.messages[KEY]).toEqual({});
+    fake.state.failWrite = null;
+    expect((await prune()).body).toMatchObject({ ok: true, conversations: 1, messages: 0, errors: 0 });
+    expect(fake.state.tree.conversations[KEY]).toBeUndefined();
   });
 
   it("reads the setting through the one normaliser: absent, null, 0 or junk is a year, and a tiny number is the 30-day floor", async () => {

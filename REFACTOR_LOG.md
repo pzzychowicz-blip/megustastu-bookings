@@ -35817,6 +35817,20 @@ statically, summed with Node's gzip):
 
 Main bundle 121.67 kB gz (−20.80); 3,361 tests; lint 63 warnings; style OK.
 
+### `/code-review` of the branch (2026-10-15)
+
+Seven findings. Each was tested against the code before it was changed, and each fix is
+its own commit.
+
+1. **The prune deleted a conversation before its messages.** It finds a thread through its
+   conversation row, so if the message delete then failed, the messages were kept for ever,
+   past the period the privacy notice states. Reproduced with a database double whose message
+   delete throws: the conversation was gone and both messages stayed. The messages go first
+   now, and a failure leaves the conversation for the next night to find again (two new tests,
+   one per failing write). One race is accepted: a thread that comes alive between the read and
+   the delete keeps its row but loses any message with no readable `ts`, which nothing in this
+   app writes.
+
 ### Deploy steps (Patryk)
 
 1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random
