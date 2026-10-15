@@ -34,8 +34,11 @@ import { WA_SANDBOX } from "./waSandbox";
 //                            dev server at the Mac's LAN address reaches the
 //                            harness there, where "localhost" meant the phone
 //   · deployed sandbox     → same-origin ("") so /api/* hits the Vercel functions
-const DEV_HOST = typeof location !== "undefined" && location.hostname ? location.hostname : "localhost";
-export const WA_BACKEND_URL = import.meta.env.DEV ? "http://" + DEV_HOST + ":3999" : "";
+// The host is read INSIDE the DEV branch, so a production build folds the
+// whole expression to "" and carries no `location` read (/code-review).
+export const WA_BACKEND_URL = import.meta.env.DEV
+  ? "http://" + (typeof location !== "undefined" && location.hostname ? location.hostname : "localhost") + ":3999"
+  : "";
 const FLAG_KEY = "mgt-wa-backend";
 
 // Backend mode is available wherever the sandbox surfaces are (dev server OR a
