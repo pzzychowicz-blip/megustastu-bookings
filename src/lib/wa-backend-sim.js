@@ -44,7 +44,11 @@ export async function postFakeWebhook({ phone, text, name, agoMs = 0, media }) {
         field: "messages",
         value: {
           messaging_product: "whatsapp",
-          metadata: { display_phone_number: "34600000000", phone_number_id: "PHONE_NUMBER_ID_LOCAL_SIM" },
+          // No `phone_number_id`, on purpose (v18.9.0): the number guard
+          // (api/_lib/coexist-core.js) lets a change without one through, and a
+          // made-up id would be dropped by a harness whose .env.local sets
+          // META_PHONE_NUMBER_ID to a real one.
+          metadata: { display_phone_number: "34600000000" },
           contacts: [{ wa_id: waId, profile: { name: name || "Sim Customer" } }],
           messages: [Object.assign({
             from: waId,

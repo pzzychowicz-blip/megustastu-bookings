@@ -45,7 +45,7 @@ const fake = vi.hoisted(() => {
   };
   const snapOf = (v) => ({ exists: () => v !== undefined && v !== null, val: () => (v === undefined ? null : v) });
   const db = {
-    ref: (path) => ({
+    ref: (path = "") => ({
       get: async () => snapOf(read(path)),
       // v18.8.0 /code-review (api/wa-prune.js): `orderByChild(k).endAt(v)`,
       // as RTDB orders it for this use: a child with no number at `k` (null)
@@ -119,6 +119,7 @@ import mediaHandler, { MEDIA_VIEW_MAX, servedType, sniffType } from "../api/wa-m
 import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "../api/wa-prune.js";
 import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
+import { numberIsOurs, makeNumberGuard } from "../api/_lib/coexist-core.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
 import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX } from "../src/lib/whatsapp.js";
@@ -668,7 +669,7 @@ describe("wa-inbound — the handshake, the method, the signature", () => {
   });
   it("answers 200 to a signed payload with nothing in it", async () => {
     const res = await deliver({});
-    expect([res.statusCode, res.body]).toEqual([200, { ok: true, messages: 0, statuses: 0, skipped: 0, errors: 0 }]);
+    expect([res.statusCode, res.body]).toEqual([200, { ok: true, messages: 0, statuses: 0, echoes: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 }]);
   });
 });
 
@@ -845,6 +846,99 @@ describe("wa-inbound — when to ask Meta to deliver again", () => {
     } finally {
       fake.db.ref = realRef;
     }
+  });
+});
+
+// ── v18.9.0 — coexistence: the field dispatch and the number guard ──────────
+// A coexistence number sends four more fields to the same URL; each change is
+// dispatched on its `field`, and a change for a number that is not the
+// restaurant's is ignored before anything reads it.
+const change = (field, value) => JSON.stringify({
+  object: "whatsapp_business_account",
+  entry: [{ id: "WABA", changes: [{ field, value: Object.assign({ messaging_product: "whatsapp" }, value) }] }],
+});
+const deliverChange = (field, value) => deliver(null, { raw: change(field, value) });
+const forNumber = (id) => ({ metadata: { display_phone_number: "34600000000", phone_number_id: id } });
+const hola = (extra) => Object.assign({ messages: [inMsg({ type: "text", text: { body: "hola" } })] }, extra);
+
+describe("wa-inbound — dispatch by field (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("a field the webhook does not handle is counted as ignored, answered 200, and writes nothing", async () => {
+    const res = await deliverChange("message_template_status_update", { event: "APPROVED" });
+    expect([res.statusCode, res.body]).toMatchObject([200, { ok: true, ignored: 1, messages: 0 }]);
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("a change with no field reads as `messages`, the one field there was", async () => {
+    const res = await deliver(null, { raw: JSON.stringify({ entry: [{ changes: [{ value: hola() }] }] }) });
+    expect(res.body).toMatchObject({ messages: 1 });
+    expect(inbound()).toHaveLength(1);
+  });
+  it("`value.messages` under another field never takes the inbound road: no auto-reply, no parse", async () => {
+    await deliverChange("history", hola());
+    expect(msgsAt(KEY).filter((m) => m.isAutoAck)).toEqual([]);
+    expect(scheduled).toEqual([]);
+  });
+});
+
+describe("wa-inbound — the number guard (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("with META_PHONE_NUMBER_ID set, a change for another number is ignored and writes nothing", async () => {
+    vi.stubEnv("META_PHONE_NUMBER_ID", "111");
+    const res = await deliver(hola(forNumber("222")));
+    expect(res.body).toMatchObject({ ignored: 1, messages: 0 });
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("a change for the configured number, or with no number on it, is stored", async () => {
+    vi.stubEnv("META_PHONE_NUMBER_ID", "111");
+    expect((await deliver(hola(forNumber("111")))).body).toMatchObject({ messages: 1, ignored: 0 });
+    expect((await deliver(hola({ messages: [inMsg({ id: "wamid.IN2", type: "text", text: { body: "otra" } })] }))).body)
+      .toMatchObject({ messages: 1, ignored: 0 });
+  });
+  it("the number Embedded Signup connected is accepted before the env var names it", async () => {
+    vi.stubEnv("META_PHONE_NUMBER_ID", "111");
+    fake.state.tree = { waLink: { status: "connected", phoneNumberId: "333" } };
+    expect((await deliver(hola(forNumber("333")))).body).toMatchObject({ messages: 1 });
+    expect((await deliver(hola(forNumber("222")))).body).toMatchObject({ ignored: 1 });
+  });
+  it("with nothing configured anywhere, every number is accepted (the mock sandbox, the harness)", async () => {
+    expect((await deliver(hola(forNumber("whatever")))).body).toMatchObject({ messages: 1 });
+  });
+  it("a delivery whose number cannot be checked is an error, so Meta sends it again", async () => {
+    vi.stubEnv("META_PHONE_NUMBER_ID", "111");
+    const realRef = fake.db.ref;
+    fake.db.ref = (path) => { if (path === "waLink") throw new Error("database unreachable"); return realRef(path); };
+    try {
+      const res = await deliver(hola(forNumber("333")));
+      expect([res.statusCode, res.body]).toMatchObject([500, { errors: 1, messages: 0 }]);
+    } finally {
+      fake.db.ref = realRef;
+    }
+  });
+});
+
+describe("numberIsOurs / makeNumberGuard", () => {
+  it("decides on the configured id and the connected id, and lets a change with no id through", () => {
+    expect(numberIsOurs(null, "111", "333")).toBe(true);
+    expect(numberIsOurs("222", null, null)).toBe(true);
+    expect(numberIsOurs("111", "111", null)).toBe(true);
+    expect(numberIsOurs("333", "111", "333")).toBe(true);
+    expect(numberIsOurs("333", null, "333")).toBe(true);
+    expect(numberIsOurs("222", "111", "333")).toBe(false);
+    expect(numberIsOurs("222", null, "333")).toBe(false);
+    expect(numberIsOurs(111, "111", null)).toBe(true); // Meta sends a string; a number is the same id
+  });
+  it("reads waLink at most once per delivery, and not at all when the env id answers", async () => {
+    vi.stubEnv("META_PHONE_NUMBER_ID", "111");
+    const readLink = vi.fn(async () => ({ phoneNumberId: "333" }));
+    const isOurs = makeNumberGuard(readLink);
+    expect(await isOurs(forNumber("111"))).toBe(true);
+    expect(readLink).not.toHaveBeenCalled();
+    expect(await isOurs(forNumber("222"))).toBe(false);
+    expect(await isOurs(forNumber("333"))).toBe(true);
+    expect(await isOurs(forNumber("444"))).toBe(false);
+    expect(readLink).toHaveBeenCalledTimes(1);
   });
 });
 

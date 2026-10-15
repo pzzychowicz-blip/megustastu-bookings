@@ -237,6 +237,18 @@ export async function readOperatingHours() {
   }
 }
 
+// ── The Business-app link (v18.9.0) ──────────────────────────────────────────
+// `waLink` is the record of the restaurant number's coexistence connection:
+// which WABA and phone-number id Embedded Signup connected, when the contact and
+// history syncs ran, and the last account event Meta sent. Only this module
+// writes it — the rules give a browser no `.write` on it at all, by design (a
+// browser that could write `phoneNumberId` could open the number guard to a
+// number of its choosing). Null when the number has never been connected.
+export async function readWaLink() {
+  const snap = await getDb().ref("waLink").get();
+  return snap.exists() ? snap.val() || null : null;
+}
+
 // ── Retention (v18.8.0 phase 7, api/wa-prune.js) ─────────────────────────────
 // What the nightly prune reads and deletes. Deletes go PER KEY (a conversation)
 // and PER MESSAGE (a multi-path update of nulls under one conversation), never

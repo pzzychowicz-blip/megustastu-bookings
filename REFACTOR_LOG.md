@@ -35994,3 +35994,46 @@ its own commit.
 After the merge: tick A4-1 and A4-5 in the go-live checklist. A5-6 is the live test on the
 sandbox: a photo each way with a real phone, a voice note in, a PDF each way, the 4.5 MB
 measurement, and the first cron run in Vercel's logs.
+
+## v18.9.0 — WhatsApp coexistence: the Business app and MGT on one number
+
+**Date:** 2026-10-15 · **Branch:** `feat/v18.9.0-wa-coexistence` ·
+**Plan:** `~/.claude/plans/1-from-roadmap-md-polished-lemur.md` (every decision in it made
+with Patryk on 2026-10-15). ROADMAP's coexistence entry (R-3, go-live plan §3a–3b): the
+restaurant's number keeps the WhatsApp Business app on the phone AND answers through MGT.
+The rehearsal on a disposable number (§3b) needs this code on the sandbox, which follows
+`main`, so it ships before the rehearsal. Contact sync ships inside it: the phone's address
+book names the inbox (Patryk asked whether a name can be the same on the phone and in MGT;
+Meta's answer is phone → MGT only, so **the phone is the master**).
+
+### Phase 1 — the webhook dispatches on the field, and checks the number
+
+`api/wa-inbound.js` read `value.messages` and `value.statuses` whatever `change.field`
+said, which was harmless while Meta sent one field. A coexistence number sends four more to
+the same URL (`smb_app_state_sync`, `smb_message_echoes`, `history`, `account_update`), and
+a `history` change carries a `value.messages` of its own (a photo's id, arriving after its
+placeholder), which read as a customer message would have been stored, acked and parsed.
+Each change is now dispatched on its field: `messages` takes the old road, unchanged (moved
+into `handleMessagesChange`), and anything else is counted as `ignored` until its handler
+lands in the phases below. An absent field reads as `messages`, the one field there was.
+The answer gains a counter per kind of record (`echoes`, `contacts`, `history`, `events`)
+and `ignored`; the 500 rule ("everything failed") now counts all of them.
+
+**The number guard** (`api/_lib/coexist-core.js`, `numberIsOurs` / `makeNumberGuard`). One
+Meta app can hold several numbers, and the sandbox app will: Meta's test number and the
+rehearsal's. A change whose `metadata.phone_number_id` is neither `META_PHONE_NUMBER_ID` nor
+`waLink.phoneNumberId` (the id Embedded Signup connected, phase 7) is ignored before
+anything reads it. The second id is not a convenience: the contact and history syncs are
+requested during onboarding, before anyone can set the env var and redeploy, and Meta
+allows each once. A change with no id passes (account events carry none), and so does
+everything when neither id is set (the mock sandbox, the harness). `waLink` is read at most
+once per delivery and only when the env id did not answer; a failed read is an error, so a
+delivery that could not be checked is redelivered. The simulator's fake webhook
+(`postFakeWebhook`) no longer sends a made-up `PHONE_NUMBER_ID_LOCAL_SIM`, which a harness
+whose `.env.local` names a real id would now drop.
+
+Tests: the dispatch (an unknown field, an absent field, `value.messages` under `history`
+reaching neither the ack nor the parse) and the guard (env id, connected id, nothing
+configured, one read per delivery, an unreadable `waLink` answered 500). Sabotaged twice:
+a guard that always answers yes fails four, a dispatch that sends every field down the
+messages road fails two.

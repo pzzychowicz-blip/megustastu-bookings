@@ -30,6 +30,9 @@
 //   META_APP_SECRET          Meta app secret for X-Hub-Signature-256 HMAC.
 //   META_WA_TOKEN            Cloud API bearer token (live send only).
 //   META_PHONE_NUMBER_ID     The restaurant number's Cloud API id (live send).
+//                            v18.9.0: also the number guard's first answer — a
+//                            webhook change for another number is ignored
+//                            (_lib/coexist-core.js, numberIsOurs).
 //   WA_ALLOW_UNSIGNED        "1" → skip HMAC verification. LOCAL ONLY — the
 //                            harness sets it; never set it on Vercel.
 //   WA_STAFF_EMAILS          Comma-separated allow-list of staff emails that

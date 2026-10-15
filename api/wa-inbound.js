@@ -33,12 +33,20 @@
 //
 // bodyParser is disabled so the HMAC sees the exact raw bytes (a re-serialized
 // JSON body would not verify).
+//
+// v18.9.0 — COEXISTENCE. Every change is dispatched on its `field`: `messages`
+// takes the flow above; the four coexistence fields (contacts, phone replies,
+// imported history, account events) go to _lib/coexist-core.js; anything else
+// is counted as `ignored` and answered 200. And before any of that, the NUMBER
+// GUARD: a change whose `metadata.phone_number_id` is not the restaurant's is
+// ignored (`numberIsOurs`, with why it accepts the id Embedded Signup wrote too).
 
 import { env } from "./_lib/env.js";
 import { verifySignature } from "./_lib/meta.js";
 import { parseMessage, mockParse } from "./_lib/gemini.js";
 import { processInbound, applyParse, inboundContent } from "./_lib/inbound-core.js";
 import { updateMessageStatusByWamid, readOperatingHours, getConversation } from "./_lib/rtdb.js";
+import { makeNumberGuard } from "./_lib/coexist-core.js";
 import { normalizePhone, isPhoneKey } from "../src/lib/whatsapp.js";
 
 export const config = { api: { bodyParser: false } };
@@ -102,6 +110,81 @@ export function inboundTs(raw) {
 // take the same road. Re-exported here, where its tests import it.
 export { inboundContent };
 
+// handleMessagesChange(value, results, parseJobs) — one `messages` change: the
+// customer's messages (phase A here, the parse queued for phase B) and the
+// delivery/read receipts. The loop body of the handler until v18.9.0, moved
+// out unchanged when the handler began dispatching on the field.
+async function handleMessagesChange(value, results, parseJobs) {
+  // contacts[] carries the WhatsApp profile name keyed by wa_id.
+  const profileByWaId = {};
+  // v18.0.0 phase 6 (CT-WA-04): `entry` and `changes` were checked with
+  // Array.isArray and these three were not, so a `value.messages` that is a
+  // STRING is iterated by `for...of` ONE CHARACTER AT A TIME. Measured
+  // against the emulator with a correctly-signed body: `messages: "abc"`
+  // answered 200 with `messages: 3` and manufactured three records.
+  (Array.isArray(value.contacts) ? value.contacts : []).forEach((c) => {
+    if (c && c.wa_id && c.profile && c.profile.name) profileByWaId[c.wa_id] = c.profile.name;
+  });
+
+  // ── Inbound messages (phase A: store fast, parse later) ───────────
+  for (const m of Array.isArray(value.messages) ? value.messages : []) {
+    try {
+      // v18.8.0: a photo, a voice note or a document is stored with its
+      // media; a caption is parsed like a text (see inboundContent).
+      const content = inboundContent(m);
+      const willParse = content.parseText !== null;
+      const phone = "+" + String(m.from || "").replace(/^\+/, "");
+      const ts = inboundTs(m.timestamp);
+      // Read the conversation ONCE: a PENDING draft (draftStatus "parsed")
+      // becomes the phase-B parse's merge context so follow-up messages
+      // UPDATE it (fill gaps, apply corrections, re-assess confidence)
+      // instead of replacing it blind. Accepted/dismissed drafts are not
+      // draft context. The same conv object is handed to processInbound.
+      const conv = await getConversation(normalizePhone(phone));
+      const existingDraft = conv && conv.draftStatus === "parsed" ? conv.draftData : null;
+      const r = await processInbound({
+        phone, text: content.text, ts,
+        media: content.media,
+        snippetText: content.snippet,
+        wamid: m.id || null,
+        profileName: profileByWaId[m.from] || null,
+        parse: null, // the LLM runs in phase B, after the response
+        // Auto-ack language before the LLM has run: the mock parser's
+        // regex detection is free and good enough for a two-line ack.
+        langHint: willParse ? mockParse(content.parseText).language : null,
+        preloadedConv: conv,
+        willParse, // flag "analyzing…" only for messages we'll parse
+      });
+      if (r.skipped) results.skipped++;
+      else {
+        results.messages++;
+        if (willParse) parseJobs.push({ phoneKey: r.phoneKey, text: content.parseText, existingDraft, ts });
+      }
+    } catch (e) {
+      results.errors++;
+      console.error("[wa-inbound] message processing failed:", e.message);
+    }
+  }
+
+  // ── Delivery / read statuses ──────────────────────────────────────
+  for (const s of Array.isArray(value.statuses) ? value.statuses : []) {
+    try {
+      const phoneKey = normalizePhone("+" + String(s.recipient_id || "").replace(/^\+/, ""));
+      // isPhoneKey, not truthiness — `normalizePhone("+")` is `"+"`, which
+      // is truthy and is nobody. CT-WA-04 replaced this test in
+      // `processInbound` and left the statuses branch of the same handler
+      // spelling it the old way: one rule, two spellings, one file.
+      if (isPhoneKey(phoneKey) && s.id && s.status) {
+        const ok = await updateMessageStatusByWamid(phoneKey, s.id, s.status);
+        if (ok) results.statuses++;
+      }
+    } catch (e) {
+      results.errors++;
+      console.error("[wa-inbound] status processing failed:", e.message);
+    }
+  }
+}
+
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -152,84 +235,41 @@ export default async function handler(req, res) {
     return;
   }
 
-  const results = { messages: 0, statuses: 0, skipped: 0, errors: 0 };
+  // v18.9.0: one counter per kind of record, plus `ignored` (a change for
+  // another number, or a field this webhook does not handle).
+  const results = { messages: 0, statuses: 0, echoes: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 };
   const parseJobs = []; // phase-B work: one LLM parse per stored text message
+  const isOurs = makeNumberGuard();
   try {
     const entries = Array.isArray(payload.entry) ? payload.entry : [];
     for (const entry of entries) {
       const changes = Array.isArray(entry.changes) ? entry.changes : [];
       for (const change of changes) {
         const value = change && change.value;
-        if (!value) continue;
-
-        // contacts[] carries the WhatsApp profile name keyed by wa_id.
-        const profileByWaId = {};
-        // v18.0.0 phase 6 (CT-WA-04): `entry` and `changes` were checked with
-        // Array.isArray and these three were not, so a `value.messages` that is a
-        // STRING is iterated by `for...of` ONE CHARACTER AT A TIME. Measured
-        // against the emulator with a correctly-signed body: `messages: "abc"`
-        // answered 200 with `messages: 3` and manufactured three records.
-        (Array.isArray(value.contacts) ? value.contacts : []).forEach((c) => {
-          if (c && c.wa_id && c.profile && c.profile.name) profileByWaId[c.wa_id] = c.profile.name;
-        });
-
-        // ── Inbound messages (phase A: store fast, parse later) ───────────
-        for (const m of Array.isArray(value.messages) ? value.messages : []) {
-          try {
-            // v18.8.0: a photo, a voice note or a document is stored with its
-            // media; a caption is parsed like a text (see inboundContent).
-            const content = inboundContent(m);
-            const willParse = content.parseText !== null;
-            const phone = "+" + String(m.from || "").replace(/^\+/, "");
-            const ts = inboundTs(m.timestamp);
-            // Read the conversation ONCE: a PENDING draft (draftStatus "parsed")
-            // becomes the phase-B parse's merge context so follow-up messages
-            // UPDATE it (fill gaps, apply corrections, re-assess confidence)
-            // instead of replacing it blind. Accepted/dismissed drafts are not
-            // draft context. The same conv object is handed to processInbound.
-            const conv = await getConversation(normalizePhone(phone));
-            const existingDraft = conv && conv.draftStatus === "parsed" ? conv.draftData : null;
-            const r = await processInbound({
-              phone, text: content.text, ts,
-              media: content.media,
-              snippetText: content.snippet,
-              wamid: m.id || null,
-              profileName: profileByWaId[m.from] || null,
-              parse: null, // the LLM runs in phase B, after the response
-              // Auto-ack language before the LLM has run: the mock parser's
-              // regex detection is free and good enough for a two-line ack.
-              langHint: willParse ? mockParse(content.parseText).language : null,
-              preloadedConv: conv,
-              willParse, // flag "analyzing…" only for messages we'll parse
-            });
-            if (r.skipped) results.skipped++;
-            else {
-              results.messages++;
-              if (willParse) parseJobs.push({ phoneKey: r.phoneKey, text: content.parseText, existingDraft, ts });
-            }
-          } catch (e) {
-            results.errors++;
-            console.error("[wa-inbound] message processing failed:", e.message);
-          }
+        if (!value || typeof value !== "object") continue;
+        // v18.9.0 — DISPATCH BY FIELD. Before coexistence Meta sent this URL
+        // one field, so the handler read `value.messages` whatever the field
+        // said; a coexistence number adds four more (_lib/coexist-core.js), and
+        // a `history` change carries `value.messages` of its own (a photo's id,
+        // arriving after its placeholder), which must not reach the inbound
+        // path and its auto-reply. An absent field reads as `messages`, the one
+        // field there was.
+        const field = typeof change.field === "string" && change.field ? change.field : "messages";
+        let ours;
+        try {
+          ours = await isOurs(value);
+        } catch (e) {
+          results.errors++;
+          console.error("[wa-inbound] number guard could not read waLink:", e.message);
+          continue;
         }
-
-        // ── Delivery / read statuses ──────────────────────────────────────
-        for (const s of Array.isArray(value.statuses) ? value.statuses : []) {
-          try {
-            const phoneKey = normalizePhone("+" + String(s.recipient_id || "").replace(/^\+/, ""));
-            // isPhoneKey, not truthiness — `normalizePhone("+")` is `"+"`, which
-            // is truthy and is nobody. CT-WA-04 replaced this test in
-            // `processInbound` and left the statuses branch of the same handler
-            // spelling it the old way: one rule, two spellings, one file.
-            if (isPhoneKey(phoneKey) && s.id && s.status) {
-              const ok = await updateMessageStatusByWamid(phoneKey, s.id, s.status);
-              if (ok) results.statuses++;
-            }
-          } catch (e) {
-            results.errors++;
-            console.error("[wa-inbound] status processing failed:", e.message);
-          }
+        if (!ours) {
+          results.ignored++;
+          console.warn("[wa-inbound] ignored a " + field + " change for another number (" + value.metadata.phone_number_id + ")");
+          continue;
         }
+        if (field === "messages") await handleMessagesChange(value, results, parseJobs);
+        else results.ignored++; // a field this webhook does not handle (yet)
       }
     }
   } catch (e) {
@@ -238,7 +278,10 @@ export default async function handler(req, res) {
   // Retry semantics: 200 tells Meta "delivered, don't retry". If EVERYTHING in
   // the payload failed (e.g. the database was unreachable), answer 500 so Meta
   // redelivers later — the wamid-keyed idempotency makes the retry safe.
-  if (results.errors > 0 && results.messages === 0 && results.statuses === 0 && results.skipped === 0) {
+  // v18.9.0: "everything" is every counter but `errors`, so a payload of
+  // contacts or history that all failed is retried as a payload of messages is.
+  const done = Object.keys(results).reduce((n, k) => (k === "errors" ? n : n + results[k]), 0);
+  if (results.errors > 0 && done === 0) {
     res.status(500).json({ error: "processing failed", ...results });
     return;
   }
