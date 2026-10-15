@@ -26,6 +26,7 @@ import { join } from "node:path";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
 const Composer = stripComments(readFileSync(new URL("../src/components/whatsapp/ReplyComposer.jsx", import.meta.url), "utf8")).join("\n");
+const Bubble = stripComments(readFileSync(new URL("../src/components/whatsapp/MessageBubble.jsx", import.meta.url), "utf8")).join("\n");
 
 describe("sanitizeMedia", () => {
   it("keeps the three kinds with an id, and refuses anything else", () => {
@@ -169,6 +170,27 @@ describe("the reply composer keeps its text and its file with their thread", () 
   it("a file the customer got but the thread could not keep is said, and not kept to send again", () => {
     expect(Composer).toMatch(/const r = await onSendMedia\(/);
     expect(Composer).toMatch(/if \(r && r\.stored === false\) setNoteState\(\{ key, text: "Sent to the customer, but it could not be saved in this thread\. Don’t send it again\." \}\);/);
+  });
+});
+
+// /code-review: Play and a document's row were `disabled` while the file
+// loaded, and Chrome blurs a focused control that becomes disabled (measured
+// again on DEV: a scratch button, focused then disabled, left <body> focused).
+// Measured after the fix, with real Enter presses and a stubbed /api/wa-media:
+// focus stays on Play while it loads and moves to the player, stays on the
+// document row through a failure, and Retry hands it on to the player or photo.
+describe("a media control keeps the keyboard's focus", () => {
+  it("no media control is `disabled` while its file loads; it says so with aria-disabled", () => {
+    expect(Bubble).not.toMatch(/disabled=\{loading\}/);
+    expect((Bubble.match(/aria-disabled=\{loading \? "true" : undefined\}/g) || []).length).toBe(2);
+    expect(Bubble).toMatch(/onClick=\{\(e\) => \{ if \(loading\) return;/);
+    expect(Bubble).toMatch(/function open\(\) \{\s*if \(m\.status === "loading"\) return;/);
+  });
+  it("focus follows a press to what replaces the control: the player, Retry, the photo", () => {
+    expect(Bubble).toMatch(/document\.activeElement === e\.currentTarget/);
+    expect(Bubble).toMatch(/ref=\{\(el\) => \{ if \(el && handOn\) \{ el\.focus\(\); setHandOn\(false\); \} \}\}/);
+    expect(Bubble).toMatch(/<RetryChip autoFocus=\{handOn\}/);
+    expect((Bubble.match(/autoFocus=\{handOn\}/g) || []).length).toBe(3);
   });
 });
 

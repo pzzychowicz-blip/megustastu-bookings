@@ -43,11 +43,18 @@ function MediaNote({ icon, children, action }) {
   );
 }
 
-function RetryChip({ onRetry }) {
+function RetryChip({ onRetry, autoFocus }) {
   return (
-    <OutlineChip as="button" tone="danger" onClick={onRetry} className="mgt-hover-scale mgt-press"
+    <OutlineChip as="button" tone="danger" onClick={onRetry} autoFocus={autoFocus} className="mgt-hover-scale mgt-press"
       style={{ padding: "0 6px" }}><RetryIcon size={IC.inline} />Retry</OutlineChip>
   );
+}
+
+// Was this press made with focus on the control pressed? Then focus follows the
+// press to whatever replaces the control (/code-review: the Play button gives
+// way to the player or to the failure line, and focus fell to <body>).
+function pressedWithFocus(e) {
+  return typeof document !== "undefined" && document.activeElement === e.currentTarget;
 }
 
 // The ROUND control a voice note starts from, in the bubble's ink.
@@ -70,9 +77,14 @@ function MediaPhoto({ phoneKey, msg, onOpenPhoto }) {
     return () => io.disconnect();
   }, [seen]);
   const m = useWaMedia(phoneKey, msg, seen || typeof IntersectionObserver === "undefined");
+  // A Retry pressed with focus hands it on to the photo once it is here: the
+  // chip leaves with the failure, and focus would fall to <body> (/code-review).
+  const [handOn, setHandOn] = useState(false);
   if (m.status === "expired") return <MediaNote icon={<PhotoIcon size={IC.chrome} />}>{"Photo — " + GONE}</MediaNote>;
   if (m.status === "toolarge") return <MediaNote icon={<PhotoIcon size={IC.chrome} />}>{TOO_LARGE}</MediaNote>;
-  if (m.status === "error") return <MediaNote icon={<PhotoIcon size={IC.chrome} />} action={<RetryChip onRetry={m.retry} />}>Couldn’t load the photo</MediaNote>;
+  if (m.status === "error") {
+    return <MediaNote icon={<PhotoIcon size={IC.chrome} />} action={<RetryChip onRetry={(e) => { setHandOn(pressedWithFocus(e)); m.retry(); }} />}>Couldn’t load the photo</MediaNote>;
+  }
   const box = { width: THUMB, height: THUMB, maxWidth: "100%", borderRadius: R.inset, display: "block" };
   if (m.status !== "ready") {
     return (
@@ -84,7 +96,7 @@ function MediaPhoto({ phoneKey, msg, onOpenPhoto }) {
   return (
     <button
       /* @no-lift a 240px photo scaled 8% grows 19px past the bubble it sits in; the press dip and the pointer say it opens */
-      className="mgt-press" onClick={() => { if (onOpenPhoto) onOpenPhoto(msg); }}
+      className="mgt-press" autoFocus={handOn} onClick={() => { if (onOpenPhoto) onOpenPhoto(msg); }}
       aria-label="Open photo" title="Open photo"
       style={{ padding: 0, border: 0, background: "none", borderRadius: R.inset, cursor: onOpenPhoto ? "zoom-in" : "default", display: "block" }}>
       <img src={m.url} alt="" draggable="false" style={Object.assign({}, box, { objectFit: "cover" })} />
@@ -94,20 +106,33 @@ function MediaPhoto({ phoneKey, msg, onOpenPhoto }) {
 
 function MediaAudio({ phoneKey, msg }) {
   const [want, setWant] = useState(false);
+  // Focus follows a press made with focus on the button: to the player once it
+  // arrives (once, then it is the user's again), or to Retry if it fails.
+  const [handOn, setHandOn] = useState(false);
   const m = useWaMedia(phoneKey, msg, want);
   const label = mediaLabel(msg.media);
   if (m.status === "expired") return <MediaNote icon={<PlayIcon size={IC.chrome} />}>{label + " — " + GONE}</MediaNote>;
   if (m.status === "toolarge") return <MediaNote icon={<PlayIcon size={IC.chrome} />}>{TOO_LARGE}</MediaNote>;
-  if (m.status === "error") return <MediaNote icon={<PlayIcon size={IC.chrome} />} action={<RetryChip onRetry={m.retry} />}>{"Couldn’t load the " + label.toLowerCase()}</MediaNote>;
-  if (m.status === "ready") {
-    return <audio controls autoPlay src={m.url} aria-label={label} style={{ width: THUMB, maxWidth: "100%", display: "block" }} />;
+  if (m.status === "error") {
+    return <MediaNote icon={<PlayIcon size={IC.chrome} />} action={<RetryChip autoFocus={handOn} onRetry={(e) => { setHandOn(pressedWithFocus(e)); m.retry(); }} />}>{"Couldn’t load the " + label.toLowerCase()}</MediaNote>;
   }
+  if (m.status === "ready") {
+    return <audio controls autoPlay src={m.url} aria-label={label} style={{ width: THUMB, maxWidth: "100%", display: "block" }}
+      ref={(el) => { if (el && handOn) { el.focus(); setHandOn(false); } }} />;
+  }
+  // Not `disabled` while it loads: Chrome blurs a focused control that becomes
+  // disabled (measured in phase 8), so the press would drop focus on <body>.
+  // `aria-disabled` says it, and the press does nothing.
   const loading = m.status === "loading";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: SP.base }}>
-      <button className="mgt-hover-scale mgt-press" onClick={() => setWant(true)} disabled={loading}
+      <button className={loading ? "mgt-nopress" : "mgt-hover-scale mgt-press"}
+        // Mounted again by Retry, which hands focus on through it to the player.
+        autoFocus={handOn}
+        onClick={(e) => { if (loading) return; setHandOn(pressedWithFocus(e)); setWant(true); }}
+        aria-disabled={loading ? "true" : undefined}
         aria-label={"Play " + label.toLowerCase()} title={"Play " + label.toLowerCase()}
-        style={Object.assign({}, roundBtn, { opacity: loading ? 0.6 : 1 })}><PlayIcon size={IC.chrome} /></button>
+        style={Object.assign({}, roundBtn, { opacity: loading ? 0.6 : 1, cursor: loading ? "default" : "pointer" })}><PlayIcon size={IC.chrome} /></button>
       <span style={{ fontSize: T.body, fontWeight: FW.medium }}>{loading ? "Loading…" : label}</span>
     </div>
   );
@@ -152,6 +177,7 @@ function MediaDocument({ phoneKey, msg }) {
     }
   }, [m.status, m.url, m.type, media.filename]);
   function open() {
+    if (m.status === "loading") return; // aria-disabled, see the button
     if (m.status === "ready") {
       if (opensInline(m.type) && !standalone) {
         const w = window.open(m.url, "_blank");
@@ -171,12 +197,16 @@ function MediaDocument({ phoneKey, msg }) {
   if (m.status === "toolarge") return <MediaNote icon={<FileIcon size={IC.chrome} />}>{TOO_LARGE}</MediaNote>;
   const loading = m.status === "loading";
   const size = fileSizeLabel(media.size);
+  // `aria-disabled` while it loads, not `disabled`: the same row comes back
+  // after a failure to be pressed again, and a disabled one would have
+  // dropped the focus that pressed it (/code-review).
   return (
-    <button className="mgt-hover-scale mgt-press" onClick={open} disabled={loading}
+    <button className={loading ? "mgt-nopress" : "mgt-hover-scale mgt-press"} onClick={open}
+      aria-disabled={loading ? "true" : undefined}
       aria-label={"Open " + name} title={"Open " + name}
       style={{
         display: "flex", alignItems: "center", gap: SP.base, width: THUMB, maxWidth: "100%", textAlign: "left",
-        padding: "6px 10px", minHeight: H.control, borderRadius: R.inset, cursor: "pointer",
+        padding: "6px 10px", minHeight: H.control, borderRadius: R.inset, cursor: loading ? "default" : "pointer",
         background: "transparent", color: "inherit", border: "1.5px solid currentColor",
       }}>
       <span style={{ display: "flex", flexShrink: 0 }}><FileIcon size={IC.chrome} /></span>

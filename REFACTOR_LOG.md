@@ -35865,6 +35865,19 @@ its own commit.
    deploy order does not matter. `npm run test:rules`: 307 passed. Three new prune tests
    (the query and its bound, the fallback, the index in the rules).
 
+5. **A keyboard press on a voice note or a document dropped focus on `<body>`.** Play and
+   the document row were `disabled` while the file loaded, and a focused control that becomes
+   disabled loses focus (re-measured on DEV with a scratch button). They are `aria-disabled`
+   now (the phase 8 "On the waitlist" pattern) and ignore a press while loading, and focus
+   follows a press made with it to whatever replaces the control: the player, the Retry chip,
+   or back through Play. Measuring it found the photo's Retry had the same gap (the chip
+   leaves with the failure), so it hands focus to "Open photo". Measured on DEV with real
+   Enter presses and `fetch` stubbed to hold `/api/wa-media` 1.5 s and answer with the
+   bundled samples: Play keeps focus while loading, then the `<audio>` has it; the document row
+   keeps it through "Opening…" and the failure; Retry → Play → player; photo Retry → Open
+   photo. The backend harness on :3999 was another process with no database access, so
+   it was stubbed rather than used.
+
 ### Deploy steps (Patryk)
 
 1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random
