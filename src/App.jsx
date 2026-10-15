@@ -384,8 +384,15 @@ import { activityWindow, retentionMs, retentionLabel } from "./lib/activity";
 // VITE_FB_TARGET=dev) so it can never appear in a real production build.
 import { useWhatsApp } from "./hooks/useWhatsApp";
 import { useWaSettings } from "./hooks/useWaSettings";
-import { InboxPanel } from "./components/whatsapp/InboxPanel";
-import { PhotoViewer } from "./components/whatsapp/PhotoViewer";
+// v18.8.0 phase 9: the inbox and the photo viewer are LAZY, like Settings. As
+// static imports every restaurant downloaded the whole inbox at startup, the
+// module switched off included, and phase 8's draft check took the startup
+// bundle past Vite's 500 kB warning (502.53 kB). The hook above stays eager:
+// it is the data layer (the listeners, the unread count, Accept's seam), and
+// only the screens wait until they are opened. Mapped to `{default: …}` for the
+// `lazyChunk` reason the WaSimulator comment below gives.
+const InboxPanel = lazyChunk(function(){return import("./components/whatsapp/InboxPanel").then(function(m){return {default:m.InboxPanel};});},"WhatsApp inbox");
+const PhotoViewer = lazyChunk(function(){return import("./components/whatsapp/PhotoViewer").then(function(m){return {default:m.PhotoViewer};});},"Photo viewer");
 // v18.0.0 phase 5b — the simulator does not reach production through a STATIC
 // import. Measured on the phase-5a build: `WA_SANDBOX` folds to `false` and
 // Rollup did strip the WaSimulator COMPONENT (none of its UI strings survive),
@@ -4800,7 +4807,7 @@ function BookingApp({uid}){
           because `?` opens Settings above the `anyModal` guard, so Admin is one
           keystroke away with the inbox up. Its listeners are detached by then,
           so it would render the last-loaded conversations, with live Send and
-          Delete controls, for a module the restaurant has turned off. */}<ModalPresence show={whatsappOn&&showInbox}>{whatsappOn&&showInbox?<InboxPanel
+          Delete controls, for a module the restaurant has turned off. */}<ModalPresence show={whatsappOn&&showInbox}>{whatsappOn&&showInbox?<Suspense fallback={null}><InboxPanel
           conversations={wa.conversations}
           messages={wa.messagesMap}
           watchMessages={wa.watchMessages}
@@ -4832,7 +4839,7 @@ function BookingApp({uid}){
           onOpenPhoto={function(phoneKey,msg){setWaPhoto({phoneKey:phoneKey,msg:msg});}}
           liveBookings={liveBookings} tableBlocks={tableBlocks} autoOptimizer={autoOptimizer}
           waitlist={waitlist} onAddToWaitlist={addDraftToWaitlist}
-          onOpenSim={WA_SANDBOX?function(){setShowSim(true);}:null} />:null}</ModalPresence>{confirmArchive?(function(){
+          onOpenSim={WA_SANDBOX?function(){setShowSim(true);}:null} /></Suspense>:null}</ModalPresence>{confirmArchive?(function(){
           const conv=wa.conversations.find(function(c){return c.phoneKey===confirmArchive;});
           const bk=conv&&conv.acceptedBookingId?bookings.find(function(b){return b.id===conv.acceptedBookingId;}):null;
           return <Overlay /* @static-height one sentence, chosen from the linked booking when it opens and not after */ onClose={function(){setConfirmArchive(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
@@ -4850,7 +4857,7 @@ function BookingApp({uid}){
               className="mgt-hover-scale"
               style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
           ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,watchMessages:wa.watchMessages,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.simAppendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
-          onClose={function(){setShowSim(false);}} /></Suspense>:null):null}{/* v18.8.0: the photo viewer, after the simulator so it paints above it (MODAL_Z ranks it so) */}<ModalPresence show={!!waPhoto}>{waPhoto?<PhotoViewer photo={waPhoto} onClose={function(){setWaPhoto(null);}} />:null}</ModalPresence><ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
+          onClose={function(){setShowSim(false);}} /></Suspense>:null):null}{/* v18.8.0: the photo viewer, after the simulator so it paints above it (MODAL_Z ranks it so) */}<ModalPresence show={!!waPhoto}>{waPhoto?<Suspense fallback={null}><PhotoViewer photo={waPhoto} onClose={function(){setWaPhoto(null);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
         // must sit above the Settings overlay. Same idiom as ReminderEditor:
         // `position` + `z-index` makes a stacking context and the subtree
         // stacks there whatever its fixed children declare, so `Overlay` is

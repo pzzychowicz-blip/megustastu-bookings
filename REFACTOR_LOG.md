@@ -35761,6 +35761,62 @@ Main bundle 142.47 kB gz (+2.90). By the sourcemap, against phase 7: DraftCard +
 `whatsapp.js` +2.2, `draft-check.js` +2.1, the rest under 0.5 each. The main chunk is 502.53 kB
 raw, past Vite's 500 kB warning for the first time. 3,357 tests; lint 63 warnings; style OK.
 
+### Phase 9 — the WhatsApp inbox loads when it is opened
+
+**Why.** Phase 8 took the startup chunk to 502.53 kB, past Vite's 500 kB warning for the first
+time. Patryk chose (at the handback, over accepting the warning) to fix it in this version. The
+inbox was a static import in App, so every restaurant downloaded it at startup, including one
+with the module switched off.
+
+**What changed.** `InboxPanel` and `PhotoViewer` are `lazyChunk`s in App, each mounted inside a
+`Suspense` with no fallback, the way Settings, Find a booking and the More popover already are.
+`useWhatsApp` stays eager: it is the data layer (the listeners, the unread count, Accept's seam
+into the booking form), and only the screens wait until they are opened. Nothing is prefetched,
+as decided: a restaurant fetches the inbox on its first open.
+
+**Measured** (production build; the startup set is the entry plus every chunk it imports
+statically, summed with Node's gzip):
+
+| | phase 8 | phase 9 |
+|---|---|---|
+| entry chunk | 502.53 kB · 142.47 kB gz | 418.87 kB · 121.67 kB gz |
+| startup set | 1,074.60 kB · 315.10 kB gz | 1,002.18 kB · 298.38 kB gz |
+
+- New lazy chunks: `InboxPanel` 67.12 kB (17.04 gz), `PhotoViewer` 2.26 kB, and `useWaMedia`
+  5.61 kB, which both use.
+- Two small chunks are new in the startup set, because the entry now shares them with the inbox
+  chunk: `customers.js` (9.99 kB) and `firebase.js` (1.25 kB).
+- No chunk is over 500 kB, so the warning is gone.
+- The built output still holds the production database URL once (now in the `firebase` chunk)
+  and the DEV one nowhere, as `src/CLAUDE.md` says.
+
+**Tests** (3,357 → 3,361): `tests/inbox-lazy.test.js`.
+- App reaches both screens only through `lazyChunk`, each inside a `Suspense`.
+- No file outside `components/whatsapp/` imports an inbox component statically. One such import
+  anywhere undoes the split silently: the v18.0.0 Admin panel was in the startup bundle that way.
+- From the build: none of four inbox-only strings is in the startup set, and all four are in some
+  chunk, so the absence means the split and not a renamed string.
+- Mutation-checked: with phase 8's App.jsx (the static imports) rebuilt, three of the four fail,
+  the build check included.
+- The two older tests that read the build (`wa-sim-not-in-prod`, `write-trace`) read every chunk,
+  so the inbox's chunk is still covered by both.
+
+**Verified on DEV:**
+- A fresh load fetched no inbox module in 8 seconds.
+- The first open fetched the inbox's 11 modules and showed it after 2.28 s. That is the dev
+  server compiling each module on first request; production fetches one 17 kB (gzipped) chunk.
+- A warm open showed the dialog 41 ms after a real click, and Escape returned focus to the
+  WhatsApp button. The `I` key opens it.
+- The photo viewer fetched its module on its first open, with 44px Save photo and Done.
+- Accept opened the form at the draft's 21:00, and Back returned to the inbox on the same
+  conversation, its check line intact.
+- **One limit, shared with Settings:** a dialog finds its opener among blurs from the last
+  `RECENT_MS` (1,500 ms, `lib/focus-return.js`). A cold first open slower than that returns
+  focus to `<body>` when the inbox closes. Measured on the dev server's 2.28 s open; a
+  production chunk of 17 kB is expected to be well inside the window.
+
+Main bundle 121.67 kB gz (−20.80); 3,361 tests; lint 63 warnings; style OK.
+
 ### Deploy steps (Patryk)
 
 1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random
