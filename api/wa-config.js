@@ -57,7 +57,7 @@ const KEYS = [
 async function phoneNumberIdMatches() {
   const envId = env("META_PHONE_NUMBER_ID", null);
   if (!envId) return null;
-  let link = null;
+  let link;
   try { link = await readWaLink(); } catch { return null; }
   if (!link || !link.phoneNumberId) return null;
   return String(link.phoneNumberId) === String(envId);

@@ -38,7 +38,7 @@ export function loginOptions(configId) {
 //   { kind: "error", message }                   Meta's error, or a signup
 //                                                this page does not complete
 export function signupMessage(origin, data) {
-  let host = "";
+  let host;
   try {
     const u = new URL(origin);
     if (u.protocol !== "https:") return null;

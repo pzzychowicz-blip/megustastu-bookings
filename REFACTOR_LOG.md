@@ -36739,3 +36739,17 @@ one round trip (tens of milliseconds per thread, once, at onboarding) has the me
 read and, on an old thread, archived. A transaction closes it at about one more round trip per
 thread, on the path nearest Vercel's time limit, which nobody has measured yet. Both are in
 ROADMAP's coexistence entry as findings the rehearsal owns, with what each answer decides.
+
+**CI's lint found two errors the local gate could not see.** The PR's `verify` job failed on
+`no-useless-assignment` (in ESLint 10's recommended set) at `api/wa-config.js` (`let link =
+null` before a `try` that assigns it or returns) and `src/lib/wa-connect.js` (`let host = ""`, the
+same shape): initial values nothing ever reads. Both now start unassigned; behaviour is unchanged.
+**Why every local gate in this version said "0 errors":** this worktree's `node_modules` still held
+ESLint 9.39.4 and Vitest 4.1.10, while the lockfile has pinned ESLint 10.12.0 and Vitest 5.0.3
+since v18.4.5, and CI installs the lockfile (`npm ci`). After `npm ci` here, the local lint gives
+CI's exact answer (65 problems, 2 errors) before the fix. The bundle moved with it: the main
+entry read 157.05 kB gz on the stale install and reads 123.08 kB gz on the lockfile's (origin/main
+on the same install: 121.71, so this version adds 1.37 kB gz). A gate run on a stale install
+measures the install, not the branch: compare `npx eslint --version` with `package.json` when a
+worktree's `node_modules` predates a dependency bump. Final gate on the lockfile's install: 3,570
+tests (Vitest 5), lint 0 errors and 63 warnings, style OK, `test:rules` 311.
