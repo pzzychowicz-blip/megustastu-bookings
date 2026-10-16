@@ -36667,3 +36667,14 @@ stamps `at`, and `requestedAt` is taken before the request goes). A failed reque
 nothing, so the last import's record survives a refused retry. The contacts' `firstAt` stays,
 being a fact about the phone's address book. Tests: the same number connected over a declined,
 finished record (fails with the old write), and the function's three cases.
+
+**Delete customer's WhatsApp erase depended on rules a database might not have yet.**
+`eraseConversation` deleted the conversation, its messages and (new here) the phone's contact
+for the number in ONE multi-path update. RTDB applies such an update whole or not at all, and
+the deploy order is the app first, the rules second: until a database has this version's rules,
+`waContacts` has no grant there, so the whole erase was refused, quietly (its `.catch` logs),
+and Delete customer left the guest's chats behind. The contact is its own write now:
+`conversationDeletePatch(keys)` lost its `{contacts}` option and `contactDeletePatch(keys)`
+(`src/lib/whatsapp.js`) is a second `update()` beside it, so the conversation and messages are
+erased whatever the contact's write meets. `tests/activity.test.js` reads the two writes in the
+eraser (it fails with them merged into one) and pins the two patches.

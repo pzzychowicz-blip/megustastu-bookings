@@ -73,22 +73,36 @@ export function replyUnarchives(conv) {
 // since the rules grant `$phoneKey` and refuse a wipe. A key that cannot be one
 // path segment is skipped: `update()` throws on . # $ [ ] and reads "/" as a
 // deeper path.
-//
-// v18.9.0: `{ contacts: true }` also deletes the MGT copy of the phone's contact
-// for the number (`waContacts/<key>`). Delete customer passes it, because the
-// name a customer is saved under is their data too (Patryk, 2026-10-15); the
-// inbox's Delete and the simulator's reset do not, since deleting a chat is not
+function pathSegment(k) {
+  return typeof k === "string" && !!k && !/[.#$[\]/]/.test(k);
+}
+export function conversationDeletePatch(keys) {
+  const patch = {};
+  (keys || []).forEach(function (k) {
+    if (!pathSegment(k)) return;
+    patch["conversations/" + k] = null;
+    patch["messages/" + k] = null;
+  });
+  return patch;
+}
+
+// contactDeletePatch(keys) — v18.9.0: the MGT copy of the phone's contact for
+// each number (`waContacts/<key>`). Delete customer asks it, because the name
+// a customer is saved under is their data too (Patryk, 2026-10-15); the inbox's
+// Delete and the simulator's reset do not, since deleting a chat is not
 // deleting the contact on the phone, and the contact sync Meta allows after
 // onboarding runs once, so a copy deleted by mistake does not come back until
 // the phone edits that contact.
-export function conversationDeletePatch(keys, opts) {
+//
+// Its OWN write, never merged into conversationDeletePatch's (/code-review): a
+// multi-path update is atomic, so one path the rules refuse refuses them all,
+// and between this version's deploy and its rules reaching a database (app
+// first, rules second) `waContacts` has no grant there. Merged, Delete
+// customer erased no conversation and no message in that window, silently.
+export function contactDeletePatch(keys) {
   const patch = {};
-  const contacts = !!(opts && opts.contacts);
   (keys || []).forEach(function (k) {
-    if (typeof k !== "string" || !k || /[.#$[\]/]/.test(k)) return;
-    patch["conversations/" + k] = null;
-    patch["messages/" + k] = null;
-    if (contacts) patch["waContacts/" + k] = null;
+    if (pathSegment(k)) patch["waContacts/" + k] = null;
   });
   return patch;
 }

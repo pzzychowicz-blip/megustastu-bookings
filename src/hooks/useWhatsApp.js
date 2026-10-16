@@ -41,7 +41,7 @@ import { EMPTY_FORM } from "../lib/constants";
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
-import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch, replyUnarchives } from "../lib/whatsapp";
+import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch, contactDeletePatch, replyUnarchives } from "../lib/whatsapp";
 import { sendsViaServer, sendViaBackend, sendMediaViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
@@ -831,7 +831,10 @@ export function useWhatsApp({
 
   // eraseConversation(phoneKey) — v18.3.1: the WhatsApp half of "Delete
   // customer & all data" (SECURITY.md §3). One atomic update nulls
-  // conversations/<key>, messages/<key> and, since v18.9.0, waContacts/<key>.
+  // conversations/<key> and messages/<key>; since v18.9.0 a second one nulls
+  // waContacts/<key>, apart on purpose (`contactDeletePatch`: one refused path
+  // refuses a whole multi-path update, and the rules for that node reach a
+  // database after the app does).
   //
   // Deliberately NOT gated on the loaded refs the savers above check, and not on
   // the module being on: those gates stop a stale device WRITING data over real
@@ -862,7 +865,8 @@ export function useWhatsApp({
       contactsRef.current = nextContacts;
       setContacts(nextContacts);
     }
-    update(ref(db), conversationDeletePatch([phoneKey], { contacts: true })).catch(function (err) { console.error("[wa] erase failed for one guest", err); });
+    update(ref(db), conversationDeletePatch([phoneKey])).catch(function (err) { console.error("[wa] erase failed for one guest", err); });
+    update(ref(db), contactDeletePatch([phoneKey])).catch(function (err) { console.error("[wa] contact erase failed for one guest", err); });
   }
 
   const unreadCount = conversations.filter((c) => c.unread && !c.archived && !c.muted).length;
