@@ -36695,3 +36695,10 @@ failed read is now `ROLES_UNREADABLE`, a 503 that says to try again (the class `
 already keeps for faults that are the server's, not the account's). `tests/api-handlers.test.js`
 fails the role read for both methods: 503 with that sentence, no Meta call, nothing written
 (it fails against the old check).
+
+**The Rule of law contradicted the node this version added.** The root CLAUDE.md said "The
+grant requirement has no exemptions" and "Nothing else skips a CAS" two lines above the
+paragraph that gives `waLink` neither, on purpose. A closed list that is wrong about its newest
+member is how the next server-only node gets a browser grant "to satisfy the rule". Both
+sentences now name the exemption: a node only the server writes takes no grant, and so no CAS,
+since no browser write exists for a rule to bind.
