@@ -122,6 +122,7 @@ import onboardHandler from "../api/wa-onboard.js";
 import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { numberIsOurs, makeNumberGuard, freshResults } from "../api/_lib/coexist-core.js";
+import { readJsonBody, bearerToken } from "../api/_lib/request.js";
 import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyRequested, historyStatus, WA_IMPORT_ARCHIVE_MS, disconnectSentence } from "../src/lib/wa-coexist.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
@@ -2511,5 +2512,34 @@ describe("wa-prune", () => {
     expect(staleMessageIds(node, cut, false)).toEqual(["a"]);
     expect(staleMessageIds(node, cut, true)).toEqual(["a", "c", "d", "e"]);
     expect(staleMessageIds(null, cut, true)).toEqual([]);
+  });
+});
+
+// v18.9.0 (/code-review): the body reader was a private copy in six handlers
+// and the bearer parse a copy in eight; one module serves them now, and a
+// handler that writes either out again fails here.
+describe("readJsonBody / bearerToken (api/_lib/request.js)", () => {
+  it("reads a body Vercel parsed, a string, a stream, and answers null for no JSON", async () => {
+    expect(await readJsonBody({ body: { a: 1 } })).toEqual({ a: 1 });
+    expect(await readJsonBody({ body: '{"b":2}' })).toEqual({ b: 2 });
+    expect(await readJsonBody({ body: "{bad" })).toBeNull();
+    expect(await readJsonBody(Readable.from([Buffer.from('{"c":'), Buffer.from("3}")]))).toEqual({ c: 3 });
+    expect(await readJsonBody(Readable.from([Buffer.from("not json")]))).toBeNull();
+  });
+  it("takes the token after \"Bearer \" and nothing else", () => {
+    expect(bearerToken({ headers: { authorization: "Bearer abc.def" } })).toBe("abc.def");
+    expect(bearerToken({ headers: { authorization: "Basic abc" } })).toBeNull();
+    expect(bearerToken({ headers: {} })).toBeNull();
+  });
+  it("no handler under api/ reads a body or a bearer token by itself", () => {
+    const files = ["api/", "api/_lib/"].flatMap((d) => readdirSync(new URL("../" + d, import.meta.url)).filter((f) => f.endsWith(".js")).map((f) => d + f)).filter((f) => f !== "api/_lib/request.js");
+    let users = 0;
+    for (const f of files) {
+      const src = stripComments(readFileSync(new URL("../" + f, import.meta.url), "utf8")).join("\n");
+      expect(src, f).not.toMatch(/function readJsonBody\b/);
+      expect(src, f).not.toMatch(/startsWith\("Bearer "\)/);
+      if (/bearerToken\(req\)/.test(src)) users++;
+    }
+    expect(users).toBe(8);
   });
 });

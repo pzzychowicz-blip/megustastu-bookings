@@ -31,6 +31,7 @@
 
 import { env, llmMode, sendMode } from "./_lib/env.js";
 import { verifyStaffToken, staffAuthError, readWaLink } from "./_lib/rtdb.js";
+import { bearerToken } from "./_lib/request.js";
 
 // Every key `api/_lib/env.js` reads, plus the two the harness/sandbox use. Kept
 // as a flat list rather than grouped, for the reason in the header: the grouping
@@ -65,8 +66,7 @@ async function phoneNumberIdMatches() {
 export default async function handler(req, res) {
   if (req.method !== "GET") { res.status(405).json({ error: "method not allowed" }); return; }
 
-  const authHeader = req.headers["authorization"] || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const idToken = bearerToken(req);
   if (!idToken) { res.status(401).json({ error: "missing token" }); return; }
   try {
     await verifyStaffToken(idToken);

@@ -33,6 +33,7 @@
 // (scripts/wa-backend-dev.mjs) for DEV testing with a real DEV id token.
 
 import { verifyStaffToken, staffAuthError } from "./_lib/rtdb.js";
+import { readJsonBody, bearerToken } from "./_lib/request.js";
 import { simEnabled } from "./_lib/env.js";
 import { injectSimInbound } from "./_lib/inbound-core.js";
 import { SIM_MEDIA } from "../src/lib/wa-mock-media.js";
@@ -51,19 +52,6 @@ function scheduleAfterResponse(promise) {
   } catch { /* no Vercel context — local harness */ }
 }
 
-function readJsonBody(req) {
-  if (req.body !== undefined && req.body !== null) {
-    if (typeof req.body === "string") { try { return Promise.resolve(JSON.parse(req.body)); } catch { return Promise.resolve(null); } }
-    return Promise.resolve(req.body);
-  }
-  return new Promise((resolve) => {
-    const chunks = [];
-    req.on("data", (c) => chunks.push(c));
-    req.on("end", () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch { resolve(null); } });
-    req.on("error", () => resolve(null));
-  });
-}
-
 export default async function handler(req, res) {
   // v18.0.0 phase 5b — FIRST statement, fail-closed. See simEnabled() in
   // _lib/env.js for why it is first and why absent means off.
@@ -71,8 +59,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST") { res.status(405).json({ error: "method not allowed" }); return; }
 
   // ── Staff auth (NOT Meta HMAC — the sim is staff-only) ──────────────────────
-  const authHeader = req.headers["authorization"] || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const idToken = bearerToken(req);
   if (!idToken) { res.status(401).json({ error: "missing token" }); return; }
   let decoded;
   try {

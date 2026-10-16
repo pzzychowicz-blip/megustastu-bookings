@@ -8,7 +8,9 @@ repo that does not run in the browser. Vercel deploys the directory WHOLESALE, s
 is no build-time way to keep a file out of production: every gate here is a RUNTIME one,
 checked as the handler's first statement. `wa-inbound.js` is a **public URL the moment
 this merges** — the single riskiest fact in the release, and the reason phase 5b exists.
-`_lib/` holds the shared halves (`env` · `gemini` · `inbound-core` · `meta` · `rtdb`);
+`_lib/` holds the shared halves (`env` · `gemini` · `inbound-core` · `meta` · `rtdb`, and
+since v18.9.0 `coexist-core` · `sim-events` · `request`, the body reader and bearer parse
+every staff endpoint shares: a handler that writes either out again fails the tests);
 `rtdb.js` writes through **firebase-admin**, which bypasses the security rules entirely
 — see the CAS exemptions under the Rule of law below, which are about exactly that. The
 three `wa-sim-*.js` endpoints are the simulator's and must return 404 unless

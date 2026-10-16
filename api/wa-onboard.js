@@ -40,6 +40,7 @@
 
 import { env } from "./_lib/env.js";
 import { verifyStaffToken, assertWaAdmin, staffAuthError, readWaLink, updateWaLink, transactWaLink } from "./_lib/rtdb.js";
+import { readJsonBody, bearerToken } from "./_lib/request.js";
 import { GRAPH_VERSION, exchangeCode, subscribeApp, requestSmbSync, phoneInfo } from "./_lib/meta.js";
 import { historyRequested } from "../src/lib/wa-coexist.js";
 
@@ -48,23 +49,6 @@ import { historyRequested } from "../src/lib/wa-coexist.js";
 const META_ID_RE = /^[0-9]{5,25}$/;
 const CODE_MAX = 4096;
 const RETRYABLE = ["subscribe", "contacts", "history", "phone"];
-
-function readJsonBody(req) {
-  if (req.body !== undefined && req.body !== null) {
-    // Vercel's helper may have parsed it already (string or object).
-    if (typeof req.body === "string") { try { return Promise.resolve(JSON.parse(req.body)); } catch { return Promise.resolve(null); } }
-    return Promise.resolve(req.body);
-  }
-  return new Promise((resolve) => {
-    const chunks = [];
-    req.on("data", (c) => chunks.push(c));
-    req.on("end", () => {
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); }
-      catch { resolve(null); }
-    });
-    req.on("error", () => resolve(null));
-  });
-}
 
 // Whether the environment's number id is the one just connected. Booleans and
 // a word, never the value: wa-config's rule (it answers which keys are set,
@@ -127,8 +111,7 @@ function answer(res, steps, extra) {
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") { res.status(405).json({ error: "method not allowed" }); return; }
 
-  const authHeader = req.headers["authorization"] || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const idToken = bearerToken(req);
   if (!idToken) { res.status(401).json({ error: "missing token" }); return; }
   let decoded;
   try {

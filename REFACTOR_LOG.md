@@ -36718,3 +36718,14 @@ bell would have left the struck one behind. A shared constant would be a non-com
 from a component file, so the copies stay, the comment says they are copies, and
 `tests/wa-bubble.test.js` renders both icons and requires the same two paths plus one slash
 (it fails with a bell path changed in either).
+
+**`wa-onboard.js` added a sixth copy of the body reader.** `readJsonBody` was a private function
+in six handlers (two spellings of one function: a comment and a line break apart) and the
+two-line bearer parse sat in eight, so a change to how a body is read would have reached one
+copy, the shape `staffAuthError` was extracted to end. The review's own plan was a ROADMAP line;
+it is fixed here instead, since the copies are behaviourally identical and every handler that
+reads one is run by `tests/api-handlers.test.js`. `api/_lib/request.js` holds
+`readJsonBody(req)` and `bearerToken(req)`, the eight handlers import them (253 handler tests
+pass unchanged), and three new tests read a parsed, a string and a streamed body, the token
+rule, and fail a handler under `api/` that defines its own reader or parses `"Bearer "` itself
+(it fails with the old `wa-onboard.js`).
