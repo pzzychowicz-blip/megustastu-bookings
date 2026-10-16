@@ -21,6 +21,17 @@ import { ConnectPage } from "./ConnectPage";
   document.documentElement.dataset.theme = dark ? "dark" : "light";
 })();
 
+// "Reduce animations" (Settings → App), the per-device flag, stamped the way
+// index.html's boot script stamps it. Without it every press, hover and Reveal
+// on this page played on a device that had asked for none
+// (/find-animation-opportunities, v18.9.0). The OS setting needs nothing here:
+// it is a media query in the stylesheet this page shares.
+(function applyReduceMotion() {
+  try {
+    if (localStorage.getItem("mgt-reduce-motion") === "1") document.documentElement.dataset.motion = "reduce";
+  } catch { /* storage blocked: the OS setting still applies */ }
+})();
+
 document.title = "Connect WhatsApp · " + APP_NAME;
 
 createRoot(document.getElementById("root")).render(

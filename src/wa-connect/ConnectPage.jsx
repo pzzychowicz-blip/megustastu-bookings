@@ -29,7 +29,7 @@ import { useState, useEffect, useRef } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firebase";
 import { APP_NAME, T, FW, SP, R, IC } from "../lib/constants";
-import { mkBtn, mkSolidBtn, InlineAlert, ALERT_TONES } from "../components/atoms";
+import { mkBtn, mkSolidBtn, InlineAlert, ALERT_TONES, Reveal } from "../components/atoms";
 import { CheckIcon, AlertIcon, CopyIcon } from "../components/Icons";
 import { WA_BACKEND_URL } from "../lib/wa-backend";
 import { FB_SDK_URL, loginOptions, signupMessage, CONNECT_STEPS, mergeSteps, resultHeadline, retryAnnouncement } from "../lib/wa-connect";
@@ -242,10 +242,17 @@ export function ConnectPage() {
                 : ""}
       </div>
       <div className="mgt-sr-only" role="status">{announce}</div>
+      {/* The house shape for a form's refusal (WalkinForm, ReplyComposer): the
+          alert always mounted, the note easing in and out inside it, so what
+          is under it slides rather than jumps. `speed="move"`: it arrives
+          after Meta's window, or the server, has answered, not under the
+          press (/find-animation-opportunities, v18.9.0). */}
       <div role="alert">
-        {note ? (
-          <InlineAlert tone={ALERT_TONES[note.tone].tone} tint={ALERT_TONES[note.tone].tint}>{note.text}</InlineAlert>
-        ) : null}
+        <Reveal show={!!note} speed="move">
+          {note ? (
+            <InlineAlert tone={ALERT_TONES[note.tone].tone} tint={ALERT_TONES[note.tone].tint}>{note.text}</InlineAlert>
+          ) : null}
+        </Reveal>
       </div>
       {result ? <ConnectResult result={result} retrying={retrying} onRetry={retry} copied={copied} onCopy={copyId} headRef={headRef} /> : null}
     </>

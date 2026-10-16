@@ -36564,3 +36564,23 @@ under nobody's finger, so it takes `speed="move"` (240 ms), as the notification 
 does. Live on DEV, with `waLink` set in memory: in, `grid-template-rows, opacity` over 0.24s,
 56 px reached at 263 ms; out, 0 px at 241 ms and unmounted at 308 ms.
 `tests/wa-inbox-layout.test.js` pins the speed with the always-mounted alert around it.
+
+### Follow-up — the connect page's note eases, and the page honours "Reduce animations"
+
+The third `/find-animation-opportunities` finding. `/wa-connect`'s error note (a sign-in that did
+not finish, a server refusal, a retry that could not run) mounted and unmounted in one frame,
+and the step results under it jumped by its height. It now takes the house shape for a form's
+refusal (WalkinForm, ReplyComposer): the `role="alert"` always mounted, the `InlineAlert`
+inside a `Reveal` on `speed="move"`, since it arrives once Meta's window or the server has
+answered rather than under the press. And the page ignored the per-device "Reduce
+animations": index.html's boot script stamps `data-motion="reduce"` before the app mounts,
+and this page has its own entry, so every press, hover and Reveal played on a device that had
+asked for none. `src/wa-connect/main.jsx` now stamps it from the same key
+(`mgt-reduce-motion`), before the React tree renders; the OS setting needed nothing, being a
+media query in the shared stylesheet.
+
+Live on `/wa-connect` on the dev server, with the config and the note set in memory (Meta's
+flow cannot run locally): the note in, 48 px at 246 ms; out, 0 px at 217 ms; with the flag
+stored, `<html data-motion="reduce">` and the note's and the Connect button's transitions at
+the kill-switch's 1e-06 s (the flag removed again after). `tests/wa-connect.test.js` pins the
+Reveal inside the alert and the stamp beside index.html's (both fail on the previous source).

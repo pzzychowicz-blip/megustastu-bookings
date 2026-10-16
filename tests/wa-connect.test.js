@@ -135,6 +135,17 @@ describe("the page wires those decisions in", () => {
     // attempt cannot start while one runs.
     expect(page).toContain('disabled={sdk !== "ready" || flow === "waiting" || flow === "sending" || !!retrying}');
   });
+  // /find-animation-opportunities (v18.9.0): the note appeared and left in one
+  // frame, and the page played every animation for a device with "Reduce
+  // animations" on, because only index.html's boot script stamped the flag.
+  it("eases its error note in and out inside the always-mounted alert", () => {
+    expect(page).toMatch(/<div role="alert">\s*<Reveal show=\{!!note\} speed="move">\s*\{note \? \(\s*<InlineAlert /);
+  });
+  it("honours this device's Reduce animations, as the app's boot script does", () => {
+    const entry = read("src/wa-connect/main.jsx");
+    expect(entry).toContain('if (localStorage.getItem("mgt-reduce-motion") === "1") document.documentElement.dataset.motion = "reduce";');
+    expect(read("index.html")).toContain('localStorage.getItem("mgt-reduce-motion") === "1"');
+  });
   it("imports nothing of the app beyond what it draws with (src/firebase.js keeps the DEV/PROD split)", () => {
     const imports = [...page.matchAll(/^import [^;]*from "([^"]+)"/gm)].map((m) => m[1]);
     expect(imports).toEqual(["react", "firebase/auth", "../firebase", "../lib/constants", "../components/atoms", "../components/Icons", "../lib/wa-backend", "../lib/wa-connect"]);
