@@ -171,6 +171,13 @@ describe("the page wires those decisions in", () => {
     expect(entry).toContain('if (localStorage.getItem("mgt-reduce-motion") === "1") document.documentElement.dataset.motion = "reduce";');
     expect(read("index.html")).toContain('localStorage.getItem("mgt-reduce-motion") === "1"');
   });
+  // Without a touch listener on the document, iOS Safari never applies
+  // `:active`, so no button on this page dipped under a finger on an iPad.
+  it("lets iOS show the press dip, as the app's boot script does", () => {
+    const listener = 'document.addEventListener("touchstart", function () {}, { passive: true });';
+    expect(read("src/wa-connect/main.jsx")).toContain(listener);
+    expect(read("index.html")).toContain(listener);
+  });
   it("imports nothing of the app beyond what it draws with (src/firebase.js keeps the DEV/PROD split)", () => {
     const imports = [...page.matchAll(/^import [^;]*from "([^"]+)"/gm)].map((m) => m[1]);
     expect(imports).toEqual(["react", "firebase/auth", "../firebase", "../lib/constants", "../components/atoms", "../components/Icons", "../lib/wa-backend", "../lib/wa-connect"]);

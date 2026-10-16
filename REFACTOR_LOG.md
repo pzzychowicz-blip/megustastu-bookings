@@ -36604,3 +36604,13 @@ pressed (the harness was not running, so the retry genuinely failed): from the p
 answer the scroll stayed at its end (97.5), both notes at 34 px, and the button within half a
 pixel (its own press dip); the second identical refusal was a new node. `tests/wa-connect.test.js`
 pins where it is drawn, that the press changes no note, and the key.
+
+### Follow-up — the connect page's buttons dip under a finger on iOS
+
+iOS Safari applies `:active` only when the document has a touch listener, which is why
+index.html's boot script adds an empty passive `touchstart` listener (v17.8.0). `/wa-connect`
+has its own entry and never added one, so none of its buttons (Connect, Try again, Copy,
+Back) dipped when pressed on an iPhone or iPad. `src/wa-connect/main.jsx` adds the same
+listener before the page renders. Checked: the built `wa-connect` bundle carries it and the
+page loads with no console error; the dip itself is iOS-only and can only be seen on a device.
+`tests/wa-connect.test.js` pins the line beside index.html's (it fails without it).

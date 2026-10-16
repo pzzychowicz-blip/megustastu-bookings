@@ -32,6 +32,13 @@ import { ConnectPage } from "./ConnectPage";
   } catch { /* storage blocked: the OS setting still applies */ }
 })();
 
+// iOS Safari delivers `:active` only when the document has a touch listener,
+// so without one the press dip (`.mgt-press`) never plays on an iPhone or
+// iPad. index.html's boot script adds this empty passive listener for the
+// app; this page has its own entry, so it adds its own. Passive, so it can
+// never hold up a scroll.
+document.addEventListener("touchstart", function () {}, { passive: true });
+
 document.title = "Connect WhatsApp · " + APP_NAME;
 
 createRoot(document.getElementById("root")).render(
