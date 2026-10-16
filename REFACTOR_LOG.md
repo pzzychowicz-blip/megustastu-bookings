@@ -36678,3 +36678,11 @@ and Delete customer left the guest's chats behind. The contact is its own write 
 (`src/lib/whatsapp.js`) is a second `update()` beside it, so the conversation and messages are
 erased whatever the contact's write meets. `tests/activity.test.js` reads the two writes in the
 eraser (it fails with them merged into one) and pins the two patches.
+
+**A reply typed on the phone was stored uncapped.** Every stored message is cut to
+`WA_MAX_TEXT_LEN` (4,000): an inbound one in `processInbound`, an imported one in
+`historyRecord`, an edit in `editPatch`. `echoRecord` took `inboundContent`'s text as it came,
+and the Business app takes far longer messages, all of which went into the thread every device
+downloads. It slices like `historyRecord` now; the simulator's client mode asks the same
+function. `tests/api-handlers.test.js` stores a phone reply 500 characters over the cap (fails
+uncapped).

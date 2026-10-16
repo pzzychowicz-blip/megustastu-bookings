@@ -114,11 +114,13 @@ export const WA_SOURCE_PHONE = "phone";
 // echoRecord(msgId, wamid, content, ts) — the stored message. `content` is what
 // `inboundContent` made of it (the text, the media). Its status stays "sent":
 // Meta reports delivery for what the API sent, and the bubble shows "phone" in
-// that place anyway.
+// that place anyway. The text is capped at `WA_MAX_TEXT_LEN`, as every stored
+// message is (/code-review: this one alone was not, and the phone's app takes
+// far longer messages than that).
 export function echoRecord(msgId, wamid, content, ts) {
   const msg = {
     id: msgId, direction: "out", source: WA_SOURCE_PHONE,
-    text: String((content && content.text) || ""), ts, status: "sent",
+    text: String((content && content.text) || "").slice(0, WA_MAX_TEXT_LEN), ts, status: "sent",
     isAutoAck: false, channel: "whatsapp", providerMsgId: wamid || null,
   };
   if (content && content.media) msg.media = content.media;

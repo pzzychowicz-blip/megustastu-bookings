@@ -1364,6 +1364,12 @@ describe("wa-inbound — phone replies (v18.9.0)", () => {
     expect(fake.read("messages/" + KEY + "/wamid_E1")).toMatchObject({ text: "La terraza", media: { kind: "image", mediaId: "123456" } });
     expect(convAt(KEY).lastMessageSnippet).toBe("Photo · La terraza");
   });
+  // /code-review: every other stored message is capped (an inbound one, an
+  // imported one, an edit); a reply typed on the phone was not.
+  it("a long phone reply is stored capped, like every other message", async () => {
+    await deliverEchoes([echo({ text: { body: "x".repeat(WA_MAX_TEXT_LEN + 500) } })]);
+    expect(fake.read("messages/" + KEY + "/wamid_E1").text).toHaveLength(WA_MAX_TEXT_LEN);
+  });
   it("an echo with no customer number, or no wamid, is ignored and writes nothing", async () => {
     const res = await deliverEchoes([echo({ to: "" }), echo({ id: "" })]);
     expect(res.body).toMatchObject({ echoes: 0, ignored: 2 });
