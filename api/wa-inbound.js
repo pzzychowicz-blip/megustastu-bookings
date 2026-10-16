@@ -46,7 +46,7 @@ import { verifySignature } from "./_lib/meta.js";
 import { parseMessage, mockParse } from "./_lib/gemini.js";
 import { processInbound, applyParse, inboundContent } from "./_lib/inbound-core.js";
 import { updateMessageStatusByWamid, readOperatingHours, getConversation } from "./_lib/rtdb.js";
-import { makeNumberGuard, COEXIST_HANDLERS, applyMessageChange } from "./_lib/coexist-core.js";
+import { makeNumberGuard, COEXIST_HANDLERS, applyMessageChange, freshResults } from "./_lib/coexist-core.js";
 import { normalizePhone, isPhoneKey } from "../src/lib/whatsapp.js";
 import { secondsTs, webhookPhoneKey, editedMessage } from "../src/lib/wa-coexist.js";
 
@@ -250,8 +250,8 @@ export default async function handler(req, res) {
   }
 
   // v18.9.0: one counter per kind of record, plus `ignored` (a change for
-  // another number, or a field this webhook does not handle).
-  const results = { messages: 0, statuses: 0, echoes: 0, edits: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 };
+  // another number, or a field this webhook does not handle): freshResults.
+  const results = freshResults();
   const parseJobs = []; // phase-B work: one LLM parse per stored text message
   const isOurs = makeNumberGuard();
   // v18.9.0: a coexistence handler that must be sent again (a history chunk

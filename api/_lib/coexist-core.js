@@ -39,6 +39,19 @@ import {
 // api/wa-inbound.js, which owns the async parse.
 export const COEXIST_FIELDS = ["smb_app_state_sync", "smb_message_echoes", "history", "account_update"];
 
+// ── The delivery's counters ──────────────────────────────────────────────────
+// freshResults() — what one delivery did: one counter per kind of record, plus
+// `skipped` (stored already), `ignored` (another number, or a field this
+// webhook does not handle) and `errors`. The webhook (api/wa-inbound.js) and
+// the simulator's events (_lib/sim-events.js) both start from it, where each
+// typed it out (the /code-review): wa-inbound's retry rule sums every key but
+// `errors`, so a counter a handler bumps and a copy lacks reads NaN, and a
+// delivery that failed everywhere is answered 200 and never sent again.
+// tests/api-handlers.test.js holds every `results.<name>++` under api/ to these.
+export function freshResults() {
+  return { messages: 0, statuses: 0, echoes: 0, edits: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 };
+}
+
 // ── The number guard ─────────────────────────────────────────────────────────
 // numberIsOurs(phoneNumberId, envId, linkId) — may this change be stored?
 //

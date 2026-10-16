@@ -28,7 +28,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import crypto from "node:crypto";
 import { Buffer } from "node:buffer";
 import { Readable, Writable } from "node:stream";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
 const fake = vi.hoisted(() => {
@@ -121,7 +121,7 @@ import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "
 import onboardHandler from "../api/wa-onboard.js";
 import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
-import { numberIsOurs, makeNumberGuard } from "../api/_lib/coexist-core.js";
+import { numberIsOurs, makeNumberGuard, freshResults } from "../api/_lib/coexist-core.js";
 import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyRequested, historyStatus, WA_IMPORT_ARCHIVE_MS, disconnectSentence } from "../src/lib/wa-coexist.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
@@ -974,6 +974,22 @@ describe("wa-inbound — the handshake, the method, the signature", () => {
   it("answers 200 to a signed payload with nothing in it", async () => {
     const res = await deliver({});
     expect([res.statusCode, res.body]).toEqual([200, { ok: true, messages: 0, statuses: 0, echoes: 0, edits: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 }]);
+  });
+  // The retry rule sums every counter but `errors`, so one a handler bumps that
+  // the record lacks reads NaN and switches the retry off: every counter under
+  // api/ is one freshResults() starts at 0, and nothing else types the record.
+  it("every results counter under api/ is a freshResults() key, and only coexist-core types the record", () => {
+    expect(freshResults()).not.toBe(freshResults());
+    expect(Object.values(freshResults()).every((v) => v === 0)).toBe(true);
+    const keys = Object.keys(freshResults());
+    const files = ["api/", "api/_lib/"].flatMap((d) => readdirSync(new URL("../" + d, import.meta.url)).filter((f) => f.endsWith(".js")).map((f) => d + f));
+    let bumps = 0;
+    for (const f of files) {
+      const src = stripComments(readFileSync(new URL("../" + f, import.meta.url), "utf8")).join("\n");
+      for (const m of src.matchAll(/\bresults\.([a-zA-Z]+)\s*(?:\+\+|\+=)/g)) { bumps++; expect(keys, f + " bumps results." + m[1]).toContain(m[1]); }
+      if (f !== "api/_lib/coexist-core.js") expect(src, f).not.toMatch(/statuses:\s*0/);
+    }
+    expect(bumps).toBeGreaterThan(30);
   });
 });
 

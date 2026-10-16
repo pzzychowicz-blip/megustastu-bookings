@@ -36702,3 +36702,12 @@ paragraph that gives `waLink` neither, on purpose. A closed list that is wrong a
 member is how the next server-only node gets a browser grant "to satisfy the rule". Both
 sentences now name the exemption: a node only the server writes takes no grant, and so no CAS,
 since no browser write exists for a rule to bind.
+
+**The webhook's counters were typed out twice.** `api/wa-inbound.js` and the simulator's
+`_lib/sim-events.js` each wrote the ten-counter results record by hand, and the retry rule sums
+every key but `errors`: a counter a handler bumps and one copy lacks reads NaN, the sum is then
+never 0, and a delivery that failed everywhere is answered 200 and never resent. Today's two
+copies agree; nothing kept them so. `freshResults()` in `_lib/coexist-core.js` is the one record
+both start from, and `tests/api-handlers.test.js` reads every `results.<name>++` under `api/`
+(38 of them) against its keys and fails a file but that one typing the record out (it fails
+with the old `wa-inbound.js`).

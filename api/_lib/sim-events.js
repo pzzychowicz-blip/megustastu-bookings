@@ -26,7 +26,7 @@
 
 import { env } from "./env.js";
 import { readWaLink, updateWaLink, readMessageNode, removeSimWaLink } from "./rtdb.js";
-import { handleStateSync, handleEchoes, handleHistory, handleAccountUpdate, applyMessageChange } from "./coexist-core.js";
+import { handleStateSync, handleEchoes, handleHistory, handleAccountUpdate, applyMessageChange, freshResults } from "./coexist-core.js";
 import { normalizePhone, isPhoneKey } from "../../src/lib/whatsapp.js";
 import {
   simEventRefusal, simContactValue, simEchoValue, simChangeMessage, lastCustomerMessage,
@@ -34,10 +34,6 @@ import {
 } from "../../src/lib/wa-sim-coexist.js";
 
 const NEEDS_PHONE = ["contact", "echo", "edit", "revoke"];
-
-function freshResults() {
-  return { messages: 0, statuses: 0, echoes: 0, edits: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 };
-}
 
 // runSimEvent(body, decoded, now) → { status, data }: what the endpoint
 // answers. `decoded` is the staff token (its email names who connected).

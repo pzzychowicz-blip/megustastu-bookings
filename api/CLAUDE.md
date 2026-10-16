@@ -148,6 +148,9 @@ a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
   does a `waLink.history` record that failed (the progress, a declined share), and the
   chunks after it are still read: a write that THROWS out of a handler is counted once and
   answered 200 whenever anything before it landed, so what it skipped is never resent.
+  The counters it sums are ONE record, `freshResults()` (`_lib/coexist-core.js`), which the
+  simulator's events start from too: a counter a handler bumps and the record lacks reads
+  NaN, and the sum then never equals 0, so a delivery that failed everywhere is not resent.
 - **History size is a rehearsal risk, not a measured one.** Vercel caps a request body at
   4.5 MB and Meta says one history webhook can describe thousands of messages. Record the
   chunk sizes in the rehearsal's logs; a `maxDuration` for `wa-inbound` in `vercel.json`
