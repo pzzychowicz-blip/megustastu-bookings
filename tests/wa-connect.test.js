@@ -141,6 +141,31 @@ describe("the page wires those decisions in", () => {
   it("eases its error note in and out inside the always-mounted alert", () => {
     expect(page).toMatch(/<div role="alert">\s*<Reveal show=\{!!note\} speed="move">\s*\{note \? \(\s*<InlineAlert /);
   });
+  // A retry's refusal sat ABOVE the step list with the Connect note: it pushed
+  // the Try again buttons down as it arrived, and the next Try again cleared
+  // it, pulling them up under the finger. Under the list, clearing it at the
+  // press still moved them on a page scrolled to its end (measured), so it
+  // stays until the answer replaces it.
+  it("draws a retry's refusal under the step list, and changes no note at the press", () => {
+    const retryFn = page.slice(page.indexOf("function retry(id)"), page.indexOf("function copyId()"));
+    expect(retryFn).not.toContain("setNote(");
+    const atPress = retryFn.slice(retryFn.indexOf("setRetrying(id);"), retryFn.indexOf("onboard("));
+    expect(atPress).not.toContain("setRetryNote");
+    expect(retryFn.indexOf("setRetryNote(null);")).toBeGreaterThan(retryFn.indexOf("mergeSteps("));
+    expect(retryFn).toContain('setRetryNote({ tone: "danger", text: errorText(r), n: ++retryCount.current });');
+    expect(retryFn).toContain('setRetryNote({ tone: "danger", text: UNREACHABLE, n: ++retryCount.current });');
+    const startFn = page.slice(page.indexOf("function start()"), page.indexOf("function retry(id)"));
+    expect(startFn).toContain("setRetryNote(null);");
+    const shown = page.slice(page.indexOf("function ConnectResult("));
+    const list = shown.indexOf("</ul>");
+    const note = shown.indexOf("<Reveal show={!!retryNote} speed=\"move\">");
+    expect(list).toBeGreaterThan(0);
+    expect(note).toBeGreaterThan(list);
+    expect(shown.lastIndexOf('<div role="alert">', note)).toBeGreaterThan(list);
+    expect(note).toBeLessThan(shown.indexOf("Number id"));
+    // The same refusal twice is a new node, so the alert speaks again.
+    expect(shown).toContain("<InlineAlert key={retryNote.n} ");
+  });
   it("honours this device's Reduce animations, as the app's boot script does", () => {
     const entry = read("src/wa-connect/main.jsx");
     expect(entry).toContain('if (localStorage.getItem("mgt-reduce-motion") === "1") document.documentElement.dataset.motion = "reduce";');

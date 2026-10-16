@@ -83,6 +83,12 @@ export function ConnectPage() {
   const [sdk, setSdk] = useState("loading");         // loading | ready | failed
   const [flow, setFlow] = useState("idle");          // idle | waiting | sending | done
   const [note, setNote] = useState(null);            // { tone, text }
+  // A retry's refusal is drawn apart from `note`, UNDER the step list it is
+  // about: above it, it pushed the Try again buttons down as it arrived, and
+  // clearing it at the next press pulled them up under the finger. `n` keys
+  // it, so the same refusal twice is a new node and is announced again.
+  const [retryNote, setRetryNote] = useState(null);  // { tone, text, n }
+  const retryCount = useRef(0);
   const [result, setResult] = useState(null);        // the server's answer
   const [retrying, setRetrying] = useState(null);    // the step being tried again
   const [copied, setCopied] = useState(false);
@@ -140,6 +146,7 @@ export function ConnectPage() {
   function start() {
     if (sdk !== "ready" || !cfg || !cfg.configId || flow === "waiting" || flow === "sending" || retrying) return;
     setNote(null);
+    setRetryNote(null);
     setResult(null);
     setCopied(false);
     setAnnounce("");
@@ -185,16 +192,21 @@ export function ConnectPage() {
     // answer this retry belongs to when it comes back.
     const base = result;
     setRetrying(id);
-    setNote(null);
+    // Neither note changes at the press. The one above the list (a Connect
+    // again that failed) is not this retry's; the retry's own stays until the
+    // answer replaces it, because cleared here it folded under the list and,
+    // on a page scrolled to its end, the browser pulled everything down by
+    // its height, the button under the finger with it (measured on DEV).
     setAnnounce("");
     onboard(u, "POST", { retry: id }).then(function (r) {
       setRetrying(null);
       if (Array.isArray(r.data.steps)) {
         const steps = mergeSteps(base.steps, r.data.steps);
         setResult(Object.assign({}, base, { steps }));
+        setRetryNote(null);
         setAnnounce(retryAnnouncement(id, r.data.steps, steps));
-      } else setNote({ tone: "danger", text: errorText(r) });
-    }, function () { setRetrying(null); setNote({ tone: "danger", text: UNREACHABLE }); });
+      } else setRetryNote({ tone: "danger", text: errorText(r), n: ++retryCount.current });
+    }, function () { setRetrying(null); setRetryNote({ tone: "danger", text: UNREACHABLE, n: ++retryCount.current }); });
   }
 
   function copyId() {
@@ -254,7 +266,7 @@ export function ConnectPage() {
           ) : null}
         </Reveal>
       </div>
-      {result ? <ConnectResult result={result} retrying={retrying} onRetry={retry} copied={copied} onCopy={copyId} headRef={headRef} /> : null}
+      {result ? <ConnectResult result={result} retrying={retrying} onRetry={retry} retryNote={retryNote} copied={copied} onCopy={copyId} headRef={headRef} /> : null}
     </>
   );
 
@@ -281,7 +293,7 @@ export function ConnectPage() {
 
 // The server's answer: each step, a Try again on a step that may be retried,
 // and the number id the environment needs.
-function ConnectResult({ result, retrying, onRetry, copied, onCopy, headRef }) {
+function ConnectResult({ result, retrying, onRetry, retryNote, copied, onCopy, headRef }) {
   const steps = result.steps || [];
   const byId = {};
   steps.forEach(function (s) { byId[s.id] = s; });
@@ -313,6 +325,16 @@ function ConnectResult({ result, retrying, onRetry, copied, onCopy, headRef }) {
           );
         })}
       </ul>
+      {/* A retry that could not run says so here, under the buttons that
+          asked, in the page's refusal shape: mounted with the result, so the
+          alert exists before its first message. */}
+      <div role="alert">
+        <Reveal show={!!retryNote} speed="move">
+          {retryNote ? (
+            <InlineAlert key={retryNote.n} tone={ALERT_TONES[retryNote.tone].tone} tint={ALERT_TONES[retryNote.tone].tint}>{retryNote.text}</InlineAlert>
+          ) : null}
+        </Reveal>
+      </div>
       {linked && result.phoneNumberId ? (
         <div style={{ display: "flex", flexDirection: "column", gap: SP.base }}>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.base }}>

@@ -36584,3 +36584,23 @@ flow cannot run locally): the note in, 48 px at 246 ms; out, 0 px at 217 ms; wit
 stored, `<html data-motion="reduce">` and the note's and the Connect button's transitions at
 the kill-switch's 1e-06 s (the flag removed again after). `tests/wa-connect.test.js` pins the
 Reveal inside the alert and the stamp beside index.html's (both fail on the previous source).
+
+### Follow-up — a retry's refusal sits under the steps, and nothing moves at the press
+
+`/wa-connect` drew every refusal in one note above the step list, a retry's too: a Try again
+that could not run pushed the Try again buttons down as its note arrived, and the next press
+cleared it and pulled them back up under the finger. A retry's refusal is now its own note
+(`retryNote`), drawn under the step list in the same shape (an alert mounted with the result, a
+`Reveal` on `move`). Moving it was not enough, measured: cleared at the press, it folded under
+the list, and on a page scrolled to its end the browser clamped the scroll as the page got
+shorter, so the button moved down on screen by the fold (12 px before the quick local refusal
+reopened it). So no note changes at the press: the retry's own stays until the answer replaces
+it (a success clears it, a refusal replaces it), and the Connect note above is not a retry's
+to clear. A refusal carries a counter that keys its `InlineAlert`, so the same sentence twice is
+a new node and the alert speaks again.
+
+Live on `/wa-connect` on the dev server, a failed step set in memory and the real Try again
+pressed (the harness was not running, so the retry genuinely failed): from the press to the
+answer the scroll stayed at its end (97.5), both notes at 34 px, and the button within half a
+pixel (its own press dip); the second identical refusal was a new node. `tests/wa-connect.test.js`
+pins where it is drawn, that the press changes no note, and the key.
