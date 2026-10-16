@@ -33,7 +33,14 @@ session and keeping it in sync.
   the rehearsal owns:** the `extras` shape FB.login takes (Embedded Signup Builder,
   "Check a launch config"); whether `META_WA_TOKEN` may send and retry the syncs on the
   converted account; history chunk sizes against Vercel's 4.5 MB request cap; whether the
-  direct route works without Tech Provider status. **Before any of it, publish
+  direct route works without Tech Provider status; whether an echo ever names a message
+  MGT sent (if never, `handleEchoes` finds a phone reply by its key alone instead of
+  reading the whole thread for each new one; if it can, the scan stays, or `providerMsgId`
+  gets an index); and how long one history thread takes to import, which decides whether
+  `importThread` reads and writes the conversation in one transaction (a customer writing
+  inside that round trip has the message marked read and, on an old thread, archived; the
+  transaction costs about one more round trip per thread, on the path nearest Vercel's
+  time limit). Both from v18.9.0's `/code-review`. **Before any of it, publish
   `database.rules.json` to PROD** (the `waContacts` grant; DEV has it since 2026-10-16,
   checked: a per-key `waContacts` delete is allowed and a `waLink` write refused). If the rehearsal
   passes, the restaurant's number, with the Business app's greeting message turned off.

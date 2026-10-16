@@ -36729,3 +36729,13 @@ reads one is run by `tests/api-handlers.test.js`. `api/_lib/request.js` holds
 pass unchanged), and three new tests read a parsed, a string and a streamed body, the token
 rule, and fail a handler under `api/` that defines its own reader or parses `"Bearer "` itself
 (it fails with the old `wa-onboard.js`).
+
+**Not fixed: two findings that wait on the rehearsal's measurements.** A phone reply that is not
+stored yet (every new one) makes `findMessageByWamid` read the whole conversation, looking for a
+message MGT sent under that wamid. Kept: if an echo can ever name a message MGT sent, that scan
+is what stops it being stored twice, and only Meta's real webhooks can say. A history thread is
+imported by reading its conversation and then writing it, so a customer who writes inside that
+one round trip (tens of milliseconds per thread, once, at onboarding) has the message marked
+read and, on an old thread, archived. A transaction closes it at about one more round trip per
+thread, on the path nearest Vercel's time limit, which nobody has measured yet. Both are in
+ROADMAP's coexistence entry as findings the rehearsal owns, with what each answer decides.
