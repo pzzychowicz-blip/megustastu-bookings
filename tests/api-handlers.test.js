@@ -1553,6 +1553,29 @@ describe("wa-inbound — the chats the phone already held (v18.9.0)", () => {
     expect(msgsAt(KEY)).toHaveLength(1);
     expect(msgsAt("+34600999888")).toHaveLength(1);
   });
+  // /code-review: the progress write threw out of the handler, so the second
+  // chunk was never read, and with the first chunk's thread counted the
+  // delivery was a 200: Meta never sent the second chunk again.
+  it("a progress record that fails does not stop the chunks after it, and the delivery is sent again", async () => {
+    const h = [
+      chunk([{ id: "34600111222", messages: [histMsg("wamid.A1", "34600111222", 600)] }], { progress: 40 }),
+      chunk([{ id: "34600999888", messages: [histMsg("wamid.B1", "34600999888", 600)] }], { progress: 80, chunk_order: 2 }),
+    ];
+    fake.state.failWrite = (op, path) => op === "transaction" && path === "waLink/history";
+    let res = await deliverHistory(h);
+    expect([res.statusCode, res.body]).toMatchObject([500, { history: 2, errors: 2 }]);
+    expect(msgsAt("+34600999888")).toHaveLength(1);
+    fake.state.failWrite = null;
+    res = await deliverHistory(h);
+    expect([res.statusCode, res.body]).toMatchObject([200, { history: 0, errors: 0 }]);
+    expect(fake.read("waLink/history")).toMatchObject({ progress: 80 });
+    expect(msgsAt(KEY)).toHaveLength(1);
+  });
+  it("a declined share that cannot be recorded is answered 500, so Meta sends it again", async () => {
+    fake.state.failWrite = (op, path) => op === "transaction" && path === "waLink/history";
+    const res = await deliverHistory([{ errors: [{ code: 2593109, title: "History sharing declined" }] }]);
+    expect([res.statusCode, res.body]).toMatchObject([500, { events: 0, errors: 1 }]);
+  });
 });
 
 describe("historyConvPatch / historyProgress / historyStatus", () => {

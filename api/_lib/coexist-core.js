@@ -242,20 +242,33 @@ export async function attachHistoryMedia(value, m, now = Date.now()) {
 // api/wa-inbound.js turns into a 500 so Meta sends the chunk again. History
 // is sent ONCE, so a thread dropped is a thread lost; every write here is
 // keyed, so the resend skips what landed and writes only what did not.
+//
+// So does a `waLink.history` record that fails (the progress, a declined
+// share), and it no longer ends the change (/code-review): thrown, it skipped
+// every chunk after it, and with the threads before it counted the delivery
+// was a 200, so Meta never sent those chunks again.
 export async function handleHistory(value, results, now = Date.now()) {
   const items = Array.isArray(value.history) ? value.history : [];
   const follow = Array.isArray(value.messages) ? value.messages : [];
   if (!items.length && !follow.length && !historyDeclined(value)) { results.ignored++; return undefined; }
   let retry = false;
-  if (historyDeclined(value)) {
-    await transactWaLink("history", function (cur) { return Object.assign({}, cur || {}, { declined: true, at: now }); });
-    results.events++;
+  async function record(what, fn) {
+    try {
+      await transactWaLink("history", fn);
+      return true;
+    } catch (e) {
+      retry = true;
+      results.errors++;
+      console.error("[wa-inbound] history " + what + " not recorded:", e.message);
+      return false;
+    }
   }
+  const declined = function (cur) { return Object.assign({}, cur || {}, { declined: true, at: now }); };
+  if (historyDeclined(value) && await record("declined", declined)) results.events++;
   for (const item of items) {
     if (!item || typeof item !== "object") continue;
     if (historyDeclined(item)) {
-      await transactWaLink("history", function (cur) { return Object.assign({}, cur || {}, { declined: true, at: now }); });
-      results.events++;
+      if (await record("declined", declined)) results.events++;
       continue;
     }
     let failed = false;
@@ -271,7 +284,7 @@ export async function handleHistory(value, results, now = Date.now()) {
     if (failed) retry = true;
     // Progress is recorded even after a failed thread: what it says is how far
     // Meta has got, and the resend brings the thread, not a new figure.
-    if (item.metadata) await transactWaLink("history", function (cur) { return historyProgress(cur, item.metadata, now); });
+    if (item.metadata) await record("progress", function (cur) { return historyProgress(cur, item.metadata, now); });
   }
   for (const m of follow) {
     try {

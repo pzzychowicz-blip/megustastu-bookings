@@ -36628,3 +36628,14 @@ Inbox, still muted, where the open chat offers no "Customer again". `replyUnarch
 (`src/lib/whatsapp.js`) is the one rule now and all four ask it. `tests/api-handlers.test.js`
 sends to a muted, archived conversation through both endpoints and reads the four files for
 the call; with `wa-send`'s old test put back, both fail.
+
+**A failed history progress write dropped the chunks after it.** `handleHistory` caught a
+failed THREAD and asked for a resend, but its `waLink.history` writes (each chunk's progress,
+a declined share) were outside any `try`. One that threw ended the change: the chunks after it
+in the same delivery were never read, and because the threads before it were counted, the
+webhook answered 200 and Meta never sent them again. History is sent once, so those chats were
+lost. Each record is now its own `try`: a failure is counted, asks for the resend and lets the
+rest of the change run, and the resend (keyed) writes only what did not land.
+`tests/api-handlers.test.js` fails every progress write in a two-chunk delivery (500, both
+threads imported, the resend records the progress and stores nothing twice; it fails against
+the old handler) and pins a declined share that cannot be recorded to a 500.
