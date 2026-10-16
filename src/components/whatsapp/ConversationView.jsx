@@ -404,7 +404,12 @@ export function ConversationView({
           ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }} title="Its messages are kept, not answered or read, and stay in Archived"><MuteIcon size={IC.inline} />Not a customer</OutlineChip>
           : conv.archived ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }}><ArchiveIcon size={IC.inline} />Archived</OutlineChip> : null}
         {windowEl}
-        <div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>
+        {/* `maxWidth: 100%` is what lets the actions WRAP (v18.9.0 follow-up):
+            this box does not shrink, so its width was the buttons' one-line
+            width, and on a 375px phone an archived thread's four ran 40px
+            past the screen (Delete cut off at x 415). Capped at the header's
+            width, the group inside wraps, right-aligned, as it was meant to. */}
+        <div style={{ marginLeft: "auto", flexShrink: 0, maxWidth: "100%" }}>{headerActionBtns}</div>
       </div>
       </Reveal>
       <Reveal show={histOpen && hasRegulars && !kbFold} style={{ padding: "0 14px" }}><div style={{ paddingTop: 8 }}>{pastListBody}</div></Reveal>

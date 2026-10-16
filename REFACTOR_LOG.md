@@ -36521,3 +36521,16 @@ three messages, "Yesterday" over the deleted one, "Today" over the phone reply; 
 yesterday across a month and a year, another year carrying its year, nothing for an
 unreadable day), one separator per day and none within one, the undated message, and a source
 pin that the view draws through `threadItems`.
+
+### Follow-up — an archived thread's actions stay on a phone's screen
+
+Found while checking the separators at 375×812: an archived thread has four header actions
+(Re-check · Restore · Not a customer · Delete, since phase 6 added the third), and they ran
+40px past the screen, Delete at x 337–415 and cut off. Phase 6 made the group WRAP, but the
+box around it is a flex item that does not shrink (`flexShrink: 0`, basis `auto`), so its
+width was the buttons' one-line width and the group never had a narrower line to wrap in.
+`maxWidth: "100%"` on that box caps it at the header's width. Measured after: at 375 Delete
+wraps to a second row at 282–360, right-aligned; at 320 a muted thread's Customer again and
+Delete do the same; at the desktop width the row is one line and unchanged (594–672).
+`tests/wa-inbox-layout.test.js` pins the cap (it fails with the cap removed) and the wrapping
+group in both states.

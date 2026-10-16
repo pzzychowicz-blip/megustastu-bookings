@@ -187,3 +187,19 @@ describe("the inbox's disconnection banner (v18.9.0)", () => {
     expect(Inbox).toMatch(/disconnectSentence\(waLink && waLink\.disconnect\)/);
   });
 });
+
+// v18.9.0 follow-up, measured on DEV at 375×812: an archived thread has four
+// actions (Re-check · Restore · Not a customer · Delete), and they ran 40px
+// past the screen (Delete at x 337–415). The group inside wraps, but the box
+// around it does not shrink, so its width was the buttons' one-line width.
+// Capped at the header's width it wraps: Delete at 282–360 on a second row,
+// and at 1280 the row is one line as before.
+describe("the conversation header's actions stay on a phone's screen", () => {
+  it("caps the box around the actions at the header's width", () => {
+    expect(View).toContain('<div style={{ marginLeft: "auto", flexShrink: 0, maxWidth: "100%" }}>{headerActionBtns}</div>');
+  });
+  it("lets the actions themselves wrap, right-aligned, in both states", () => {
+    const groups = View.match(/headerActionBtns = \(\s*<div style=\{\{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" \}\}>/g) || [];
+    expect(groups.length).toBe(2);
+  });
+});
