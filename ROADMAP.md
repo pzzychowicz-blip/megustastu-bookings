@@ -34,7 +34,8 @@ session and keeping it in sync.
   "Check a launch config"); whether `META_WA_TOKEN` may send and retry the syncs on the
   converted account; history chunk sizes against Vercel's 4.5 MB request cap; whether the
   direct route works without Tech Provider status. **Before any of it, publish
-  `database.rules.json` to DEV and PROD** (the `waContacts` grant). If the rehearsal
+  `database.rules.json` to PROD** (the `waContacts` grant; DEV has it since 2026-10-16,
+  checked: a per-key `waContacts` delete is allowed and a `waLink` write refused). If the rehearsal
   passes, the restaurant's number, with the Business app's greeting message turned off.
 
 - **A WhatsApp cost counter in Settings → WhatsApp**, after go-live. Meta charges for
