@@ -162,8 +162,9 @@ a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
   subscribe SKIPS the two syncs, since a sync spent while no webhook can arrive is lost. `{retry: <step>}` runs one step again with `META_WA_TOKEN`
   (refused for a simulated link). **The business token is never stored or returned.**
   Guards: 405 → staff → admin (`assertWaAdmin`: `isAdminEntry` on `/roles`, the client's
-  own question, whatever `enforceRoles` says, since `settingsAdmin` is always enforced) →
-  400 → 503. The harness answers its POST 503 (it needs a deployment).
+  own question, whatever `enforceRoles` says, since `settingsAdmin` is always enforced; a
+  `/roles` read that fails is a 503, `ROLES_UNREADABLE`, never "invalid token") → 400 → 503.
+  The harness answers its POST 503 (it needs a deployment).
 - **The simulator's events** (`_lib/sim-events.js`, behind `/api/wa-sim-inbound`'s
   `event`): each builds Meta's `value` (`src/lib/wa-sim-coexist.js`) and calls the
   handler above, so a simulated contact, echo, edit, history import or disconnection is

@@ -36686,3 +36686,12 @@ and the Business app takes far longer messages, all of which went into the threa
 downloads. It slices like `historyRecord` now; the simulator's client mode asks the same
 function. `tests/api-handlers.test.js` stores a phone reply 500 characters over the cap (fails
 uncapped).
+
+**An admin was told "invalid token" when the server could not read their role.**
+`assertWaAdmin` read `/roles/<uid>` with nothing around it, so a database that did not answer
+threw an error with no code, `staffAuthError`'s default mapped it to 401 "invalid token", and
+`/wa-connect` showed that to an admin whose sign-in was fine; signing in again cannot fix it. A
+failed read is now `ROLES_UNREADABLE`, a 503 that says to try again (the class `staffAuthError`
+already keeps for faults that are the server's, not the account's). `tests/api-handlers.test.js`
+fails the role read for both methods: 503 with that sentence, no Meta call, nothing written
+(it fails against the old check).

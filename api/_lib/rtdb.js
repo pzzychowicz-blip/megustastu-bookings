@@ -137,9 +137,24 @@ export async function verifyStaffToken(idToken) {
 // Connect link to. `settingsAdmin` is never governed by the enforcement flag
 // (`ALWAYS_ENFORCED`, roles.js), so the flag is not read: with it off, a
 // non-admin account still is not an admin. Asked AFTER verifyStaffToken.
+//
+// A read that FAILS is not a refusal (/code-review): it reached
+// staffAuthError's default, so an admin was told "invalid token" and sent to
+// sign in again, which cannot help when the database did not answer. It is
+// `ROLES_UNREADABLE`, a 503 that says to try again.
 export async function assertWaAdmin(decoded) {
   const uid = decoded && typeof decoded.uid === "string" ? decoded.uid : "";
-  const snap = uid ? await getDb().ref("roles/" + sanitizeKey(uid)).get() : null;
+  let snap = null;
+  if (uid) {
+    try {
+      snap = await getDb().ref("roles/" + sanitizeKey(uid)).get();
+    } catch (e) {
+      console.error("[wa] the account's role could not be read:", e && e.message);
+      const err = new Error("Could not check your role just now: try again in a moment.");
+      err.code = "ROLES_UNREADABLE";
+      throw err;
+    }
+  }
   const entry = snap && snap.exists() ? sanitizeRole(snap.val(), uid) : null;
   if (!isAdminEntry(entry)) {
     const err = new Error("Not authorised: only an admin can connect the WhatsApp Business app.");
@@ -159,7 +174,8 @@ export async function assertWaAdmin(decoded) {
 //   503 — the SERVER is misconfigured. No service account (cannot verify any
 //         token) or, now, a live/non-DEV backend with no staff allow-list.
 //         Telling staff "invalid token" for these sends them to debug their own
-//         login for a fault that is not theirs.
+//         login for a fault that is not theirs. v18.9.0: or the account's role
+//         could not be read (assertWaAdmin), for the same reason.
 //   403 — the token is fine and the ACCOUNT is not allowed, either because it
 //         is not on the list or because its email is unverified. Distinct from
 //         401 because re-authenticating can never fix either one; the two carry
@@ -169,7 +185,7 @@ export async function assertWaAdmin(decoded) {
 //   401 — everything else: absent, expired or malformed token.
 export function staffAuthError(e) {
   const code = e && e.code;
-  if (code === "NO_SERVICE_ACCOUNT" || code === "NO_STAFF_ALLOWLIST") {
+  if (code === "NO_SERVICE_ACCOUNT" || code === "NO_STAFF_ALLOWLIST" || code === "ROLES_UNREADABLE") {
     return { status: 503, error: e.message };
   }
   if (code === "NOT_STAFF" || code === "EMAIL_UNVERIFIED" || code === "NOT_ADMIN") return { status: 403, error: e.message };

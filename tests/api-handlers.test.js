@@ -496,6 +496,22 @@ describe("wa-onboard", () => {
       fake.state.tree = { roles: { u1: { role: "staff" } }, settings: { admin: { enforceRoles: false } } };
       expect((await call(onboardHandler, { method: "GET", token: "staff" })).statusCode).toBe(403);
     });
+    // /code-review: a failed read reached staffAuthError's default, and the
+    // page told an admin "invalid token", which signing in again cannot fix.
+    it("a role that cannot be read is a 503 saying to try again, never \"invalid token\"", async () => {
+      fake.state.tree = ADMIN;
+      const f = meta(); vi.stubGlobal("fetch", f);
+      const realRef = fake.db.ref;
+      fake.db.ref = (path) => (path === "roles/u1" ? { get: async () => { throw new Error("database unreachable"); } } : realRef(path));
+      try {
+        for (const method of ["GET", "POST"]) {
+          const res = await call(onboardHandler, { method, token: "staff", body: ids() });
+          expect([res.statusCode, res.body.error]).toEqual([503, "Could not check your role just now: try again in a moment."]);
+        }
+      } finally { fake.db.ref = realRef; }
+      expect(f).not.toHaveBeenCalled();
+      expect(fake.state.writes).toEqual([]);
+    });
   });
 
   describe("GET", () => {
