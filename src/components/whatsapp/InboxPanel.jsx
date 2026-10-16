@@ -556,9 +556,11 @@ export function InboxPanel({
             inbox says so, and why, until it is connected again. Inside the
             title bar's fold, so it makes room while a reply is typed; the
             `role="alert"` is always mounted, outside the Reveal, so the
-            disconnection is announced when it happens. */}
+            disconnection is announced when it happens. `speed="move"`: it
+            arrives from a webhook, under nobody's finger, and `--t-reveal`
+            is for a disclosure opened by a press (DESIGN.md). */}
         <div role="alert">
-          <Reveal show={linkDown}>
+          <Reveal show={linkDown} speed="move">
             <div style={{ padding: "8px 14px 0" }}>
               <InlineAlert>{disconnectSentence(waLink && waLink.disconnect)}</InlineAlert>
             </div>

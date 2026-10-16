@@ -36554,3 +36554,13 @@ section opened at "Connected", closed, then opened by itself with the warning at
 the link at 487; on a not-connected `waLink` the link did not move when the warning arrived
 (433 before and after). `tests/wa-connect.test.js` pins the open state, the rising edge and the
 order (both new tests fail on the previous source).
+
+### Follow-up — the disconnection banner eases on `move`
+
+Also from `/find-animation-opportunities`: the inbox's disconnection banner (phase 7) was a
+`Reveal` at its default speed, `--t-reveal` (520 ms), which DESIGN.md keeps for a disclosure
+opening under the finger that pressed it. The banner arrives from Meta's `account_update`,
+under nobody's finger, so it takes `speed="move"` (240 ms), as the notification strip's pane
+does. Live on DEV, with `waLink` set in memory: in, `grid-template-rows, opacity` over 0.24s,
+56 px reached at 263 ms; out, 0 px at 241 ms and unmounted at 308 ms.
+`tests/wa-inbox-layout.test.js` pins the speed with the always-mounted alert around it.

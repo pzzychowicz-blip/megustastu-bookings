@@ -179,11 +179,12 @@ describe("W-2 + W-3 — the conversation says each thing once", () => {
 
 // v18.9.0 phase 7 — the disconnection banner reads `waLink.status`, and its
 // live region stays mounted outside the Reveal (a region mounted with its
-// message announces nothing).
+// message announces nothing). It eases on `move`: a webhook raises it, not a
+// press (/find-animation-opportunities found it on the 520ms disclosure clock).
 describe("the inbox's disconnection banner (v18.9.0)", () => {
   it("shows while waLink says disconnected, with the server's reason in words", () => {
     expect(Inbox).toMatch(/const linkDown = !!\(waLink && waLink\.status === "disconnected"\);/);
-    expect(Inbox).toMatch(/<div role="alert">\s*<Reveal show=\{linkDown\}>/);
+    expect(Inbox).toMatch(/<div role="alert">\s*<Reveal show=\{linkDown\} speed="move">/);
     expect(Inbox).toMatch(/disconnectSentence\(waLink && waLink\.disconnect\)/);
   });
 });
