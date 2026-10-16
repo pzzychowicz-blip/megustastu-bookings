@@ -5,7 +5,7 @@
 // is disabled when the 24h service window has expired.
 
 import { useState, useRef, useEffect } from "react";
-import { matchCustomerByPhone, regularChipLabel, conversationName, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
+import { matchCustomerByPhone, regularChipLabel, conversationName, formatWindow, intentBannerVisible, isParsing, threadItems, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
 import { Reveal, mkSolidBtn, mkDangerBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { RecheckIcon, ArchiveIcon, DraftIcon, RestoreIcon, MuteIcon } from "./WaIcons";
@@ -15,8 +15,8 @@ import { DraftCard } from "./DraftCard";
 import { ReplyComposer } from "./ReplyComposer";
 import { LinkedBookingCard } from "./LinkedBookingCard";
 import { IntentBanner } from "./IntentBanner";
-import { R, T, FW, IC, H, M } from "../../lib/constants";
-import { formatDay } from "../../lib/day";
+import { R, T, FW, IC, H, M, SP } from "../../lib/constants";
+import { formatDay, todayStr } from "../../lib/day";
 import { guestsLabel } from "../../lib/booking-logic";
 import { onWaitlistFor } from "../../lib/draft-check";
 import { useDraftCheck } from "../../hooks/useDraftCheck";
@@ -28,6 +28,26 @@ const REREAD_DIM = 0.55;
 
 // Within this many px of the bottom, the thread counts as showing its end.
 const AT_END_SLACK = 24;
+
+// v18.9.0 — the day between a thread's messages ("Today", "Yesterday", "Sun
+// 06.09"), as WhatsApp on the phone draws it (Patryk, 2026-10-16): an
+// imported history puts months in one thread, and a bubble says only its
+// time. The words are `threadItems`' (lib/whatsapp.js). DESIGN.md's TEXT
+// treatment: no fill, the secondary ink, between two of the inbox's own
+// hairlines, which are decoration and hidden from assistive technology, so a
+// screen reader meets the day as a line of text before that day's messages.
+// It enters with the bubble it introduces (`enter`): the first message of a
+// new day arrives with its day above it.
+const DAY_RULE = { flex: 1, height: 1, background: "var(--wa-divider)" };
+function DaySeparator({ label, enter }) {
+  return (
+    <div className={enter ? "mgt-bubble-in" : undefined} style={{ display: "flex", alignItems: "center", gap: SP.base, margin: SP.tight + "px 0 " + SP.mid + "px" }}>
+      <span aria-hidden="true" style={DAY_RULE} />
+      <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{label}</span>
+      <span aria-hidden="true" style={DAY_RULE} />
+    </div>
+  );
+}
 
 export function ConversationView({
   conv, messages, onBack, onSend, onSendMedia, onAccept, onDismiss, templates, bookings, showBack, phone,
@@ -69,6 +89,10 @@ export function ConversationView({
   // the thread is known to be empty.
   const loaded = messages !== undefined;
   const msgsForConv = messages || [];
+  // v18.9.0: for the day separators' "Today" and "Yesterday". Read per render,
+  // like the rows' relative times: a thread left open across midnight says
+  // "Today" for yesterday's messages until it next renders (a message, a tap).
+  const today = todayStr();
   // v18.4.0: `atEnd` is "the thread is showing its last message", kept by the
   // thread's own scroll handler. It decides whether a RESIZE follows the end.
   const atEnd = useRef(true);
@@ -417,7 +441,9 @@ export function ConversationView({
       ) : null}
       </Reveal>
       <div ref={threadRef} onScroll={onThreadScroll} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "14px" }}>
-        {msgsForConv.map((m) => <MessageBubble key={m.id} msg={m} isLast={m.id === animateId} onRetry={onResend} phoneKey={conv.phoneKey} onOpenPhoto={onOpenPhoto} />)}
+        {threadItems(msgsForConv, today).map((it) => (it.msg
+          ? <MessageBubble key={it.msg.id} msg={it.msg} isLast={it.msg.id === animateId} onRetry={onResend} phoneKey={conv.phoneKey} onOpenPhoto={onOpenPhoto} />
+          : <DaySeparator key={"day-" + it.day} label={it.label} enter={it.firstId === animateId} />))}
       </div>
       {/* Parsing/typing indicator — eased in while the inbound is being parsed
           (conv.parsing, set by the sandbox inbound path; cleared when the draft

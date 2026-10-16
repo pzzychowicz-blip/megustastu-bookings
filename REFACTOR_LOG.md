@@ -36445,6 +36445,8 @@ imported history puts months of messages in one thread with nothing saying which
 is from: the two-day-old messages read "00:47". The fix is a decision for Patryk (a date in
 the meta line of a message not from today, or day separators in the thread).
 
+(Fixed in the follow-up below: day separators, Patryk's pick.)
+
 Also: the panel's nine section headings were nine copies of one style and are one
 `SECTION_HEAD` now. Adding a tenth had tipped `tests/style-check.test.js`' weight ratchet to
 29.9%, so the ratio moved by de-duplication, not by demoting anything.
@@ -36492,3 +36494,30 @@ ROADMAP: the coexistence entry is now the rehearsal and the restaurant's number,
 findings the rehearsal owns, and a new idea: MGT names written back to the phone through the
 Google People API, only if the iPhone's Contacts sync to a Google account. The connect page's
 entry file said it was "Vite's second input"; it is built by its own config, and says so.
+
+### Follow-up — the thread says which day (day separators)
+
+Phase 9's finding: a bubble says only its clock time (`formatClockTime`), so an imported
+history read "00:47" with nothing saying which day. Patryk chose day separators over a date in
+each bubble's meta line (2026-10-16), as WhatsApp on the phone draws them: before the first
+message of each local day, "Today", "Yesterday", else the house date ("Wed 14.10", with the
+year when it is not this year's). The bubbles keep their times.
+
+`threadItems(messages, today)` (`lib/whatsapp.js`) is the thread as drawn, and
+`threadDayLabel(day, today)` the words; a message with no usable `ts` joins the day before it
+rather than opening one. `ConversationView` maps `threadItems` where it mapped the messages,
+and draws each separator as DESIGN.md's TEXT treatment: no fill, `--text-secondary` at
+`T.small` semibold between two `--wa-divider` hairlines, which are `aria-hidden`, so a screen
+reader meets the day as a line of text before that day's messages. A separator takes the
+bubble entrance (`mgt-bubble-in`) when the message it introduces is the one animating in, so
+the first message of a new day arrives with its day. "Today" is read per render, like the
+rows' relative times: a thread left open across midnight keeps its labels until it next
+renders. The ink on the thread's surface is registered in `tests/contrast.test.js`
+(`--text-secondary` on `--wa-list-bg`, both themes).
+
+Live on DEV (1280 and 375, light and dark): the imported chat reads "Wed 14.10" over its first
+three messages, "Yesterday" over the deleted one, "Today" over the phone reply; the archived
+40-day-old chat reads "Sun 06.09". Tests (`tests/wa-bubble.test.js`): the labels (today,
+yesterday across a month and a year, another year carrying its year, nothing for an
+unreadable day), one separator per day and none within one, the undated message, and a source
+pin that the view draws through `threadItems`.

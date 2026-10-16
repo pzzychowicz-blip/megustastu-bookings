@@ -459,6 +459,9 @@ const FILLS = [
   { fill: "--wa-row-bg-hover", alpha: null, ink: "--text-primary", role: "label", what: "conversation row (hover)" },
   { fill: "--wa-row-active-bg", alpha: null, ink: "--text-primary", role: "label", what: "conversation row (selected)" },
   { fill: "--wa-list-bg", alpha: null, ink: "--text-primary", role: "label", what: "conversation-list pane" },
+  // v18.9.0: the thread's day separators ("Today", "Sun 06.09") stand on the
+  // thread's own surface, which is this token, with no fill of their own.
+  { fill: "--wa-list-bg", alpha: null, ink: "--text-secondary", role: "label", what: "a thread's day separator" },
   { fill: "--wa-header-bg", alpha: null, ink: "--text-primary", role: "label", what: "panel header strip" },
 ];
 

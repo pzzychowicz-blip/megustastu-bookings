@@ -414,6 +414,7 @@ second number": the number never moves.
 | **Not a customer** in an open chat's actions; **Customer again** in Archived | **mute** (`muted`, `handleMute` / `handleUnarchive`) | For a supplier, the gestor, a friend. The conversation goes to Archived with a struck bell and stays there: its messages are stored, never auto-replied to, parsed or counted as unread. Customer again (or any Restore) undoes it. |
 | Red "WhatsApp is disconnected from MGT: …" at the top of the inbox | **disconnect banner** (`disconnectSentence`, `lib/wa-coexist.js`) | On every device, from `waLink`, until Meta reports the connection back. Says why and that replies from MGT will not send. |
 | Old chats that appear the day the number is connected | **imported history** (`imported: true`) | Up to 180 days of the phone's 1:1 chats, sent once by Meta. Marked read, never parsed, never auto-replied; a chat with nothing in the last 7 days goes straight to Archived. A photo appears as "Photo or file — open WhatsApp on the phone to see it" until Meta sends it. |
+| "Today" · "Yesterday" · "Sun 06.09" between two hairlines in a thread | **day separator** (`threadItems`, `lib/whatsapp.js`) | Before the first message of each day, as WhatsApp on the phone draws it; a bubble says only its time. Text, no fill. Enters with the first message of a new day. |
 | "Couldn't show this message here — check the WhatsApp Business app" | **unsupported message** (`WA_UNSUPPORTED_LINE`, error 131060) | A message type the Cloud API cannot pass on. Read it on the phone. |
 
 ### Conversation state

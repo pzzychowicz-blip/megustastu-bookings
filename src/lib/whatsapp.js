@@ -324,7 +324,7 @@ import { formatPhone as _formatPhone, matchCustomerByPhone as _matchByPhone, nor
 // re-expressed — see sanitizeParse below. Both files carry their explicit .js
 // extension because api/_lib imports this module under Node ESM.
 import { isReadableTime, countLabel } from "./booking-logic.js";
-import { isReadableDate, formatDay, localDay } from "./day.js";
+import { isReadableDate, formatDay, localDay, stepDate } from "./day.js";
 
 // ── What a conversation is called (v18.9.0) ────────────────────────────────
 // conversationName(conv, bookings, contacts) → `{ title, phoneLine, source }`:
@@ -384,6 +384,44 @@ export function formatRelativeTime(ts) {
   // v18.2.0 (the design critique, C1): past a week, the house date — "Thu
   // 17.09" — where this wrote the locale's "17 Sept".
   return formatDay(localDay(ts));
+}
+
+// ── Day separators in a thread (v18.9.0) ─────────────────────────────────────
+// A bubble says its clock time and nothing else (`formatClockTime`), which was
+// enough while a thread held a day or two. An imported history puts months of
+// a customer's messages in one thread, and "00:47" alone no longer says when
+// (found checking phase 9). The thread now draws the day between messages, as
+// WhatsApp on the phone does (Patryk, 2026-10-16), and the bubbles keep their
+// times.
+//
+// threadDayLabel(day, today) — "Today", "Yesterday", else the house date
+// ("Thu 24.09", with its year when that is not this year). Both arguments are
+// local YYYY-MM-DD days (`localDay`, `todayStr`); "" for anything else.
+export function threadDayLabel(day, today) {
+  if (typeof day !== "string" || !isReadableDate(day)) return "";
+  if (day === today) return "Today";
+  if (typeof today === "string" && isReadableDate(today) && stepDate(today, -1) === day) return "Yesterday";
+  return formatDay(day, { today });
+}
+
+// threadItems(messages, today) → the thread as it is drawn, in order: each
+// message as `{ msg }`, and before the first message of each local day a
+// separator `{ day, label, firstId }` (`firstId`, the message it introduces,
+// so it can enter with that bubble). `messages` are in time order, as
+// useWhatsApp keeps them. A message with no usable time joins the day before
+// it, and draws no separator of its own.
+export function threadItems(messages, today) {
+  const out = [];
+  let cur = "";
+  (messages || []).forEach(function (m) {
+    const day = m && Number(m.ts) > 0 ? localDay(m.ts) : "";
+    if (day && day !== cur) {
+      cur = day;
+      out.push({ day, label: threadDayLabel(day, today), firstId: m.id });
+    }
+    out.push({ msg: m });
+  });
+  return out;
 }
 
 // Format a timestamp as an inline bubble caption ("14:32").
