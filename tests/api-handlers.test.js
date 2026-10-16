@@ -122,7 +122,7 @@ import onboardHandler from "../api/wa-onboard.js";
 import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { numberIsOurs, makeNumberGuard } from "../api/_lib/coexist-core.js";
-import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyStatus, WA_IMPORT_ARCHIVE_MS, disconnectSentence } from "../src/lib/wa-coexist.js";
+import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyRequested, historyStatus, WA_IMPORT_ARCHIVE_MS, disconnectSentence } from "../src/lib/wa-coexist.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
 import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE, replyUnarchives } from "../src/lib/whatsapp.js";
@@ -610,6 +610,18 @@ describe("wa-onboard", () => {
       fake.state.tree.waLink.phoneNumberId = "123123123";
       await connect(ids());
       expect(fake.read("waLink/contacts")).toBeUndefined();
+    });
+
+    // /code-review: the same number connected again kept the earlier import's
+    // record, so Settings described the new import as declined or done.
+    it("a new history request starts a new record for the same number", async () => {
+      vi.stubGlobal("fetch", meta());
+      fake.state.tree.waLink = { status: "disconnected", wabaId: WABA, phoneNumberId: PHONE,
+        contacts: { requestId: "old-c", requestedAt: 1, firstAt: 2 },
+        history: { requestId: "old", requestedAt: 1, declined: true, progress: 100, phase: 2, doneAt: 3, at: 3 } };
+      expect((await connect(ids())).statusCode).toBe(200);
+      expect(fake.read("waLink/history")).toEqual({ requestId: "req-history", requestedAt: expect.any(Number) });
+      expect(fake.read("waLink/contacts")).toMatchObject({ requestId: "req-contacts", firstAt: 2 });
     });
 
     // v18.9.0 phase 9: a real connection over the sandbox simulator's.
@@ -1620,6 +1632,11 @@ describe("historyConvPatch / historyProgress / historyStatus", () => {
     expect(done.doneAt).toBe(3);
     expect(historyProgress(done, { progress: 100 }, 4).doneAt).toBe(3);
     expect(historyProgress(null, { progress: 250 }, 1).progress).toBe(100);
+  });
+  it("a new request drops what an earlier one recorded, and keeps what its own webhooks wrote first", () => {
+    expect(historyRequested({ requestId: "old", declined: true, progress: 100, doneAt: 3, at: 3 }, "new", 10)).toEqual({ requestId: "new", requestedAt: 10 });
+    expect(historyRequested({ progress: 40, phase: 0, at: 12 }, "new", 10)).toEqual({ progress: 40, phase: 0, at: 12, requestId: "new", requestedAt: 10 });
+    expect(historyRequested(null, "new", 10)).toEqual({ requestId: "new", requestedAt: 10 });
   });
   it("the phone's statuses read as this app's; a customer's message is delivered", () => {
     expect(historyStatus({ history_context: { status: "PLAYED" } }, false)).toBe("read");

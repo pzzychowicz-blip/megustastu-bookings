@@ -36654,3 +36654,16 @@ week to inside it, unless the conversation is muted or was archived inside the w
 person). `tests/api-handlers.test.js`: the conversation after the photo alone; an old photo and
 then a thread with a recent message, which ends un-archived; and the re-decision's four cases.
 Each half fails with its own change reverted.
+
+**Connecting the same number again kept the last import's record.** The onboarding's history
+step wrote `requestId` and `requestedAt` into `waLink.history` and left the rest: a declined
+share, a finished import's `doneAt` and 100%. Settings reads `declined` first, so a number
+connected again after a disconnection said "declined to share" (or "imported on …") for an
+import that had not begun, and `historyProgress`, which only moves forward, kept 100%.
+`historyRequested(cur, requestId, requestedAt)` (`src/lib/wa-coexist.js`) is the record after a
+new request, written in a transaction: what an earlier request left is dropped, and what this
+request's own webhooks already wrote is kept (they can land before the request's answer; each
+stamps `at`, and `requestedAt` is taken before the request goes). A failed request writes
+nothing, so the last import's record survives a refused retry. The contacts' `firstAt` stays,
+being a fact about the phone's address book. Tests: the same number connected over a declined,
+finished record (fails with the old write), and the function's three cases.

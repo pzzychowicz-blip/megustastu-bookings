@@ -360,6 +360,23 @@ export function historyProgress(cur, meta, now) {
   return next;
 }
 
+// historyRequested(cur, requestId, requestedAt) → `waLink.history` once a new
+// import has been asked for (api/wa-onboard.js). What an EARLIER request left
+// (a declined share, a finished import's `doneAt` and 100%) is not this one's:
+// kept, it described the new import in Settings as declined or done before
+// anything had arrived (/code-review), and `historyProgress` only moves
+// forward from it. What THIS request's webhooks wrote is kept, because they may
+// land before the request's answer does; each stamps `at` (the progress, the
+// declined record), and `requestedAt` is taken before the request is sent,
+// which is how the two are told apart.
+export function historyRequested(cur, requestId, requestedAt) {
+  const c = cur && typeof cur === "object" ? cur : {};
+  const next = Number(c.at) >= requestedAt ? Object.assign({}, c) : {};
+  next.requestId = requestId;
+  next.requestedAt = requestedAt;
+  return next;
+}
+
 // ── The connection itself (account_update) ───────────────────────────────────
 // Meta tells the business's partner when a coexistence number leaves it or
 // comes back: PARTNER_REMOVED (the business disconnected MGT, in the Business

@@ -39,8 +39,9 @@
 // 400 → 503 (a key this needs is not set) → the steps.
 
 import { env } from "./_lib/env.js";
-import { verifyStaffToken, assertWaAdmin, staffAuthError, readWaLink, updateWaLink } from "./_lib/rtdb.js";
+import { verifyStaffToken, assertWaAdmin, staffAuthError, readWaLink, updateWaLink, transactWaLink } from "./_lib/rtdb.js";
 import { GRAPH_VERSION, exchangeCode, subscribeApp, requestSmbSync, phoneInfo } from "./_lib/meta.js";
+import { historyRequested } from "../src/lib/wa-coexist.js";
 
 // Meta's ids are decimal strings. Checked rather than escaped: they become
 // Graph paths with a token on them, and the number guard's allowed set.
@@ -101,7 +102,12 @@ async function syncSteps(link, token, now, only) {
     if (!subscribed) { out.push({ id, ok: false, skipped: true, error: "Not asked: the subscription failed, and Meta runs this only once." }); continue; }
     out.push(await step(id, async () => {
       const requestId = await requestSmbSync(link.phoneNumberId, syncType, token);
-      await updateWaLink({ [id + "/requestId"]: requestId, [id + "/requestedAt"]: now });
+      // A new history import starts a new record (`historyRequested`): the
+      // same number connected again kept the earlier import's, so Settings
+      // said "declined" or "imported" for one that had not begun. The
+      // contacts' `firstAt` is a fact about the phone's address book and stays.
+      if (id === "history") await transactWaLink("history", (cur) => historyRequested(cur, requestId, now));
+      else await updateWaLink({ [id + "/requestId"]: requestId, [id + "/requestedAt"]: now });
     }));
   }
   if (want("phone")) {

@@ -156,8 +156,10 @@ a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
   `{appId, configId, graphVersion}` (not secrets); POST exchanges the 30-second code, then
   writes `waLink` BEFORE asking for any sync (the guard above), then subscribes the app to
   the WABA, asks for the contacts and the history (`smb_app_data`) and reads the number's
-  `is_on_biz_app`. A failed subscribe SKIPS the two syncs, since a sync spent while no
-  webhook can arrive is lost. `{retry: <step>}` runs one step again with `META_WA_TOKEN`
+  `is_on_biz_app`. A history request starts a new `waLink.history` record
+  (`historyRequested`), keeping only what its own webhooks already wrote: the same number
+  connected again otherwise showed the earlier import as declined or done. A failed
+  subscribe SKIPS the two syncs, since a sync spent while no webhook can arrive is lost. `{retry: <step>}` runs one step again with `META_WA_TOKEN`
   (refused for a simulated link). **The business token is never stored or returned.**
   Guards: 405 → staff → admin (`assertWaAdmin`: `isAdminEntry` on `/roles`, the client's
   own question, whatever `enforceRoles` says, since `settingsAdmin` is always enforced) →
