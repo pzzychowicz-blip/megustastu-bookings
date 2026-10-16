@@ -229,6 +229,13 @@ export async function attachHistoryMedia(value, m, now = Date.now()) {
     return "applied";
   }
   const ts = secondsTs(m.timestamp, now);
+  // The conversation first (/code-review): stored alone, a photo that came
+  // before its thread had no conversation, which the inbox does not list and
+  // the nightly prune never reaches (both walk conversations), so a thread that
+  // never came left it there for good. Written as the thread's import would
+  // write it; the import, when it comes, moves it on (`historyConvPatch`).
+  const conv = await getConversation(phoneKey);
+  await upsertConversation(phoneKey, historyConvPatch(conv, { phoneKey, oldest: ts, newest: ts, snippet: snippet(content.snippet), now }));
   await appendMessage(phoneKey, historyRecord(sanitizeKey(wamid), wamid, content, ts, incoming, historyStatus(m, incoming)));
   return "stored";
 }

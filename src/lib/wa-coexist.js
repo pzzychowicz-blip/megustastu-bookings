@@ -275,10 +275,18 @@ export function historyRecord(msgId, wamid, content, ts, incoming, status) {
 // only a conversation created before its cutoff (`mayHoldOld`,
 // api/wa-prune.js): left alone, an imported message older than the
 // conversation would outlive the retention it is under.
+//
+// And when its line moves forward from outside the week to inside it, the
+// week's rule decides again (/code-review): a conversation archived for being
+// old, by an earlier chunk or by a photo that came before its thread
+// (api/_lib/coexist-core.js), comes back out. One archived while its last
+// message was inside the week was archived by a person, and a muted one by the
+// mute; both stay where they are.
 export function historyConvPatch(existing, o) {
   const patch = { autoAckSent: true };
+  const cut = o.now - WA_IMPORT_ARCHIVE_MS;
   if (!existing) {
-    const old = o.newest < o.now - WA_IMPORT_ARCHIVE_MS;
+    const old = o.newest < cut;
     return Object.assign(patch, {
       phoneKey: o.phoneKey, phone: o.phoneKey, channel: "whatsapp",
       createdAt: o.oldest, lastMessageAt: o.newest, lastMessageSnippet: o.snippet, unread: false,
@@ -289,6 +297,10 @@ export function historyConvPatch(existing, o) {
   if (!(Number(existing.lastMessageAt) > o.newest)) {
     patch.lastMessageAt = o.newest;
     patch.lastMessageSnippet = o.snippet;
+    if (existing.archived && !existing.muted && Number(existing.lastMessageAt) < cut && o.newest >= cut) {
+      patch.archived = false;
+      patch.archivedAt = null;
+    }
   }
   if (!(Number(existing.createdAt) <= o.oldest)) patch.createdAt = o.oldest;
   return patch;

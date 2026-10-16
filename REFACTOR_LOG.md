@@ -36639,3 +36639,18 @@ rest of the change run, and the resend (keyed) writes only what did not land.
 `tests/api-handlers.test.js` fails every progress write in a two-chunk delivery (500, both
 threads imported, the resend records the progress and stores nothing twice; it fails against
 the old handler) and pins a declined share that cannot be recorded to a 500.
+
+**A history photo that came before its chat had no conversation.** A `history` change's own
+`messages[]` carries the media of a photo or file imported as a placeholder. When it came
+before its thread, `attachHistoryMedia` stored the message alone, and nothing lists or prunes a
+message without a conversation: the inbox and the nightly prune both walk `conversations`. The
+thread's import made the row when it came; when it never came (a chunk lost, a share stopped
+part way), the photo stayed for good, past the retention the privacy notice states. It now
+writes the conversation first, the way the thread's import would (`historyConvPatch`). That
+alone would have moved a rule: a photo over a week old archived the conversation it created,
+and the thread arriving with a recent message only moved its line, so a recent chat stayed in
+Archived. `historyConvPatch` now decides again when an import moves the line from outside the
+week to inside it, unless the conversation is muted or was archived inside the week (by a
+person). `tests/api-handlers.test.js`: the conversation after the photo alone; an old photo and
+then a thread with a recent message, which ends un-archived; and the re-decision's four cases.
+Each half fails with its own change reverted.

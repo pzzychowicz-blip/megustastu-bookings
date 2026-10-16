@@ -1520,9 +1520,25 @@ describe("wa-inbound — the chats the phone already held (v18.9.0)", () => {
       { from: BIZ, to: "34600111222", id: "wamid.P2", timestamp: secsAgo(900), type: "document", document: { id: "778", mime_type: "application/pdf", filename: "carta.pdf" } },
     ] }));
     expect(msgsAt(KEY)[0]).toMatchObject({ direction: "out", source: "phone", media: { kind: "document", filename: "carta.pdf" } });
+    // /code-review: with a conversation, so the inbox lists it and the prune
+    // reaches it even if its thread never comes.
+    expect(convAt(KEY)).toMatchObject({ phoneKey: KEY, unread: false, autoAckSent: true, archived: false, lastMessageAt: msgsAt(KEY)[0].ts, createdAt: msgsAt(KEY)[0].ts });
     await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.P2", BIZ, 900, { type: "media_placeholder", text: undefined })] }])]);
     expect(msgsAt(KEY)).toHaveLength(1);
     expect(msgsAt(KEY)[0].media).toMatchObject({ mediaId: "778" });
+  });
+  it("a photo over a week old that comes before its thread does not keep a recent thread in Archived", async () => {
+    await deliverChange("history", Object.assign(forNumber("111"), { messages: [
+      { from: "34600111222", id: "wamid.P3", timestamp: secsAgo(10 * DAY), type: "image", image: { id: "779", mime_type: "image/jpeg" } },
+    ] }));
+    expect(convAt(KEY)).toMatchObject({ archived: true });
+    await deliverHistory([chunk([{ id: "34600111222", messages: [
+      histMsg("wamid.P3", "34600111222", 10 * DAY, { type: "media_placeholder", text: undefined }),
+      histMsg("wamid.P4", "34600111222", DAY),
+    ] }])]);
+    expect(convAt(KEY)).toMatchObject({ archived: false, lastMessageSnippet: "msg wamid.P4" });
+    expect("archivedAt" in convAt(KEY)).toBe(false);
+    expect(msgsAt(KEY)).toHaveLength(2);
   });
   it("a business that declined to share its history is recorded, and nothing is imported", async () => {
     const res = await deliverHistory([{ errors: [{ code: 2593109, title: "History sharing declined" }] }]);
@@ -1587,6 +1603,15 @@ describe("historyConvPatch / historyProgress / historyStatus", () => {
   it("an existing conversation's createdAt only moves back, its time only forward", () => {
     expect(historyConvPatch({ createdAt: 50, lastMessageAt: 500 }, { oldest: 10, newest: 100, snippet: "x", now })).toEqual({ autoAckSent: true, createdAt: 10 });
     expect(historyConvPatch({ createdAt: 5, lastMessageAt: 50 }, { oldest: 10, newest: 100, snippet: "x", now })).toEqual({ autoAckSent: true, lastMessageAt: 100, lastMessageSnippet: "x" });
+  });
+  it("archived for being old, it comes back out when the import brings a message inside the week; a person's archive and a mute stay", () => {
+    const old = now - WA_IMPORT_ARCHIVE_MS - 1;
+    const recent = now - WA_IMPORT_ARCHIVE_MS + 1;
+    const o = { oldest: old, newest: recent, snippet: "x", now };
+    expect(historyConvPatch({ createdAt: old, lastMessageAt: old, archived: true, archivedAt: now }, o)).toMatchObject({ archived: false, archivedAt: null });
+    expect(historyConvPatch({ createdAt: old, lastMessageAt: old, archived: true, muted: true }, o)).not.toHaveProperty("archived");
+    expect(historyConvPatch({ createdAt: old, lastMessageAt: recent - 1, archived: true }, o)).not.toHaveProperty("archived");
+    expect(historyConvPatch({ createdAt: old, lastMessageAt: old - 1, archived: true }, { oldest: old, newest: old, snippet: "x", now })).not.toHaveProperty("archived");
   });
   it("progress and phase only move forward, and done is stamped once at 100", () => {
     const a = historyProgress(null, { progress: 60, phase: 1 }, 1);
