@@ -212,4 +212,22 @@ describe("Settings → WhatsApp shows the connection to admins only", () => {
     expect(settings).toContain('href="/wa-connect"');
     expect(settings).toContain("status.phoneNumberIdMatches === false");
   });
+  // /find-animation-opportunities (v18.9.0): wa-config answers after the first
+  // render, and Collapsible reads `defaultOpen` once, so the section opened
+  // closed over its own mismatch warning, which then arrived ABOVE the link.
+  const section = settings.slice(settings.indexOf("function BusinessAppSection("), settings.indexOf("export function SettingsContent("));
+  it("opens itself when the mismatch (or a lost connection) arrives, not only at mount", () => {
+    expect(section).not.toContain("defaultOpen");
+    expect(section).toContain("const attention = state !== \"connected\" || mismatch;");
+    expect(section).toContain("if (attention !== sawAttention) { setSawAttention(attention); if (attention) setOpen(true); }");
+    expect(section).toContain("open={open}");
+    expect(section).toContain("onToggle={setOpen}");
+  });
+  it("draws the mismatch warning under the link, easing in on move", () => {
+    const link = section.indexOf('href="/wa-connect"');
+    const warn = section.indexOf("<Reveal show={mismatch} speed=\"move\">");
+    expect(link).toBeGreaterThan(0);
+    expect(warn).toBeGreaterThan(link);
+    expect(section.indexOf("META_PHONE_NUMBER_ID in this deployment")).toBeGreaterThan(warn);
+  });
 });

@@ -1225,10 +1225,22 @@ function WhatsAppTabContent({ waSettings, onSaveWaSettings, isAdmin, waLink }) {
 //
 // The link opens a new tab: the page is a separate document with its own CSP,
 // and the app stays where it was.
+//
+// It opens ITSELF when something needs an admin (`attention`: not connected,
+// or the mismatch). Not through `defaultOpen`, which Collapsible reads once:
+// wa-config's answer arrives after the first render (useIntegrationStatus
+// starts at null), so a connected number with the wrong env id opened closed,
+// with its warning hidden inside (/find-animation-opportunities, v18.9.0).
+// The rising edge opens it, during render (TagListEditor's `seenLabel`
+// shape); nothing closes it, so a section the admin opened stays open.
 function BusinessAppSection({ waLink }) {
   const { status } = useIntegrationStatus();
   const { state, lines } = connectionLines(waLink, todayStr());
   const mismatch = !!(status && status.phoneNumberIdMatches === false);
+  const attention = state !== "connected" || mismatch;
+  const [open, setOpen] = useState(attention);
+  const [sawAttention, setSawAttention] = useState(attention);
+  if (attention !== sawAttention) { setSawAttention(attention); if (attention) setOpen(true); }
   const summary = state === "connected" ? "Connected" : state === "disconnected" ? "Disconnected" : "Not connected";
   const text = { fontSize: T.body, color: "var(--text-primary)", textAlign: "left" };
   return (
@@ -1236,18 +1248,14 @@ function BusinessAppSection({ waLink }) {
       title="Business app connection"
       subtitle="MGT and the WhatsApp Business app on the restaurant phone, on one number. Admins only."
       summary={summary}
-      defaultOpen={state !== "connected" || mismatch}
+      open={open}
+      onToggle={setOpen}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: SP.tight, paddingTop: SP.tight }}>
         {state === "disconnected" ? <InlineAlert>{lines[0]}</InlineAlert> : null}
         {lines.slice(state === "disconnected" ? 1 : 0).map(function (line) {
           return <div key={line} style={text}>{line}</div>;
         })}
-        {mismatch ? (
-          <InlineAlert tone={ALERT_TONES.warn.tone} tint={ALERT_TONES.warn.tint}>
-            META_PHONE_NUMBER_ID in this deployment is not the connected number&rsquo;s id. Replies from MGT go out from the number that variable names: set it to {waLink && waLink.phoneNumberId ? waLink.phoneNumberId : "the connected id"} in Vercel and redeploy.
-          </InlineAlert>
-        ) : null}
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.base, paddingTop: SP.tight }}>
           <a className="mgt-hover-scale mgt-press" href="/wa-connect" target="_blank" rel="noopener"
             style={mkBtn({ minHeight: H.control, boxSizing: "border-box", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" })}>
@@ -1257,6 +1265,18 @@ function BusinessAppSection({ waLink }) {
             Opens in a new tab. Have the restaurant phone at hand: Meta asks for it on the way.
           </span>
         </div>
+        {/* UNDER the link, never above it: wa-config answers after the section
+            has drawn, and above, the warning pushed the link down by its own
+            height as it arrived (DESIGN.md's rule for the armed confirm's
+            sentence, for the same reason: nothing moves the control). It
+            arrives without a press, so `speed="move"`. */}
+        <Reveal show={mismatch} speed="move">
+          <div style={{ paddingTop: SP.tight }}>
+            <InlineAlert tone={ALERT_TONES.warn.tone} tint={ALERT_TONES.warn.tint}>
+              META_PHONE_NUMBER_ID in this deployment is not the connected number&rsquo;s id. Replies from MGT go out from the number that variable names: set it to {waLink && waLink.phoneNumberId ? waLink.phoneNumberId : "the connected id"} in Vercel and redeploy.
+            </InlineAlert>
+          </div>
+        </Reveal>
       </div>
     </Collapsible>
   );

@@ -36534,3 +36534,23 @@ wraps to a second row at 282–360, right-aligned; at 320 a muted thread's Custo
 Delete do the same; at the desktop width the row is one line and unchanged (594–672).
 `tests/wa-inbox-layout.test.js` pins the cap (it fails with the cap removed) and the wrapping
 group in both states.
+
+### Follow-up — the connection section opens for its own warning
+
+Found by `/find-animation-opportunities` over the version. Settings → WhatsApp's Business app
+connection section opened or stayed closed by `defaultOpen={state !== "connected" || mismatch}`,
+and `Collapsible` reads `defaultOpen` once, at mount. `mismatch` is wa-config's answer
+(`useIntegrationStatus`), which starts at `null` and arrives after the first render, so the case
+the warning exists for (a connected number while `META_PHONE_NUMBER_ID` still names another)
+always opened closed, reading "Connected", with its warning inside. The section now holds its
+own open state and opens itself on the rising edge of `attention` (not connected, or the
+mismatch), set during render the way TagListEditor's `seenLabel` is; nothing closes it, so a
+section the admin opened or closed stays that way.
+
+The warning also arrived ABOVE the Connect link and pushed it down by its own height. It now
+sits under the link, in a `Reveal` on `speed="move"` (it arrives without a press). Live on DEV
+at 1280, with `waLink` set to connected in memory and wa-config's answer held back 800 ms: the
+section opened at "Connected", closed, then opened by itself with the warning at y 545 under
+the link at 487; on a not-connected `waLink` the link did not move when the warning arrived
+(433 before and after). `tests/wa-connect.test.js` pins the open state, the rising edge and the
+order (both new tests fail on the previous source).
