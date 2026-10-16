@@ -36614,3 +36614,17 @@ Back) dipped when pressed on an iPhone or iPad. `src/wa-connect/main.jsx` adds t
 listener before the page renders. Checked: the built `wa-connect` bundle carries it and the
 page loads with no console error; the dip itself is iOS-only and can only be seen on a device.
 `tests/wa-connect.test.js` pins the line beside index.html's (it fails without it).
+
+### /code-review fixes
+
+The ship run's `/code-review` (max effort) raised thirteen findings. Each fix below is its own
+commit; what was not fixed, and why, closes this section.
+
+**A reply from MGT took a "Not a customer" thread out of Archived.** The mute's rule (it stays
+archived) was written out at the four places a reply un-archives a conversation, and only the
+phone's echo (`echoConvPatch`) checked `muted`. A reply sent from MGT (`wa-send`, `wa-media`,
+the client's mock send) set `archived: false` on a muted conversation, which then sat in
+Inbox, still muted, where the open chat offers no "Customer again". `replyUnarchives(conv)`
+(`src/lib/whatsapp.js`) is the one rule now and all four ask it. `tests/api-handlers.test.js`
+sends to a muted, archived conversation through both endpoints and reads the four files for
+the call; with `wa-send`'s old test put back, both fail.

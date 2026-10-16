@@ -52,6 +52,18 @@ export function snippet(text) {
   return String(text == null ? "" : text).slice(0, WA_SNIPPET_LEN);
 }
 
+// replyUnarchives(conv) — does a reply from the restaurant bring this
+// conversation back out of Archived? Yes (Q2), unless it is "Not a customer"
+// (`muted`, v18.9.0): a supplier answered from MGT stays where the mute put it.
+// One rule for the four places a reply is written — api/wa-send.js,
+// api/wa-media.js, the client's mock send (useWhatsApp.js) and the phone's
+// echo (`echoConvPatch`, wa-coexist.js). Only the echo knew about the mute
+// until the /code-review, so a reply typed in MGT un-archived a muted thread
+// and left it in Inbox, still muted, with no "Customer again" anywhere.
+export function replyUnarchives(conv) {
+  return !!(conv && conv.archived && !conv.muted);
+}
+
 // conversationDeletePatch(keys) — the ONE write that deletes conversations
 // (v18.8.0 /code-review): each key's conversation row AND its messages, as a
 // multi-path update at the database root, so neither half can outlive the

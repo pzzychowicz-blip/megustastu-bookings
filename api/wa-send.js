@@ -30,12 +30,13 @@
 // live → Graph API + "sent", later advanced by webhook statuses[]), appends
 // the outbound message (authorEmail from the verified token — the audit
 // trail), updates the conversation snippet/lastMessageAt, and auto-unarchives
-// (Q2: replying to an archived conversation un-archives it). The window is
-// NOT reset — only inbound customer messages reset it.
+// (Q2: replying to an archived conversation un-archives it, unless it is
+// "Not a customer": `replyUnarchives`). The window is NOT reset — only inbound
+// customer messages reset it.
 
 import { verifyStaffToken, staffAuthError, getConversation, upsertConversation, appendMessage } from "./_lib/rtdb.js";
 import { sendText } from "./_lib/meta.js";
-import { capOutbound, snippet } from "../src/lib/whatsapp.js";
+import { capOutbound, snippet, replyUnarchives } from "../src/lib/whatsapp.js";
 
 function readJsonBody(req) {
   if (req.body !== undefined && req.body !== null) {
@@ -110,7 +111,7 @@ export default async function handler(req, res) {
     authorEmail: staff.email || staff.uid,
   });
   const patch = { lastMessageAt: ts, lastMessageSnippet: snippet(text) };
-  if (conv.archived) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
+  if (replyUnarchives(conv)) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
   await upsertConversation(phoneKey, patch);
 
   res.status(200).json({ ok: true, msgId, wamid: sent.wamid || null, status: sent.status });

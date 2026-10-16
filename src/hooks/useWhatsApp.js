@@ -41,7 +41,7 @@ import { EMPTY_FORM } from "../lib/constants";
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
-import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch } from "../lib/whatsapp";
+import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch, replyUnarchives } from "../lib/whatsapp";
 import { sendsViaServer, sendViaBackend, sendMediaViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
@@ -423,7 +423,7 @@ export function useWhatsApp({
     appendMessage(phoneKey, msg);
     patchConversation(phoneKey, function (c) {
       const patch = { lastMessageAt: ts, lastMessageSnippet: snippet(text) };
-      if (c.archived) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
+      if (replyUnarchives(c)) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
       return patch;
     });
     // Mock provider round-trip. A one-shot simulated failure (simFailNextSend)

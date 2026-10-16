@@ -13,7 +13,7 @@
 // inbox (the disconnection banner's sentence), which is a lazy chunk, so it
 // never reaches the startup bundle.
 
-import { normalizePhone, isPhoneKey, mediaLabel, mediaSnippet, WA_MAX_TEXT_LEN } from "./whatsapp.js";
+import { normalizePhone, isPhoneKey, mediaLabel, mediaSnippet, replyUnarchives, WA_MAX_TEXT_LEN } from "./whatsapp.js";
 import { formatDay, localDay } from "./day.js";
 
 // secondsTs(raw, now) — a Meta timestamp (seconds since the epoch, usually as a
@@ -151,7 +151,7 @@ export function echoConvPatch(existing, o) {
     patch.lastMessageAt = o.ts;
     patch.lastMessageSnippet = o.snippet;
   }
-  if (existing.archived && !existing.muted) { patch.archived = false; patch.archivedAt = null; }
+  if (replyUnarchives(existing)) { patch.archived = false; patch.archivedAt = null; }
   return patch;
 }
 

@@ -29,6 +29,7 @@ import crypto from "node:crypto";
 import { Buffer } from "node:buffer";
 import { Readable, Writable } from "node:stream";
 import { readFileSync } from "node:fs";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 const fake = vi.hoisted(() => {
   // `failWrite(op, path)` → true makes that write throw (a database error the
@@ -124,7 +125,7 @@ import { numberIsOurs, makeNumberGuard } from "../api/_lib/coexist-core.js";
 import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyStatus, WA_IMPORT_ARCHIVE_MS, disconnectSentence } from "../src/lib/wa-coexist.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
-import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE } from "../src/lib/whatsapp.js";
+import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE, replyUnarchives } from "../src/lib/whatsapp.js";
 import { simMediaMessage } from "../src/lib/wa-mock-media.js";
 import { simHistoryValue, simEchoValue, simContent, SIM_HISTORY_RECENT, SIM_HISTORY_OLD, SIM_HISTORY_PHOTO_ID, SIM_WABA_ID, SIM_PHONE_NUMBER_ID } from "../src/lib/wa-sim-coexist.js";
 
@@ -247,6 +248,15 @@ describe("wa-send", () => {
     await send({ phoneKey: KEY, text: "hi" });
     const patch = fake.state.writes.find((w) => w.op === "update").value;
     expect(Object.keys(patch).sort()).toEqual(["lastMessageAt", "lastMessageSnippet"]);
+  });
+
+  // v18.9.0 /code-review: only the phone's echo knew about the mute, so a
+  // reply typed in MGT took a "Not a customer" thread back to Inbox, still
+  // muted, where nothing offers "Customer again".
+  it("a reply to a muted (\"Not a customer\") archived conversation leaves it archived", async () => {
+    fake.state.tree = { conversations: { [KEY]: openConv({ archived: true, archivedAt: 5, muted: true }) } };
+    expect((await send({ phoneKey: KEY, text: "hi" })).statusCode).toBe(200);
+    expect(convAt(KEY)).toMatchObject({ archived: true, archivedAt: 5, muted: true, lastMessageSnippet: "hi" });
   });
 
   it("caps the text before the send, so what is sent and what is stored are one string", async () => {
@@ -1411,6 +1421,22 @@ describe("echoConvPatch / editedText / editPatch / revokePatch", () => {
     expect(echoConvPatch({ archived: true, muted: true }, { ts: 1, snippet: "x" })).not.toHaveProperty("archived");
     expect(echoConvPatch({ archived: true }, { ts: 1, snippet: "x" })).toMatchObject({ archived: false, archivedAt: null });
   });
+  it("replyUnarchives: archived and not muted, and nothing else", () => {
+    expect(replyUnarchives({ archived: true })).toBe(true);
+    expect(replyUnarchives({ archived: true, muted: true })).toBe(false);
+    expect(replyUnarchives({ archived: false })).toBe(false);
+    expect(replyUnarchives({ muted: true })).toBe(false);
+    expect(replyUnarchives(null)).toBe(false);
+  });
+  // The rule was written out at four sites and three had dropped the mute, so
+  // every place a reply un-archives must ASK it rather than restate it.
+  it("every place a reply is written asks replyUnarchives, and none restates the test", () => {
+    ["api/wa-send.js", "api/wa-media.js", "src/hooks/useWhatsApp.js", "src/lib/wa-coexist.js"].forEach((f) => {
+      const src = stripComments(readFileSync(new URL("../" + f, import.meta.url), "utf8")).join("\n");
+      expect(src, f).toMatch(/replyUnarchives\(/);
+      expect(src, f).not.toMatch(/\.archived\)\s*\{\s*patch\.archived\s*=\s*false/);
+    });
+  });
   it("an edit's text is a text's body or a caption, with or without a type on the edited message", () => {
     expect(editedText({ type: "edit", edit: { message: { type: "text", text: { body: "a" } } } })).toBe("a");
     expect(editedText({ type: "edit", edit: { message: { text: { body: "b" } } } })).toBe("b");
@@ -2121,6 +2147,13 @@ describe("wa-media POST — a photo or a PDF sent", () => {
     await sendFile();
     expect(convAt(KEY).archived).toBe(false);
     expect("archivedAt" in convAt(KEY)).toBe(false);
+  });
+
+  it("a send to a muted (\"Not a customer\") archived conversation leaves it archived", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    fake.state.tree = { conversations: { [KEY]: openConv({ archived: true, archivedAt: 5, muted: true }) } };
+    expect((await sendFile()).statusCode).toBe(200);
+    expect(convAt(KEY)).toMatchObject({ archived: true, archivedAt: 5, muted: true });
   });
 
   // /code-review: Meta had the photo, the database write failed, and the

@@ -70,7 +70,7 @@ import { sendMode } from "./_lib/env.js";
 import { verifyStaffToken, staffAuthError, getMessage, getConversation, appendMessage, upsertConversation } from "./_lib/rtdb.js";
 import { mediaInfo, downloadMedia, uploadMedia, sendMedia } from "./_lib/meta.js";
 import {
-  isPhoneKey, sanitizeMedia, sendKindOf, mediaLabel, mediaSnippet, snippet,
+  isPhoneKey, sanitizeMedia, sendKindOf, mediaLabel, mediaSnippet, snippet, replyUnarchives,
   WA_SEND_MAX_BYTES, WA_CAPTION_MAX,
 } from "../src/lib/whatsapp.js";
 
@@ -306,7 +306,7 @@ async function send(req, res) {
   }
   if (stored) {
     const patch = { lastMessageAt: ts, lastMessageSnippet: snippet(mediaSnippet(media || { kind }, text)) };
-    if (conv.archived) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
+    if (replyUnarchives(conv)) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
     try {
       await upsertConversation(phoneKey, patch);
     } catch (e) {
