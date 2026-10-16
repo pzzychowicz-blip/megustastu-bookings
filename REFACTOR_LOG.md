@@ -36711,3 +36711,10 @@ copies agree; nothing kept them so. `freshResults()` in `_lib/coexist-core.js` i
 both start from, and `tests/api-handlers.test.js` reads every `results.<name>++` under `api/`
 (38 of them) against its keys and fails a file but that one typing the record out (it fails
 with the old `wa-inbound.js`).
+
+**The mute icon's comment promised what nothing held.** `MuteIcon` said it draws "the bell's own
+path, so the two cannot drift", over two path strings copied by hand from `BellIcon`: a redrawn
+bell would have left the struck one behind. A shared constant would be a non-component export
+from a component file, so the copies stay, the comment says they are copies, and
+`tests/wa-bubble.test.js` renders both icons and requires the same two paths plus one slash
+(it fails with a bell path changed in either).

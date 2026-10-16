@@ -13,6 +13,8 @@ import { readFileSync } from "node:fs";
 import { MessageBubble } from "../src/components/whatsapp/MessageBubble.jsx";
 import { threadDayLabel, threadItems } from "../src/lib/whatsapp.js";
 import { formatDay } from "../src/lib/day.js";
+import { BellIcon } from "../src/components/Icons.jsx";
+import { MuteIcon } from "../src/components/whatsapp/WaIcons.jsx";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
 // Every string the tree renders, in order, and every element's props.
@@ -120,5 +122,17 @@ describe("the thread's day separators (v18.9.0)", () => {
     const src = stripComments(readFileSync(new URL("../src/components/whatsapp/ConversationView.jsx", import.meta.url), "utf8")).join("\n");
     expect(src).toContain("threadItems(msgsForConv, today)");
     expect(/msgsForConv\.map\(/.test(src)).toBe(false);
+  });
+});
+
+// MuteIcon draws the app's bell struck through, and copies the bell's paths
+// (Icons.jsx may export components only), so a redrawn bell must move both.
+describe("the mute icon is the app's bell, struck through (v18.9.0)", () => {
+  it("MuteIcon's bell is BellIcon's, plus one slash", () => {
+    const paths = (el) => walk(el).props.filter((p) => typeof p.d === "string").map((p) => p.d);
+    const bell = paths(BellIcon({}));
+    expect(bell.length).toBe(2);
+    expect(paths(MuteIcon({}))).toEqual(bell);
+    expect(walk(MuteIcon({})).props.filter((p) => p.x1 !== undefined)).toEqual([{ x1: "3", y1: "3", x2: "21", y2: "21" }]);
   });
 });

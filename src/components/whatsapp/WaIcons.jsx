@@ -183,9 +183,11 @@ export function RetryIcon({ size = IC.chrome, color = "currentColor" }) {
 
 // MuteIcon (v18.9.0) — the app's bell (BellIcon, Icons.jsx), struck through:
 // "Not a customer", a conversation whose messages are kept and announce
-// nothing. The bell's own path, so the two cannot drift; the slash runs
-// corner to corner, past the bell's outline, so at the 14px it ships at it
-// reads as a struck bell and not as a bell with a clapper.
+// nothing. The bell's two paths are COPIES of BellIcon's (a shared constant
+// would be a non-component export from a component file), and
+// tests/wa-bubble.test.js renders both icons and fails when they differ. The
+// slash runs corner to corner, past the bell's outline, so at the 14px it
+// ships at it reads as a struck bell and not as a bell with a clapper.
 export function MuteIcon({ size = IC.chrome, color = "currentColor" }) {
   return (
     <Svg size={size} color={color}>
