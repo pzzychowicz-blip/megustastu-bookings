@@ -936,7 +936,9 @@ export function AdminTabContent({
           normaliser, so never 0 and a year by default). Unlike the log it is
           pruned on a SCHEDULE: api/wa-prune.js runs every night at 04:00 UTC.
           Shown only while the module is on, because it is about the module's
-          data. The privacy notice states the period, so the hint says so. */}
+          data. The privacy notice states the period, so the hint says so.
+          v18.9.0: the notice says "up to 12 months", which stays true for a
+          shorter setting and not for a longer one, so the hint names that. */}
       {moduleOn(modules, "whatsapp") ? (
         <Section>
           <div style={{ fontWeight: FW.bold, fontSize: T.body, color: "var(--text-primary)" }}>
@@ -957,8 +959,8 @@ export function AdminTabContent({
           </label>
           <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: SP.tight }}>
             Every night, messages older than this are deleted, and so is a
-            conversation whose last message is. The privacy notice tells customers
-            12&nbsp;months: change it there too if you change this.
+            conversation whose last message is. The privacy notice says up
+            to 12&nbsp;months: change it there if you keep messages longer.
           </div>
         </Section>
       ) : null}

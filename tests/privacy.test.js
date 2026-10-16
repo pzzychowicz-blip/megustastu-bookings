@@ -86,10 +86,22 @@ describe("the privacy notice — the template", () => {
 // the new one, in both languages.
 describe("the privacy notice — the periods it promises", () => {
   const section = (id) => new RegExp('<section id="' + id + '"[\\s\\S]*?</section>').exec(BODY)[0].replace(/\s+/g, " ");
-  it("deletes WhatsApp messages after the prune's default, 12 months", () => {
+  // v18.9.0: "up to", because the prune's period is a setting an admin can
+  // shorten (Settings → Admin), and a notice promising exactly 12 months would
+  // then be wrong in the other direction.
+  it("keeps WhatsApp messages up to the prune's default, 12 months", () => {
     expect(DEFAULT_RETENTION_DAYS).toBe(365);
-    expect(section("en")).toContain("We delete each WhatsApp message automatically 12 months after it was sent.");
-    expect(section("es")).toContain("Eliminamos automáticamente cada mensaje de WhatsApp 12 meses después de su envío.");
+    expect(section("en")).toContain("We keep each WhatsApp message for up to 12 months, then delete it automatically.");
+    expect(section("es")).toContain("Conservamos cada mensaje de WhatsApp durante un máximo de 12 meses y después lo eliminamos automáticamente.");
+  });
+  // v18.9.0: what coexistence adds. History reaches back as far as Meta sends
+  // it (180 days, Meta's figure, not a setting of ours), and a phone contact's
+  // name is kept as long as the phone keeps it (the phone is the master).
+  it("names the imported history and the phone's contact names", () => {
+    expect(section("en")).toContain("before we connected it to our booking system, going back up to 180 days");
+    expect(section("en")).toContain("stays in our system for as long as it is saved on the phone");
+    expect(section("es")).toContain("antes de que lo conectáramos a nuestro sistema de reservas, de hasta 180 días atrás");
+    expect(section("es")).toContain("permanece en nuestro sistema mientras siga guardado en el teléfono");
   });
   it("says Meta keeps a file 7 days received and 30 sent, and that we keep no copy", () => {
     expect([WA_MEDIA_KEEP_IN_MS, WA_MEDIA_KEEP_OUT_MS].map((ms) => ms / 86400000)).toEqual([7, 30]);

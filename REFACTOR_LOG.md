@@ -36456,3 +36456,39 @@ real link left alone, idempotent history, which a mutant ignoring stored keys fa
 agreement test), the onboarding's `sim` handling, the Settings line, and
 `tests/wa-sim-not-in-prod.test.js`: only the stubbed `wa-sim.js` imports the new module, and
 its marker `wamid-SIMHIST` is in no built chunk.
+
+### Phase 10 — the privacy notice, and the docs
+
+**`/privacy`, in both languages.** Two more things it keeps: the WhatsApp messages exchanged
+with the restaurant phone before the connection, going back up to 180 days, and, for a number
+saved in the phone's contacts, the name it is saved under (kept for as long as the phone keeps
+it). The retention sentence changed from "We delete each WhatsApp message automatically 12
+months after it was sent" to "We keep each WhatsApp message for **up to** 12 months, then delete
+it automatically": the prune's period is a setting an admin can shorten, and "up to" stays true
+for every shorter choice. The rights paragraph adds the contact on the restaurant phone to what
+a deletion request removes, which is what Delete customer's confirm now asks staff to do on the
+phone. `privacy.updated` is 2026-10-16. The text is the data controller's to approve.
+`tests/privacy.test.js` pins the new retention sentence in both languages (still held to
+`DEFAULT_RETENTION_DAYS` = 365) and the two new items; the EN/ES shape test still passes (two
+`<li>` added on each side). The Admin tab's retention hint follows: "The privacy notice says up
+to 12 months: change it there if you keep messages longer."
+
+**The rules tests were already done in phase 2** (the `waContacts` grant, a whole-node wipe
+refused, and no browser write to `waLink` at any depth); nothing in the rules changed here, so
+`npm run test:rules` was not re-run.
+
+**Docs.** Root `CLAUDE.md`: `waLink`'s no-grant shape under the Rule of law, the node in the
+inventory, `wa-connect/` in the file structure, and the second-page Gotchas row extended to
+`/wa-connect` (its own CSP, its own build). `api/CLAUDE.md`: the seventh production function
+and a coexistence section (the field dispatch, the number guard, the retry rule, the history
+size risk, `wa-onboard`, the simulator's events). `src/lib/CLAUDE.md`: `wa-coexist.js`,
+`wa-sim-coexist.js`, `wa-connect.js`, `conversationName` and `draftPrefill`'s new order.
+`src/hooks/CLAUDE.md`: the mute, `simSetContacts`, the `waLink` node and the new message and
+conversation fields. `src/CLAUDE.md`: the `wa-connect/` page. GLOSSARY: a coexistence table in
+the WhatsApp section (the connect page, the Business app connection section, the phone reply,
+edited, the deleted message, the not-saved hint, the conversation name, Not a customer, the
+disconnect banner, imported history, the unsupported message) and the simulator's events.
+ROADMAP: the coexistence entry is now the rehearsal and the restaurant's number, with the
+findings the rehearsal owns, and a new idea: MGT names written back to the phone through the
+Google People API, only if the iPhone's Contacts sync to a Google account. The connect page's
+entry file said it was "Vite's second input"; it is built by its own config, and says so.

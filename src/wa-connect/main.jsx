@@ -1,5 +1,5 @@
-// src/wa-connect/main.jsx — the /wa-connect page's entry (v18.9.0), Vite's
-// second input beside index.html (vite.config.js). It shares the app's
+// src/wa-connect/main.jsx — the /wa-connect page's entry (v18.9.0), built by
+// its own config (vite.wa-connect.config.js). It shares the app's
 // stylesheet, its Firebase project (src/firebase.js, so the DEV/PROD split
 // holds here too) and the sign-in already on this device; nothing else of the
 // app is loaded.

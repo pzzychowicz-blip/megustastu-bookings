@@ -91,6 +91,6 @@ export const profile = {
   // page, and `tests/privacy.test.js` then wants a ROADMAP entry saying so.
   privacy: {
     controller: "Tomasz Uzarowski",
-    updated: "2026-10-14"
+    updated: "2026-10-16"
   }
 };

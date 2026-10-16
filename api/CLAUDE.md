@@ -22,8 +22,8 @@ indistinguishable from "no such endpoint": a 405 or a 401 would both confirm the
 is there. Fail-closed, and measured across five env values — absent, empty, `"0"`,
 `"true"` and `"1"` — where only the last opens it. **Since the phase-5 review those
 three are also excluded from a deployment by `.vercelignore`**, so PRODUCTION routes
-SIX functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config` · `wa-media` ·
-`wa-prune`, the last two since v18.8.0) and the `sandbox`
+SEVEN functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config` · `wa-media` ·
+`wa-prune`, those two since v18.8.0 · `wa-onboard`, since v18.9.0; Hobby allows 12) and the `sandbox`
 branch gets its three back through one appended `!api/wa-sim-*.js`. Since v18.4.3 that
 branch is GENERATED from main by `.github/workflows/sandbox.yml`, which writes the line;
 it is never written on main and never by hand. The runtime gate stays: two independent answers, and
@@ -125,6 +125,46 @@ Four rules:
 It answers the counts and logs one line; an error in any thread makes it 500. Its tests are their own
 block in `tests/api-handlers.test.js`, outside the staff-gate `describe.each`, since its gate is the
 cron secret.
+
+**Coexistence (v18.9.0) — the Business app and MGT on one number.** Six things, each
+a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
+- **Dispatch by `change.field`.** `messages` keeps its path; `smb_app_state_sync`
+  (contacts), `smb_message_echoes` (a reply typed on the phone), `history` and
+  `account_update` go to `COEXIST_HANDLERS`; any other field is counted `ignored` and
+  answered 200. An absent field reads as `messages`. It matters beyond tidiness: a
+  `history` change carries a `value.messages[]` of its own (a photo arriving after its
+  placeholder), which must never reach the inbound path and its auto-reply.
+- **The number guard** (`numberIsOurs` / `makeNumberGuard`). One Meta app holds several
+  numbers (the sandbox app: Meta's test number AND the rehearsal's), so a change naming a
+  `phone_number_id` is stored only when it is `META_PHONE_NUMBER_ID` or
+  `waLink.phoneNumberId`. The second is load-bearing: the contact and history syncs are
+  asked for during onboarding, before anyone can set the env var to the new id, and Meta
+  sends each ONCE. No id on the change, or nothing configured (the mock sandbox, the
+  harness), is allowed. `waLink` is read at most once per delivery, and only when the env
+  id did not answer.
+- **The retry rule still holds because every handler is keyed** (by wamid or phone key).
+  A history chunk with a thread that failed answers `{ retry: true }`, which the webhook
+  turns into a 500, so Meta resends the chunk and only what did not land is written.
+- **History size is a rehearsal risk, not a measured one.** Vercel caps a request body at
+  4.5 MB and Meta says one history webhook can describe thousands of messages. Record the
+  chunk sizes in the rehearsal's logs; a `maxDuration` for `wa-inbound` in `vercel.json`
+  if processing nears the default limit.
+- **`wa-onboard.js`**, the server half of Embedded Signup for `/wa-connect`. GET answers
+  `{appId, configId, graphVersion}` (not secrets); POST exchanges the 30-second code, then
+  writes `waLink` BEFORE asking for any sync (the guard above), then subscribes the app to
+  the WABA, asks for the contacts and the history (`smb_app_data`) and reads the number's
+  `is_on_biz_app`. A failed subscribe SKIPS the two syncs, since a sync spent while no
+  webhook can arrive is lost. `{retry: <step>}` runs one step again with `META_WA_TOKEN`
+  (refused for a simulated link). **The business token is never stored or returned.**
+  Guards: 405 → staff → admin (`assertWaAdmin`: `isAdminEntry` on `/roles`, the client's
+  own question, whatever `enforceRoles` says, since `settingsAdmin` is always enforced) →
+  400 → 503. The harness answers its POST 503 (it needs a deployment).
+- **The simulator's events** (`_lib/sim-events.js`, behind `/api/wa-sim-inbound`'s
+  `event`): each builds Meta's `value` (`src/lib/wa-sim-coexist.js`) and calls the
+  handler above, so a simulated contact, echo, edit, history import or disconnection is
+  stored as Meta's would be. "Connect (simulated)" writes a `waLink` marked `sim: true`,
+  and **a real `waLink` (ids, no `sim`) is never touched**: 409, because the sandbox's
+  DEV database is where the rehearsal's real connection lives.
 
 **Tests (v18.4.5).** `tests/api-handlers.test.js` RUNS `wa-send`, `wa-recheck`, `wa-config`,
 `_lib/inbound-core.js` and `_lib/meta.js`: it replaces the three `firebase-admin` modules

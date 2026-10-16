@@ -22,17 +22,20 @@ session and keeping it in sync.
 - **At WhatsApp go-live, set the Meta app's WEBHOOK version to v26.0** in the dashboard.
   The Graph calls moved to v26.0 in v18.3.1, and the code cannot change the webhook's.
 
-- **WhatsApp coexistence — the Business app and the Cloud API on one number**
-  (decided 2026-09-21, go-live plan § 3a–3b). Replaces the ops-SIM migration: the groups
-  never move and staff keep answering from the phone. **Milestone 1 is a rehearsal and
-  gates everything else:** onboard a cheap disposable number running the Business app to
-  the *sandbox* app through **Embedded Signup v4** (v2 is retired 15 Oct 2026), subscribe
-  `history` · `smb_app_state_sync` · `smb_message_echoes`, and check that the one-shot
-  24-hour history sync arrives, echoes flow both ways, and groups stay out of the API.
-  If it passes, the full build: Embedded Signup in place of the single system-user token,
-  the three webhook topics, echo mirroring into the inbox — load-bearing, since without it
-  two staff can answer one customer — and disconnection handling (`account_update`, error
-  `131060`). If it fails, the plan's Phase B comes back.
+- **WhatsApp coexistence: the rehearsal, then the restaurant's number.** The code
+  shipped in v18.9.0 (Embedded Signup at `/wa-connect`, the four coexistence webhooks,
+  contact sync, phone replies, history import, the disconnect banner, Not a customer).
+  What is left needs Meta and a phone, and runs on the sandbox after merge, in the go-live
+  plan's order (§3b, the runbook in the plan for v18.9.0): subscribe `account_update` ·
+  `history` · `smb_app_state_sync` · `smb_message_echoes`; Facebook Login for Business and
+  an Embedded Signup configuration; `META_APP_ID` + `META_ES_CONFIG_ID` on the sandbox;
+  then connect a disposable number that has run the Business app for a week. **Findings
+  the rehearsal owns:** the `extras` shape FB.login takes (Embedded Signup Builder,
+  "Check a launch config"); whether `META_WA_TOKEN` may send and retry the syncs on the
+  converted account; history chunk sizes against Vercel's 4.5 MB request cap; whether the
+  direct route works without Tech Provider status. **Before any of it, publish
+  `database.rules.json` to DEV and PROD** (the `waContacts` grant). If the rehearsal
+  passes, the restaurant's number, with the Business app's greeting message turned off.
 
 - **A WhatsApp cost counter in Settings → WhatsApp**, after go-live. Meta charges for
   every message a business sends from **1 October 2026**, replies included, so the panel
@@ -192,3 +195,9 @@ two ideas, deposits reporting and structured guest tags, shipped in v18.5.0.
   parse runs on text only. Gemini takes audio, so the note could be fetched as the media
   proxy fetches it (`mediaInfo` + `downloadMedia`, `api/_lib/meta.js`) and parsed like a
   message.
+
+- **MGT names written back to the phone** (2026-10-15, planning v18.9.0). The phone is the
+  master for contact names because Meta has no API that writes one. If the restaurant
+  iPhone's Contacts sync to a Google account, the Google People API could create or rename
+  the contact, and the Business app would then send the name back to MGT. Only workable
+  with that Google account; check what the phone syncs to first.
