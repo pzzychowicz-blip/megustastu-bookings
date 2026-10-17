@@ -37136,3 +37136,16 @@ low, and "sobre las nueve" 21:00 low with a Spanish note; nothing else may chang
 
 **Files:** `api/_lib/gemini.js` · `src/lib/wa-sim-scenarios.js` ·
 `tests/wa-prompt-rules.test.js` (new).
+
+### Phase 3 — ROADMAP in step with the go-live page
+
+Three of the Deferred section's WhatsApp entries described work that is done. **Deleted:**
+the cost counter (phase 1 ships it) and "set the Meta app's webhook version to v26.0" (the
+sandbox's fields already read v26.0, recorded on the go-live page at R-4 on 17 October;
+production's is checked at a6-2 on the page, which now says so). **Trimmed:** the
+coexistence entry listed the rig's setup as still to do (the four webhook fields, Facebook
+Login for Business and its configuration, `META_APP_ID` + `META_ES_CONFIG_ID`: R-4, R-13 and
+R-14, all done 17 October) and asked for the rules to be published to PROD first (R-12, done
+17 October). It now says the rehearsal waits only for the disposable number's week of
+history, then runs from R-5, and keeps the findings the rehearsal owns and where its answers
+are recorded.
