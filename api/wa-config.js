@@ -29,8 +29,7 @@
 // rather than inventing a "no" — an unrecognised key is a question this
 // deployment cannot answer, which is different from a key that is not set.
 
-import { env, llmMode, sendMode } from "./_lib/env.js";
-import { geminiModel } from "./_lib/gemini.js";
+import { env, llmMode, sendMode, geminiModel } from "./_lib/env.js";
 import { verifyStaffToken, staffAuthError, readWaLink } from "./_lib/rtdb.js";
 import { bearerToken } from "./_lib/request.js";
 

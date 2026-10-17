@@ -308,6 +308,11 @@ describe("CT-WA-07 — the Admin tab shows the mode the backend is actually in",
     expect(src).not.toMatch(/llm:\s*env\(/);
     expect(src).not.toMatch(/send:\s*env\(/);
     expect(src).toMatch(/import \{[^}]*llmMode[^}]*sendMode[^}]*\} from "\.\/_lib\/env\.js"/);
+    // v18.9.2 /code-review: the model comes from env.js too. Importing gemini.js
+    // would load src/lib/whatsapp.js and the booking-logic chain into the
+    // endpoint used as the cheapest health check.
+    expect(src).toMatch(/import \{[^}]*geminiModel[^}]*\} from "\.\/_lib\/env\.js"/);
+    expect(src).not.toMatch(/from "\.\/_lib\/gemini\.js"/);
   });
   it("the KEY list still reports booleans only — it cannot hold a value", () => {
     const src = read("api/wa-config.js");

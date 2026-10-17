@@ -22,7 +22,7 @@
 // exact current string in AI Studio (the local harness exposes GET /dev/models
 // to list what the key can see).
 
-import { env, llmMode, simEnabled } from "./env.js";
+import { env, llmMode, simEnabled, geminiModel } from "./env.js";
 
 // ── Who this restaurant is, for the prompts (v18.0.0 phase 5c) ───────────────
 // The prompts carried "a small restaurant in the Canary Islands" as a literal,
@@ -69,13 +69,8 @@ const TIMEOUT_MS = 15000;
 // gemini-3.5-flash is accurate but its latency swings to ~20s (timeouts);
 // gemini-3-flash-preview always times out; gemini-2.0-flash 429s on free tier.
 // Confirm an id is available to the key via the harness's /dev/models.
-const DEFAULT_MODEL = "gemini-3.5-flash-lite";
-
-// v18.9.2: the model the backend actually calls, as ONE function. It was three
-// copies of `env("GEMINI_MODEL", DEFAULT_MODEL)`, and the Admin tab now shows it
-// (api/wa-config.js): a fourth copy there could drift from what runs, which is
-// the exact defect CT-WA-07 found in the modes.
-export function geminiModel() { return env("GEMINI_MODEL", DEFAULT_MODEL); }
+// The constant and `geminiModel()`, the one function every call below reads
+// it through, live in env.js since the v18.9.2 /code-review, beside llmMode().
 
 // The strict response schema (Gemini "controlled generation"). Mirrors
 // draftData on the conversation + language detection.

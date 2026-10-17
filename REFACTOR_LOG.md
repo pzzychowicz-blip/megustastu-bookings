@@ -36970,3 +36970,12 @@ its "could not ask" state locally; the sentence is checked on the sandbox after 
 
 **Files:** `api/_lib/gemini.js` · `api/wa-config.js` · `src/components/AdminSettings.jsx` ·
 `tests/api-handlers.test.js` · the three docs above.
+
+### /code-review fixes
+
+**The model lives in env.js (finding 4).** `wa-config` imported `_lib/gemini.js` for
+`geminiModel()`, and gemini.js imports `src/lib/whatsapp.js` and the booking-logic chain behind it:
+every cold start of the endpoint `api/CLAUDE.md` names as the cheapest health check loaded all of it
+to read one variable, and a break anywhere in that chain would have made it 500. `DEFAULT_MODEL` and
+`geminiModel()` moved to `_lib/env.js`, beside `llmMode()`; gemini.js imports them.
+`wa-parse-guard` pins that wa-config takes the model from env.js and never imports gemini.js.
