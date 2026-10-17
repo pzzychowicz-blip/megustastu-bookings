@@ -35,7 +35,7 @@ import { sanitizeAdminSettings } from "../src/hooks/useRoles.js";
 // carry paragraphs explaining which writes are deliberately NOT logged, and a
 // raw read would match the explanation instead of the code.
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { conversationDeletePatch } from "../src/lib/whatsapp.js";
+import { conversationDeletePatch, contactDeletePatch } from "../src/lib/whatsapp.js";
 
 const RULES = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "..", "database.rules.json"), "utf8"
@@ -581,8 +581,16 @@ describe("the writer hook points", () => {
     const erase = hook.slice(hook.indexOf("function eraseConversation"), hook.indexOf("const unreadCount"));
     // v18.8.0 /code-review: through the one delete patch the inbox's Delete
     // uses too, which nulls both halves of the key in one write.
+    // v18.9.0: and the MGT copy of the phone's contact (`contactDeletePatch`),
+    // which the inbox's Delete leaves alone, in a write OF ITS OWN
+    // (/code-review): a multi-path update is atomic, and until a database has
+    // this version's rules, a waContacts path in it refused the whole erase.
     expect(erase).toMatch(/update\(ref\(db\), conversationDeletePatch\(\[phoneKey\]\)\)/);
+    expect(erase).toMatch(/update\(ref\(db\), contactDeletePatch\(\[phoneKey\]\)\)/);
     expect(conversationDeletePatch(["+34600111222"])).toEqual({ "conversations/+34600111222": null, "messages/+34600111222": null });
+    expect(contactDeletePatch(["+34600111222", "a/b", ""])).toEqual({ "waContacts/+34600111222": null });
+    // And the conversations' patch never carries a contact with it.
+    expect(conversationDeletePatch(["+34600111222"], { contacts: true })).not.toHaveProperty("waContacts/+34600111222");
     // Not gated on the listeners having loaded: with the module off they never do.
     expect(erase).not.toMatch(/Loaded\.current/);
     expect(erase).toMatch(/if \(!isPhoneKey\(phoneKey\)\) return;/);

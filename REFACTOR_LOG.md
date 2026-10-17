@@ -35994,3 +35994,870 @@ its own commit.
 After the merge: tick A4-1 and A4-5 in the go-live checklist. A5-6 is the live test on the
 sandbox: a photo each way with a real phone, a voice note in, a PDF each way, the 4.5 MB
 measurement, and the first cron run in Vercel's logs.
+
+## v18.9.0 — WhatsApp coexistence: the Business app and MGT on one number
+
+**Date:** 2026-10-15 · **Branch:** `feat/v18.9.0-wa-coexistence` ·
+**Plan:** `~/.claude/plans/1-from-roadmap-md-polished-lemur.md` (every decision in it made
+with Patryk on 2026-10-15). ROADMAP's coexistence entry (R-3, go-live plan §3a–3b): the
+restaurant's number keeps the WhatsApp Business app on the phone AND answers through MGT.
+The rehearsal on a disposable number (§3b) needs this code on the sandbox, which follows
+`main`, so it ships before the rehearsal. Contact sync ships inside it: the phone's address
+book names the inbox (Patryk asked whether a name can be the same on the phone and in MGT;
+Meta's answer is phone → MGT only, so **the phone is the master**).
+
+### Phase 1 — the webhook dispatches on the field, and checks the number
+
+`api/wa-inbound.js` read `value.messages` and `value.statuses` whatever `change.field`
+said, which was harmless while Meta sent one field. A coexistence number sends four more to
+the same URL (`smb_app_state_sync`, `smb_message_echoes`, `history`, `account_update`), and
+a `history` change carries a `value.messages` of its own (a photo's id, arriving after its
+placeholder), which read as a customer message would have been stored, acked and parsed.
+Each change is now dispatched on its field: `messages` takes the old road, unchanged (moved
+into `handleMessagesChange`), and anything else is counted as `ignored` until its handler
+lands in the phases below. An absent field reads as `messages`, the one field there was.
+The answer gains a counter per kind of record (`echoes`, `contacts`, `history`, `events`)
+and `ignored`; the 500 rule ("everything failed") now counts all of them.
+
+**The number guard** (`api/_lib/coexist-core.js`, `numberIsOurs` / `makeNumberGuard`). One
+Meta app can hold several numbers, and the sandbox app will: Meta's test number and the
+rehearsal's. A change whose `metadata.phone_number_id` is neither `META_PHONE_NUMBER_ID` nor
+`waLink.phoneNumberId` (the id Embedded Signup connected, phase 7) is ignored before
+anything reads it. The second id is not a convenience: the contact and history syncs are
+requested during onboarding, before anyone can set the env var and redeploy, and Meta
+allows each once. A change with no id passes (account events carry none), and so does
+everything when neither id is set (the mock sandbox, the harness). `waLink` is read at most
+once per delivery and only when the env id did not answer; a failed read is an error, so a
+delivery that could not be checked is redelivered. The simulator's fake webhook
+(`postFakeWebhook`) no longer sends a made-up `PHONE_NUMBER_ID_LOCAL_SIM`, which a harness
+whose `.env.local` names a real id would now drop.
+
+Tests: the dispatch (an unknown field, an absent field, `value.messages` under `history`
+reaching neither the ack nor the parse) and the guard (env id, connected id, nothing
+configured, one read per delivery, an unreadable `waLink` answered 500). Sabotaged twice:
+a guard that always answers yes fails four, a dispatch that sends every field down the
+messages road fails two.
+
+### Phase 2 — the phone's contacts name the inbox (`waContacts`)
+
+**Server.** `smb_app_state_sync` (`handleStateSync`, `api/_lib/coexist-core.js`): each
+`state_sync[]` contact becomes `waContacts/<phoneKey>` = `{name, first?, at}`, an add
+(or an edit, which Meta sends as an add) sets it and a remove deletes it, in ONE per-key
+`update()` of the node per webhook. What an item becomes is decided in
+`src/lib/wa-coexist.js` (`contactPlan`, `contactPatch`), so the simulator's client mode
+(phase 9) stores a contact the way the server does. Only the keys a webhook names are
+read (`readWaContactsFor`), so a delivery costs what it carries, not the size of the
+address book. A change older than the stored one is skipped (an edit delivered out of
+order never brings an old name back); a remove leaves no marker, so an add delivered
+after the remove that followed it brings the contact back, a stale name at worst.
+Names lose control characters, collapse their whitespace and stop at 80 characters. A
+contact saved with no name is stored with `name: ""`: saved, naming nothing. Every
+contact is kept, suppliers and staff included (Patryk). The first batch stamps
+`waLink.contacts.firstAt` once (`stampWaLinkOnce`, a transaction). The Meta timestamp
+rule is `secondsTs` now, in the shared file; `inboundTs` calls it.
+
+**Rules.** `waContacts/$phoneKey: auth != null`, no whole-node grant: the Admin SDK is
+the principal writer, so it takes `conversations`' shape and joins the Rule of law's
+closed list. The browser's one write is Delete customer's per-key erase. Rules suite:
+a per-key write and erase pass, another key survives, a whole-node wipe or replace is
+refused, and `waLink` refuses every browser write at any depth (it has no grant; phase 7
+writes it). **DEV and PROD need the rules published.**
+
+**Client.** `useWhatsApp` listens to `waContacts` and `waLink` (module-gated, `dbError`).
+**One naming rule**, `conversationName(conv, bookings, contacts)` in `lib/whatsapp.js`:
+the phone's contact, then the newest booking's name, then the WhatsApp profile name,
+then the formatted number. The row, the open conversation's header and
+`describeConversation` each spelled the booking match out for themselves; all three
+read it now. The profile name as a third step is new on screen (Patryk's order): a
+first-time sender reads by the name they gave WhatsApp instead of their number. The
+inbox's search matches every name a conversation has (`conversationSearchNames`), so a
+thread the contact now names is still found by its booking's name. **"Not saved on the
+restaurant phone"**, a neutral chip in the conversation header, appears for a number
+with no contact once `waLink.contacts.firstAt` is set; before the first sync, missing
+means "not synced yet". `draftPrefill`'s name order is typed → phone contact → bookings
+→ profile, for Accept and Add to waitlist alike.
+
+**Delete customer** also deletes the number's `waContacts` key
+(`conversationDeletePatch(keys, { contacts: true })`), and its confirm adds, with
+WhatsApp on and a phone on the customer, "Also delete them from the restaurant phone's
+contacts: MGT can't reach the phone." **A deviation from the plan, on purpose:** the
+plan had `clearAllWaData` (the simulator's reset) erase contacts too. It does not, and
+neither does the inbox's Delete: deleting a chat is not deleting the contact on the
+phone, and Meta allows the full contact sync once, so a copy deleted by mistake stays
+gone until the phone edits that contact. That matters most on the sandbox, which will
+hold the rehearsal number's real contacts.
+
+Tests: the webhook end to end (add, remove per key, out-of-order, non-contacts ignored,
+names cleaned, the number guard, a failed write answered 500), the planner, the naming
+rule run rather than read (W4's two source checks became behaviour checks plus a check
+that both components call it), `draftPrefill`'s new step, the erase patch.
+
+### Phases 3–4 — phone replies, and what a customer edits or deletes
+
+**Phone replies (`smb_message_echoes`).** What staff send from the WhatsApp Business app
+comes back as an echo, `to` being the customer. `handleEchoes` (`api/_lib/coexist-core.js`)
+stores each as an outgoing message keyed by its wamid, `source: "phone"`, status `sent`
+(`echoRecord`), its content read by `inboundContent` like a customer's, so a photo keeps
+its media id and its caption is its text. The conversation (`echoConvPatch`, in
+`src/lib/wa-coexist.js` for the simulator): read; out of Archived unless muted (phase 6's
+"Not a customer"); `autoAckSent: true`, so a customer the restaurant wrote to first never
+gets the auto-reply; the 24h window untouched, since only the customer's own message
+opens it; the snippet and time only move forward, so a late echo never makes an older
+reply the last line. A conversation the phone starts is created with `processInbound`'s
+shape, minus the window. Never parsed. An echo already stored, or the echo of a message
+MGT sent itself (found by `providerMsgId`), is skipped. The conversation is written
+before the message, as `processInbound` does, so a redelivery after a failed message
+write writes both again. Each echo is counted on its own (`results.echoes`), and one
+failing does not stop the next.
+
+**Edits and deletes (`messages`, types `edit` and `revoke`).** A customer may edit for 15
+minutes and delete for two days. `applyMessageChange` finds the message the change names
+(`findMessageByWamid`: its wamid as the key, else a scan for `providerMsgId`, for a
+message MGT sent) and patches it in place (`updateMessage`): an edit sets `text` and
+`editedAt` (`editedText` reads a text's body or a photo's caption, so an edited caption
+that comes without the media id keeps the photo, and a caption edited away leaves the
+photo's label); a delete sets the text to "Message deleted by the customer" ("… on the
+phone" for staff's own), drops the media and sets `revokedAt`, and is final (a later edit
+changes nothing). No new bubble, no parse; the draft stays (Patryk). When the changed
+message is the conversation's last, the list's line follows it, so a deleted message's
+words do not stay on screen there. An edit of a message never stored (sent before
+onboarding, or pruned) is kept as a new message under the edit's id and takes the
+ordinary road; a delete of one has nothing to delete. The same function handles an echoed
+edit or delete. Counted as `results.edits`.
+
+**`131060`.** A message only the Business app can show arrives as `unsupported` with error
+131060 under coexistence; `inboundContent` stores "Couldn't show this message here — check
+the WhatsApp Business app" (`WA_UNSUPPORTED_LINE`) instead of "Message — open WhatsApp on
+the phone to see it", which reads like an ordinary sticker.
+
+**The bubble.** A phone reply says "· phone" in the meta row where a reply from MGT says
+how far it got (with a title saying where it was sent from), and has no Retry: MGT did
+not send it. "· edited" beside the time, either side. A deleted message keeps its place,
+its line in italic at 0.75 opacity (opacity, so it reads on both bubble fills), and draws
+no media. The photo viewer captions a phone photo "Sent from the phone".
+
+No `SCHEMA` raise: messages are read raw and only `update()`d by the browser
+(`src/lib/whatsapp.js`'s media note says why). Tests: `tests/api-handlers.test.js` runs
+the webhook for each case (a new and an archived conversation, muted, late, redelivered,
+MGT's own echo, a photo, no number or wamid, staff's delete, one echo failing; an edit,
+a delete with a photo then an edit after it, both with the original missing, the
+`providerMsgId` path), the planners and the 131060 line; `tests/wa-bubble.test.js`
+renders the bubble by calling it (the phone tag and no Retry, MGT's status and Retry,
+"edited", the deleted state); `tests/wa-rtdb-hardening.test.js`'s count of sanitised
+message paths is 14. **Not checked live yet**: the simulator's echo, edit and delete
+events are phase 9, and the live DEV pass runs then.
+
+### Phase 5 — the chats the phone already held (`history`)
+
+Once after onboarding, and only if the business agreed on the phone, Meta sends the
+Business app's 1:1 chats of the last 180 days in three phases of chunks.
+`handleHistory` (`api/_lib/coexist-core.js`) imports each thread with `importThread`:
+one read of its messages (anything already stored, by key or by `providerMsgId`, is
+skipped, so a resent chunk writes nothing twice), one of its conversation, and **one
+root update** (`writeImportedThread`, `api/_lib/rtdb.js`, which builds both kinds of
+path from one sanitised key and writes nowhere but `messages/<key>/` and
+`conversations/<key>/`). A message is `in` when it is from the thread's customer;
+`imported: true`; the restaurant's side is tagged "phone" and takes its status from
+`history_context` (`historyStatus`). Content goes through `inboundContent`. Edits,
+deletes and messages with no wamid are not imported.
+
+The conversation (`historyConvPatch`, `src/lib/wa-coexist.js`): a NEW one is created
+read, `autoAckSent: true` (an existing customer: "new customers only" needs no other
+gate), with no 24h window (Meta opens none for a message from before onboarding), and
+archived when its newest message is over a week old (`WA_IMPORT_ARCHIVE_MS`). An
+EXISTING one is settled for the auto-reply, its line and time move only forward, and
+**its `createdAt` moves BACK to the oldest imported message**: the nightly prune reads
+only conversations created before its cutoff (`mayHoldOld`), so an import into a newer
+conversation would otherwise keep 180-day-old messages past retention. Never parsed.
+
+A photo or a file arrives as a `media_placeholder` ("Photo or file — open WhatsApp on
+the phone to see it"), and its media follows in a later `history` change carrying
+`value.messages[]` under the same id (`attachHistoryMedia`): found, the placeholder takes
+the media and its caption or label; not found yet, it is stored whole and the thread's
+import leaves it. Its customer is `from`, or `to` for the restaurant's own (the business
+number being the change's `display_phone_number`).
+
+`waLink.history` (a transaction, `transactWaLink`): `progress` and `phase` only move
+forward, as chunks may arrive out of order, `at`, and `doneAt` once at 100
+(`historyProgress`); error 2593109 (sharing declined) sets `declined: true` and imports
+nothing.
+
+**A chunk with a thread that failed is answered 500** (the handler answers
+`{ retry: true }`, `api/wa-inbound.js` turns it into a 500). History is sent once, so a
+dropped thread would be lost, and every write is keyed, so Meta's resend writes only
+what did not land. Phase B (the parse) is now scheduled before that answer, so a text
+stored in the same delivery is still parsed; in the old total-failure case there was
+nothing to schedule, so that path is unchanged.
+
+**Rehearsal risk, unchanged:** Vercel caps a request body at 4.5 MB and Meta says one
+history webhook can describe thousands of messages. The rehearsal records chunk sizes.
+
+Tests: a recent thread end to end (directions, statuses, the tag, the conversation, no
+window, no auto-reply or parse, progress, ONE root update under the thread's two paths
+only), an old thread archived, a resent chunk, an import into a live conversation
+(`createdAt` back, nothing else back), the placeholder and its media, media before its
+thread and the restaurant's own, a declined share, skipped kinds, a failed thread
+answered 500 and recovered by the resend; the planners. The hardening pin is 15.
+
+### Phase 6 — "Not a customer"
+
+A supplier, the gestor, a friend: under coexistence every chat on the restaurant phone
+reaches MGT, and a conversation that is nobody's booking should neither be answered
+nor ask for attention. **"Not a customer"** (a header button, beside Archive in the
+Inbox and beside Restore and Delete in Archived, with a struck bell, `MuteIcon`, drawn
+from the app's own bell path) sets `muted: true`, archives the conversation and marks
+it read (`useWhatsApp.handleMute`).
+
+A muted conversation's next message (`processInbound`, and `simulateInbound` for the
+sandbox's client mode, the same rule twice for the two writers): the message is
+stored, the time, line and 24h window move as for anyone (the window is a fact, and
+staff may still write to a supplier), and nothing else happens: no auto-reply, no
+draft from a parse handed in, no "reading the message" flag, `unread: false`, and it
+stays in Archived. `processInbound` returns `muted`, so `api/wa-inbound.js` queues no
+parse and `injectSimInbound` schedules none (the one place that pays Gemini).
+
+**Undo is Restore.** `handleUnarchive` clears `muted` with `archived`, whichever door
+it comes through: the header (where Restore reads **"Customer again"** on a muted
+conversation), the R key, a bulk Restore. A muted conversation sitting in the Inbox
+would take messages and never say so, so there is no way to restore one without
+unmuting it. A phone reply (phase 3) leaves a muted conversation in Archived.
+
+On screen: the header's status chip reads "Not a customer" in the Archived chip's
+place; the row wears the struck bell in the archive mark's place; the spoken label
+adds "not a customer"; the needs-action filter never counts a muted thread (a draft
+from before the mute included); both unread counts exclude it. The header's action
+group now wraps, right-aligned: an archived thread has four buttons, wider than a
+phone. No `SCHEMA` raise (conversations are read raw, patched with `update()`;
+`tests/schema.test.js` agrees).
+
+Tests: `processInbound` for a muted conversation (stored, no ack, no draft, no flag,
+read, still archived, the window moved), the webhook (no parse queued) and the sim's
+inbound (none scheduled), the client mode (`tests/wa-sim-feedback.test.js`), and the
+parse-guard pin, which now reads `willParse && !r.muted`. **Not checked live yet**
+(phase 9's pass: the header at phone width, the icon at 14px).
+
+### Phase 7 — the connection's own events (`account_update`) and the inbox banner
+
+`handleAccountUpdate` (`api/_lib/coexist-core.js`) records a coexistence number leaving
+MGT or coming back on `waLink` (`linkAfterEvent`, `src/lib/wa-coexist.js`):
+`PARTNER_REMOVED` and `ACCOUNT_OFFBOARDED` set `status: "disconnected"` and
+`disconnect: {event, reason?, initiatedBy?, at}`; `ACCOUNT_RECONNECTED` sets `connected`
+and deletes `disconnect`; every event is `lastEvent`. `disconnect` is kept apart from
+`lastEvent` so an unrelated event after a disconnection does not replace the reason
+staff are shown. Strings from Meta go through `cleanContactName` (no control
+characters, 80 at most).
+
+**Which account.** An `account_update` carries no phone-number id, so the number guard
+passes it; the handler asks instead whether the delivery's `entry.id` (the WABA) is
+`waLink.wabaId`, which `api/wa-inbound.js` now hands every coexistence handler as a
+fourth argument. With no link at all it is ignored: the sandbox's Meta app also holds
+the test number's account, and an event about that one must not put a red banner on
+the inbox.
+
+**The banner.** With `waLink.status === "disconnected"` the inbox shows, under its title
+bar on every device, "WhatsApp is disconnected from MGT: <why>. Replies from MGT won't
+send until it is connected again in Settings → WhatsApp." (`disconnectSentence`: the
+event in words, Meta's reason lower-cased after it). An `InlineAlert` in a `Reveal`,
+inside an always-mounted `role="alert"`, and inside the title bar's fold, so it makes
+room while a reply is typed. `wa-coexist.js` is now imported by the inbox too, which is
+a lazy chunk (the startup bundle did not move).
+
+Tests: a disconnection recorded, another event keeping the reason, a reconnection, an
+event for another account or with nothing connected writing nothing, a change with no
+event; the sentence; the banner's source (the field it reads, the live region outside
+the Reveal). Settings → WhatsApp's status is phase 8.
+
+### Phase 8 — connecting the Business app: `/wa-connect` and `api/wa-onboard.js`
+
+**The server half** (`api/wa-onboard.js`, production's seventh function). `GET` answers
+`{appId, configId, graphVersion}` from two new environment variables, `META_APP_ID` and
+`META_ES_CONFIG_ID` (not secrets: both sit in the page's JavaScript once it runs), and is
+also the page's admin check. `POST {code, wabaId, phoneNumberId}` runs Meta's onboarding
+in its order: exchange the code at once (it lives 30 s), record `waLink`, subscribe the
+app to the account, ask for the contacts sync, ask for the history sync, read the number
+(`is_on_biz_app`, `platform_type`). Four rules, each a line of it:
+- **`waLink` is written before any sync is asked for**, so the number guard (phase 1)
+  accepts the sync's webhooks while `META_PHONE_NUMBER_ID` still names the old number. A
+  link that fails answers 500 and stops: a sync asked for then would be spent on webhooks
+  the guard refuses. A different number from the last one clears the old one's sync
+  records (`contacts`, `history`, `phone`, `subscribedAt`); `waContacts` stays, since it is
+  keyed by the customer's number.
+- **A failed subscribe skips both syncs** (`skipped`, with the reason): Meta runs each once,
+  within 24 hours, and one asked for while no webhook can arrive is lost. The number check
+  runs regardless; it changes nothing.
+- **The business token is never stored and never returned.** It can send as the restaurant
+  and read its chats, and the database is readable by every account that signs in. It
+  lives in the request's memory; the tests assert it is in no response and no write.
+- **Per step, never all-or-nothing**: `{ok, steps: [{id, ok, error?, skipped?}], phoneNumberId,
+  envNumber}`, 200 when every step succeeded and 502 when a Meta call failed.
+  `POST {retry: "subscribe" | "contacts" | "history" | "phone"}` runs one step again with
+  `META_WA_TOKEN` and the ids `waLink` holds, since the code is spent. Whether the system user
+  may make these calls on a converted account is a rehearsal finding (§3b).
+
+`envNumber` is `unset`, `same` or `different`: whether `META_PHONE_NUMBER_ID` is the number
+just connected, as a word and never the value (wa-config's rule). `wa-config` gains the two
+keys and `phoneNumberIdMatches` (a boolean, null when either side is missing).
+
+**The admin gate is stricter than the plan's text, on purpose.** The plan said that with
+`enforceRoles` off any allow-listed staff account passes. `assertWaAdmin`
+(`api/_lib/rtdb.js`, 403 `NOT_ADMIN`) is the client's own question instead,
+`isAdminEntry(sanitizeRole(roles/{uid}))`, as `useRoles.isAdmin` asks it: `settingsAdmin` is
+one of the always-enforced capabilities, so the client never reads `enforceRoles` for it
+either, and a server that let more people through than the screen would be the two
+disagreeing about who may connect the restaurant's number. Tested with the switch off.
+
+**The page** (`wa-connect.html` + `src/wa-connect/`). It signs in through `src/firebase.js`
+(same origin, same session, the DEV/PROD split intact), asks the GET, loads Meta's SDK on
+demand and calls `FB.login` with `loginOptions` (`src/lib/wa-connect.js`). Meta answers in
+two ways that arrive in either order, a window message naming the account and the number
+and the login callback carrying the code, so the POST goes the moment both are in hand;
+everything one attempt needs is local to that attempt, so a second attempt can never send
+the first one's code. `signupMessage` reads only an https `facebook.com` origin and checks
+the ids as the server does; a `FINISH` or `FINISH_ONLY_WABA` (a signup that takes the number
+off the Business app) is refused rather than half-connected. The result lists each step, a
+Try again on the four the server retries, the number id with Copy, and, unless `envNumber`
+is `same`, the line saying to set `META_PHONE_NUMBER_ID` and redeploy. No inline script, so
+the hash-pinned CSP has nothing to pin.
+
+**Its own build, because a second input moved the app.** Added as a second input to
+`vite.config.js`, the shared code split differently: the entry became `main-*.js`
+(123.55 kB gz) plus six shared chunks, +4.6 kB gz on every app open, for a page an admin
+opens once. `vite.wa-connect.config.js` builds it alone into the same `dist` (`npm run
+build` runs both); the app's entry is byte-for-byte the size it was (156.82 kB gz) and the
+page is 140.03. In dev, `waConnectPage()` (a `vite.config.js` middleware) rewrites
+`/wa-connect` to the HTML.
+
+**Two CSP rules, never two policies on one response.** `vercel.json`'s app rule is now
+`/((?!wa-connect).*)` and `/wa-connect(\.html)?` has its own: the app's policy without the
+boot-script hash, plus `script-src https://connect.facebook.net`, `connect-src` and
+`frame-src https://*.facebook.com`. A response carrying both would have both enforced,
+which blocks the SDK. `tests/csp.test.js` checks the two sources between them cover every
+path once, the page's policy is the app's plus exactly those additions, the app's names no
+Facebook host, the other four headers match, and the built page (when `dist` exists). The
+rewrite is exact, `public/sw.js` already leaves the path to the browser (`APP_NAV_RE`), and
+`tests/service-worker.test.js` lists it. Widen only by what the sandbox's console shows.
+
+**Settings → WhatsApp, admins only: "Business app connection".** A Collapsible, open unless
+connected, built from `connectionLines(waLink, today)` (`src/lib/wa-coexist.js`): never
+connected / connected on <day> by <who> / the disconnect sentence (phase 7) in a danger
+alert, then the number id, the contacts and history syncs in words, a number Meta says is
+not on the Business app, and the last event from Meta when it is not the disconnect. A warn
+alert when `phoneNumberIdMatches === false`, and a link to `/wa-connect` (a new tab:
+"Have the restaurant phone at hand"). `useIntegrationStatus` moved out of `AdminSettings`
+into its own hook so both read it. Admin → Integrations lists the two new keys.
+`tests/link-buttons.test.js` now sweeps all of `src`, so the page's two links are held to
+the same rule as the app's.
+
+**The local harness** routes `/api/wa-onboard`: the GET works, the POST answers 503 "Embedded
+Signup needs a deployment", because Meta only opens the flow for an https domain its app
+lists.
+
+**Checked live on the dev server against a stub server**, with `FB.login` replaced by one
+that posts Meta's message and returns a code (the real flow cannot run locally):
+`loginOptions("111")` reached `FB.login`; the POST carried `{code, wabaId, phoneNumberId}`
+and nothing else; a 502 with the contacts step failed showed "Connected, with a step to
+finish.", the step's error and Try again, the number id with Copy, and the
+`META_PHONE_NUMBER_ID` line; Try again posted `{retry: "contacts"}` and the step turned green;
+Copy put the id on the clipboard. **It found two faults, fixed here.** Nothing told a screen
+reader the answer: the status region beside the button went from "Connecting…" to empty,
+and the result arrived outside any live region. And a Try again that succeeds unmounts
+itself, which dropped keyboard focus to `<body>`. Now one rule, `resultHeadline`, draws the
+heading and fills a hidden `role="status"` (`retryAnnouncement` adds how the retried step
+went, Copy says "Number id copied."), and when the control holding focus has gone, focus
+moves to the heading (measured: after the first answer, and after an Enter on Try again).
+"Connect again" is disabled while a retry runs, so a retry's answer is always merged into
+the result it belongs to.
+
+Tests: the onboarding handler (the gate in the shared `describe.each` for GET and POST, the
+admin check with extras, denies and `enforceRoles` off, the GET and its 503, the 400s, the
+call order with the link before the syncs, the token in no response or write, a failed
+exchange, link or subscribe, one failed sync not stopping the other, a reconnect to another
+number, `envNumber`, each retry), `wa-config`'s new keys and boolean, the CSP pair, and
+`tests/wa-connect.test.js` (23: the login options, every message case, the steps against the
+server's `RETRYABLE`, the headline and announcements, the page's wiring and imports,
+`connectionLines`, the Settings section and App's prop). **Cannot be verified before a
+deployment** (the rehearsal, §3b): Meta's real popup and its messages, the CSP against the
+real SDK, the `extras` shape (to confirm with the App Dashboard's Embedded Signup Builder),
+and whether `META_WA_TOKEN` may retry a sync on a converted account.
+
+### Phase 9 — the simulator's coexistence events
+
+The sandbox's WhatsApp simulator can now play the Business app on the restaurant phone, so
+every coexistence surface can be seen without Meta. A new section in the panel, "WhatsApp
+Business app (coexistence)", has eleven buttons: save or remove a contact, reply from the
+phone, the customer edits or deletes their last message, import chat history, the photo for
+the imported chat, and connect (simulated) / disconnect / reconnect / forget. The first five
+act on the conversation picked under "Reply as customer".
+
+**One description of each event, two ways to store it.** `src/lib/wa-sim-coexist.js` (new,
+pure, shared with the server) builds each event as Meta's webhook `value`. In **backend
+mode** the panel POSTs `{ event, … }` to `/api/wa-sim-inbound`, and `api/_lib/sim-events.js`
+(new) hands the value to the handler the real webhook uses (`handleStateSync`,
+`handleEchoes`, `applyMessageChange`, `handleHistory`, `handleAccountUpdate`), so a simulated
+event is stored exactly as Meta's would be. A body with an `event` is never read as a
+customer message. In **client mode** `simulateCoexist` (`src/lib/wa-sim.js`) stores the four
+the browser can write (a contact, a phone reply, an edit or delete, the history) through the
+same pure planners and the hook's savers. Two planners moved out of
+`api/_lib/coexist-core.js` into `src/lib/wa-coexist.js` for that: `threadPlan` (what one
+imported thread stores) and `changeLine` (a conversation's line after an edit or delete).
+The browser has no write on `waLink` and never writes a message's media, so the photo and
+the connection are backend-only. The panel disables them in client mode and the rule says
+so: `simEventRefusal`, one table (`SIM_EVENTS`) asked by both halves.
+
+**A real connection is left alone.** The sandbox runs on DEV Firebase, which is where the
+rehearsal's real connection will be recorded. Any event that writes `waLink` (contacts and
+history stamp it too) is refused with 409 while `waLink` holds a connection the simulator did
+not make (`simMayTouchLink`: no link, a link with no ids, or `sim: true`). A simulated
+connection is `sim: true` and names a WABA in a range no real id is in. Settings says
+"Simulated by the sandbox's WhatsApp simulator: nothing at Meta is connected." under its
+first line. "Forget" removes it in a transaction that asks `sim === true` of what is stored
+(`removeSimWaLink`). A real onboarding over a simulated link clears `sim`, and the onboarding
+retry refuses a simulated link ("there is nothing at Meta to try again"). Disconnect and
+reconnect need a simulated connection first.
+
+**The history import** brings two chats under fixed ids, so a second import stores nothing
+(the server skips what is stored; client mode, which cannot read an unopened thread, leaves
+a chat that is already there and says so). One chat is from this week and stays in the
+Inbox, the other is forty days old and goes straight to Archived. The recent one holds a
+restaurant reply read on the phone and a photo placeholder, which "Photo for the imported
+chat" fills (the later `history` change Meta sends with `messages[]`). Client mode reads a
+message with `simContent`, since the browser cannot import `inboundContent`. A test holds
+the two to one answer for every message the events build.
+
+**Checked live on the dev server, client mode, DEV Firebase.** Import: "6 messages". The
+recent chat was in the Inbox, read, with the restaurant's reply tagged "phone" and the
+"Photo or file — open WhatsApp on the phone to see it" line. The old chat was in Archived,
+dated Sun 06.09. A second press answered "Both chats are here already". Edit: the bubble's
+meta line read "edited". Reply from the phone: tagged "phone", and the row read "just now"
+with it as its line. Delete: "Message deleted by the customer", italic and muted, with the
+"edited" mark gone. Phase 6's mute at 375px: "Not a customer" archived it (Archived 3 → 4),
+the row carried the mute mark, the open chat a "Not a customer" chip with Re-check · Customer
+again · Delete on one row, and "Customer again" sent it back (4 → 3). **Save as contact was
+refused: `PERMISSION_DENIED`.** DEV's published rules do not have the `waContacts/$phoneKey`
+grant yet (the rules ship in phase 10 and need publishing); the panel shows the refusal in
+its failure line. Backend mode and the connection events cannot run here (the local harness
+has no database credentials), so they are covered by the handler tests and checked on the
+sandbox after merge.
+
+**Found while checking, not yet fixed: a bubble's time has no day.** `MessageBubble` writes
+`formatClockTime(ts)` alone, which was harmless while a thread held a day or two. An
+imported history puts months of messages in one thread with nothing saying which day each
+is from: the two-day-old messages read "00:47". The fix is a decision for Patryk (a date in
+the meta line of a message not from today, or day separators in the thread).
+
+(Fixed in the follow-up below: day separators, Patryk's pick.)
+
+Also: the panel's nine section headings were nine copies of one style and are one
+`SECTION_HEAD` now. Adding a tenth had tipped `tests/style-check.test.js`' weight ratchet to
+29.9%, so the ratio moved by de-duplication, not by demoting anything.
+
+Tests: `tests/wa-sim-coexist.test.js` (new, 16: the refusal table, the builders, the two
+lifted planners, client mode through recorded savers, backend mode through a mocked post),
+the events against the in-memory database in `tests/api-handlers.test.js` (each event, the
+real link left alone, idempotent history, which a mutant ignoring stored keys fails, and the
+agreement test), the onboarding's `sim` handling, the Settings line, and
+`tests/wa-sim-not-in-prod.test.js`: only the stubbed `wa-sim.js` imports the new module, and
+its marker `wamid-SIMHIST` is in no built chunk.
+
+### Phase 10 — the privacy notice, and the docs
+
+**`/privacy`, in both languages.** Two more things it keeps: the WhatsApp messages exchanged
+with the restaurant phone before the connection, going back up to 180 days, and, for a number
+saved in the phone's contacts, the name it is saved under (kept for as long as the phone keeps
+it). The retention sentence changed from "We delete each WhatsApp message automatically 12
+months after it was sent" to "We keep each WhatsApp message for **up to** 12 months, then delete
+it automatically": the prune's period is a setting an admin can shorten, and "up to" stays true
+for every shorter choice. The rights paragraph adds the contact on the restaurant phone to what
+a deletion request removes, which is what Delete customer's confirm now asks staff to do on the
+phone. `privacy.updated` is 2026-10-16. The text is the data controller's to approve.
+`tests/privacy.test.js` pins the new retention sentence in both languages (still held to
+`DEFAULT_RETENTION_DAYS` = 365) and the two new items; the EN/ES shape test still passes (two
+`<li>` added on each side). The Admin tab's retention hint follows: "The privacy notice says up
+to 12 months: change it there if you keep messages longer."
+
+**The rules tests were already done in phase 2** (the `waContacts` grant, a whole-node wipe
+refused, and no browser write to `waLink` at any depth); nothing in the rules changed here, so
+`npm run test:rules` was not re-run.
+
+**Docs.** Root `CLAUDE.md`: `waLink`'s no-grant shape under the Rule of law, the node in the
+inventory, `wa-connect/` in the file structure, and the second-page Gotchas row extended to
+`/wa-connect` (its own CSP, its own build). `api/CLAUDE.md`: the seventh production function
+and a coexistence section (the field dispatch, the number guard, the retry rule, the history
+size risk, `wa-onboard`, the simulator's events). `src/lib/CLAUDE.md`: `wa-coexist.js`,
+`wa-sim-coexist.js`, `wa-connect.js`, `conversationName` and `draftPrefill`'s new order.
+`src/hooks/CLAUDE.md`: the mute, `simSetContacts`, the `waLink` node and the new message and
+conversation fields. `src/CLAUDE.md`: the `wa-connect/` page. GLOSSARY: a coexistence table in
+the WhatsApp section (the connect page, the Business app connection section, the phone reply,
+edited, the deleted message, the not-saved hint, the conversation name, Not a customer, the
+disconnect banner, imported history, the unsupported message) and the simulator's events.
+ROADMAP: the coexistence entry is now the rehearsal and the restaurant's number, with the
+findings the rehearsal owns, and a new idea: MGT names written back to the phone through the
+Google People API, only if the iPhone's Contacts sync to a Google account. The connect page's
+entry file said it was "Vite's second input"; it is built by its own config, and says so.
+
+### Follow-up — the thread says which day (day separators)
+
+Phase 9's finding: a bubble says only its clock time (`formatClockTime`), so an imported
+history read "00:47" with nothing saying which day. Patryk chose day separators over a date in
+each bubble's meta line (2026-10-16), as WhatsApp on the phone draws them: before the first
+message of each local day, "Today", "Yesterday", else the house date ("Wed 14.10", with the
+year when it is not this year's). The bubbles keep their times.
+
+`threadItems(messages, today)` (`lib/whatsapp.js`) is the thread as drawn, and
+`threadDayLabel(day, today)` the words; a message with no usable `ts` joins the day before it
+rather than opening one. `ConversationView` maps `threadItems` where it mapped the messages,
+and draws each separator as DESIGN.md's TEXT treatment: no fill, `--text-secondary` at
+`T.small` semibold between two `--wa-divider` hairlines, which are `aria-hidden`, so a screen
+reader meets the day as a line of text before that day's messages. A separator takes the
+bubble entrance (`mgt-bubble-in`) when the message it introduces is the one animating in, so
+the first message of a new day arrives with its day. "Today" is read per render, like the
+rows' relative times: a thread left open across midnight keeps its labels until it next
+renders. The ink on the thread's surface is registered in `tests/contrast.test.js`
+(`--text-secondary` on `--wa-list-bg`, both themes).
+
+Live on DEV (1280 and 375, light and dark): the imported chat reads "Wed 14.10" over its first
+three messages, "Yesterday" over the deleted one, "Today" over the phone reply; the archived
+40-day-old chat reads "Sun 06.09". Tests (`tests/wa-bubble.test.js`): the labels (today,
+yesterday across a month and a year, another year carrying its year, nothing for an
+unreadable day), one separator per day and none within one, the undated message, and a source
+pin that the view draws through `threadItems`.
+
+### Follow-up — an archived thread's actions stay on a phone's screen
+
+Found while checking the separators at 375×812: an archived thread has four header actions
+(Re-check · Restore · Not a customer · Delete, since phase 6 added the third), and they ran
+40px past the screen, Delete at x 337–415 and cut off. Phase 6 made the group WRAP, but the
+box around it is a flex item that does not shrink (`flexShrink: 0`, basis `auto`), so its
+width was the buttons' one-line width and the group never had a narrower line to wrap in.
+`maxWidth: "100%"` on that box caps it at the header's width. Measured after: at 375 Delete
+wraps to a second row at 282–360, right-aligned; at 320 a muted thread's Customer again and
+Delete do the same; at the desktop width the row is one line and unchanged (594–672).
+`tests/wa-inbox-layout.test.js` pins the cap (it fails with the cap removed) and the wrapping
+group in both states.
+
+### Follow-up — the connection section opens for its own warning
+
+Found by `/find-animation-opportunities` over the version. Settings → WhatsApp's Business app
+connection section opened or stayed closed by `defaultOpen={state !== "connected" || mismatch}`,
+and `Collapsible` reads `defaultOpen` once, at mount. `mismatch` is wa-config's answer
+(`useIntegrationStatus`), which starts at `null` and arrives after the first render, so the case
+the warning exists for (a connected number while `META_PHONE_NUMBER_ID` still names another)
+always opened closed, reading "Connected", with its warning inside. The section now holds its
+own open state and opens itself on the rising edge of `attention` (not connected, or the
+mismatch), set during render the way TagListEditor's `seenLabel` is; nothing closes it, so a
+section the admin opened or closed stays that way.
+
+The warning also arrived ABOVE the Connect link and pushed it down by its own height. It now
+sits under the link, in a `Reveal` on `speed="move"` (it arrives without a press). Live on DEV
+at 1280, with `waLink` set to connected in memory and wa-config's answer held back 800 ms: the
+section opened at "Connected", closed, then opened by itself with the warning at y 545 under
+the link at 487; on a not-connected `waLink` the link did not move when the warning arrived
+(433 before and after). `tests/wa-connect.test.js` pins the open state, the rising edge and the
+order (both new tests fail on the previous source).
+
+### Follow-up — the disconnection banner eases on `move`
+
+Also from `/find-animation-opportunities`: the inbox's disconnection banner (phase 7) was a
+`Reveal` at its default speed, `--t-reveal` (520 ms), which DESIGN.md keeps for a disclosure
+opening under the finger that pressed it. The banner arrives from Meta's `account_update`,
+under nobody's finger, so it takes `speed="move"` (240 ms), as the notification strip's pane
+does. Live on DEV, with `waLink` set in memory: in, `grid-template-rows, opacity` over 0.24s,
+56 px reached at 263 ms; out, 0 px at 241 ms and unmounted at 308 ms.
+`tests/wa-inbox-layout.test.js` pins the speed with the always-mounted alert around it.
+
+### Follow-up — the connect page's note eases, and the page honours "Reduce animations"
+
+The third `/find-animation-opportunities` finding. `/wa-connect`'s error note (a sign-in that did
+not finish, a server refusal, a retry that could not run) mounted and unmounted in one frame,
+and the step results under it jumped by its height. It now takes the house shape for a form's
+refusal (WalkinForm, ReplyComposer): the `role="alert"` always mounted, the `InlineAlert`
+inside a `Reveal` on `speed="move"`, since it arrives once Meta's window or the server has
+answered rather than under the press. And the page ignored the per-device "Reduce
+animations": index.html's boot script stamps `data-motion="reduce"` before the app mounts,
+and this page has its own entry, so every press, hover and Reveal played on a device that had
+asked for none. `src/wa-connect/main.jsx` now stamps it from the same key
+(`mgt-reduce-motion`), before the React tree renders; the OS setting needed nothing, being a
+media query in the shared stylesheet.
+
+Live on `/wa-connect` on the dev server, with the config and the note set in memory (Meta's
+flow cannot run locally): the note in, 48 px at 246 ms; out, 0 px at 217 ms; with the flag
+stored, `<html data-motion="reduce">` and the note's and the Connect button's transitions at
+the kill-switch's 1e-06 s (the flag removed again after). `tests/wa-connect.test.js` pins the
+Reveal inside the alert and the stamp beside index.html's (both fail on the previous source).
+
+### Follow-up — a retry's refusal sits under the steps, and nothing moves at the press
+
+`/wa-connect` drew every refusal in one note above the step list, a retry's too: a Try again
+that could not run pushed the Try again buttons down as its note arrived, and the next press
+cleared it and pulled them back up under the finger. A retry's refusal is now its own note
+(`retryNote`), drawn under the step list in the same shape (an alert mounted with the result, a
+`Reveal` on `move`). Moving it was not enough, measured: cleared at the press, it folded under
+the list, and on a page scrolled to its end the browser clamped the scroll as the page got
+shorter, so the button moved down on screen by the fold (12 px before the quick local refusal
+reopened it). So no note changes at the press: the retry's own stays until the answer replaces
+it (a success clears it, a refusal replaces it), and the Connect note above is not a retry's
+to clear. A refusal carries a counter that keys its `InlineAlert`, so the same sentence twice is
+a new node and the alert speaks again.
+
+Live on `/wa-connect` on the dev server, a failed step set in memory and the real Try again
+pressed (the harness was not running, so the retry genuinely failed): from the press to the
+answer the scroll stayed at its end (97.5), both notes at 34 px, and the button within half a
+pixel (its own press dip); the second identical refusal was a new node. `tests/wa-connect.test.js`
+pins where it is drawn, that the press changes no note, and the key.
+
+### Follow-up — the connect page's buttons dip under a finger on iOS
+
+iOS Safari applies `:active` only when the document has a touch listener, which is why
+index.html's boot script adds an empty passive `touchstart` listener (v17.8.0). `/wa-connect`
+has its own entry and never added one, so none of its buttons (Connect, Try again, Copy,
+Back) dipped when pressed on an iPhone or iPad. `src/wa-connect/main.jsx` adds the same
+listener before the page renders. Checked: the built `wa-connect` bundle carries it and the
+page loads with no console error; the dip itself is iOS-only and can only be seen on a device.
+`tests/wa-connect.test.js` pins the line beside index.html's (it fails without it).
+
+### /code-review fixes
+
+The ship run's `/code-review` (max effort) raised thirteen findings. Each fix below is its own
+commit; what was not fixed, and why, closes this section.
+
+**A reply from MGT took a "Not a customer" thread out of Archived.** The mute's rule (it stays
+archived) was written out at the four places a reply un-archives a conversation, and only the
+phone's echo (`echoConvPatch`) checked `muted`. A reply sent from MGT (`wa-send`, `wa-media`,
+the client's mock send) set `archived: false` on a muted conversation, which then sat in
+Inbox, still muted, where the open chat offers no "Customer again". `replyUnarchives(conv)`
+(`src/lib/whatsapp.js`) is the one rule now and all four ask it. `tests/api-handlers.test.js`
+sends to a muted, archived conversation through both endpoints and reads the four files for
+the call; with `wa-send`'s old test put back, both fail.
+
+**A failed history progress write dropped the chunks after it.** `handleHistory` caught a
+failed THREAD and asked for a resend, but its `waLink.history` writes (each chunk's progress,
+a declined share) were outside any `try`. One that threw ended the change: the chunks after it
+in the same delivery were never read, and because the threads before it were counted, the
+webhook answered 200 and Meta never sent them again. History is sent once, so those chats were
+lost. Each record is now its own `try`: a failure is counted, asks for the resend and lets the
+rest of the change run, and the resend (keyed) writes only what did not land.
+`tests/api-handlers.test.js` fails every progress write in a two-chunk delivery (500, both
+threads imported, the resend records the progress and stores nothing twice; it fails against
+the old handler) and pins a declined share that cannot be recorded to a 500.
+
+**A history photo that came before its chat had no conversation.** A `history` change's own
+`messages[]` carries the media of a photo or file imported as a placeholder. When it came
+before its thread, `attachHistoryMedia` stored the message alone, and nothing lists or prunes a
+message without a conversation: the inbox and the nightly prune both walk `conversations`. The
+thread's import made the row when it came; when it never came (a chunk lost, a share stopped
+part way), the photo stayed for good, past the retention the privacy notice states. It now
+writes the conversation first, the way the thread's import would (`historyConvPatch`). That
+alone would have moved a rule: a photo over a week old archived the conversation it created,
+and the thread arriving with a recent message only moved its line, so a recent chat stayed in
+Archived. `historyConvPatch` now decides again when an import moves the line from outside the
+week to inside it, unless the conversation is muted or was archived inside the week (by a
+person). `tests/api-handlers.test.js`: the conversation after the photo alone; an old photo and
+then a thread with a recent message, which ends un-archived; and the re-decision's four cases.
+Each half fails with its own change reverted.
+
+**Connecting the same number again kept the last import's record.** The onboarding's history
+step wrote `requestId` and `requestedAt` into `waLink.history` and left the rest: a declined
+share, a finished import's `doneAt` and 100%. Settings reads `declined` first, so a number
+connected again after a disconnection said "declined to share" (or "imported on …") for an
+import that had not begun, and `historyProgress`, which only moves forward, kept 100%.
+`historyRequested(cur, requestId, requestedAt)` (`src/lib/wa-coexist.js`) is the record after a
+new request, written in a transaction: what an earlier request left is dropped, and what this
+request's own webhooks already wrote is kept (they can land before the request's answer; each
+stamps `at`, and `requestedAt` is taken before the request goes). A failed request writes
+nothing, so the last import's record survives a refused retry. The contacts' `firstAt` stays,
+being a fact about the phone's address book. Tests: the same number connected over a declined,
+finished record (fails with the old write), and the function's three cases.
+
+**Delete customer's WhatsApp erase depended on rules a database might not have yet.**
+`eraseConversation` deleted the conversation, its messages and (new here) the phone's contact
+for the number in ONE multi-path update. RTDB applies such an update whole or not at all, and
+the deploy order is the app first, the rules second: until a database has this version's rules,
+`waContacts` has no grant there, so the whole erase was refused, quietly (its `.catch` logs),
+and Delete customer left the guest's chats behind. The contact is its own write now:
+`conversationDeletePatch(keys)` lost its `{contacts}` option and `contactDeletePatch(keys)`
+(`src/lib/whatsapp.js`) is a second `update()` beside it, so the conversation and messages are
+erased whatever the contact's write meets. `tests/activity.test.js` reads the two writes in the
+eraser (it fails with them merged into one) and pins the two patches.
+
+**A reply typed on the phone was stored uncapped.** Every stored message is cut to
+`WA_MAX_TEXT_LEN` (4,000): an inbound one in `processInbound`, an imported one in
+`historyRecord`, an edit in `editPatch`. `echoRecord` took `inboundContent`'s text as it came,
+and the Business app takes far longer messages, all of which went into the thread every device
+downloads. It slices like `historyRecord` now; the simulator's client mode asks the same
+function. `tests/api-handlers.test.js` stores a phone reply 500 characters over the cap (fails
+uncapped).
+
+**An admin was told "invalid token" when the server could not read their role.**
+`assertWaAdmin` read `/roles/<uid>` with nothing around it, so a database that did not answer
+threw an error with no code, `staffAuthError`'s default mapped it to 401 "invalid token", and
+`/wa-connect` showed that to an admin whose sign-in was fine; signing in again cannot fix it. A
+failed read is now `ROLES_UNREADABLE`, a 503 that says to try again (the class `staffAuthError`
+already keeps for faults that are the server's, not the account's). `tests/api-handlers.test.js`
+fails the role read for both methods: 503 with that sentence, no Meta call, nothing written
+(it fails against the old check).
+
+**The Rule of law contradicted the node this version added.** The root CLAUDE.md said "The
+grant requirement has no exemptions" and "Nothing else skips a CAS" two lines above the
+paragraph that gives `waLink` neither, on purpose. A closed list that is wrong about its newest
+member is how the next server-only node gets a browser grant "to satisfy the rule". Both
+sentences now name the exemption: a node only the server writes takes no grant, and so no CAS,
+since no browser write exists for a rule to bind.
+
+**The webhook's counters were typed out twice.** `api/wa-inbound.js` and the simulator's
+`_lib/sim-events.js` each wrote the ten-counter results record by hand, and the retry rule sums
+every key but `errors`: a counter a handler bumps and one copy lacks reads NaN, the sum is then
+never 0, and a delivery that failed everywhere is answered 200 and never resent. Today's two
+copies agree; nothing kept them so. `freshResults()` in `_lib/coexist-core.js` is the one record
+both start from, and `tests/api-handlers.test.js` reads every `results.<name>++` under `api/`
+(38 of them) against its keys and fails a file but that one typing the record out (it fails
+with the old `wa-inbound.js`).
+
+**The mute icon's comment promised what nothing held.** `MuteIcon` said it draws "the bell's own
+path, so the two cannot drift", over two path strings copied by hand from `BellIcon`: a redrawn
+bell would have left the struck one behind. A shared constant would be a non-component export
+from a component file, so the copies stay, the comment says they are copies, and
+`tests/wa-bubble.test.js` renders both icons and requires the same two paths plus one slash
+(it fails with a bell path changed in either).
+
+**`wa-onboard.js` added a sixth copy of the body reader.** `readJsonBody` was a private function
+in six handlers (two spellings of one function: a comment and a line break apart) and the
+two-line bearer parse sat in eight, so a change to how a body is read would have reached one
+copy, the shape `staffAuthError` was extracted to end. The review's own plan was a ROADMAP line;
+it is fixed here instead, since the copies are behaviourally identical and every handler that
+reads one is run by `tests/api-handlers.test.js`. `api/_lib/request.js` holds
+`readJsonBody(req)` and `bearerToken(req)`, the eight handlers import them (253 handler tests
+pass unchanged), and three new tests read a parsed, a string and a streamed body, the token
+rule, and fail a handler under `api/` that defines its own reader or parses `"Bearer "` itself
+(it fails with the old `wa-onboard.js`).
+
+**Not fixed: two findings that wait on the rehearsal's measurements.** A phone reply that is not
+stored yet (every new one) makes `findMessageByWamid` read the whole conversation, looking for a
+message MGT sent under that wamid. Kept: if an echo can ever name a message MGT sent, that scan
+is what stops it being stored twice, and only Meta's real webhooks can say. A history thread is
+imported by reading its conversation and then writing it, so a customer who writes inside that
+one round trip (tens of milliseconds per thread, once, at onboarding) has the message marked
+read and, on an old thread, archived. A transaction closes it at about one more round trip per
+thread, on the path nearest Vercel's time limit, which nobody has measured yet. Both are in
+ROADMAP's coexistence entry as findings the rehearsal owns, with what each answer decides.
+
+**CI's lint found two errors the local gate could not see.** The PR's `verify` job failed on
+`no-useless-assignment` (in ESLint 10's recommended set) at `api/wa-config.js` (`let link =
+null` before a `try` that assigns it or returns) and `src/lib/wa-connect.js` (`let host = ""`, the
+same shape): initial values nothing ever reads. Both now start unassigned; behaviour is unchanged.
+**Why every local gate in this version said "0 errors":** this worktree's `node_modules` still held
+ESLint 9.39.4 and Vitest 4.1.10, while the lockfile has pinned ESLint 10.12.0 and Vitest 5.0.3
+since v18.4.5, and CI installs the lockfile (`npm ci`). After `npm ci` here, the local lint gives
+CI's exact answer (65 problems, 2 errors) before the fix. The bundle moved with it: the main
+entry read 157.05 kB gz on the stale install and reads 123.08 kB gz on the lockfile's (origin/main
+on the same install: 121.71, so this version adds 1.37 kB gz). A gate run on a stale install
+measures the install, not the branch: compare `npx eslint --version` with `package.json` when a
+worktree's `node_modules` predates a dependency bump. Final gate on the lockfile's install: 3,570
+tests (Vitest 5), lint 0 errors and 63 warnings, style OK, `test:rules` 311.
+
+### Follow-up — the ship gate measures what CI measures
+
+The `mgt-workflow` skill's gate block had two defects this version exposed. **`npm run build`
+is two builds since phase 8** (`vite build && vite build -c vite.wa-connect.config.js`), so its
+`tail -3` reported the `/wa-connect` page's bundle as the main bundle, and on a failed build it
+printed three lines of Rolldown's stack trace and no error at all, in either build. **And it ran
+on whatever `node_modules` held**, which is how the CI failure above got past it. The block now
+starts with `npm ls --depth=0` (silent when the install satisfies `package.json`; a STOP line
+asking for `npm ci` when it does not), greps the build's output for the main entry
+(`dist/assets/index-*.js`), and on a failed build prints its last 15 lines with the stack frames
+and colour codes removed: the message, the file and line, the code frame. Verified against a
+passing tree (four lines, exit 0, in zsh and in bash), an install reporting ESLint 9.39.4 (the
+STOP line, exit 1, nothing else run), a syntax error in each build (`src/lib/whatsapp.js` for the
+app's, `src/lib/wa-connect.js` for the page's: the excerpt names the file and line, exit 1) and a
+lint error (`✖ 64 problems (1 error, 63 warnings)`, exit 1, style not run). Stage timings
+re-measured: 0.2 · 0.5 · 4.2 · 7.7 · 0.4 s. `npm ls` cannot see a drift inside a range, so the
+skill also says to run `npm ci` after any pull that changes the lockfile.
+
+### Follow-up — the webhook records what the rehearsal measures
+
+Two of the rehearsal's questions had no instrument. **Does an echo ever name a message MGT
+sent?** `handleEchoes` counted that case in `skipped`, beside a plain redelivery, and logged
+nothing; the answer decides whether `handleEchoes` reads the whole thread for each new phone reply
+(corrected by the `/code-review` below). **How big and
+how slow is a history delivery?** Nothing logged a delivery's size, time or thread count, which
+the 4.5 MB request cap and the function's time limit are asked about.
+
+An echo found under ANOTHER key (a message MGT sent: `wa-send`, `wa-media`, the auto-reply, each
+stored under its own id with the wamid as `providerMsgId`) is now counted `mgtEchoes`, a new
+`freshResults()` key; one found under its own key is still `skipped`. Every delivery that handed a
+change to a coexistence handler logs one line (`deliveryLine`, `_lib/coexist-core.js`):
+
+    [wa-inbound] coexistence delivery status=200 bytes=48211 ms=930 fields=history:1 threads=3 messages=41 counts=history:41
+
+`ms` runs from the request's arrival to the answer's decision; `threads` and `messages` are the
+payload's own counts, where `counts` is what was stored. **The line alone could not answer a
+week-long rehearsal**: Vercel keeps a Hobby project's runtime logs for one hour (its runtime-logs
+page, read on 2026-10-17), so an echo of MGT's own on day 4, or a history chunk that arrived while
+nobody was watching, would leave no trace. So a history delivery, or a delivery with an echo of
+MGT's own, is also recorded on `waLink/measured` (`measuredAfter`, one transaction):
+`historyDeliveries`, `historyFailed` (answered 500), `historyLargest` and `historySlowest`
+(`{bytes, ms, threads, messages, at}` of the largest and of the slowest; a tie keeps the first),
+`mgtEchoes` and `mgtEchoAt`. It adds up for as long as the link lasts, since the cap and the time
+limit are asked about the maximum, and no screen reads it: the Firebase console does. This goes
+past the task's brief, which asked for a log line; the record is what makes the log's two answers
+outlast the hour. **Counts only**: the line's shape is held to a strict pattern (numbers and this
+code's own names) and every leaf of the record to a number, and one test sends a contact, a phone
+reply, an echo of MGT's own and a history chunk carrying a name, numbers and text, and finds none
+of them in either. A record that cannot be written is logged and changes nothing about the
+answer: a 500 would have Meta send the delivery again for a second measurement. The simulator's
+events call the handlers directly, so neither the line nor the record fires there.
+
+Eight new tests, and the redelivered-echo and empty-payload tests changed (`skipped: 1,
+mgtEchoes: 1`; `mgtEchoes: 0`). Nine of the ten fail on the code before this commit; the tenth
+(a delivery of messages alone, and a change for another number, are not measured) holds there
+too, as an absence should. Four breakages were
+each caught by a test: every echo found counted as MGT's own, the payload put in the line, a failed
+record thrown out of the webhook, and a 500 never counted as failed. Gate: main entry 422.34 kB /
+123.08 kB gz (unchanged, server code only), 3,578 tests, lint 0 errors and 63 warnings, style OK.
+
+### `/code-review` of the three follow-ups
+
+The review ran over `1420c664..49582b65` (the lint fix, the gate block, the instrument): five
+findings, two confirmed. Each fix below is its own commit.
+
+**A history delivery the time limit ends left no trace.** `waLink/measured` was written only by
+`reportDelivery`, at the end of the handler, so an invocation Vercel ends for running too long
+never reached it. Meta then resends the chunk, the resend skips the threads that landed and
+answers in time, and the record showed one delivery and a `historySlowest` under the limit: the
+answer "within the limit" for a chunk that hit it. A history delivery is now counted as it
+begins (`historyBegun`, `beganAfter` / `recordBegun`): the webhook starts that transaction as it
+hands on the delivery's first history change, does not wait for it, and `reportDelivery` awaits
+it before the end's record. `historyBegun` above `historyDeliveries` is a delivery that never
+answered. The record stays BEFORE the answer for this reason (a finding asked to move it after,
+to answer Meta a round trip sooner; written after the answer, it would be lost with an
+invocation ended at that point and make an answered delivery read as one that never answered).
+Two new assertions and one new test (a thread read that never returns, as on an invocation the
+limit ends: `{historyBegun: 1}` and no answer); with the start's record removed, four tests fail.
+
+**A chunk the 4.5 MB cap refuses could not show at all.** Vercel answers a body over the cap with
+413 before the function runs, so `historyLargest` only ever held a delivery that fit, the refused
+chunk's threads never imported, and its 413s sat in Vercel's logs for one hour: the checklist's
+"did any history delivery hit the cap" had no answer that lasts. The record now lists the chunks
+that landed, per phase and with how many times (`historyChunks: {p0: {c1: 1, c2: 2}}`, from each
+chunk's `metadata.phase` and `chunk_order`, through `chunkKeys`: whole numbers in range only, keys
+prefixed so the database keeps them an object). A number missing between two that came is a
+chunk that never landed. A delivery answered 500 lists nothing, since Meta sends it again and a
+chunk that failed every time would otherwise look landed; a declined share carries no threads and
+is not a chunk. Two new tests and four assertions; listing a 500's chunks fails two tests, and
+listing a declined share fails one.
+
+**The echo count's question was stated too wide.** The instrument's comment and `api/CLAUDE.md`
+said that a zero `mgtEchoes` lets `findMessageByWamid`'s whole-thread scan go. That scan also
+finds the original of an echoed EDIT or DELETE of a message MGT sent (`applyMessageChange`),
+which `mgtEchoes` never counts (it is an `edits`): removed on the strength of a zero, an edit
+made on the phone to a reply MGT sent would be stored as a second bubble, and a delete skipped
+with its words left in MGT. Whether the Business app can edit a message the API sent is not
+known. ROADMAP already scoped the decision right (`handleEchoes`' look-up of a new phone reply);
+the two comments and this entry's sentence now say the same. No code changed.
+
+**Whether the record outlasts a change of number was undecided.** Connecting another number clears
+that number's sync records (`contacts`, `history`, `phone`, `subscribedAt`, in `wa-onboard.js`)
+and left `measured`, which the reset list predates, with nothing saying whether it should. It
+stays, and both places say why: it records what Meta sends, which another number does not change,
+and cleared there it would take the rehearsal's answers with it at the next connection. The
+onboarding test for a different number now seeds a record and expects it back unchanged; with
+`measured` added to the reset list, that test fails.

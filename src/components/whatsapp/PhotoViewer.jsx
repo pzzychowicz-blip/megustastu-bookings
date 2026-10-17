@@ -24,7 +24,8 @@ export function PhotoViewer({ photo, onClose }) {
   const msg = photo.msg;
   const m = useWaMedia(photo.phoneKey, msg, true);
   const caption = msg.text && msg.text !== mediaLabel(msg.media) ? msg.text : "";
-  const from = msg.direction === "in" ? "From the customer" : "Sent";
+  // v18.9.0: a photo staff sent from the WhatsApp Business app says so.
+  const from = msg.direction === "in" ? "From the customer" : msg.source === "phone" ? "Sent from the phone" : "Sent";
   // `alignItems: center`: a flex row stretches its items to the tallest, so one
   // control taller than 44 made the other as tall too.
   const footer = (

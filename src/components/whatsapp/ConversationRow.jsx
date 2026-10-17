@@ -4,22 +4,20 @@
 // relative time, and the last-message snippet. Archived rows render dimmed.
 
 import { useRef, useEffect } from "react";
-import { matchCustomerByPhone, formatPhone, formatRelativeTime, isParsing, describeConversation } from "../../lib/whatsapp";
+import { conversationName, formatRelativeTime, isParsing, describeConversation } from "../../lib/whatsapp";
 import { R, T, FW, IC } from "../../lib/constants";
 import { OutlineChip } from "../atoms";
-import { WarnIcon, PencilIcon, DraftIcon, ArchiveIcon } from "./WaIcons";
+import { WarnIcon, PencilIcon, DraftIcon, ArchiveIcon, MuteIcon } from "./WaIcons";
 import { CheckIcon } from "../Icons";
 
-export function ConversationRow({ conv, active, onClick, bookings, flipId, selectMode, checked, roving = false, departing = false }) {
-  const match = matchCustomerByPhone(conv.phoneKey, bookings);
+export function ConversationRow({ conv, active, onClick, bookings, contacts, flipId, selectMode, checked, roving = false, departing = false }) {
   // v18.2.0 (the design critique, W4): an unknown sender is named by the
   // FORMATTED number — this row showed the raw key ("+447811223344") while the
   // open conversation added "+44 7811223344" beside the same raw key. And a
   // match whose booking has no name (a walk-in) falls through to the number
   // rather than rendering an empty title, describeConversation's own rule.
-  const named = !!(match && match.name);
-  const displayName = named ? match.name : formatPhone(conv.phone || conv.phoneKey);
-  const phoneLine = named ? formatPhone(conv.phone || conv.phoneKey) : null;
+  // v18.9.0: the name is `conversationName`'s — the phone's contact first.
+  const { title: displayName, phoneLine } = conversationName(conv, bookings, contacts);
   const hasDraft = conv.draftStatus === "parsed" && conv.draftData;
   const hasAccepted = conv.draftStatus === "accepted";
   const intent = (conv.draftData && conv.draftData.intent) || null;
@@ -81,7 +79,7 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
          also firing the row — the keyboard twin of the pointer-events guard. */
       role="listitem"
       tabIndex={departing ? -1 : (roving ? 0 : -1)}
-      aria-label={describeConversation(conv, { bookings })}
+      aria-label={describeConversation(conv, { bookings, contacts })}
       aria-current={active && !selectMode ? "true" : undefined}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return;
@@ -134,7 +132,12 @@ export function ConversationRow({ conv, active, onClick, bookings, flipId, selec
             : <span style={{ width: 8, height: 8, borderRadius: "50%", background: "transparent", border: "1px solid var(--wa-bubble-in-border)", flexShrink: 0, boxSizing: "border-box" }} />}
           <span style={{ fontSize: T.lead, fontWeight: conv.unread ? FW.bold : FW.semi, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
           {tagEl}
-          {conv.archived ? <span title="Archived" style={{ marginLeft: 4, color: "var(--text-muted)", display: "inline-flex", alignItems: "center" }}><ArchiveIcon size={IC.inline} /></span> : null}
+          {/* v18.9.0: a muted ("Not a customer") thread wears the struck bell
+              in the archive mark's place: it is archived too, and the mute is
+              the thing worth knowing before opening it. */}
+          {conv.muted
+            ? <span title="Not a customer" style={{ marginLeft: 4, color: "var(--text-muted)", display: "inline-flex", alignItems: "center" }}><MuteIcon size={IC.inline} /></span>
+            : conv.archived ? <span title="Archived" style={{ marginLeft: 4, color: "var(--text-muted)", display: "inline-flex", alignItems: "center" }}><ArchiveIcon size={IC.inline} /></span> : null}
         </div>
         <span style={{ fontSize: T.small, color: "var(--text-muted)", flexShrink: 0, fontWeight: FW.regular }}>{formatRelativeTime(conv.lastMessageAt)}</span>
       </div>

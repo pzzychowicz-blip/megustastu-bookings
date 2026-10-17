@@ -11,7 +11,14 @@
 // can inject a simulated message.
 //
 //   POST { phone, text, name?, agoMs?, media? }
+//   POST { event, phone?, name?, text?, remove? }   (v18.9.0, coexistence)
 //   Authorization: Bearer <Firebase ID token>   (auth.currentUser.getIdToken())
+//
+// v18.9.0: `event` is one of the WhatsApp Business app's coexistence events
+// (a contact saved on the phone, a phone reply, a customer's edit or delete,
+// the chat history, the connection going and coming back), built as Meta's
+// webhook and stored by the real webhook's handlers: _lib/sim-events.js. A
+// body with an `event` is never a customer message.
 //
 // v18.8.0 phase 6: `media` is "image", "audio" or "document" — a KIND, never an
 // id. The server mints the MOCK id (src/lib/wa-mock-media.js), and `text` is
@@ -26,9 +33,11 @@
 // (scripts/wa-backend-dev.mjs) for DEV testing with a real DEV id token.
 
 import { verifyStaffToken, staffAuthError } from "./_lib/rtdb.js";
+import { readJsonBody, bearerToken } from "./_lib/request.js";
 import { simEnabled } from "./_lib/env.js";
 import { injectSimInbound } from "./_lib/inbound-core.js";
 import { SIM_MEDIA } from "../src/lib/wa-mock-media.js";
+import { runSimEvent } from "./_lib/sim-events.js";
 
 // Run `promise` after the response is sent (same hook as api/wa-inbound): on
 // Vercel via the request-context waitUntil, on the local harness the long-lived
@@ -43,19 +52,6 @@ function scheduleAfterResponse(promise) {
   } catch { /* no Vercel context — local harness */ }
 }
 
-function readJsonBody(req) {
-  if (req.body !== undefined && req.body !== null) {
-    if (typeof req.body === "string") { try { return Promise.resolve(JSON.parse(req.body)); } catch { return Promise.resolve(null); } }
-    return Promise.resolve(req.body);
-  }
-  return new Promise((resolve) => {
-    const chunks = [];
-    req.on("data", (c) => chunks.push(c));
-    req.on("end", () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch { resolve(null); } });
-    req.on("error", () => resolve(null));
-  });
-}
-
 export default async function handler(req, res) {
   // v18.0.0 phase 5b — FIRST statement, fail-closed. See simEnabled() in
   // _lib/env.js for why it is first and why absent means off.
@@ -63,11 +59,11 @@ export default async function handler(req, res) {
   if (req.method !== "POST") { res.status(405).json({ error: "method not allowed" }); return; }
 
   // ── Staff auth (NOT Meta HMAC — the sim is staff-only) ──────────────────────
-  const authHeader = req.headers["authorization"] || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const idToken = bearerToken(req);
   if (!idToken) { res.status(401).json({ error: "missing token" }); return; }
+  let decoded;
   try {
-    await verifyStaffToken(idToken);
+    decoded = await verifyStaffToken(idToken);
   } catch (e) {
     const f = staffAuthError(e);
     res.status(f.status).json({ error: f.error });
@@ -75,6 +71,16 @@ export default async function handler(req, res) {
   }
 
   const body = await readJsonBody(req);
+  if (body && body.event !== undefined) {
+    try {
+      const r = await runSimEvent(body, decoded);
+      res.status(r.status).json(r.data);
+    } catch (e) {
+      console.error("[wa-sim-inbound] event failed:", e && e.message);
+      res.status(500).json({ error: "internal error: " + (e && e.message) });
+    }
+    return;
+  }
   const phone = body && body.phone;
   const text = body && typeof body.text === "string" ? body.text : "";
   const media = body && body.media != null ? body.media : null;

@@ -25,13 +25,14 @@ import { useState, useEffect, useRef } from "react";
 import { useWinW } from "../../hooks/useWinW";
 import { useWinH } from "../../hooks/useWinH";
 import { useShortViewport } from "../../hooks/useShortViewport";
-import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, matchCustomerByPhone, intentBannerVisible } from "../../lib/whatsapp";
+import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, conversationSearchNames, intentBannerVisible } from "../../lib/whatsapp";
 import { ConversationList } from "./ConversationList";
 import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
 import { SelectIcon, FlaskIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
 import { CloseIcon, EditIcon, TrashIcon } from "../Icons";
-import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Reveal, MODAL_TITLE_ATTR } from "../atoms";
+import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Reveal, InlineAlert, MODAL_TITLE_ATTR } from "../atoms";
+import { disconnectSentence } from "../../lib/wa-coexist";
 import { R, T, FW, M, IC, H } from "../../lib/constants";
 // v18.2.0 /code-review: "3 selected", "Delete 3 conversations?" keep their count and word together.
 import { countLabel } from "../../lib/booking-logic";
@@ -52,6 +53,9 @@ const LIST_W = 320;
 const INBOX_PANEL = { maxWidth: 1200, height: "min(900px, 90dvh)", background: "var(--wa-panel-bg)", blur: 16 };
 
 function isActionable(c) {
+  // v18.9.0: "Not a customer" needs nothing from staff, a draft left from
+  // before the mute included.
+  if (c.muted) return false;
   const intent = c.draftData && c.draftData.intent;
   if (intent === "cancel" || intent === "modify") return intentBannerVisible(c);
   return !!(c.unread || c.draftStatus === "parsed");
@@ -102,6 +106,9 @@ const HEAD_TEXT_BTN = { display: "inline-flex", alignItems: "center", justifyCon
 
 export function InboxPanel({
   conversations, messages, templates, bookings, initialActiveKey,
+  // v18.9.0: the phone's synced contacts (`waContacts`) and the Business-app
+  // link (`waLink`), both from useWhatsApp.
+  contacts, waLink,
   // v18.8.0: `watchMessages(phoneKey)` from useWhatsApp — the open thread's
   // listener. `messages` holds only the watched conversations.
   watchMessages,
@@ -109,6 +116,8 @@ export function InboxPanel({
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, onRecheck, onOpenPhoto,
   onBulkArchive, onBulkUnarchive, onBulkDelete,
+  // v18.9.0: "Not a customer".
+  onMute,
   query, setQuery, needsAction, setNeedsAction,
   // v18.8.0 phase 8: the draft check's inputs, and the waitlist it can add to.
   liveBookings, tableBlocks, autoOptimizer, waitlist, onAddToWaitlist,
@@ -175,9 +184,10 @@ export function InboxPanel({
   function matchesFilters(c) {
     if (needsAction && !isActionable(c)) return false;
     if (!q) return true;
-    const m = matchCustomerByPhone(c.phoneKey, bookings);
-    const name = (m ? m.name : (c.phone || c.phoneKey)) || "";
-    return name.toLowerCase().includes(q)
+    // v18.9.0: every name the conversation has (the phone's contact, its
+    // booking, its WhatsApp profile), so a thread the contact now names is still
+    // found by the name on its booking.
+    return conversationSearchNames(c, bookings, contacts).some((n) => n.toLowerCase().includes(q))
       || String(c.phone || c.phoneKey || "").toLowerCase().includes(q)
       || String(c.lastMessageSnippet || "").toLowerCase().includes(q);
   }
@@ -436,7 +446,8 @@ export function InboxPanel({
   // ConversationView's `loaded`), `[]` once it is known to be empty.
   const activeMessages = activeConv ? messages[activeConv.phoneKey] : undefined;
   const kbFold = !!activeConv && typing === activeConv.phoneKey && short && !shown;
-  const unreadCount = conversations.filter((c) => c.unread && !c.archived).length;
+  const unreadCount = conversations.filter((c) => c.unread && !c.archived && !c.muted).length;
+  const linkDown = !!(waLink && waLink.status === "disconnected");
   const archivedCount = conversations.filter((c) => c.archived).length;
 
   const listEl = (
@@ -447,7 +458,7 @@ export function InboxPanel({
     <div inert={twoPane && kbFold} style={{ width: twoPane ? (kbFold ? 0 : LIST_W) : "100%", flexShrink: 0, borderRight: twoPane && !kbFold ? "1px solid var(--wa-divider)" : "none", background: "var(--wa-list-bg)", height: "100%", overflow: "hidden", display: twoPane || !activeKey ? "flex" : "none", flexDirection: "column", transition: twoPane ? "width " + M.shift : undefined }}>
       {/* keyed by tab → Inbox⇄Archived switch crossfades the list */}
       <div key={tab} className="mgt-fade-in" style={{ flex: 1, minHeight: 0, minWidth: twoPane ? LIST_W : 0, display: "flex", flexDirection: "column" }}>
-        <ConversationList conversations={filteredConvs} activeKey={activeKey} onSelect={setActiveKey} bookings={bookings} archivedView={tab === "archived"} emptyLabel={filtersActive ? "No matches." : undefined} selectMode={selectMode} selected={selected} onToggleSelect={toggleSelect} />
+        <ConversationList conversations={filteredConvs} activeKey={activeKey} onSelect={setActiveKey} bookings={bookings} contacts={contacts} archivedView={tab === "archived"} emptyLabel={filtersActive ? "No matches." : undefined} selectMode={selectMode} selected={selected} onToggleSelect={toggleSelect} />
       </div>
     </div>
   );
@@ -456,9 +467,11 @@ export function InboxPanel({
       <ConversationView
         conv={activeConv} messages={activeMessages} onBack={() => setActiveKey(null)}
         onSend={(t) => onSend(activeConv.phoneKey, t)} onSendMedia={onSendMedia ? (blob, meta) => onSendMedia(activeConv.phoneKey, blob, meta) : null} onAccept={(over) => onAccept(activeConv, over)} onDismiss={() => onDismiss(activeConv.phoneKey)}
-        templates={templates} bookings={bookings} showBack={!twoPane} phone={winW < 600} compact={compact}
+        templates={templates} bookings={bookings} contacts={contacts}
+        contactsSynced={!!(waLink && waLink.contacts && waLink.contacts.firstAt)}
+        showBack={!twoPane} phone={winW < 600} compact={compact}
         kbFold={kbFold} onUnfold={unfold}
-        onArchive={onArchive} onUnarchive={onUnarchive} onDelete={onDelete}
+        onArchive={onArchive} onUnarchive={onUnarchive} onDelete={onDelete} onMute={onMute}
         onCancelLinkedBooking={onCancelLinkedBooking} onOpenLinkedBooking={onOpenLinkedBooking}
         onDismissAcceptedBadge={onDismissAcceptedBadge} onMarkIntentHandled={onMarkIntentHandled}
         onResend={onResend ? (msgId) => onResend(activeConv.phoneKey, msgId) : undefined}
@@ -537,6 +550,21 @@ export function InboxPanel({
             <button onClick={() => setShowTpl(true)} title="Edit templates (T)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), HEAD_TEXT_BTN)}><EditIcon size={IC.inline} />Edit templates</button>
           </div>
           <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1, order: twoPane ? 0 : 1, marginLeft: twoPane ? 0 : "auto" })}><CloseIcon size={IC.chrome} /></button>
+        </div>
+        {/* v18.9.0: the WhatsApp Business app's connection is broken (Meta's
+            account_update, recorded on waLink by the server): every device's
+            inbox says so, and why, until it is connected again. Inside the
+            title bar's fold, so it makes room while a reply is typed; the
+            `role="alert"` is always mounted, outside the Reveal, so the
+            disconnection is announced when it happens. `speed="move"`: it
+            arrives from a webhook, under nobody's finger, and `--t-reveal`
+            is for a disclosure opened by a press (DESIGN.md). */}
+        <div role="alert">
+          <Reveal show={linkDown} speed="move">
+            <div style={{ padding: "8px 14px 0" }}>
+              <InlineAlert>{disconnectSentence(waLink && waLink.disconnect)}</InlineAlert>
+            </div>
+          </Reveal>
         </div>
         {/* Search + Needs-action filter toolbar — filters the list + ↑/↓ nav.
             Order (Patryk, 2026-07-16): Select, then Needs action, then the

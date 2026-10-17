@@ -438,10 +438,11 @@ describe("injectSimInbound does not pay for a message it dropped", () => {
   });
   it("which is the guard api/wa-inbound.js already had", () => {
     // v18.8.0: the flag is `willParse` (a caption is parsed too), still asked
-    // only on the branch that stored the message.
+    // only on the branch that stored the message. v18.9.0: and never for a
+    // muted ("Not a customer") conversation, which processInbound reports.
     const src = read("api/wa-inbound.js");
-    expect(src).toMatch(/if \(willParse\) parseJobs\.push/);
-    expect(src.indexOf("if (willParse) parseJobs.push")).toBeGreaterThan(src.indexOf("if (r.skipped) results.skipped++;"));
+    expect(src).toMatch(/if \(willParse && !r\.muted\) parseJobs\.push/);
+    expect(src.indexOf("if (willParse && !r.muted) parseJobs.push")).toBeGreaterThan(src.indexOf("if (r.skipped) results.skipped++;"));
   });
 });
 

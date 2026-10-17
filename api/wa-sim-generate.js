@@ -13,6 +13,7 @@
 //   → { generated, samples: [{ phone, text }] }
 
 import { verifyStaffToken, staffAuthError } from "./_lib/rtdb.js";
+import { readJsonBody, bearerToken } from "./_lib/request.js";
 import { simEnabled } from "./_lib/env.js";
 import { generateScenarioMessage } from "./_lib/gemini.js";
 import { injectSimInbound } from "./_lib/inbound-core.js";
@@ -24,19 +25,6 @@ function scheduleAfterResponse(promise) {
     const waitUntil = ctx && ctx.get && ctx.get() && ctx.get().waitUntil;
     if (typeof waitUntil === "function") waitUntil(promise);
   } catch { /* local harness — no Vercel context */ }
-}
-
-function readJsonBody(req) {
-  if (req.body !== undefined && req.body !== null) {
-    if (typeof req.body === "string") { try { return Promise.resolve(JSON.parse(req.body)); } catch { return Promise.resolve(null); } }
-    return Promise.resolve(req.body);
-  }
-  return new Promise((resolve) => {
-    const chunks = [];
-    req.on("data", (c) => chunks.push(c));
-    req.on("end", () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch { resolve(null); } });
-    req.on("error", () => resolve(null));
-  });
 }
 
 // A fresh Spanish mobile (+34 6XXXXXXXX) per generated scenario → a new
@@ -52,8 +40,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST") { res.status(405).json({ error: "method not allowed" }); return; }
 
   // ── Staff auth ──────────────────────────────────────────────────────────────
-  const authHeader = req.headers["authorization"] || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const idToken = bearerToken(req);
   if (!idToken) { res.status(401).json({ error: "missing token" }); return; }
   try {
     await verifyStaffToken(idToken);

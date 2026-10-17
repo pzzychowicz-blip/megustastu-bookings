@@ -5,18 +5,18 @@
 // is disabled when the 24h service window has expired.
 
 import { useState, useRef, useEffect } from "react";
-import { matchCustomerByPhone, regularChipLabel, formatPhone, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
+import { matchCustomerByPhone, regularChipLabel, conversationName, formatWindow, intentBannerVisible, isParsing, threadItems, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
 import { Reveal, mkSolidBtn, mkDangerBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
-import { RecheckIcon, ArchiveIcon, DraftIcon, RestoreIcon } from "./WaIcons";
+import { RecheckIcon, ArchiveIcon, DraftIcon, RestoreIcon, MuteIcon } from "./WaIcons";
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon, TrashIcon } from "../Icons";
 import { MessageBubble } from "./MessageBubble";
 import { DraftCard } from "./DraftCard";
 import { ReplyComposer } from "./ReplyComposer";
 import { LinkedBookingCard } from "./LinkedBookingCard";
 import { IntentBanner } from "./IntentBanner";
-import { R, T, FW, IC, H, M } from "../../lib/constants";
-import { formatDay } from "../../lib/day";
+import { R, T, FW, IC, H, M, SP } from "../../lib/constants";
+import { formatDay, todayStr } from "../../lib/day";
 import { guestsLabel } from "../../lib/booking-logic";
 import { onWaitlistFor } from "../../lib/draft-check";
 import { useDraftCheck } from "../../hooks/useDraftCheck";
@@ -29,11 +29,35 @@ const REREAD_DIM = 0.55;
 // Within this many px of the bottom, the thread counts as showing its end.
 const AT_END_SLACK = 24;
 
+// v18.9.0 — the day between a thread's messages ("Today", "Yesterday", "Sun
+// 06.09"), as WhatsApp on the phone draws it (Patryk, 2026-10-16): an
+// imported history puts months in one thread, and a bubble says only its
+// time. The words are `threadItems`' (lib/whatsapp.js). DESIGN.md's TEXT
+// treatment: no fill, the secondary ink, between two of the inbox's own
+// hairlines, which are decoration and hidden from assistive technology, so a
+// screen reader meets the day as a line of text before that day's messages.
+// It enters with the bubble it introduces (`enter`): the first message of a
+// new day arrives with its day above it.
+const DAY_RULE = { flex: 1, height: 1, background: "var(--wa-divider)" };
+function DaySeparator({ label, enter }) {
+  return (
+    <div className={enter ? "mgt-bubble-in" : undefined} style={{ display: "flex", alignItems: "center", gap: SP.base, margin: SP.tight + "px 0 " + SP.mid + "px" }}>
+      <span aria-hidden="true" style={DAY_RULE} />
+      <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{label}</span>
+      <span aria-hidden="true" style={DAY_RULE} />
+    </div>
+  );
+}
+
 export function ConversationView({
   conv, messages, onBack, onSend, onSendMedia, onAccept, onDismiss, templates, bookings, showBack, phone,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, compact,
   onRecheck, regularMin, kbFold = false, onUnfold, onOpenPhoto,
+  // v18.9.0: "Not a customer" (useWhatsApp.handleMute).
+  onMute,
+  // v18.9.0: the phone's synced contacts, and whether the first sync landed.
+  contacts, contactsSynced = false,
   // v18.8.0 phase 8: what the draft check needs, from App through InboxPanel.
   liveBookings, tableBlocks, autoOptimizer, waitlist, onAddToWaitlist,
 }) {
@@ -49,9 +73,14 @@ export function ConversationView({
   // v18.2.0 (W4): the number ONCE. An unknown sender's title was the raw key
   // "+447811223344" followed by "+44 7811223344"; now the title is the
   // formatted number and the grey number beside it appears only under a name.
-  const named = !!(match && match.name);
-  const displayName = named ? match.name : formatPhone(conv.phone || conv.phoneKey);
-  const phoneDisplay = named ? formatPhone(conv.phone || conv.phoneKey) : null;
+  // v18.9.0: the name is `conversationName`'s — the phone's contact first.
+  const { title: displayName, phoneLine: phoneDisplay } = conversationName(conv, bookings, contacts);
+  // v18.9.0: "Not saved on the restaurant phone" — only once the first contact
+  // sync has landed (`waLink.contacts.firstAt`). Before it, a number missing
+  // from the synced contacts means "not synced yet", and saying "not saved"
+  // would be a guess. The phone is the master (Patryk, 2026-10-15): saving the
+  // number there is how the name reaches MGT, so the hint says where to do it.
+  const notOnPhone = !!(contactsSynced && contacts && !contacts[conv.phoneKey]);
   const [histOpen, setHistOpen] = useState(false);
   const win = formatWindow(conv.windowExpiresAt);
   const threadRef = useRef(null);
@@ -60,6 +89,10 @@ export function ConversationView({
   // the thread is known to be empty.
   const loaded = messages !== undefined;
   const msgsForConv = messages || [];
+  // v18.9.0: for the day separators' "Today" and "Yesterday". Read per render,
+  // like the rows' relative times: a thread left open across midnight says
+  // "Today" for yesterday's messages until it next renders (a message, a tap).
+  const today = todayStr();
   // v18.4.0: `atEnd` is "the thread is showing its last message", kept by the
   // thread's own scroll handler. It decides whether a RESIZE follows the end.
   const atEnd = useRef(true);
@@ -286,19 +319,32 @@ export function ConversationView({
     </button>
   ) : null;
 
+  // v18.9.0 — "Not a customer": a supplier, the gestor, a friend. Archives the
+  // conversation and mutes it (no auto-reply, no parse, no unread, it stays in
+  // Archived when they write again). Offered wherever the conversation is not
+  // muted already; undone by Restore, which reads "Customer again" on a muted
+  // conversation (useWhatsApp.handleUnarchive clears both).
+  const muteBtn = onMute && !conv.muted ? (
+    <button onClick={() => onMute(conv.phoneKey)} title="Not a customer: archive it, and stop replying to and reading its messages" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0, boxShadow: "var(--shadow-btn)" })}><MuteIcon size={IC.inline} />Not a customer</button>
+  ) : null;
+
+  // The actions WRAP (v18.9.0): with "Not a customer" an archived thread has
+  // four, wider than a phone's header. They wrap as one group, right-aligned.
   let headerActionBtns;
   if (conv.archived) {
     headerActionBtns = (
-      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+      <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
         {recheckBtn}
-        <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-handled)", { padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />Restore</button>
+        <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title={conv.muted ? "A customer after all: back to the inbox, and replied to and read again" : "Restore conversation"} className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-handled)", { padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />{conv.muted ? "Customer again" : "Restore"}</button>
+        {muteBtn}
         <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={mkDangerBtn({ gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small })} ><TrashIcon size={IC.inline} />Delete</button>
       </div>
     );
   } else {
     headerActionBtns = (
-      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+      <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
         {recheckBtn}
+        {muteBtn}
         <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0, boxShadow: "var(--shadow-btn)" })} ><ArchiveIcon size={IC.inline} />Archive</button>
       </div>
     );
@@ -352,10 +398,18 @@ export function ConversationView({
         <span style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", minWidth: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
         {phoneDisplay ? <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span> : null}
         {regularChip}
+        {notOnPhone ? <OutlineChip tone="neutral" size="small" title="Save this number in the WhatsApp Business app's contacts and its name shows here">Not saved on the restaurant phone</OutlineChip> : null}
         {acceptedBadge}
-        {conv.archived ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }}><ArchiveIcon size={IC.inline} />Archived</OutlineChip> : null}
+        {conv.muted
+          ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }} title="Its messages are kept, not answered or read, and stay in Archived"><MuteIcon size={IC.inline} />Not a customer</OutlineChip>
+          : conv.archived ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }}><ArchiveIcon size={IC.inline} />Archived</OutlineChip> : null}
         {windowEl}
-        <div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>
+        {/* `maxWidth: 100%` is what lets the actions WRAP (v18.9.0 follow-up):
+            this box does not shrink, so its width was the buttons' one-line
+            width, and on a 375px phone an archived thread's four ran 40px
+            past the screen (Delete cut off at x 415). Capped at the header's
+            width, the group inside wraps, right-aligned, as it was meant to. */}
+        <div style={{ marginLeft: "auto", flexShrink: 0, maxWidth: "100%" }}>{headerActionBtns}</div>
       </div>
       </Reveal>
       <Reveal show={histOpen && hasRegulars && !kbFold} style={{ padding: "0 14px" }}><div style={{ paddingTop: 8 }}>{pastListBody}</div></Reveal>
@@ -392,7 +446,9 @@ export function ConversationView({
       ) : null}
       </Reveal>
       <div ref={threadRef} onScroll={onThreadScroll} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "14px" }}>
-        {msgsForConv.map((m) => <MessageBubble key={m.id} msg={m} isLast={m.id === animateId} onRetry={onResend} phoneKey={conv.phoneKey} onOpenPhoto={onOpenPhoto} />)}
+        {threadItems(msgsForConv, today).map((it) => (it.msg
+          ? <MessageBubble key={it.msg.id} msg={it.msg} isLast={it.msg.id === animateId} onRetry={onResend} phoneKey={conv.phoneKey} onOpenPhoto={onOpenPhoto} />
+          : <DaySeparator key={"day-" + it.day} label={it.label} enter={it.firstId === animateId} />))}
       </div>
       {/* Parsing/typing indicator — eased in while the inbound is being parsed
           (conv.parsing, set by the sandbox inbound path; cleared when the draft

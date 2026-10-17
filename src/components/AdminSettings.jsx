@@ -27,7 +27,7 @@ import { TrashIcon } from "./Icons";
 import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, isGranted, effectiveRole, displayName } from "../lib/roles";
 import { MODULES, moduleOn } from "../lib/modules";
 import { RETENTION_CHOICES } from "../lib/activity";
-import { auth } from "../firebase";
+import { useIntegrationStatus } from "../hooks/useIntegrationStatus";
 
 const LEVEL_LABEL = { staff: "Staff", manager: "Manager", admin: "Admin" };
 
@@ -167,40 +167,9 @@ const INTEGRATION_KEYS = [
   { group: "Server-side database access", keys: ["FIREBASE_SERVICE_ACCOUNT", "WA_DB_URL"] },
   // v18.8.0 phase 7: the nightly WhatsApp prune runs only when this is set.
   { group: "Nightly message cleanup", keys: ["CRON_SECRET"] },
+  // v18.9.0: the /wa-connect page's two ids (Embedded Signup).
+  { group: "Connecting the WhatsApp Business app", keys: ["META_APP_ID", "META_ES_CONFIG_ID"] },
 ];
-
-// v18.0.0 phase 5: the status this section used to say was "coming". THREE
-// states, not two, and the third is the point — `null` means "we could not ask",
-// which is what `npm run dev` produces (no serverless runtime) and what a
-// deployment without the functions produces. A panel about secrets must not
-// render "not set" for a key it never managed to enquire about: that is a false
-// negative pointing at a configuration problem that may not exist, in the one
-// place someone goes to diagnose exactly that.
-function useIntegrationStatus() {
-  const [status, setStatus] = useState(null);   // null = unknown, else the payload
-  const [failed, setFailed] = useState(false);
-  useEffect(function () {
-    let cancelled = false;
-    (async function () {
-      try {
-        const user = auth.currentUser;
-        if (!user) { if (!cancelled) setFailed(true); return; }
-        const token = await user.getIdToken();
-        const res = await fetch("/api/wa-config", { headers: { Authorization: "Bearer " + token } });
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        const data = await res.json();
-        if (!cancelled) { setStatus(data); setFailed(false); }
-      } catch {
-        // Deliberately quiet: on the dev server this request ALWAYS fails, and a
-        // console error every time the Admin tab opens would train the one person
-        // who reads this console to ignore it.
-        if (!cancelled) setFailed(true);
-      }
-    })();
-    return function () { cancelled = true; };
-  }, []);
-  return { status, failed };
-}
 
 // set → "Set", not set → "Not set", unknown → nothing but the key name. The
 // third case renders no chip at all rather than a grey "unknown" one, because a
@@ -967,7 +936,9 @@ export function AdminTabContent({
           normaliser, so never 0 and a year by default). Unlike the log it is
           pruned on a SCHEDULE: api/wa-prune.js runs every night at 04:00 UTC.
           Shown only while the module is on, because it is about the module's
-          data. The privacy notice states the period, so the hint says so. */}
+          data. The privacy notice states the period, so the hint says so.
+          v18.9.0: the notice says "up to 12 months", which stays true for a
+          shorter setting and not for a longer one, so the hint names that. */}
       {moduleOn(modules, "whatsapp") ? (
         <Section>
           <div style={{ fontWeight: FW.bold, fontSize: T.body, color: "var(--text-primary)" }}>
@@ -988,8 +959,8 @@ export function AdminTabContent({
           </label>
           <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: SP.tight }}>
             Every night, messages older than this are deleted, and so is a
-            conversation whose last message is. The privacy notice tells customers
-            12&nbsp;months: change it there too if you change this.
+            conversation whose last message is. The privacy notice says up
+            to 12&nbsp;months: change it there if you keep messages longer.
           </div>
         </Section>
       ) : null}

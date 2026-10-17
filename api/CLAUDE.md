@@ -8,7 +8,9 @@ repo that does not run in the browser. Vercel deploys the directory WHOLESALE, s
 is no build-time way to keep a file out of production: every gate here is a RUNTIME one,
 checked as the handler's first statement. `wa-inbound.js` is a **public URL the moment
 this merges** — the single riskiest fact in the release, and the reason phase 5b exists.
-`_lib/` holds the shared halves (`env` · `gemini` · `inbound-core` · `meta` · `rtdb`);
+`_lib/` holds the shared halves (`env` · `gemini` · `inbound-core` · `meta` · `rtdb`, and
+since v18.9.0 `coexist-core` · `sim-events` · `request`, the body reader and bearer parse
+every staff endpoint shares: a handler that writes either out again fails the tests);
 `rtdb.js` writes through **firebase-admin**, which bypasses the security rules entirely
 — see the CAS exemptions under the Rule of law below, which are about exactly that. The
 three `wa-sim-*.js` endpoints are the simulator's and must return 404 unless
@@ -22,8 +24,8 @@ indistinguishable from "no such endpoint": a 405 or a 401 would both confirm the
 is there. Fail-closed, and measured across five env values — absent, empty, `"0"`,
 `"true"` and `"1"` — where only the last opens it. **Since the phase-5 review those
 three are also excluded from a deployment by `.vercelignore`**, so PRODUCTION routes
-SIX functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config` · `wa-media` ·
-`wa-prune`, the last two since v18.8.0) and the `sandbox`
+SEVEN functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config` · `wa-media` ·
+`wa-prune`, those two since v18.8.0 · `wa-onboard`, since v18.9.0; Hobby allows 12) and the `sandbox`
 branch gets its three back through one appended `!api/wa-sim-*.js`. Since v18.4.3 that
 branch is GENERATED from main by `.github/workflows/sandbox.yml`, which writes the line;
 it is never written on main and never by hand. The runtime gate stays: two independent answers, and
@@ -125,6 +127,75 @@ Four rules:
 It answers the counts and logs one line; an error in any thread makes it 500. Its tests are their own
 block in `tests/api-handlers.test.js`, outside the staff-gate `describe.each`, since its gate is the
 cron secret.
+
+**Coexistence (v18.9.0) — the Business app and MGT on one number.** Six things, each
+a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
+- **Dispatch by `change.field`.** `messages` keeps its path; `smb_app_state_sync`
+  (contacts), `smb_message_echoes` (a reply typed on the phone), `history` and
+  `account_update` go to `COEXIST_HANDLERS`; any other field is counted `ignored` and
+  answered 200. An absent field reads as `messages`. It matters beyond tidiness: a
+  `history` change carries a `value.messages[]` of its own (a photo arriving after its
+  placeholder), which must never reach the inbound path and its auto-reply.
+- **The number guard** (`numberIsOurs` / `makeNumberGuard`). One Meta app holds several
+  numbers (the sandbox app: Meta's test number AND the rehearsal's), so a change naming a
+  `phone_number_id` is stored only when it is `META_PHONE_NUMBER_ID` or
+  `waLink.phoneNumberId`. The second is load-bearing: the contact and history syncs are
+  asked for during onboarding, before anyone can set the env var to the new id, and Meta
+  sends each ONCE. No id on the change, or nothing configured (the mock sandbox, the
+  harness), is allowed. `waLink` is read at most once per delivery, and only when the env
+  id did not answer.
+- **The retry rule still holds because every handler is keyed** (by wamid or phone key).
+  A history chunk with a thread that failed answers `{ retry: true }`, which the webhook
+  turns into a 500, so Meta resends the chunk and only what did not land is written. So
+  does a `waLink.history` record that failed (the progress, a declined share), and the
+  chunks after it are still read: a write that THROWS out of a handler is counted once and
+  answered 200 whenever anything before it landed, so what it skipped is never resent.
+  The counters it sums are ONE record, `freshResults()` (`_lib/coexist-core.js`), which the
+  simulator's events start from too: a counter a handler bumps and the record lacks reads
+  NaN, and the sum then never equals 0, so a delivery that failed everywhere is not resent.
+- **What the rehearsal measures (v18.9.0 follow-up, "What a delivery measures" in
+  `coexist-core.js`).** Two questions only Meta's real webhooks answer: does an echo ever
+  name a message MGT sent (if never, `handleEchoes` can find a new phone reply by its key
+  alone; `findMessageByWamid` keeps its scan for an echoed edit or delete of a message MGT
+  sent, which the count does not see), and
+  how big and how slow is a history delivery (Vercel caps a request body at 4.5 MB, Meta
+  says one history webhook can describe thousands of messages, and the import runs against
+  the function's time limit: a `maxDuration` for `wa-inbound` in `vercel.json` if it nears
+  it). An echo found under another key is counted `mgtEchoes`, not `skipped`. Every
+  delivery with a coexistence change logs one `[wa-inbound] coexistence delivery` line
+  (status, bytes, ms, fields, a history delivery's threads and messages, the non-zero
+  counters), and a history delivery or an echo of MGT's own is also recorded on
+  `waLink/measured`, **because a Hobby project's runtime logs last one hour**. Counts only,
+  held to a strict shape by the tests; a record that fails is logged and changes nothing
+  about the answer. The simulator's events call the handlers directly, so never reach it.
+  **That record is written at the END of the handler, before the answer**, so a history
+  delivery is also counted as it begins (`recordBegun`, started beside the import and
+  awaited before the answer): `historyBegun` above `historyDeliveries` is a delivery that
+  never answered, an invocation the time limit ended (the /code-review; a record after
+  the answer would be lost with the invocation and blur the two). **A body over the cap
+  never reaches the function** (Vercel answers 413 first), so the record lists the chunks
+  that did land, per phase (`historyChunks`, `{p0: {c1: 1}}`, from each chunk's
+  `metadata.chunk_order`; a 500's wait for the resend): a gap in the numbers is a chunk
+  that never landed.
+- **`wa-onboard.js`**, the server half of Embedded Signup for `/wa-connect`. GET answers
+  `{appId, configId, graphVersion}` (not secrets); POST exchanges the 30-second code, then
+  writes `waLink` BEFORE asking for any sync (the guard above), then subscribes the app to
+  the WABA, asks for the contacts and the history (`smb_app_data`) and reads the number's
+  `is_on_biz_app`. A history request starts a new `waLink.history` record
+  (`historyRequested`), keeping only what its own webhooks already wrote: the same number
+  connected again otherwise showed the earlier import as declined or done. A failed
+  subscribe SKIPS the two syncs, since a sync spent while no webhook can arrive is lost. `{retry: <step>}` runs one step again with `META_WA_TOKEN`
+  (refused for a simulated link). **The business token is never stored or returned.**
+  Guards: 405 → staff → admin (`assertWaAdmin`: `isAdminEntry` on `/roles`, the client's
+  own question, whatever `enforceRoles` says, since `settingsAdmin` is always enforced; a
+  `/roles` read that fails is a 503, `ROLES_UNREADABLE`, never "invalid token") → 400 → 503.
+  The harness answers its POST 503 (it needs a deployment).
+- **The simulator's events** (`_lib/sim-events.js`, behind `/api/wa-sim-inbound`'s
+  `event`): each builds Meta's `value` (`src/lib/wa-sim-coexist.js`) and calls the
+  handler above, so a simulated contact, echo, edit, history import or disconnection is
+  stored as Meta's would be. "Connect (simulated)" writes a `waLink` marked `sim: true`,
+  and **a real `waLink` (ids, no `sim`) is never touched**: 409, because the sandbox's
+  DEV database is where the rehearsal's real connection lives.
 
 **Tests (v18.4.5).** `tests/api-handlers.test.js` RUNS `wa-send`, `wa-recheck`, `wa-config`,
 `_lib/inbound-core.js` and `_lib/meta.js`: it replaces the three `firebase-admin` modules

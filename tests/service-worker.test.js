@@ -106,6 +106,8 @@ describe("service worker — which navigations it answers", () => {
     "/privacy",
     "/privacy.html",
     "/privacy/",
+    "/wa-connect",          // v18.9.0, the third document
+    "/wa-connect.html",
     "/api/wa-inbound",
     "/index.html/x",
     "/anything-else",

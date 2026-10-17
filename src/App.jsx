@@ -423,7 +423,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.8.0"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.9.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1430,6 +1430,8 @@ function BookingApp({uid}){
   waSimCtxRef.current={
     conversations:wa.conversations, messagesMap:wa.messagesMap, upsertConversation:wa.upsertConversation,
     appendMessage:wa.simAppendMessage, saveBookings:saveBookings, clearAllWaData:wa.clearAllWaData,
+    // v18.9.0: the coexistence events (simulateCoexist) read and write these too.
+    patchConversation:wa.patchConversation, patchMessage:wa.patchMessage, contacts:wa.contacts, waLink:wa.waLink, simSetContacts:wa.simSetContacts,
   };
   useEffect(function(){
     if(!WA_SANDBOX) return;
@@ -2423,7 +2425,7 @@ function BookingApp({uid}){
   // the card's button turns into "On the waitlist" once the entry is stored.
   function addDraftToWaitlist(conv){
     if(refused("waitlistManage"))return null;
-    const p=draftPrefill(conv,bookings);
+    const p=draftPrefill(conv,bookings,wa.contacts);
     const phoneRule=phoneForSave(p.phone,generalSettings.pinnedCountries,generalSettings.phonePrefix,false);
     if(phoneRule.refusal)return phoneRule.refusal;
     addToWaitlist({name:p.name,phone:cleanPhoneOf(phoneRule.phone),size:p.size,date:p.date,prefTime:p.time,notes:p.notes,preference:p.preference});
@@ -4786,7 +4788,8 @@ function BookingApp({uid}){
             onDeleteReminder={deleteReminder}
             onToggleReminder={toggleReminderActive}
             waSettings={waSettings}
-            onSaveWaSettings={saveWaSettings} /></Suspense></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmReminderDel}>{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
+            onSaveWaSettings={saveWaSettings}
+            waLink={wa.waLink} /></Suspense></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmReminderDel}>{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
         // window.confirm which is blocked in sandboxed preview environments).
         // Renders on top of Settings in DOM order so it visually covers the list.
         confirmReminderDel?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReminderDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
@@ -4809,6 +4812,8 @@ function BookingApp({uid}){
           so it would render the last-loaded conversations, with live Send and
           Delete controls, for a module the restaurant has turned off. */}<ModalPresence show={whatsappOn&&showInbox}>{whatsappOn&&showInbox?<Suspense fallback={null}><InboxPanel
           conversations={wa.conversations}
+          contacts={wa.contacts}
+          waLink={wa.waLink}
           messages={wa.messagesMap}
           watchMessages={wa.watchMessages}
           templates={wa.templates}
@@ -4825,6 +4830,7 @@ function BookingApp({uid}){
           onMarkRead={wa.handleMarkRead}
           onArchive={wa.handleArchive}
           onUnarchive={wa.handleUnarchive}
+          onMute={wa.handleMute}
           onDelete={wa.handleDeleteConversation}
           onBulkArchive={wa.bulkArchive}
           onBulkUnarchive={wa.bulkUnarchive}
@@ -4856,7 +4862,7 @@ function BookingApp({uid}){
               onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
               className="mgt-hover-scale"
               style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
-          ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,watchMessages:wa.watchMessages,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.simAppendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
+          ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,watchMessages:wa.watchMessages,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.simAppendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend,patchMessage:wa.patchMessage,contacts:wa.contacts,waLink:wa.waLink,simSetContacts:wa.simSetContacts}}
           onClose={function(){setShowSim(false);}} /></Suspense>:null):null}{/* v18.8.0: the photo viewer, after the simulator so it paints above it (MODAL_Z ranks it so) */}<ModalPresence show={!!waPhoto}>{waPhoto?<Suspense fallback={null}><PhotoViewer photo={waPhoto} onClose={function(){setWaPhoto(null);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
         // must sit above the Settings overlay. Same idiom as ReminderEditor:
         // `position` + `z-index` makes a stacking context and the subtree

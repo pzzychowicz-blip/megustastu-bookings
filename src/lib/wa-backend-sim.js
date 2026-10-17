@@ -44,7 +44,11 @@ export async function postFakeWebhook({ phone, text, name, agoMs = 0, media }) {
         field: "messages",
         value: {
           messaging_product: "whatsapp",
-          metadata: { display_phone_number: "34600000000", phone_number_id: "PHONE_NUMBER_ID_LOCAL_SIM" },
+          // No `phone_number_id`, on purpose (v18.9.0): the number guard
+          // (api/_lib/coexist-core.js) lets a change without one through, and a
+          // made-up id would be dropped by a harness whose .env.local sets
+          // META_PHONE_NUMBER_ID to a real one.
+          metadata: { display_phone_number: "34600000000" },
           contacts: [{ wa_id: waId, profile: { name: name || "Sim Customer" } }],
           messages: [Object.assign({
             from: waId,
@@ -78,6 +82,27 @@ export async function postSimInbound({ phone, text, name, agoMs = 0, media }) {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
     body: JSON.stringify({ phone, text, name, agoMs, media: media || undefined }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}
+
+// v18.9.0 — one of the WhatsApp Business app's coexistence events (a contact,
+// a phone reply, the customer's edit or delete, the chat history, the
+// connection going and coming back), POSTed as `{ event, ...params }` to the
+// staff-auth /api/wa-sim-inbound, which builds Meta's webhook and stores it
+// through the real webhook's handlers (api/_lib/sim-events.js). The same
+// endpoint on the DEV harness and online: "connect" and "forget" are not
+// webhooks at all, so there is no unsigned-webhook route for these.
+export async function postSimEvent(event, params) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("not signed in");
+  const idToken = await user.getIdToken();
+  const res = await fetch(WA_BACKEND_URL + "/api/wa-sim-inbound", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
+    body: JSON.stringify(Object.assign({}, params || {}, { event })),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));

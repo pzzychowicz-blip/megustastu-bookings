@@ -185,6 +185,15 @@ describe("draftPrefill — one rule for Accept and for the waitlist", () => {
     expect(draftPrefill(conv({}), []).name).toBe("");
     expect(draftPrefill(conv({}, { profileName: 42 }), []).name).toBe("");
   });
+  it("v18.9.0: the name the restaurant phone saves comes after the typed one and before the bookings'", () => {
+    const list = [bk({ name: "Ana López", phone: "+34600111222", status: "completed", date: "2099-01-01" })];
+    const saved = { "+34600111222": { name: " Ana (terraza) ", at: 1 } };
+    expect(draftPrefill(conv({}, { profileName: "Patryk" }), list, saved).name).toBe("Ana (terraza)");
+    expect(draftPrefill(conv({ name: "Pau" }), list, saved).name).toBe("Pau");
+    // A contact saved with no name, or none at all, falls through as before.
+    expect(draftPrefill(conv({}), list, { "+34600111222": { name: "", at: 1 } }).name).toBe("Ana López");
+    expect(draftPrefill(conv({}), list, undefined).name).toBe("Ana López");
+  });
   it("Accept's fallbacks for a draft it opens anyway", () => {
     const p = draftPrefill({ phoneKey: "+44", draftData: { preference: "indoor", notes: "terrace" } }, []);
     expect(p).toMatchObject({ size: 2, time: "13:00", preference: "indoor", notes: "terrace" });
@@ -193,12 +202,12 @@ describe("draftPrefill — one rule for Accept and for the waitlist", () => {
   it("is what Accept and the waitlist read: neither spells the rule again", () => {
     const hook = read("hooks", "useWhatsApp.js");
     const accept = hook.slice(hook.indexOf("function handleAcceptDraft("), hook.indexOf("function takeDraftSource("));
-    expect(accept).toMatch(/const p = draftPrefill\(conv, bookings\);/);
+    expect(accept).toMatch(/const p = draftPrefill\(conv, bookings, contactsRef\.current\);/);
     expect(accept).toMatch(/const time = \(over && over\.time\) \|\| p\.time;/);
     expect(accept).not.toMatch(/matchCustomerByPhone|charAt\(0\)/);
     const App = read("App.jsx");
     const wl = App.slice(App.indexOf("function addDraftToWaitlist(conv){"), App.indexOf("function addFormToWaitlist(){"));
-    expect(wl).toMatch(/const p=draftPrefill\(conv,bookings\);/);
+    expect(wl).toMatch(/const p=draftPrefill\(conv,bookings,wa\.contacts\);/);
     expect(wl).toMatch(/addToWaitlist\(\{name:p\.name,phone:cleanPhoneOf\(phoneRule\.phone\),size:p\.size,date:p\.date,prefTime:p\.time,notes:p\.notes,preference:p\.preference\}\)/);
   });
 });

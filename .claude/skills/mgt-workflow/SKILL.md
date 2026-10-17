@@ -282,17 +282,22 @@ read as one version's story. Body ends with the Claude co-author trailer.
 a green PR then mean the same thing; running two of four just means the PR is the first
 place the other two get tried.
 
-**Run this exact block — both lines.** It is the whole gate, filtered down to the four
-numbers worth reporting, so there is nothing left for you to trim by hand:
+**Run this exact block.** It is the whole gate, filtered down to the four numbers worth
+reporting, so there is nothing left for you to trim by hand:
 
 ```bash
 set -o pipefail
-npm run build 2>&1 | tail -3 && npm test 2>&1 | grep -E "Tests +[0-9]" && npm run lint 2>&1 | grep -E "✖.*problems" && npm run check:style 2>&1 | tail -1
+{ npm ls --depth=0 >/dev/null 2>&1 || { echo "STOP: node_modules does not match package.json: run npm ci, then the gate again"; false; }; } &&
+{ b=$(npm run build 2>&1) && printf '%s\n' "$b" | grep -E "assets/index-[^ ]+\.js" || { printf '%s\n' "$b" | grep -v '^    at ' | sed $'s/\e\\[[0-9;]*m//g' | tail -15; false; }; } &&
+npm test 2>&1 | grep -E "Tests +[0-9]" &&
+npm run lint 2>&1 | grep -E "✖.*problems" &&
+npm run check:style 2>&1 | tail -1
 ```
 
-Four lines out, in order: main-bundle gz size · test count · lint problem count · the
-style verdict. Measured on this repo: **0.1s · 1.8s · 4.0s · 0.3s** — about six seconds
-for all four, so run them per commit; a `git bisect` should never land on a broken one.
+Four lines out, in order: the main entry's size and gz size · test count · lint problem
+count · the style verdict. The install check prints nothing when it passes. Measured on
+this repo (v18.9.0, 2026-10-16): **0.2s · 0.5s · 4.2s · 7.7s · 0.4s**, about thirteen
+seconds for all five, so run them per commit; a `git bisect` should never land on a broken one.
 `lint` is a **hard** gate at 0 errors, and since 2026-10-07 at no more than 63 warnings (`--max-warnings 63` in the `lint` script: a NEW warning fails the run; lower the number when warnings are fixed, never raise it without asking. Most are the React-Compiler advisories kept as warnings on purpose — read the count off the `✖ N problems` line, never a number written here).
 
 **`set -o pipefail` is load-bearing — without it this line lies.** A pipeline's exit
@@ -306,9 +311,16 @@ failing, because the broken import took whole files out — then the style verdi
 compile. `pipefail` makes the pipeline carry the *first* non-zero status instead, so
 the chain stops where it broke.
 
-**And `build` is tailed while `lint` is grepped — on purpose.** A build's useful output
-on failure is its error tail, so `tail -3` shows the gz line when it works and the
-error when it doesn't. `lint` is the opposite: `eslint` prints two trailing lines and
+**And `build` shows an excerpt on failure while `lint` is only grepped — on purpose.** A
+build's useful output on failure is its error, so the block keeps the whole output and
+prints the main entry's line when the build passes, or its last 15 lines when it fails,
+with the stack frames (`    at …`) and colour codes taken out: what is left is the
+message, the file and line, and the code frame. **It greps for the main entry
+(`dist/assets/index-*.js`) because `npm run build` is two builds since v18.9.0**
+(`vite build && vite build -c vite.wa-connect.config.js`). The old `tail -3` then
+reported the `/wa-connect` page's bundle as if it were the app's, and on a failed build
+it showed three lines of Rolldown's stack trace and no error at all (measured, in either
+build). `lint` is the opposite: `eslint` prints two trailing lines and
 the reassuring one is not the verdict — `0 errors and 1 warning potentially fixable
 with the --fix option` is about what `--fix` could *repair*, while `✖ N problems (E
 errors, W warnings)` is what CI gates on. `tail -2` shows the first and hides the
@@ -317,9 +329,24 @@ carrying an error (CLAUDE.md's gotcha). A v5 eval run then did it again, typing
 `npm run lint 2>&1 | tail -8` with the correct grep eight lines away in this file,
 because it was batching three gates and trimmed all three the same way. **A prohibition
 you have to remember loses to a habit; a command you paste doesn't** — so paste the
-block above rather than assembling your own. Both of that block's own defects were
-found by running it against a broken tree, which is the only way either could have
-been: it was written, and verified, against a passing one.
+block above rather than assembling your own. The block's first two defects were found by
+running it against a broken tree, which is the only way either could have been: it was
+written, and verified, against a passing one. Its next two (v18.9.0) were the same
+lesson: a `tail` that a second build had quietly re-aimed, and a green gate on an
+install CI does not make.
+
+**The install is checked before anything runs (v18.9.0).** CI's `verify` job starts with
+`npm ci`, so it builds, tests and lints exactly what `package-lock.json` pins; this block
+runs whatever `node_modules` holds. In the v18.9.0 ship run a worktree still held ESLint
+9.39.4 and Vitest 4.1.10 where the lockfile had pinned 10.12.0 and 5.0.3 since v18.4.5:
+every local gate said "0 errors", CI's lint found two (`no-useless-assignment`, in ESLint
+10's recommended set), and the main entry read 157 kB gz instead of 123. `npm ls
+--depth=0` exits non-zero when an installed package does not satisfy `package.json`, or
+one is missing or extraneous, and the block then stops on its STOP line (measured: an
+ESLint reporting 9.39.4 stops it, and the correct install passes). It cannot see a drift
+inside a range (a lockfile moved from 10.12.0 to 10.13.0), so run `npm ci` after any pull
+that changes `package-lock.json`, and before trusting a gate in a worktree whose
+`node_modules` is older than its lockfile.
 
 **A fifth gate, when the diff touches the rules.** Changed `database.rules.json`,
 `tests/rules/**`, `firebase.json` or `vitest.rules.config.js`? Also run

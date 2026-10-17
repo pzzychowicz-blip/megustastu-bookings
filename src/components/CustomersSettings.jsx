@@ -66,7 +66,7 @@ const GUESTS_COL = 58;
 // (`onSetCustomerTag(key, "+id" | "-id")`, App's `saveCustomerTag`), and the
 // chips are disabled for an account that may not edit bookings
 // (`canEditGuestTags`): a guest's tags live on their bookings.
-export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2, seekQuery = "", tagList, onSaveTagList, tagError, onClearTagError, canEditTags = false, onDirty, guestTags = null, onSetCustomerTag, canEditGuestTags = false }) {
+export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2, seekQuery = "", tagList, onSaveTagList, tagError, onClearTagError, canEditTags = false, onDirty, guestTags = null, onSetCustomerTag, canEditGuestTags = false, whatsappOn = false }) {
   const [query, setQuery] = useState(seekQuery || "");
   const [openKey, setOpenKey] = useState(null);   // expanded customer
   const [armedKey, setArmedKey] = useState(null); // delete armed for this key
@@ -240,7 +240,13 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
                   else setArmedKey(c.key);
                 }}><TrashIcon size={IC.control} />{armed ? "Confirm — delete" : "Delete customer & all data"}</button>
             </div>
-            {armed ? <div id={DELETE_WARN_ID} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", marginTop: 8 }}>Permanently removes this customer's personal data (name, phone, notes, tags, history) — no backups. Their bookings remain anonymised as “Data removed” for statistics. Tap again to confirm.</div> : null}
+            {/* v18.9.0: with WhatsApp on, the delete also erases MGT's copy of
+                the restaurant phone's contact for this number, and it cannot
+                reach the phone itself: the phone is the master of names, so
+                staff are told to delete the contact there too (Patryk,
+                2026-10-15). Inside the same described element, so it is read
+                with the warning it qualifies. */}
+            {armed ? <div id={DELETE_WARN_ID} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", marginTop: 8 }}>Permanently removes this customer's personal data (name, phone, notes, tags, history) — no backups. Their bookings remain anonymised as “Data removed” for statistics. Tap again to confirm.{whatsappOn && c.phone ? <span style={{ display: "block", marginTop: 6 }}>Also delete them from the restaurant phone's contacts: MGT can't reach the phone.</span> : null}</div> : null}
           </div>
         </Reveal>
       </div>

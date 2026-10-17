@@ -30,29 +30,14 @@
 // live → Graph API + "sent", later advanced by webhook statuses[]), appends
 // the outbound message (authorEmail from the verified token — the audit
 // trail), updates the conversation snippet/lastMessageAt, and auto-unarchives
-// (Q2: replying to an archived conversation un-archives it). The window is
-// NOT reset — only inbound customer messages reset it.
+// (Q2: replying to an archived conversation un-archives it, unless it is
+// "Not a customer": `replyUnarchives`). The window is NOT reset — only inbound
+// customer messages reset it.
 
 import { verifyStaffToken, staffAuthError, getConversation, upsertConversation, appendMessage } from "./_lib/rtdb.js";
+import { readJsonBody, bearerToken } from "./_lib/request.js";
 import { sendText } from "./_lib/meta.js";
-import { capOutbound, snippet } from "../src/lib/whatsapp.js";
-
-function readJsonBody(req) {
-  if (req.body !== undefined && req.body !== null) {
-    // Vercel's helper may have parsed it already (string or object).
-    if (typeof req.body === "string") { try { return Promise.resolve(JSON.parse(req.body)); } catch { return Promise.resolve(null); } }
-    return Promise.resolve(req.body);
-  }
-  return new Promise((resolve) => {
-    const chunks = [];
-    req.on("data", (c) => chunks.push(c));
-    req.on("end", () => {
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); }
-      catch { resolve(null); }
-    });
-    req.on("error", () => resolve(null));
-  });
-}
+import { capOutbound, snippet, replyUnarchives } from "../src/lib/whatsapp.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -61,8 +46,7 @@ export default async function handler(req, res) {
   }
 
   // ── Staff auth ──────────────────────────────────────────────────────────────
-  const authHeader = req.headers["authorization"] || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const idToken = bearerToken(req);
   if (!idToken) { res.status(401).json({ error: "missing token" }); return; }
   let staff;
   try {
@@ -110,7 +94,7 @@ export default async function handler(req, res) {
     authorEmail: staff.email || staff.uid,
   });
   const patch = { lastMessageAt: ts, lastMessageSnippet: snippet(text) };
-  if (conv.archived) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
+  if (replyUnarchives(conv)) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
   await upsertConversation(phoneKey, patch);
 
   res.status(200).json({ ok: true, msgId, wamid: sent.wamid || null, status: sent.status });

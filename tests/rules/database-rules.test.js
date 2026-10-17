@@ -771,6 +771,46 @@ describe("the WhatsApp sandbox nodes (v17.16.8)", () => {
   });
 });
 
+// ── Coexistence (v18.9.0) ───────────────────────────────────────────────────
+// `waContacts/$phoneKey` is the phone's address book as the Business app syncs
+// it. Its principal writer is the Admin SDK (api/_lib/coexist-core.js), which
+// bypasses these rules, so it takes the `conversations` shape: a per-key grant
+// and no CAS (the Rule of law's closed list names it). The browser's one write
+// is Delete customer's per-key erase. `waLink` — the Business-app connection —
+// has NO grant at all, by design: only the backend writes it, and a browser that
+// could write `phoneNumberId` would choose which number the webhook accepts.
+describe("coexistence nodes (v18.9.0)", () => {
+  it("waContacts: one contact writes and deletes; another key survives an erase", async () => {
+    await assertSucceeds(staff().ref("waContacts/" + PHONE).set({ name: "Ana", at: 1 }));
+    await seed((db) => db.ref("waContacts/+34999").set({ name: "Pau", at: 1 }));
+    await seed((db) => db.ref("conversations/" + PHONE).set({ phone: PHONE }));
+    await assertSucceeds(staff().ref().update({ ["conversations/" + PHONE]: null, ["messages/" + PHONE]: null, ["waContacts/" + PHONE]: null }));
+    expect(await seedRead("waContacts/" + PHONE)).toBeNull();
+    expect(await seedRead("waContacts/+34999")).not.toBeNull();
+  });
+
+  it("the ENTIRE waContacts node can be neither wiped nor replaced", async () => {
+    await seed((db) => db.ref("waContacts").set({ [PHONE]: { name: "Ana", at: 1 } }));
+    await assertFails(staff().ref("waContacts").remove());
+    await assertFails(staff().ref("waContacts").set({ other: { name: "x", at: 1 } }));
+    expect(await seedRead("waContacts/" + PHONE)).not.toBeNull();
+  });
+
+  it("waLink is written by nobody but the backend: no browser write, at any depth", async () => {
+    await assertFails(staff().ref("waLink").set({ status: "connected", phoneNumberId: "999" }));
+    await assertFails(staff().ref("waLink/phoneNumberId").set("999"));
+    await assertFails(staff().ref("waLink/contacts/firstAt").set(1));
+    await seed((db) => db.ref("waLink").set({ status: "connected", phoneNumberId: "123" }));
+    await assertFails(staff().ref("waLink").remove());
+    expect(await seedRead("waLink/phoneNumberId")).toBe("123");
+  });
+
+  it("an unauthenticated client can write neither", async () => {
+    await assertFails(anon().ref("waContacts/" + PHONE).set({ name: "Ana", at: 1 }));
+    await assertFails(anon().ref("waLink/status").set("connected"));
+  });
+});
+
 describe("field shapes are validated (v17.16.1)", () => {
   // WAS a PROBE group asserting the rules accepted all of these. CT-2A-03's
   // server half; the assertions were inverted deliberately, not weakened.

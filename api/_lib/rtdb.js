@@ -39,6 +39,7 @@ import { getDatabase } from "firebase-admin/database";
 import { getAuth } from "firebase-admin/auth";
 import { dbUrl, serviceAccount, staffEmails, requireStaffAllowList } from "./env.js";
 import { statusWins } from "../../src/lib/whatsapp.js";
+import { isAdminEntry, sanitizeRole } from "../../src/lib/roles.js";
 
 let cachedApp = null;
 let cachedDb = null;
@@ -128,6 +129,41 @@ export async function verifyStaffToken(idToken) {
   return assertStaffAllowed(await getAuth(ensureApp()).verifyIdToken(idToken));
 }
 
+// ── The admin gate (v18.9.0, api/wa-onboard.js) ─────────────────────────────
+// Connecting the restaurant's number to MGT is an admin's act. The answer is
+// the CLIENT's own question: `isAdminEntry` on the account's `/roles` row,
+// exactly what useRoles asks for `isAdmin`, so the server can neither let
+// through an account the app treats as staff nor refuse one it shows the
+// Connect link to. `settingsAdmin` is never governed by the enforcement flag
+// (`ALWAYS_ENFORCED`, roles.js), so the flag is not read: with it off, a
+// non-admin account still is not an admin. Asked AFTER verifyStaffToken.
+//
+// A read that FAILS is not a refusal (/code-review): it reached
+// staffAuthError's default, so an admin was told "invalid token" and sent to
+// sign in again, which cannot help when the database did not answer. It is
+// `ROLES_UNREADABLE`, a 503 that says to try again.
+export async function assertWaAdmin(decoded) {
+  const uid = decoded && typeof decoded.uid === "string" ? decoded.uid : "";
+  let snap = null;
+  if (uid) {
+    try {
+      snap = await getDb().ref("roles/" + sanitizeKey(uid)).get();
+    } catch (e) {
+      console.error("[wa] the account's role could not be read:", e && e.message);
+      const err = new Error("Could not check your role just now: try again in a moment.");
+      err.code = "ROLES_UNREADABLE";
+      throw err;
+    }
+  }
+  const entry = snap && snap.exists() ? sanitizeRole(snap.val(), uid) : null;
+  if (!isAdminEntry(entry)) {
+    const err = new Error("Not authorised: only an admin can connect the WhatsApp Business app.");
+    err.code = "NOT_ADMIN";
+    throw err;
+  }
+  return decoded;
+}
+
 // The HTTP mapping for what verifyStaffToken can throw, in ONE place. It was
 // five verbatim catch blocks across the five gated endpoints, which is the
 // condition that produces the next disagreement — and it had already produced
@@ -138,18 +174,21 @@ export async function verifyStaffToken(idToken) {
 //   503 — the SERVER is misconfigured. No service account (cannot verify any
 //         token) or, now, a live/non-DEV backend with no staff allow-list.
 //         Telling staff "invalid token" for these sends them to debug their own
-//         login for a fault that is not theirs.
+//         login for a fault that is not theirs. v18.9.0: or the account's role
+//         could not be read (assertWaAdmin), for the same reason.
 //   403 — the token is fine and the ACCOUNT is not allowed, either because it
 //         is not on the list or because its email is unverified. Distinct from
 //         401 because re-authenticating can never fix either one; the two carry
-//         different MESSAGES because they need opposite fixes.
+//         different MESSAGES because they need opposite fixes. v18.9.0: or
+//         because the endpoint is an admin's and the account is not one
+//         (assertWaAdmin).
 //   401 — everything else: absent, expired or malformed token.
 export function staffAuthError(e) {
   const code = e && e.code;
-  if (code === "NO_SERVICE_ACCOUNT" || code === "NO_STAFF_ALLOWLIST") {
+  if (code === "NO_SERVICE_ACCOUNT" || code === "NO_STAFF_ALLOWLIST" || code === "ROLES_UNREADABLE") {
     return { status: 503, error: e.message };
   }
-  if (code === "NOT_STAFF" || code === "EMAIL_UNVERIFIED") return { status: 403, error: e.message };
+  if (code === "NOT_STAFF" || code === "EMAIL_UNVERIFIED" || code === "NOT_ADMIN") return { status: 403, error: e.message };
   return { status: 401, error: "invalid token" };
 }
 
@@ -225,6 +264,30 @@ export async function updateMessageStatusByWamid(phoneKey, wamid, status) {
   return false;
 }
 
+// v18.9.0: the stored message a customer's edit or delete is about, as
+// `{ key, msg }`, or null. Its own wamid is the key of every message the
+// webhook stored (one get); a message sent FROM MGT is keyed by its own id and
+// carries the wamid as `providerMsgId`, which needs the thread read (the
+// receipts above do the same).
+export async function findMessageByWamid(phoneKey, wamid) {
+  const key = sanitizeKey(wamid);
+  const direct = await getMessage(phoneKey, key);
+  if (direct) return { key, msg: direct };
+  const node = await getDb().ref("messages/" + sanitizeKey(phoneKey)).get();
+  if (!node.exists()) return null;
+  const all = node.val() || {};
+  for (const k of Object.keys(all)) {
+    if (all[k] && all[k].providerMsgId === wamid) return { key: k, msg: all[k] };
+  }
+  return null;
+}
+
+// v18.9.0: patch one stored message in place (update() semantics, null deletes
+// a field) — an edit's new text, a delete's empty one.
+export async function updateMessage(phoneKey, key, patch) {
+  await getDb().ref("messages/" + sanitizeKey(phoneKey) + "/" + sanitizeKey(key)).update(patch);
+}
+
 // ── Settings (read-only, for the LLM prompt constraints) ─────────────────────
 // v15 schema: settings/operatingHours holds per-day {open,close} (weekHours).
 // Returned as-is; gemini.js folds it into the prompt. Null when unset.
@@ -235,6 +298,91 @@ export async function readOperatingHours() {
   } catch {
     return null; // prompt falls back to the default hours line
   }
+}
+
+// ── The Business-app link (v18.9.0) ──────────────────────────────────────────
+// `waLink` is the record of the restaurant number's coexistence connection:
+// which WABA and phone-number id Embedded Signup connected, when the contact and
+// history syncs ran, and the last account event Meta sent. Only this module
+// writes it — the rules give a browser no `.write` on it at all, by design (a
+// browser that could write `phoneNumberId` could open the number guard to a
+// number of its choosing). Null when the number has never been connected.
+export async function readWaLink() {
+  const snap = await getDb().ref("waLink").get();
+  return snap.exists() ? snap.val() || null : null;
+}
+
+// Stamps `waLink/<path>` with `value` unless something is already there, and
+// resolves true when this call wrote it — "the first contact sync landed" is a
+// moment, and a later webhook must not move it.
+export async function stampWaLinkOnce(path, value) {
+  let wrote = false;
+  const r = await getDb().ref("waLink/" + path).transaction(function (cur) {
+    if (cur != null) { wrote = false; return undefined; }
+    wrote = true;
+    return value;
+  });
+  return !!(r && r.committed && wrote);
+}
+
+// Updates `waLink`'s own fields (update() semantics: null deletes a field).
+// The keys are this code's (`linkAfterEvent`), never a webhook's.
+export async function updateWaLink(patch) {
+  await getDb().ref("waLink").update(patch);
+}
+
+// Rewrites `waLink/<path>` through `fn(current)` in a transaction, so two
+// webhooks landing together each build on the other (history progress).
+export async function transactWaLink(path, fn) {
+  await getDb().ref("waLink/" + path).transaction(function (cur) { return fn(cur); });
+}
+
+// Removes `waLink` when the sandbox's simulator made it (`sim: true`) and
+// resolves whether it did. A transaction that asks of what is stored, so a
+// real connection recorded a moment earlier is never what "Forget" deletes.
+// Only api/_lib/sim-events.js calls it.
+export async function removeSimWaLink() {
+  let removed = false;
+  await getDb().ref("waLink").transaction(function (cur) {
+    removed = !!(cur && cur.sim === true);
+    return removed ? null : undefined;
+  });
+  return removed;
+}
+
+// ── An imported chat (v18.9.0, history) ─────────────────────────────────────
+// One thread in ONE multi-path update at the root: its new messages, each
+// whole under its own key, and its conversation's fields one path each, so
+// nothing else in the conversation is replaced. The paths are built here, at
+// the sanitising boundary, and only under `messages/<key>/` and
+// `conversations/<key>/`: the Admin SDK bypasses the rules, and a root update
+// is the one write that could reach anything.
+export async function writeImportedThread(phoneKey, records, convPatch) {
+  const k = sanitizeKey(phoneKey);
+  const patch = {};
+  (records || []).forEach(function (m) { patch["messages/" + k + "/" + sanitizeKey(m.id)] = m; });
+  Object.keys(convPatch || {}).forEach(function (f) { patch["conversations/" + k + "/" + f] = convPatch[f]; });
+  if (Object.keys(patch).length) await getDb().ref().update(patch);
+}
+
+// ── The phone's address book (v18.9.0) ──────────────────────────────────────
+// `waContacts/<phoneKey>` = `{ name, first?, at }` (src/lib/wa-coexist.js
+// decides it). Read per key, for the keys one webhook names, so a delivery
+// costs what it carries rather than the size of the address book.
+export async function readWaContactsFor(phoneKeys) {
+  const out = {};
+  await Promise.all(phoneKeys.map(async function (k) {
+    const snap = await getDb().ref("waContacts/" + sanitizeKey(k)).get();
+    if (snap.exists()) out[k] = snap.val();
+  }));
+  return out;
+}
+// One per-key update: a key set to null is deleted. Never the whole node — the
+// Admin SDK bypasses the rules, so this is the only limit on what it replaces.
+export async function updateWaContacts(patch) {
+  const safe = {};
+  Object.keys(patch).forEach(function (k) { safe[sanitizeKey(k)] = patch[k]; });
+  if (Object.keys(safe).length) await getDb().ref("waContacts").update(safe);
 }
 
 // ── Retention (v18.8.0 phase 7, api/wa-prune.js) ─────────────────────────────

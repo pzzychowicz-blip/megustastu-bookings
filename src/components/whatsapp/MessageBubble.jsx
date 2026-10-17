@@ -15,6 +15,12 @@
 // from the message's time without a request (`mediaExpired`), and the bubble
 // says so. The thumbnail's box is the same size before and after it loads, so a
 // photo arriving never moves the thread under the reader.
+//
+// v18.9.0 (coexistence): a reply staff sent from the WhatsApp Business app on
+// the phone (`source: "phone"`) says "phone" in its meta line where a reply
+// from MGT says how far it got, and offers no Retry (MGT did not send it). A
+// message its author edited says "edited"; one they deleted keeps its place
+// in the thread, its text replaced by a line saying so, in italic and muted.
 
 import { useEffect, useRef, useState } from "react";
 import { formatClockTime, mediaLabel, fileSizeLabel } from "../../lib/whatsapp";
@@ -255,7 +261,9 @@ export function MessageBubble({ msg, isLast, onRetry, phoneKey, onOpenPhoto }) {
   const color = incoming ? "var(--text-primary)" : "var(--text-on-accent)";
   const border = incoming ? "1px solid var(--wa-bubble-in-border)" : "1px solid var(--wa-bubble-out-border)";
   const align = incoming ? "flex-start" : "flex-end";
-  const media = msg.media && msg.media.kind ? msg.media : null;
+  const fromPhone = msg.source === "phone";
+  const revoked = !!msg.revokedAt;
+  const media = !revoked && msg.media && msg.media.kind ? msg.media : null;
   // The stored text of a media message is its caption, or the label written in
   // its place for a build that cannot draw media ("Photo"); the block draws
   // the label itself, so only a real caption is printed under it.
@@ -273,8 +281,21 @@ export function MessageBubble({ msg, isLast, onRetry, phoneKey, onOpenPhoto }) {
     <span style={{ fontSize: T.micro, fontWeight: FW.regular, color: "var(--text-muted)", marginLeft: 6, fontStyle: "italic" }}>auto</span>
   ) : null;
 
+  // v18.9.0: "edited" beside the time, for either side; a deleted message
+  // is past being edited, so it says only that it was deleted (its text).
+  const editedTag = msg.editedAt && !revoked ? (
+    <span style={{ fontSize: T.micro, color: "var(--text-muted)", marginLeft: SP.tight }}>· edited</span>
+  ) : null;
+
   let statusEl = null;
-  if (!incoming && msg.status) {
+  if (!incoming && fromPhone) {
+    // A reply typed on the phone: Meta reports no delivery for it here, and
+    // where it came from is what staff need to know.
+    statusEl = (
+      <span title="Sent from the WhatsApp Business app on the restaurant phone"
+        style={{ fontSize: T.micro, color: "var(--text-muted)", marginLeft: SP.tight }}>· phone</span>
+    );
+  } else if (!incoming && msg.status) {
     const map = { sending: "· sending", delivered: "· delivered", read: "· read", failed: "· failed" };
     const statColor = msg.status === "failed" ? "var(--danger-text)" : "var(--text-muted)";
     statusEl = <span style={{ fontSize: T.micro, color: statColor, marginLeft: 4 }}>{map[msg.status] || ""}</span>;
@@ -284,7 +305,7 @@ export function MessageBubble({ msg, isLast, onRetry, phoneKey, onOpenPhoto }) {
   // useWhatsApp.handleResend). Only shown when a resend handler is wired, and
   // never on a photo or a PDF (v18.8.0): a resend posts the message's TEXT,
   // which for media is its caption or the word "Photo".
-  const retryEl = (!incoming && msg.status === "failed" && onRetry && !media) ? (
+  const retryEl = (!incoming && !fromPhone && msg.status === "failed" && onRetry && !media) ? (
     <OutlineChip
       as="button"
       tone="danger"
@@ -306,10 +327,12 @@ export function MessageBubble({ msg, isLast, onRetry, phoneKey, onOpenPhoto }) {
             first and last characters (the same trap that produced mkArea). */}
         <div style={{ background: bg, color, border, borderRadius: 14 /* @canvas */, padding: media && media.kind === "image" ? SP.tight : "8px 12px", fontSize: T.lead, lineHeight: 1.4, whiteSpace: "pre-wrap", wordBreak: "break-word", boxShadow: "var(--shadow-soft)", opacity: msg.status === "sending" ? 0.7 : 1 }}>
           {media ? <MediaBlock phoneKey={phoneKey} msg={msg} onOpenPhoto={onOpenPhoto} /> : null}
-          {caption ? <div style={media ? { marginTop: SP.snug, padding: media.kind === "image" ? "0 8px 4px" : 0 } : undefined}>{caption}</div> : null}
+          {caption ? (
+            <div style={revoked ? { fontStyle: "italic", opacity: 0.75 } : media ? { marginTop: SP.snug, padding: media.kind === "image" ? "0 8px 4px" : 0 } : undefined}>{caption}</div>
+          ) : null}
         </div>
         <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: 2, padding: "0 4px", display: "flex", alignItems: "center" }}>
-          {formatClockTime(msg.ts)}{ackTag}{statusEl}{retryEl}
+          {formatClockTime(msg.ts)}{ackTag}{editedTag}{statusEl}{retryEl}
         </div>
       </div>
     </div>

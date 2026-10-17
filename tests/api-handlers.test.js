@@ -28,7 +28,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import crypto from "node:crypto";
 import { Buffer } from "node:buffer";
 import { Readable, Writable } from "node:stream";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 const fake = vi.hoisted(() => {
   // `failWrite(op, path)` → true makes that write throw (a database error the
@@ -45,7 +46,7 @@ const fake = vi.hoisted(() => {
   };
   const snapOf = (v) => ({ exists: () => v !== undefined && v !== null, val: () => (v === undefined ? null : v) });
   const db = {
-    ref: (path) => ({
+    ref: (path = "") => ({
       get: async () => snapOf(read(path)),
       // v18.8.0 /code-review (api/wa-prune.js): `orderByChild(k).endAt(v)`,
       // as RTDB orders it for this use: a child with no number at `k` (null)
@@ -117,12 +118,17 @@ import simSuggestHandler from "../api/wa-sim-suggest.js";
 import simGenerateHandler from "../api/wa-sim-generate.js";
 import mediaHandler, { MEDIA_VIEW_MAX, servedType, sniffType } from "../api/wa-media.js";
 import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "../api/wa-prune.js";
+import onboardHandler from "../api/wa-onboard.js";
 import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
+import { numberIsOurs, makeNumberGuard, freshResults, measuredAfter, beganAfter, chunkKeys } from "../api/_lib/coexist-core.js";
+import { readJsonBody, bearerToken } from "../api/_lib/request.js";
+import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyRequested, historyStatus, WA_IMPORT_ARCHIVE_MS, disconnectSentence } from "../src/lib/wa-coexist.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
-import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX } from "../src/lib/whatsapp.js";
+import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE, replyUnarchives } from "../src/lib/whatsapp.js";
 import { simMediaMessage } from "../src/lib/wa-mock-media.js";
+import { simHistoryValue, simEchoValue, simContent, SIM_HISTORY_RECENT, SIM_HISTORY_OLD, SIM_HISTORY_PHOTO_ID, SIM_WABA_ID, SIM_PHONE_NUMBER_ID } from "../src/lib/wa-sim-coexist.js";
 
 // A request as Vercel hands it over (the body already parsed) and a response
 // that records the one answer a handler gives.
@@ -145,9 +151,10 @@ beforeEach(() => {
   vi.stubEnv("FIREBASE_SERVICE_ACCOUNT", '{"project_id":"test"}');
   ["WA_STAFF_EMAILS", "WA_SEND_MODE", "WA_LLM_MODE", "WA_DB_URL", "WA_ALLOW_UNSIGNED", "WA_SIM_ENABLED",
     "META_APP_SECRET", "META_WA_TOKEN", "META_PHONE_NUMBER_ID", "META_VERIFY_TOKEN", "GEMINI_API_KEY", "GEMINI_MODEL", "TENANT_WA_CONTEXT",
-    "CRON_SECRET",
+    "CRON_SECRET", "META_APP_ID", "META_ES_CONFIG_ID",
   ].forEach((k) => vi.stubEnv(k, ""));
   vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   parseThread.mockReset();
@@ -161,6 +168,8 @@ describe.each([
   ["wa-config", configHandler, "GET", "POST"],
   ["wa-media", mediaHandler, "GET", "PUT"],
   ["wa-media (send)", mediaHandler, "POST", "PUT"],
+  ["wa-onboard", onboardHandler, "GET", "PUT"],
+  ["wa-onboard (connect)", onboardHandler, "POST", "PUT"],
 ])("%s — method and staff auth", (name, handler, method, wrong) => {
   it("answers 405 to the wrong method, before anything else", async () => {
     const res = await call(handler, { method: wrong, token: "staff" });
@@ -241,6 +250,15 @@ describe("wa-send", () => {
     await send({ phoneKey: KEY, text: "hi" });
     const patch = fake.state.writes.find((w) => w.op === "update").value;
     expect(Object.keys(patch).sort()).toEqual(["lastMessageAt", "lastMessageSnippet"]);
+  });
+
+  // v18.9.0 /code-review: only the phone's echo knew about the mute, so a
+  // reply typed in MGT took a "Not a customer" thread back to Inbox, still
+  // muted, where nothing offers "Customer again".
+  it("a reply to a muted (\"Not a customer\") archived conversation leaves it archived", async () => {
+    fake.state.tree = { conversations: { [KEY]: openConv({ archived: true, archivedAt: 5, muted: true }) } };
+    expect((await send({ phoneKey: KEY, text: "hi" })).statusCode).toBe(200);
+    expect(convAt(KEY)).toMatchObject({ archived: true, archivedAt: 5, muted: true, lastMessageSnippet: "hi" });
   });
 
   it("caps the text before the send, so what is sent and what is stored are one string", async () => {
@@ -395,6 +413,285 @@ describe("wa-config", () => {
     vi.stubEnv("WA_LLM_MODE", "live");
     expect((await config()).body.modes).toEqual({ llm: "live", send: "mock" });
   });
+
+  // v18.9.0: the /wa-connect page's two ids, and whether the environment's
+  // number is the one Embedded Signup connected — a boolean, never either id.
+  it("reports the Connect page's two keys", async () => {
+    vi.stubEnv("META_APP_ID", "111222333");
+    const res = await config();
+    expect(res.body.set).toMatchObject({ META_APP_ID: true, META_ES_CONFIG_ID: false });
+    expect(JSON.stringify(res.body)).not.toContain("111222333");
+  });
+  it("says whether META_PHONE_NUMBER_ID is the connected number, null when there is nothing to compare", async () => {
+    expect((await config()).body.phoneNumberIdMatches).toBe(null);
+    vi.stubEnv("META_PHONE_NUMBER_ID", "555000111");
+    expect((await config()).body.phoneNumberIdMatches).toBe(null);
+    fake.state.tree = { waLink: { phoneNumberId: "555000111" } };
+    expect((await config()).body.phoneNumberIdMatches).toBe(true);
+    fake.state.tree = { waLink: { phoneNumberId: "999888777" } };
+    const res = await config();
+    expect(res.body.phoneNumberIdMatches).toBe(false);
+    expect(JSON.stringify(res.body)).not.toMatch(/555000111|999888777/);
+  });
+});
+
+// ── api/wa-onboard.js (v18.9.0) ─────────────────────────────────────────────
+describe("wa-onboard", () => {
+  const WABA = "102030405060";
+  const PHONE = "908070605040";
+  const BIZ = "BIZ-TOKEN-never-kept";
+  const ADMIN = { roles: { u1: { role: "admin" } } };
+  const connect = (body, token = "staff") => call(onboardHandler, { method: "POST", token, body });
+  const ids = () => ({ code: "the-code", wabaId: WABA, phoneNumberId: PHONE });
+  // Meta, as far as onboarding meets it. Every call is recorded with what the
+  // database held when it was made, so the order can be asserted against it.
+  function meta({ fail = {} } = {}) {
+    const calls = [];
+    const f = vi.fn(async (url, init = {}) => {
+      const u = new URL(url);
+      const path = u.pathname.replace(/^\/v26\.0\//, "");
+      const body = typeof init.body === "string" ? init.body : "";
+      const step = path === "oauth/access_token" ? "exchange"
+        : path === WABA + "/subscribed_apps" ? "subscribe"
+        : path === PHONE + "/smb_app_data" ? (JSON.parse(body).sync_type === "history" ? "history" : "contacts")
+        : path === PHONE ? "phone" : "unknown";
+      calls.push({ step, method: init.method || "GET", auth: (init.headers || {}).Authorization || null, body, url,
+        linkedPhone: fake.read("waLink/phoneNumberId") || null });
+      if (fail[step]) return { ok: false, status: fail[step], json: async () => ({ error: { message: step + " refused" } }) };
+      const data = step === "exchange" ? { access_token: BIZ, token_type: "bearer" }
+        : step === "subscribe" ? { success: true }
+        : step === "contacts" || step === "history" ? { messaging_product: "whatsapp", request_id: "req-" + step }
+        : step === "phone" ? { is_on_biz_app: true, platform_type: "CLOUD_API", id: PHONE } : {};
+      return { ok: true, status: 200, json: async () => data };
+    });
+    f.calls = calls;
+    return f;
+  }
+  beforeEach(() => {
+    vi.stubEnv("META_APP_ID", "app-1");
+    vi.stubEnv("META_ES_CONFIG_ID", "cfg-1");
+    vi.stubEnv("META_APP_SECRET", "app-secret");
+  });
+
+  describe("the admin gate", () => {
+    it("refuses a staff account with no admin grant, writing nothing and calling nobody", async () => {
+      const f = meta(); vi.stubGlobal("fetch", f);
+      for (const tree of [{}, { roles: { u1: { role: "staff" } } }, { roles: { u1: { role: "manager" } } }]) {
+        fake.state.tree = tree;
+        const res = await connect(ids());
+        expect([res.statusCode, res.body.error]).toEqual([403, "Not authorised: only an admin can connect the WhatsApp Business app."]);
+        expect((await call(onboardHandler, { method: "GET", token: "staff" })).statusCode).toBe(403);
+      }
+      expect(f).not.toHaveBeenCalled();
+      expect(fake.state.writes).toEqual([]);
+    });
+    it("asks the client's question: an admin level, or the settingsAdmin extra, and never one under a deny", async () => {
+      const get = () => call(onboardHandler, { method: "GET", token: "staff" });
+      fake.state.tree = { roles: { u1: { role: "admin" } } };
+      expect((await get()).statusCode).toBe(200);
+      fake.state.tree = { roles: { u1: { role: "staff", extras: { settingsAdmin: true } } } };
+      expect((await get()).statusCode).toBe(200);
+      fake.state.tree = { roles: { u1: { role: "admin", denies: { settingsAdmin: true } } } };
+      expect((await get()).statusCode).toBe(403);
+    });
+    it("the enforcement flag does not open it: settingsAdmin is always enforced (roles.js ALWAYS_ENFORCED)", async () => {
+      fake.state.tree = { roles: { u1: { role: "staff" } }, settings: { admin: { enforceRoles: false } } };
+      expect((await call(onboardHandler, { method: "GET", token: "staff" })).statusCode).toBe(403);
+    });
+    // /code-review: a failed read reached staffAuthError's default, and the
+    // page told an admin "invalid token", which signing in again cannot fix.
+    it("a role that cannot be read is a 503 saying to try again, never \"invalid token\"", async () => {
+      fake.state.tree = ADMIN;
+      const f = meta(); vi.stubGlobal("fetch", f);
+      const realRef = fake.db.ref;
+      fake.db.ref = (path) => (path === "roles/u1" ? { get: async () => { throw new Error("database unreachable"); } } : realRef(path));
+      try {
+        for (const method of ["GET", "POST"]) {
+          const res = await call(onboardHandler, { method, token: "staff", body: ids() });
+          expect([res.statusCode, res.body.error]).toEqual([503, "Could not check your role just now: try again in a moment."]);
+        }
+      } finally { fake.db.ref = realRef; }
+      expect(f).not.toHaveBeenCalled();
+      expect(fake.state.writes).toEqual([]);
+    });
+  });
+
+  describe("GET", () => {
+    it("hands the page the two ids and the Graph version its SDK must use", async () => {
+      fake.state.tree = ADMIN;
+      const res = await call(onboardHandler, { method: "GET", token: "staff" });
+      expect([res.statusCode, res.body]).toEqual([200, { appId: "app-1", configId: "cfg-1", graphVersion: "v26.0" }]);
+    });
+    it("503 while either id is unset", async () => {
+      fake.state.tree = ADMIN;
+      vi.stubEnv("META_ES_CONFIG_ID", "");
+      const res = await call(onboardHandler, { method: "GET", token: "staff" });
+      expect(res.statusCode).toBe(503);
+      expect(res.body.error).toMatch(/META_ES_CONFIG_ID/);
+    });
+  });
+
+  describe("POST, the onboarding", () => {
+    beforeEach(() => { fake.state.tree = JSON.parse(JSON.stringify(ADMIN)); });
+
+    it("400 without a code, or with ids that are not Meta's, before calling anyone", async () => {
+      const f = meta(); vi.stubGlobal("fetch", f);
+      for (const body of [{ wabaId: WABA, phoneNumberId: PHONE }, { code: 7, wabaId: WABA, phoneNumberId: PHONE },
+        Object.assign(ids(), { wabaId: "12/../me" }), Object.assign(ids(), { phoneNumberId: "abc123456" }), Object.assign(ids(), { phoneNumberId: undefined })]) {
+        expect((await connect(body)).statusCode).toBe(400);
+      }
+      expect(f).not.toHaveBeenCalled();
+      expect(fake.state.writes).toEqual([]);
+    });
+    it("503 without the app secret the exchange needs, before calling anyone", async () => {
+      vi.stubEnv("META_APP_SECRET", "");
+      const f = meta(); vi.stubGlobal("fetch", f);
+      expect((await connect(ids())).statusCode).toBe(503);
+      expect(f).not.toHaveBeenCalled();
+    });
+
+    it("runs Meta's steps in order, links the number BEFORE any sync, and answers each step", async () => {
+      vi.stubEnv("META_PHONE_NUMBER_ID", "111111111");
+      const f = meta(); vi.stubGlobal("fetch", f);
+      const res = await connect(ids());
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toEqual({ ok: true, phoneNumberId: PHONE, envNumber: "different",
+        steps: ["exchange", "link", "subscribe", "contacts", "history", "phone"].map((id) => ({ id, ok: true })) });
+      expect(f.calls.map((c) => c.step)).toEqual(["exchange", "subscribe", "contacts", "history", "phone"]);
+      // The code went in a form body, the secret with it, never in the URL.
+      const ex = f.calls[0];
+      expect(ex.method).toBe("POST");
+      expect(new URLSearchParams(ex.body).get("code")).toBe("the-code");
+      expect(new URLSearchParams(ex.body).get("client_id")).toBe("app-1");
+      expect(ex.url).not.toMatch(/app-secret|the-code/);
+      // Every later call carries the business token, and the syncs found the
+      // number already linked, so the number guard accepts their webhooks.
+      expect(f.calls.slice(1).every((c) => c.auth === "Bearer " + BIZ)).toBe(true);
+      expect(f.calls.filter((c) => c.step === "contacts" || c.step === "history").map((c) => c.linkedPhone)).toEqual([PHONE, PHONE]);
+      expect(fake.read("waLink")).toMatchObject({ status: "connected", wabaId: WABA, phoneNumberId: PHONE, connectedBy: "ana@example.com",
+        contacts: { requestId: "req-contacts" }, history: { requestId: "req-history" },
+        phone: { isOnBizApp: true, platformType: "CLOUD_API" } });
+      expect(typeof fake.read("waLink/subscribedAt")).toBe("number");
+    });
+
+    it("never stores or returns the business token", async () => {
+      vi.stubGlobal("fetch", meta());
+      const res = await connect(ids());
+      expect(JSON.stringify(res.body)).not.toContain(BIZ);
+      expect(JSON.stringify(fake.state.writes)).not.toContain(BIZ);
+      expect(JSON.stringify(fake.state.tree)).not.toContain(BIZ);
+    });
+
+    it("a refused exchange stops there: 502, nothing linked, nobody else called", async () => {
+      const f = meta({ fail: { exchange: 400 } }); vi.stubGlobal("fetch", f);
+      const res = await connect(ids());
+      expect([res.statusCode, res.body.steps]).toEqual([502, [{ id: "exchange", ok: false, error: "exchange refused" }]]);
+      expect(f.calls.map((c) => c.step)).toEqual(["exchange"]);
+      expect(fake.read("waLink")).toBeUndefined();
+    });
+
+    it("a failed subscribe skips both syncs, which Meta runs only once, and still checks the phone", async () => {
+      const f = meta({ fail: { subscribe: 500 } }); vi.stubGlobal("fetch", f);
+      const res = await connect(ids());
+      expect(res.statusCode).toBe(502);
+      expect(res.body.steps.map((s) => [s.id, s.ok, !!s.skipped])).toEqual([
+        ["exchange", true, false], ["link", true, false], ["subscribe", false, false],
+        ["contacts", false, true], ["history", false, true], ["phone", true, false]]);
+      expect(f.calls.map((c) => c.step)).toEqual(["exchange", "subscribe", "phone"]);
+      expect(fake.read("waLink/contacts")).toBeUndefined();
+    });
+
+    it("one failed sync does not stop the other", async () => {
+      vi.stubGlobal("fetch", meta({ fail: { contacts: 400 } }));
+      const res = await connect(ids());
+      expect(res.statusCode).toBe(502);
+      expect(res.body.steps.find((s) => s.id === "contacts")).toEqual({ id: "contacts", ok: false, error: "contacts refused" });
+      expect(res.body.steps.find((s) => s.id === "history")).toEqual({ id: "history", ok: true });
+    });
+
+    it("a failed link stops before the syncs: 500, and Meta's one sync is not spent", async () => {
+      fake.state.failWrite = (op, path) => path === "waLink";
+      const f = meta(); vi.stubGlobal("fetch", f);
+      const res = await connect(ids());
+      expect(res.statusCode).toBe(500);
+      expect(res.body.steps.map((s) => [s.id, s.ok])).toEqual([["exchange", true], ["link", false]]);
+      expect(f.calls.map((c) => c.step)).toEqual(["exchange"]);
+    });
+
+    it("reconnecting clears a disconnection; a different number forgets the old number's sync records", async () => {
+      vi.stubGlobal("fetch", meta({ fail: { contacts: 400, history: 400 } }));
+      fake.state.tree.waLink = { status: "disconnected", disconnect: { event: "PARTNER_REMOVED" }, phoneNumberId: PHONE, contacts: { firstAt: 5 } };
+      await connect(ids());
+      expect(fake.read("waLink/status")).toBe("connected");
+      expect(fake.read("waLink/disconnect")).toBeUndefined();
+      expect(fake.read("waLink/contacts")).toEqual({ firstAt: 5 });
+      fake.state.tree.waLink.phoneNumberId = "123123123";
+      fake.state.tree.waLink.measured = { historyDeliveries: 2, mgtEchoes: 1 };
+      await connect(ids());
+      expect(fake.read("waLink/contacts")).toBeUndefined();
+      // /code-review: the rehearsal's record is about Meta, not one number, so it stays.
+      expect(fake.read("waLink/measured")).toEqual({ historyDeliveries: 2, mgtEchoes: 1 });
+    });
+
+    // /code-review: the same number connected again kept the earlier import's
+    // record, so Settings described the new import as declined or done.
+    it("a new history request starts a new record for the same number", async () => {
+      vi.stubGlobal("fetch", meta());
+      fake.state.tree.waLink = { status: "disconnected", wabaId: WABA, phoneNumberId: PHONE,
+        contacts: { requestId: "old-c", requestedAt: 1, firstAt: 2 },
+        history: { requestId: "old", requestedAt: 1, declined: true, progress: 100, phase: 2, doneAt: 3, at: 3 } };
+      expect((await connect(ids())).statusCode).toBe(200);
+      expect(fake.read("waLink/history")).toEqual({ requestId: "req-history", requestedAt: expect.any(Number) });
+      expect(fake.read("waLink/contacts")).toMatchObject({ requestId: "req-contacts", firstAt: 2 });
+    });
+
+    // v18.9.0 phase 9: a real connection over the sandbox simulator's.
+    it("a real connection over a simulated one is no longer the simulator's", async () => {
+      fake.state.tree.waLink = { status: "connected", wabaId: SIM_WABA_ID, phoneNumberId: SIM_PHONE_NUMBER_ID, sim: true };
+      vi.stubGlobal("fetch", meta());
+      expect((await connect(ids())).statusCode).toBe(200);
+      expect(fake.read("waLink")).toMatchObject({ wabaId: WABA, phoneNumberId: PHONE });
+      expect(fake.read("waLink/sim")).toBeUndefined();
+    });
+
+    it("says whether the environment's number is the one connected, as a word", async () => {
+      vi.stubGlobal("fetch", meta());
+      expect((await connect(ids())).body.envNumber).toBe("unset");
+      vi.stubEnv("META_PHONE_NUMBER_ID", PHONE);
+      expect((await connect(ids())).body.envNumber).toBe("same");
+    });
+  });
+
+  describe("POST, a retry", () => {
+    beforeEach(() => { fake.state.tree = JSON.parse(JSON.stringify(ADMIN)); });
+    it("400 for a step it does not know, and while nothing is connected", async () => {
+      vi.stubEnv("META_WA_TOKEN", "sys-token");
+      expect((await connect({ retry: "exchange" })).statusCode).toBe(400);
+      const res = await connect({ retry: "contacts" });
+      expect([res.statusCode, res.body.error]).toEqual([400, "Nothing is connected yet: connect the Business app first."]);
+    });
+    it("400 for a connection the sandbox's simulator made, calling nobody", async () => {
+      vi.stubEnv("META_WA_TOKEN", "sys-token");
+      fake.state.tree.waLink = { status: "connected", wabaId: SIM_WABA_ID, phoneNumberId: SIM_PHONE_NUMBER_ID, sim: true };
+      const f = meta(); vi.stubGlobal("fetch", f);
+      const res = await connect({ retry: "contacts" });
+      expect([res.statusCode, res.body.error]).toEqual([400, "The connection is the sandbox simulator's: there is nothing at Meta to try again."]);
+      expect(f).not.toHaveBeenCalled();
+    });
+    it("503 without the system user's token", async () => {
+      fake.state.tree.waLink = { wabaId: WABA, phoneNumberId: PHONE };
+      expect((await connect({ retry: "history" })).statusCode).toBe(503);
+    });
+    it("runs that one step with META_WA_TOKEN and the ids waLink holds", async () => {
+      vi.stubEnv("META_WA_TOKEN", "sys-token");
+      fake.state.tree.waLink = { status: "connected", wabaId: WABA, phoneNumberId: PHONE };
+      const f = meta(); vi.stubGlobal("fetch", f);
+      const res = await connect({ retry: "history" });
+      expect([res.statusCode, res.body.steps]).toEqual([200, [{ id: "history", ok: true }]]);
+      expect(f.calls.map((c) => [c.step, c.auth])).toEqual([["history", "Bearer sys-token"]]);
+      expect(fake.read("waLink/history/requestId")).toBe("req-history");
+    });
+  });
 });
 
 // ── api/_lib/inbound-core.js ─────────────────────────────────────────────────
@@ -410,7 +707,7 @@ describe("processInbound", () => {
 
   it("a first message opens the conversation, stores the message and sends the one-time auto-ack", async () => {
     const r = await processInbound({ phone: "+34 600 111 222", text: "Hola", ts: TS, wamid: "wamid.A1", profileName: "Juan", langHint: "es" });
-    expect(r).toEqual({ phoneKey: KEY, skipped: false });
+    expect(r).toEqual({ phoneKey: KEY, skipped: false, muted: false });
     expect(convAt(KEY)).toMatchObject({ phoneKey: KEY, channel: "whatsapp", lastMessageAt: TS, lastMessageSnippet: "Hola", unread: true,
       windowExpiresAt: TS + WA_WINDOW_MS, language: "es", archived: false, autoAckSent: true, createdAt: TS, profileName: "Juan" });
     const [inbound, ack] = msgsAt(KEY);
@@ -436,6 +733,19 @@ describe("processInbound", () => {
     expect(await processInbound({ phone: KEY, text: "Hola", ts: TS + 5000, wamid: "wamid.DUP" })).toEqual({ phoneKey: KEY, skipped: true });
     expect(fake.state.writes.length).toBe(count);
     expect(convAt(KEY).lastMessageAt).toBe(TS);
+  });
+
+  // v18.9.0 — "Not a customer".
+  it("a muted conversation stores the message and does nothing else: no ack, no draft, no flag, read, still archived", async () => {
+    fake.state.tree = { conversations: { [KEY]: { phoneKey: KEY, muted: true, archived: true, archivedAt: 9, createdAt: 5 } } };
+    const r = await processInbound({ phone: KEY, text: "mesa para 4", ts: TS, wamid: "wamid.M",
+      parse: { intent: "new_booking", language: "es", size: 4 }, willParse: true });
+    expect(r).toEqual({ phoneKey: KEY, skipped: false, muted: true });
+    const c = convAt(KEY);
+    expect(c).toMatchObject({ muted: true, archived: true, archivedAt: 9, unread: false, lastMessageAt: TS, windowExpiresAt: TS + WA_WINDOW_MS });
+    expect("draftStatus" in c).toBe(false);
+    expect("parsing" in c).toBe(false);
+    expect(msgsAt(KEY).map((m) => m.direction)).toEqual(["in"]);
   });
 
   it("a draft intent stores a draft the app can use: an unusable time or size becomes null and the confidence drops", async () => {
@@ -521,7 +831,7 @@ describe("injectSimInbound", () => {
   it("stores the message at once with the indicator on, and lands the parse afterwards", async () => {
     let later;
     const r = await injectSimInbound({ phone: KEY, text: "Mesa para 4 personas mañana a las 21:00", name: "Sim" }, (p) => { later = p; });
-    expect(r).toEqual({ phoneKey: KEY, skipped: false });
+    expect(r).toEqual({ phoneKey: KEY, skipped: false, muted: false });
     expect(convAt(KEY)).toMatchObject({ parsing: true, profileName: "Sim" });
     expect(msgsAt(KEY)[0].direction).toBe("in");
     await later;
@@ -668,7 +978,23 @@ describe("wa-inbound — the handshake, the method, the signature", () => {
   });
   it("answers 200 to a signed payload with nothing in it", async () => {
     const res = await deliver({});
-    expect([res.statusCode, res.body]).toEqual([200, { ok: true, messages: 0, statuses: 0, skipped: 0, errors: 0 }]);
+    expect([res.statusCode, res.body]).toEqual([200, { ok: true, messages: 0, statuses: 0, echoes: 0, mgtEchoes: 0, edits: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 }]);
+  });
+  // The retry rule sums every counter but `errors`, so one a handler bumps that
+  // the record lacks reads NaN and switches the retry off: every counter under
+  // api/ is one freshResults() starts at 0, and nothing else types the record.
+  it("every results counter under api/ is a freshResults() key, and only coexist-core types the record", () => {
+    expect(freshResults()).not.toBe(freshResults());
+    expect(Object.values(freshResults()).every((v) => v === 0)).toBe(true);
+    const keys = Object.keys(freshResults());
+    const files = ["api/", "api/_lib/"].flatMap((d) => readdirSync(new URL("../" + d, import.meta.url)).filter((f) => f.endsWith(".js")).map((f) => d + f));
+    let bumps = 0;
+    for (const f of files) {
+      const src = stripComments(readFileSync(new URL("../" + f, import.meta.url), "utf8")).join("\n");
+      for (const m of src.matchAll(/\bresults\.([a-zA-Z]+)\s*(?:\+\+|\+=)/g)) { bumps++; expect(keys, f + " bumps results." + m[1]).toContain(m[1]); }
+      if (f !== "api/_lib/coexist-core.js") expect(src, f).not.toMatch(/statuses:\s*0/);
+    }
+    expect(bumps).toBeGreaterThan(30);
   });
 });
 
@@ -848,12 +1174,752 @@ describe("wa-inbound — when to ask Meta to deliver again", () => {
   });
 });
 
+// ── v18.9.0 — coexistence: the field dispatch and the number guard ──────────
+// A coexistence number sends four more fields to the same URL; each change is
+// dispatched on its `field`, and a change for a number that is not the
+// restaurant's is ignored before anything reads it.
+const change = (field, value) => JSON.stringify({
+  object: "whatsapp_business_account",
+  entry: [{ id: "WABA", changes: [{ field, value: Object.assign({ messaging_product: "whatsapp" }, value) }] }],
+});
+const deliverChange = (field, value) => deliver(null, { raw: change(field, value) });
+const forNumber = (id) => ({ metadata: { display_phone_number: "34600000000", phone_number_id: id } });
+const hola = (extra) => Object.assign({ messages: [inMsg({ type: "text", text: { body: "hola" } })] }, extra);
+
+describe("wa-inbound — dispatch by field (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("a field the webhook does not handle is counted as ignored, answered 200, and writes nothing", async () => {
+    const res = await deliverChange("message_template_status_update", { event: "APPROVED" });
+    expect([res.statusCode, res.body]).toMatchObject([200, { ok: true, ignored: 1, messages: 0 }]);
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("a change with no field reads as `messages`, the one field there was", async () => {
+    const res = await deliver(null, { raw: JSON.stringify({ entry: [{ changes: [{ value: hola() }] }] }) });
+    expect(res.body).toMatchObject({ messages: 1 });
+    expect(inbound()).toHaveLength(1);
+  });
+  it("`value.messages` under another field never takes the inbound road: no auto-reply, no parse", async () => {
+    await deliverChange("history", hola());
+    expect(msgsAt(KEY).filter((m) => m.isAutoAck)).toEqual([]);
+    expect(scheduled).toEqual([]);
+  });
+});
+
+describe("wa-inbound — the number guard (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("with META_PHONE_NUMBER_ID set, a change for another number is ignored and writes nothing", async () => {
+    vi.stubEnv("META_PHONE_NUMBER_ID", "111");
+    const res = await deliver(hola(forNumber("222")));
+    expect(res.body).toMatchObject({ ignored: 1, messages: 0 });
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("a change for the configured number, or with no number on it, is stored", async () => {
+    vi.stubEnv("META_PHONE_NUMBER_ID", "111");
+    expect((await deliver(hola(forNumber("111")))).body).toMatchObject({ messages: 1, ignored: 0 });
+    expect((await deliver(hola({ messages: [inMsg({ id: "wamid.IN2", type: "text", text: { body: "otra" } })] }))).body)
+      .toMatchObject({ messages: 1, ignored: 0 });
+  });
+  it("the number Embedded Signup connected is accepted before the env var names it", async () => {
+    vi.stubEnv("META_PHONE_NUMBER_ID", "111");
+    fake.state.tree = { waLink: { status: "connected", phoneNumberId: "333" } };
+    expect((await deliver(hola(forNumber("333")))).body).toMatchObject({ messages: 1 });
+    expect((await deliver(hola(forNumber("222")))).body).toMatchObject({ ignored: 1 });
+  });
+  it("with nothing configured anywhere, every number is accepted (the mock sandbox, the harness)", async () => {
+    expect((await deliver(hola(forNumber("whatever")))).body).toMatchObject({ messages: 1 });
+  });
+  it("a delivery whose number cannot be checked is an error, so Meta sends it again", async () => {
+    vi.stubEnv("META_PHONE_NUMBER_ID", "111");
+    const realRef = fake.db.ref;
+    fake.db.ref = (path) => { if (path === "waLink") throw new Error("database unreachable"); return realRef(path); };
+    try {
+      const res = await deliver(hola(forNumber("333")));
+      expect([res.statusCode, res.body]).toMatchObject([500, { errors: 1, messages: 0 }]);
+    } finally {
+      fake.db.ref = realRef;
+    }
+  });
+});
+
+// ── Phase 2: the phone's contacts (smb_app_state_sync) ──────────────────────
+const contactItem = (phone, action, full, first, secs) => ({
+  type: "contact", action,
+  contact: { full_name: full, first_name: first, phone_number: phone },
+  metadata: { timestamp: String(secs || Math.floor(Date.now() / 1000) - 60) },
+});
+const syncContacts = (items) => deliverChange("smb_app_state_sync", Object.assign(forNumber("111"), { state_sync: items }));
+
+describe("wa-inbound — the phone's contacts (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("an add is stored per key, named, and counted; the first batch stamps waLink.contacts.firstAt", async () => {
+    const res = await syncContacts([contactItem("34600111222", "add", "Ana López", "Ana"), contactItem("34600999888", "add", "Proveedor Pescado", "")]);
+    expect(res.body).toMatchObject({ contacts: 2, errors: 0 });
+    expect(fake.read("waContacts/" + KEY)).toMatchObject({ name: "Ana López", first: "Ana" });
+    expect(fake.read("waContacts/+34600999888")).toMatchObject({ name: "Proveedor Pescado" });
+    expect("first" in fake.read("waContacts/+34600999888")).toBe(false);
+    const firstAt = fake.read("waLink/contacts/firstAt");
+    expect(firstAt).toBeGreaterThan(0);
+    // A later batch does not move the moment the first one landed.
+    await syncContacts([contactItem("34600111222", "add", "Ana L.", "Ana")]);
+    expect(fake.read("waLink/contacts/firstAt")).toBe(firstAt);
+    expect(fake.read("waContacts/" + KEY).name).toBe("Ana L.");
+  });
+  it("a remove deletes the key and nothing else; the write is per key, never the node", async () => {
+    fake.state.tree = { waContacts: { [KEY]: { name: "Ana", at: 1000 }, "+34999": { name: "Pau", at: 1000 } } };
+    await syncContacts([contactItem("34600111222", "remove", "Ana", "Ana")]);
+    expect(fake.read("waContacts/" + KEY)).toBeUndefined();
+    expect(fake.read("waContacts/+34999")).toMatchObject({ name: "Pau" });
+    expect(fake.state.writes.filter((w) => w.path === "waContacts")).toEqual([{ op: "update", path: "waContacts", value: { [KEY]: null } }]);
+  });
+  it("an edit older than what is stored never replaces it (out of order)", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    fake.state.tree = { waContacts: { [KEY]: { name: "Ana (new)", at: (now - 10) * 1000 } } };
+    await syncContacts([contactItem("34600111222", "add", "Ana (old)", "", now - 100)]);
+    expect(fake.read("waContacts/" + KEY).name).toBe("Ana (new)");
+  });
+  it("an item that is not a contact, or has no usable number, writes nothing and is ignored", async () => {
+    const res = await syncContacts([{ type: "label", action: "add" }, contactItem("", "add", "Nobody", ""), contactItem("+", "add", "Plus", "")]);
+    expect(res.body).toMatchObject({ contacts: 0, ignored: 1 });
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("names are cleaned: control characters out, whitespace collapsed, capped", async () => {
+    await syncContacts([contactItem("34600111222", "add", "  Ana\u0000\n  López\t" + "x".repeat(200), "Ana")]);
+    const c = fake.read("waContacts/" + KEY);
+    expect(c.name.startsWith("Ana López x")).toBe(true);
+    expect(c.name.length).toBe(WA_CONTACT_NAME_MAX);
+  });
+  it("a contact for another number's change is ignored by the guard", async () => {
+    vi.stubEnv("META_PHONE_NUMBER_ID", "999");
+    const res = await syncContacts([contactItem("34600111222", "add", "Ana", "Ana")]);
+    expect(res.body).toMatchObject({ ignored: 1, contacts: 0 });
+    expect(fake.read("waContacts/" + KEY)).toBeUndefined();
+  });
+  it("a failed write is an error, so Meta sends the batch again", async () => {
+    fake.state.failWrite = (op, path) => path === "waContacts";
+    const res = await syncContacts([contactItem("34600111222", "add", "Ana", "Ana")]);
+    expect([res.statusCode, res.body]).toMatchObject([500, { errors: 1 }]);
+  });
+});
+
+describe("contactPlan / contactPatch", () => {
+  const now = 2000000000000;
+  it("keys by the normalised number, keeps a nameless contact as saved, and deletes on remove", () => {
+    expect(contactPlan(contactItem("34 600-111-222", "add", "", "", 1900000000), now)).toEqual({ phoneKey: KEY, at: 1900000000000, contact: { name: "", at: 1900000000000 } });
+    expect(contactPlan(contactItem("34600111222", "remove", "Ana", "", 1900000000), now)).toEqual({ phoneKey: KEY, at: 1900000000000, contact: null });
+    expect(contactPlan(contactItem("34600111222", "add", "", "Ana", 1900000000), now).contact).toEqual({ name: "Ana", at: 1900000000000 });
+    expect(contactPlan({ type: "contact", contact: "nope" }, now)).toBeNull();
+    expect(contactPlan(null, now)).toBeNull();
+  });
+  it("a timestamp in the future is now, a missing one is now", () => {
+    expect(contactPlan(contactItem("34600111222", "add", "Ana", "", 9999999999), now).at).toBe(now);
+    expect(contactPlan({ type: "contact", action: "add", contact: { full_name: "Ana", phone_number: "34600111222" } }, now).at).toBe(now);
+  });
+  it("within one batch the later change to a key wins, in either order", () => {
+    const a = contactItem("34600111222", "add", "First", "", 1900000000);
+    const b = contactItem("34600111222", "add", "Second", "", 1900000100);
+    expect(contactPatch([a, b], {}, now).patch[KEY].name).toBe("Second");
+    expect(contactPatch([b, a], {}, now).patch[KEY].name).toBe("Second");
+  });
+});
+
+describe("numberIsOurs / makeNumberGuard", () => {
+  it("decides on the configured id and the connected id, and lets a change with no id through", () => {
+    expect(numberIsOurs(null, "111", "333")).toBe(true);
+    expect(numberIsOurs("222", null, null)).toBe(true);
+    expect(numberIsOurs("111", "111", null)).toBe(true);
+    expect(numberIsOurs("333", "111", "333")).toBe(true);
+    expect(numberIsOurs("333", null, "333")).toBe(true);
+    expect(numberIsOurs("222", "111", "333")).toBe(false);
+    expect(numberIsOurs("222", null, "333")).toBe(false);
+    expect(numberIsOurs(111, "111", null)).toBe(true); // Meta sends a string; a number is the same id
+  });
+  it("reads waLink at most once per delivery, and not at all when the env id answers", async () => {
+    vi.stubEnv("META_PHONE_NUMBER_ID", "111");
+    const readLink = vi.fn(async () => ({ phoneNumberId: "333" }));
+    const isOurs = makeNumberGuard(readLink);
+    expect(await isOurs(forNumber("111"))).toBe(true);
+    expect(readLink).not.toHaveBeenCalled();
+    expect(await isOurs(forNumber("222"))).toBe(false);
+    expect(await isOurs(forNumber("333"))).toBe(true);
+    expect(await isOurs(forNumber("444"))).toBe(false);
+    expect(readLink).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── Phases 3–4: phone replies (smb_message_echoes), edits and deletes ───────
+const echo = (extra) => Object.assign({ from: "34600000000", to: "34600111222", id: "wamid.E1", timestamp: nowSecs(), type: "text", text: { body: "Hola Ana, ¿a qué hora venís?" } }, extra);
+const deliverEchoes = (echoes) => deliverChange("smb_message_echoes", Object.assign(forNumber("111"), { message_echoes: echoes }));
+const editOf = (orig, body, extra) => inMsg(Object.assign({ id: "wamid.ED1", type: "edit", edit: { original_message_id: orig, message: { type: "text", text: { body } } } }, extra));
+const revokeOf = (orig, extra) => inMsg(Object.assign({ id: "wamid.RV1", type: "revoke", revoke: { original_message_id: orig } }, extra));
+
+describe("wa-inbound — phone replies (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("an echo is an outgoing message tagged phone, keyed by its wamid; a new conversation is read, settled, with no window", async () => {
+    const res = await deliverEchoes([echo()]);
+    expect(res.body).toMatchObject({ ok: true, echoes: 1, messages: 0, errors: 0 });
+    const msgs = msgsAt(KEY);
+    expect(msgs).toHaveLength(1); // no auto-reply beside it
+    expect(fake.read("messages/" + KEY + "/wamid_E1")).toMatchObject({
+      direction: "out", source: "phone", text: "Hola Ana, ¿a qué hora venís?", status: "sent", isAutoAck: false, providerMsgId: "wamid.E1",
+    });
+    const c = convAt(KEY);
+    expect(c).toMatchObject({ phoneKey: KEY, unread: false, autoAckSent: true, archived: false, lastMessageSnippet: "Hola Ana, ¿a qué hora venís?" });
+    expect(c.windowExpiresAt).toBeUndefined();
+    expect(scheduled).toEqual([]); // never parsed
+  });
+  it("an echo marks the conversation read and brings it out of Archived, and leaves the window alone", async () => {
+    const win = Date.now() + 5000;
+    fake.state.tree = { conversations: { [KEY]: openConv({ unread: true, archived: true, archivedAt: 5, windowExpiresAt: win, lastMessageAt: 1 }) } };
+    await deliverEchoes([echo()]);
+    expect(convAt(KEY)).toMatchObject({ unread: false, archived: false, windowExpiresAt: win });
+    expect(convAt(KEY).archivedAt).toBeUndefined(); // null deletes the key, as in RTDB
+  });
+  it("a muted conversation (not a customer) stays archived", async () => {
+    fake.state.tree = { conversations: { [KEY]: openConv({ muted: true, archived: true, archivedAt: 5, lastMessageAt: 1 }) } };
+    await deliverEchoes([echo()]);
+    expect(convAt(KEY)).toMatchObject({ archived: true, archivedAt: 5, unread: false });
+  });
+  it("an echo delivered late does not make an older reply the conversation's last line", async () => {
+    fake.state.tree = { conversations: { [KEY]: openConv({ lastMessageAt: Date.now(), lastMessageSnippet: "newer" }) } };
+    await deliverEchoes([echo({ timestamp: String(Math.floor(Date.now() / 1000) - 3600) })]);
+    expect(convAt(KEY).lastMessageSnippet).toBe("newer");
+    expect(msgsAt(KEY)).toHaveLength(1);
+  });
+  // v18.9.0 follow-up: both are left alone, and the second is counted apart,
+  // because the rehearsal asks whether Meta ever sends one.
+  it("a redelivered echo is skipped, and the echo of a message MGT sent itself is stored nowhere and counted apart", async () => {
+    fake.state.tree = { messages: { [KEY]: { out1: { id: "out1", direction: "out", text: "x", ts: 1, providerMsgId: "wamid.MGT" } } } };
+    await deliverEchoes([echo()]);
+    const res = await deliverEchoes([echo(), echo({ id: "wamid.MGT" })]);
+    expect(res.body).toMatchObject({ echoes: 0, skipped: 1, mgtEchoes: 1 });
+    expect(msgsAt(KEY)).toHaveLength(2);
+  });
+  it("a photo sent from the phone keeps its media id, and its caption is the text", async () => {
+    await deliverEchoes([echo({ type: "image", image: { id: "123456", mime_type: "image/jpeg", caption: "La terraza" } })]);
+    expect(fake.read("messages/" + KEY + "/wamid_E1")).toMatchObject({ text: "La terraza", media: { kind: "image", mediaId: "123456" } });
+    expect(convAt(KEY).lastMessageSnippet).toBe("Photo · La terraza");
+  });
+  // /code-review: every other stored message is capped (an inbound one, an
+  // imported one, an edit); a reply typed on the phone was not.
+  it("a long phone reply is stored capped, like every other message", async () => {
+    await deliverEchoes([echo({ text: { body: "x".repeat(WA_MAX_TEXT_LEN + 500) } })]);
+    expect(fake.read("messages/" + KEY + "/wamid_E1").text).toHaveLength(WA_MAX_TEXT_LEN);
+  });
+  it("an echo with no customer number, or no wamid, is ignored and writes nothing", async () => {
+    const res = await deliverEchoes([echo({ to: "" }), echo({ id: "" })]);
+    expect(res.body).toMatchObject({ echoes: 0, ignored: 2 });
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("staff deleting a phone reply on the phone empties it on the MGT side too", async () => {
+    await deliverEchoes([echo()]);
+    const res = await deliverEchoes([echo({ id: "wamid.E2", type: "revoke", revoke: { original_message_id: "wamid.E1" } })]);
+    expect(res.body).toMatchObject({ edits: 1, echoes: 0 });
+    expect(fake.read("messages/" + KEY + "/wamid_E1")).toMatchObject({ text: WA_REVOKED_OUT, source: "phone" });
+    expect(msgsAt(KEY)).toHaveLength(1);
+  });
+  it("one failing echo is counted and the next is still stored", async () => {
+    fake.state.failWrite = (op, path) => path.endsWith("wamid_E1");
+    const res = await deliverEchoes([echo(), echo({ id: "wamid.E2" })]);
+    expect([res.statusCode, res.body]).toMatchObject([200, { echoes: 1, errors: 1 }]);
+  });
+});
+
+describe("wa-inbound — a customer edits or deletes a message (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("an edit replaces the stored text and marks it edited: no new bubble, no parse, and the list's line follows", async () => {
+    await deliver(hola());
+    const before = scheduled.length;
+    const res = await deliver({ messages: [editOf("wamid.IN1", "hola, mesa para 2")] });
+    expect(res.body).toMatchObject({ edits: 1, messages: 0 });
+    expect(inbound()).toHaveLength(1);
+    expect(inbound()[0]).toMatchObject({ id: "wamid_IN1", text: "hola, mesa para 2" });
+    expect(inbound()[0].editedAt).toBeGreaterThan(0);
+    expect(scheduled).toHaveLength(before);
+    expect(convAt(KEY).lastMessageSnippet).toBe("hola, mesa para 2");
+  });
+  it("a delete replaces the text with a line saying so and drops the photo; an edit after it changes nothing", async () => {
+    await deliver({ messages: [inMsg({ type: "image", image: { id: "123456", mime_type: "image/jpeg", caption: "mi foto" } })] });
+    const res = await deliver({ messages: [revokeOf("wamid.IN1")] });
+    expect(res.body).toMatchObject({ edits: 1 });
+    const [m] = inbound();
+    expect(m).toMatchObject({ text: WA_REVOKED_IN });
+    expect(m.media).toBeUndefined();
+    expect(m.revokedAt).toBeGreaterThan(0);
+    expect(convAt(KEY).lastMessageSnippet).toBe(WA_REVOKED_IN);
+    expect((await deliver({ messages: [editOf("wamid.IN1", "back again")] })).body).toMatchObject({ edits: 0, skipped: 1 });
+    expect(inbound()[0].text).toBe(WA_REVOKED_IN);
+  });
+  it("an edit whose original was never stored is kept as a new message under the edit's id", async () => {
+    const res = await deliver({ messages: [editOf("wamid.GONE", "mesa para 3")] });
+    expect(res.body).toMatchObject({ messages: 1, edits: 0 });
+    expect(inbound()).toEqual([expect.objectContaining({ id: "wamid_ED1", text: "mesa para 3" })]);
+  });
+  it("a delete whose original was never stored has nothing to delete", async () => {
+    const res = await deliver({ messages: [revokeOf("wamid.GONE")] });
+    expect(res.body).toMatchObject({ skipped: 1, messages: 0 });
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("an edit or a delete finds a message by its providerMsgId too", async () => {
+    fake.state.tree = { messages: { [KEY]: { in7: { id: "in7", direction: "in", text: "old", ts: 1, providerMsgId: "wamid.X" } } } };
+    await deliver({ messages: [editOf("wamid.X", "new")] });
+    expect(fake.read("messages/" + KEY + "/in7")).toMatchObject({ text: "new" });
+  });
+});
+
+describe("echoConvPatch / editedText / editPatch / revokePatch", () => {
+  it("the snippet and time move only forward; a muted conversation stays archived", () => {
+    expect(echoConvPatch({ lastMessageAt: 100 }, { ts: 50, snippet: "x" })).toEqual({ unread: false, autoAckSent: true });
+    expect(echoConvPatch({ lastMessageAt: 100 }, { ts: 100, snippet: "x" })).toMatchObject({ lastMessageAt: 100, lastMessageSnippet: "x" });
+    expect(echoConvPatch({ archived: true, muted: true }, { ts: 1, snippet: "x" })).not.toHaveProperty("archived");
+    expect(echoConvPatch({ archived: true }, { ts: 1, snippet: "x" })).toMatchObject({ archived: false, archivedAt: null });
+  });
+  it("replyUnarchives: archived and not muted, and nothing else", () => {
+    expect(replyUnarchives({ archived: true })).toBe(true);
+    expect(replyUnarchives({ archived: true, muted: true })).toBe(false);
+    expect(replyUnarchives({ archived: false })).toBe(false);
+    expect(replyUnarchives({ muted: true })).toBe(false);
+    expect(replyUnarchives(null)).toBe(false);
+  });
+  // The rule was written out at four sites and three had dropped the mute, so
+  // every place a reply un-archives must ASK it rather than restate it.
+  it("every place a reply is written asks replyUnarchives, and none restates the test", () => {
+    ["api/wa-send.js", "api/wa-media.js", "src/hooks/useWhatsApp.js", "src/lib/wa-coexist.js"].forEach((f) => {
+      const src = stripComments(readFileSync(new URL("../" + f, import.meta.url), "utf8")).join("\n");
+      expect(src, f).toMatch(/replyUnarchives\(/);
+      expect(src, f).not.toMatch(/\.archived\)\s*\{\s*patch\.archived\s*=\s*false/);
+    });
+  });
+  it("an edit's text is a text's body or a caption, with or without a type on the edited message", () => {
+    expect(editedText({ type: "edit", edit: { message: { type: "text", text: { body: "a" } } } })).toBe("a");
+    expect(editedText({ type: "edit", edit: { message: { text: { body: "b" } } } })).toBe("b");
+    expect(editedText({ type: "edit", edit: { message: { type: "image", image: { caption: "c" } } } })).toBe("c");
+    expect(editedText({ type: "edit", edit: { message: { type: "sticker", sticker: {} } } })).toBeNull();
+    expect(editedText({ type: "edit" })).toBeNull();
+  });
+  it("a caption edited away leaves the photo's label; a deleted message takes no edit and no second delete", () => {
+    expect(editPatch({ text: "x", media: { kind: "image", mediaId: "1" } }, "  ", 5)).toEqual({ text: "Photo", editedAt: 5 });
+    expect(editPatch({ text: "x", revokedAt: 1 }, "y", 5)).toBeNull();
+    expect(editPatch({ text: "x" }, null, 5)).toBeNull();
+    expect(revokePatch({ direction: "out", text: "x" }, 5)).toEqual({ text: WA_REVOKED_OUT, media: null, revokedAt: 5 });
+    expect(revokePatch({ direction: "in", revokedAt: 1 }, 5)).toBeNull();
+  });
+});
+
+// ── Phase 5: the chats the phone already held (history) ─────────────────────
+const BIZ = "34600000000";
+const secsAgo = (n) => String(Math.floor(Date.now() / 1000) - n);
+const histMsg = (id, from, ago, extra) => Object.assign({ from, id, timestamp: secsAgo(ago), type: "text", text: { body: "msg " + id }, history_context: { status: "READ" } }, extra);
+const deliverHistory = (history, extra) => deliverChange("history", Object.assign(forNumber("111"), { history }, extra));
+const chunk = (threads, meta) => ({ metadata: Object.assign({ phase: 0, chunk_order: 1, progress: 40 }, meta), threads });
+const DAY = 24 * 3600;
+
+describe("wa-inbound — the chats the phone already held (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("a recent thread is imported read, settled, with no window, never parsed or answered; progress is recorded", async () => {
+    const res = await deliverHistory([chunk([{ id: "34600111222", messages: [
+      histMsg("wamid.H1", "34600111222", 7200),
+      histMsg("wamid.H2", BIZ, 3600, { history_context: { status: "DELIVERED" } }),
+    ] }])]);
+    expect(res.body).toMatchObject({ ok: true, history: 2, messages: 0, errors: 0 });
+    const [a, b] = msgsAt(KEY);
+    expect(a).toMatchObject({ id: "wamid_H1", direction: "in", status: "delivered", imported: true, text: "msg wamid.H1" });
+    expect(a.source).toBeUndefined();
+    expect(b).toMatchObject({ id: "wamid_H2", direction: "out", source: "phone", status: "delivered", imported: true });
+    const c = convAt(KEY);
+    expect(c).toMatchObject({ unread: false, autoAckSent: true, archived: false, lastMessageAt: b.ts, createdAt: a.ts, lastMessageSnippet: "msg wamid.H2" });
+    expect(c.windowExpiresAt).toBeUndefined();
+    expect(msgsAt(KEY).filter((m) => m.isAutoAck)).toEqual([]);
+    expect(scheduled).toEqual([]);
+    expect(fake.read("waLink/history")).toMatchObject({ progress: 40, phase: 0 });
+    // One root update for the thread: its messages and its conversation's fields.
+    const root = fake.state.writes.filter((w) => w.op === "update" && w.path === "");
+    expect(root).toHaveLength(1);
+    expect(Object.keys(root[0].value).every((k) => k.startsWith("messages/" + KEY + "/") || k.startsWith("conversations/" + KEY + "/"))).toBe(true);
+  });
+  it("a thread with nothing newer than a week goes straight to Archived", async () => {
+    await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 10 * DAY)] }])]);
+    expect(convAt(KEY)).toMatchObject({ archived: true, unread: false });
+  });
+  it("a resent chunk stores nothing twice", async () => {
+    const h = [chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600)] }])];
+    await deliverHistory(h);
+    const res = await deliverHistory(h);
+    expect([res.statusCode, res.body]).toMatchObject([200, { history: 0 }]);
+    expect(msgsAt(KEY)).toHaveLength(1);
+  });
+  it("into a live conversation: createdAt moves back to the oldest import, nothing else of it moves back", async () => {
+    const win = Date.now() + 5000;
+    const live = openConv({ createdAt: Date.now() - 60000, lastMessageAt: Date.now() - 1000, lastMessageSnippet: "live", unread: true, windowExpiresAt: win, archived: false });
+    fake.state.tree = { conversations: { [KEY]: live } };
+    await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 30 * DAY)] }])]);
+    const c = convAt(KEY);
+    expect(c).toMatchObject({ lastMessageSnippet: "live", unread: true, windowExpiresAt: win, archived: false, autoAckSent: true });
+    expect(c.createdAt).toBe(msgsAt(KEY)[0].ts);
+  });
+  it("a photo comes as a placeholder, and its media follows under the same id", async () => {
+    await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.P1", "34600111222", 600, { type: "media_placeholder", text: undefined })] }])]);
+    expect(msgsAt(KEY)[0]).toMatchObject({ text: "Photo or file — open WhatsApp on the phone to see it" });
+    const res = await deliverChange("history", Object.assign(forNumber("111"), { messages: [
+      { from: "34600111222", id: "wamid.P1", timestamp: secsAgo(600), type: "image", image: { id: "777", mime_type: "image/jpeg", caption: "la mesa" } },
+    ] }));
+    expect(res.body).toMatchObject({ history: 1, messages: 0 });
+    expect(msgsAt(KEY)).toHaveLength(1);
+    expect(msgsAt(KEY)[0]).toMatchObject({ text: "la mesa", media: { kind: "image", mediaId: "777" }, imported: true });
+  });
+  it("media that comes before its thread is stored whole, and the thread leaves it; the restaurant's own goes to its customer", async () => {
+    await deliverChange("history", Object.assign(forNumber("111"), { messages: [
+      { from: BIZ, to: "34600111222", id: "wamid.P2", timestamp: secsAgo(900), type: "document", document: { id: "778", mime_type: "application/pdf", filename: "carta.pdf" } },
+    ] }));
+    expect(msgsAt(KEY)[0]).toMatchObject({ direction: "out", source: "phone", media: { kind: "document", filename: "carta.pdf" } });
+    // /code-review: with a conversation, so the inbox lists it and the prune
+    // reaches it even if its thread never comes.
+    expect(convAt(KEY)).toMatchObject({ phoneKey: KEY, unread: false, autoAckSent: true, archived: false, lastMessageAt: msgsAt(KEY)[0].ts, createdAt: msgsAt(KEY)[0].ts });
+    await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.P2", BIZ, 900, { type: "media_placeholder", text: undefined })] }])]);
+    expect(msgsAt(KEY)).toHaveLength(1);
+    expect(msgsAt(KEY)[0].media).toMatchObject({ mediaId: "778" });
+  });
+  it("a photo over a week old that comes before its thread does not keep a recent thread in Archived", async () => {
+    await deliverChange("history", Object.assign(forNumber("111"), { messages: [
+      { from: "34600111222", id: "wamid.P3", timestamp: secsAgo(10 * DAY), type: "image", image: { id: "779", mime_type: "image/jpeg" } },
+    ] }));
+    expect(convAt(KEY)).toMatchObject({ archived: true });
+    await deliverHistory([chunk([{ id: "34600111222", messages: [
+      histMsg("wamid.P3", "34600111222", 10 * DAY, { type: "media_placeholder", text: undefined }),
+      histMsg("wamid.P4", "34600111222", DAY),
+    ] }])]);
+    expect(convAt(KEY)).toMatchObject({ archived: false, lastMessageSnippet: "msg wamid.P4" });
+    expect("archivedAt" in convAt(KEY)).toBe(false);
+    expect(msgsAt(KEY)).toHaveLength(2);
+  });
+  it("a business that declined to share its history is recorded, and nothing is imported", async () => {
+    const res = await deliverHistory([{ errors: [{ code: 2593109, title: "History sharing declined" }] }]);
+    expect(res.body).toMatchObject({ ok: true, events: 1, history: 0 });
+    expect(fake.read("waLink/history")).toMatchObject({ declined: true });
+    expect(fake.read("conversations")).toBeUndefined();
+  });
+  it("an edit, a delete and a message with no id are not imported", async () => {
+    await deliverHistory([chunk([{ id: "34600111222", messages: [
+      histMsg("", "34600111222", 600),
+      histMsg("wamid.E", "34600111222", 600, { type: "edit", edit: { original_message_id: "x", message: { type: "text", text: { body: "y" } } } }),
+      histMsg("wamid.R", "34600111222", 600, { type: "revoke", revoke: { original_message_id: "x" } }),
+    ] }])]);
+    expect(fake.read("messages")).toBeUndefined();
+  });
+  it("a chunk with a thread that failed is answered 500, and its resend imports that thread without doubling the others", async () => {
+    const h = [chunk([
+      { id: "34600111222", messages: [histMsg("wamid.A1", "34600111222", 600)] },
+      { id: "34600999888", messages: [histMsg("wamid.B1", "34600999888", 600)] },
+    ])];
+    const realRef = fake.db.ref;
+    fake.db.ref = (path) => { if (path === "messages/+34600999888") throw new Error("database unreachable"); return realRef(path); };
+    let res;
+    try { res = await deliverHistory(h); } finally { fake.db.ref = realRef; }
+    expect([res.statusCode, res.body]).toMatchObject([500, { history: 1, errors: 1 }]);
+    res = await deliverHistory(h);
+    expect([res.statusCode, res.body]).toMatchObject([200, { history: 1, errors: 0 }]);
+    expect(msgsAt(KEY)).toHaveLength(1);
+    expect(msgsAt("+34600999888")).toHaveLength(1);
+  });
+  // /code-review: the progress write threw out of the handler, so the second
+  // chunk was never read, and with the first chunk's thread counted the
+  // delivery was a 200: Meta never sent the second chunk again.
+  it("a progress record that fails does not stop the chunks after it, and the delivery is sent again", async () => {
+    const h = [
+      chunk([{ id: "34600111222", messages: [histMsg("wamid.A1", "34600111222", 600)] }], { progress: 40 }),
+      chunk([{ id: "34600999888", messages: [histMsg("wamid.B1", "34600999888", 600)] }], { progress: 80, chunk_order: 2 }),
+    ];
+    fake.state.failWrite = (op, path) => op === "transaction" && path === "waLink/history";
+    let res = await deliverHistory(h);
+    expect([res.statusCode, res.body]).toMatchObject([500, { history: 2, errors: 2 }]);
+    expect(msgsAt("+34600999888")).toHaveLength(1);
+    fake.state.failWrite = null;
+    res = await deliverHistory(h);
+    expect([res.statusCode, res.body]).toMatchObject([200, { history: 0, errors: 0 }]);
+    expect(fake.read("waLink/history")).toMatchObject({ progress: 80 });
+    expect(msgsAt(KEY)).toHaveLength(1);
+  });
+  it("a declined share that cannot be recorded is answered 500, so Meta sends it again", async () => {
+    fake.state.failWrite = (op, path) => op === "transaction" && path === "waLink/history";
+    const res = await deliverHistory([{ errors: [{ code: 2593109, title: "History sharing declined" }] }]);
+    expect([res.statusCode, res.body]).toMatchObject([500, { events: 0, errors: 1 }]);
+  });
+});
+
+// ── v18.9.0 follow-up: what a coexistence delivery measures ─────────────────
+// The rehearsal's two questions (does an echo ever name a message MGT sent; how
+// big and how slow is a history delivery) are answered by one log line per
+// delivery, for watching live, and by `waLink/measured`, which outlasts
+// Vercel's hour of logs. Counts only: the line's shape below admits nothing but
+// numbers and this code's own names.
+const LINE = /^\[wa-inbound\] coexistence delivery status=\d{3} bytes=\d+ ms=\d+ fields=[a-z_]+:\d+(,[a-z_]+:\d+)*( threads=\d+ messages=\d+)? counts=([a-zA-Z]+:\d+(,[a-zA-Z]+:\d+)*|none)$/;
+const coexistLines = () => console.info.mock.calls.map((c) => c.join(" ")).filter((l) => l.includes("coexistence delivery"));
+const mgtSent = () => ({ messages: { [KEY]: { out1: { id: "out1", direction: "out", text: "x", ts: 1, providerMsgId: "wamid.MGT" } } } });
+const leaves = (o) => Object.values(o).flatMap((v) => (v && typeof v === "object" ? leaves(v) : [v]));
+
+describe("wa-inbound — what a coexistence delivery measures (v18.9.0 follow-up)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("a history delivery logs one line and records its size, time, threads and messages on waLink/measured", async () => {
+    const body = change("history", Object.assign(forNumber("111"), { history: [chunk([
+      { id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600), histMsg("wamid.H2", BIZ, 300)] },
+      { id: "34600999888", messages: [histMsg("wamid.H3", "34600999888", 600)] },
+    ])] }));
+    const res = await deliver(null, { raw: body });
+    expect(res.statusCode).toBe(200);
+    const lines = coexistLines();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(LINE);
+    expect(lines[0]).toMatch(/ fields=history:1 threads=2 messages=3 counts=history:3$/);
+    const m = fake.read("waLink/measured");
+    expect(m).toMatchObject({ historyBegun: 1, historyDeliveries: 1, historyLargest: { bytes: Buffer.byteLength(body), threads: 2, messages: 3, at: expect.any(Number) } });
+    expect(lines[0]).toContain("status=200 bytes=" + Buffer.byteLength(body) + " ms=" + m.historyLargest.ms + " ");
+    expect(m.historySlowest).toEqual(m.historyLargest);
+    expect(Object.keys(m).sort()).toEqual(["historyBegun", "historyChunks", "historyDeliveries", "historyLargest", "historySlowest"]);
+    expect(m.historyChunks).toEqual({ p0: { c1: 1 } });
+  });
+  it("an echo of a message MGT sent is logged and recorded; a phone reply is logged only", async () => {
+    fake.state.tree = mgtSent();
+    await deliverEchoes([echo()]);
+    expect(coexistLines()).toEqual([expect.stringMatching(/ fields=smb_message_echoes:1 counts=echoes:1$/)]);
+    expect(fake.read("waLink/measured")).toBeUndefined();
+    await deliverEchoes([echo({ id: "wamid.MGT" })]);
+    await deliverEchoes([echo({ id: "wamid.MGT" })]);
+    expect(coexistLines().slice(1)).toEqual([expect.stringMatching(/ counts=mgtEchoes:1$/), expect.stringMatching(/ counts=mgtEchoes:1$/)]);
+    expect(fake.read("waLink/measured")).toEqual({ mgtEchoes: 2, mgtEchoAt: expect.any(Number) });
+    expect(msgsAt(KEY)).toHaveLength(2); // the echo of MGT's own is stored nowhere
+  });
+  it("nothing a customer said or is reaches the line or the record", async () => {
+    fake.state.tree = mgtSent();
+    await syncContacts([contactItem("34600111222", "add", "Ana López", "Ana")]);
+    await deliverEchoes([echo(), echo({ id: "wamid.MGT" })]);
+    await deliverHistory([chunk([{ id: "34600999888", messages: [histMsg("wamid.H9", "34600999888", 600, { text: { body: "Mesa para 4 el viernes" } })] }])]);
+    const lines = coexistLines();
+    expect(lines).toHaveLength(3);
+    expect(lines.every((l) => LINE.test(l))).toBe(true);
+    const measured = fake.read("waLink/measured");
+    expect(leaves(measured).every((v) => typeof v === "number")).toBe(true);
+    for (const s of lines.concat(JSON.stringify(measured))) {
+      for (const secret of ["600111222", "600999888", "34600000000", "Ana", "López", "Hola", "Mesa", "wamid", "WABA", "MGT"]) {
+        expect(s, secret).not.toContain(secret);
+      }
+    }
+  });
+  it("a delivery of messages alone, and a change for another number, are not measured", async () => {
+    await deliver(hola());
+    vi.stubEnv("META_PHONE_NUMBER_ID", "111");
+    const res = await deliverChange("history", Object.assign(forNumber("222"), { history: [chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600)] }])] }));
+    expect(res.body).toMatchObject({ ignored: 1, history: 0 });
+    expect(coexistLines()).toEqual([]);
+    expect(fake.read("waLink/measured")).toBeUndefined();
+  });
+  it("a contacts delivery is logged and not recorded", async () => {
+    await syncContacts([contactItem("34600111222", "add", "Ana López", "Ana")]);
+    expect(coexistLines()).toEqual([expect.stringMatching(/ fields=smb_app_state_sync:1 counts=contacts:1$/)]);
+    expect(fake.read("waLink/measured")).toBeUndefined();
+  });
+  it("a history delivery answered 500 says so in its line and is counted as failed", async () => {
+    const realRef = fake.db.ref;
+    fake.db.ref = (path) => { if (path === "messages/+34600999888") throw new Error("database unreachable"); return realRef(path); };
+    let res;
+    try {
+      res = await deliverHistory([chunk([{ id: "34600999888", messages: [histMsg("wamid.B1", "34600999888", 600)] }])]);
+    } finally { fake.db.ref = realRef; }
+    expect(res.statusCode).toBe(500);
+    expect(coexistLines()).toEqual([expect.stringMatching(/^\[wa-inbound\] coexistence delivery status=500 .* counts=errors:1$/)]);
+    expect(fake.read("waLink/measured")).toMatchObject({ historyBegun: 1, historyDeliveries: 1, historyFailed: 1 });
+    expect(fake.read("waLink/measured").historyChunks).toBeUndefined(); // Meta sends it again: the resend lists it
+  });
+  // /code-review: a body over the 4.5 MB cap is refused before the function
+  // runs, so the record lists the chunks that DID land; a gap is one that did not.
+  it("the chunks that landed are listed per phase with how often, so a gap in their numbers is one that never did", async () => {
+    await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600)] }])]);
+    await deliverHistory([
+      chunk([{ id: "34600999888", messages: [histMsg("wamid.H2", "34600999888", 600)] }], { chunk_order: 3, progress: 90 }),
+      chunk([{ id: "34600999777", messages: [histMsg("wamid.H3", "34600999777", 900)] }], { phase: 1, chunk_order: 1, progress: 100 }),
+    ]);
+    await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600)] }])]); // chunk 1 again
+    expect(fake.read("waLink/measured").historyChunks).toEqual({ p0: { c1: 2, c3: 1 }, p1: { c1: 1 } });
+  });
+  it("a chunk whose numbers are not whole numbers in range, and a declined share, are not listed", async () => {
+    await deliverHistory([
+      chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600)] }], { phase: "zero", chunk_order: 2 }),
+      chunk([{ id: "34600999888", messages: [histMsg("wamid.H2", "34600999888", 600)] }], { chunk_order: 1.5 }),
+      { metadata: { phase: 0, chunk_order: 4 }, errors: [{ code: 2593109 }] },
+    ]);
+    expect(fake.read("waLink/measured")).toMatchObject({ historyBegun: 1, historyDeliveries: 1 });
+    expect(fake.read("waLink/measured").historyChunks).toBeUndefined();
+    expect([chunkKeys({ metadata: { phase: 2, chunk_order: 7 } }), chunkKeys({ metadata: { phase: 10, chunk_order: 1 } }), chunkKeys({ metadata: { phase: 0, chunk_order: -1 } }), chunkKeys({})])
+      .toEqual([{ phase: "p2", chunk: "c7" }, null, null, null]);
+  });
+  // /code-review: the record is written at the end of the handler, so an
+  // invocation the time limit ends would leave nothing; its start is recorded.
+  it("a history delivery that never answers, as one the time limit ends, still leaves its start on the record", async () => {
+    const realRef = fake.db.ref;
+    // The thread's read never comes back, so the handler never reaches its end.
+    fake.db.ref = (path) => (path === "messages/+34600111222" ? { get: () => new Promise(() => {}) } : realRef(path));
+    try {
+      let answered = false;
+      deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600)] }])]).then(() => { answered = true; });
+      await vi.waitFor(() => expect(fake.read("waLink/measured")).toEqual({ historyBegun: 1 }));
+      expect(answered).toBe(false);
+      expect(coexistLines()).toEqual([]);
+    } finally { fake.db.ref = realRef; }
+  });
+  it("a record that cannot be written leaves the delivery's answer and what it stored alone", async () => {
+    fake.state.failWrite = (op, path) => op === "transaction" && path === "waLink/measured";
+    const res = await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600)] }])]);
+    expect([res.statusCode, res.body]).toMatchObject([200, { history: 1, errors: 0 }]);
+    expect(msgsAt(KEY)).toHaveLength(1);
+    expect(coexistLines()).toHaveLength(1);
+    expect(console.error).toHaveBeenCalledWith(expect.stringMatching(/measures were not recorded/), "database unavailable");
+    expect(console.error).toHaveBeenCalledWith(expect.stringMatching(/start was not recorded/), "database unavailable");
+  });
+  it("measuredAfter: deliveries and failures add up, the largest and the slowest are kept apart, a tie keeps the first", () => {
+    let m = measuredAfter(null, { history: true, failed: false, bytes: 100, ms: 900, threads: 1, messages: 2 }, 1);
+    m = measuredAfter(m, { history: true, failed: true, bytes: 5000, ms: 300, threads: 4, messages: 40 }, 2);
+    m = measuredAfter(m, { history: true, failed: false, bytes: 5000, ms: 900, threads: 9, messages: 9 }, 3);
+    expect(m).toEqual({
+      historyDeliveries: 3, historyFailed: 1,
+      historyLargest: { bytes: 5000, ms: 300, threads: 4, messages: 40, at: 2 },
+      historySlowest: { bytes: 100, ms: 900, threads: 1, messages: 2, at: 1 },
+    });
+    const before = JSON.stringify(m);
+    expect(measuredAfter(m, { mgtEchoes: 2 }, 5)).toEqual(Object.assign({}, m, { mgtEchoes: 2, mgtEchoAt: 5 }));
+    expect(measuredAfter(m, { history: false, mgtEchoes: 0 }, 6)).toEqual(m);
+    expect(JSON.stringify(m)).toBe(before); // never changes what it was given
+    const listed = measuredAfter(m, { history: true, failed: false, bytes: 1, ms: 1, threads: 1, messages: 1, chunks: [{ phase: "p0", chunk: "c2" }] }, 4);
+    expect(measuredAfter(listed, { history: true, failed: false, bytes: 1, ms: 1, threads: 1, messages: 1, chunks: [{ phase: "p0", chunk: "c2" }, { phase: "p1", chunk: "c1" }] }, 5).historyChunks)
+      .toEqual({ p0: { c2: 2 }, p1: { c1: 1 } });
+    expect(listed.historyChunks).toEqual({ p0: { c2: 1 } }); // the next one copied, never changed it
+    expect(measuredAfter(m, { history: true, failed: true, bytes: 1, ms: 1, threads: 1, messages: 1, chunks: [{ phase: "p0", chunk: "c2" }] }, 6).historyChunks).toBeUndefined();
+    expect(beganAfter(null)).toEqual({ historyBegun: 1 });
+    expect(beganAfter(beganAfter(m))).toEqual(Object.assign({}, m, { historyBegun: 2 }));
+    expect(JSON.stringify(m)).toBe(before);
+  });
+});
+
+describe("historyConvPatch / historyProgress / historyStatus", () => {
+  const now = 2000000000000;
+  it("a new conversation is archived only when its newest message is over a week old", () => {
+    expect(historyConvPatch(null, { phoneKey: KEY, oldest: 1, newest: now - WA_IMPORT_ARCHIVE_MS + 1, snippet: "x", now })).toMatchObject({ archived: false, archivedAt: null });
+    expect(historyConvPatch(null, { phoneKey: KEY, oldest: 1, newest: now - WA_IMPORT_ARCHIVE_MS - 1, snippet: "x", now })).toMatchObject({ archived: true, archivedAt: now });
+  });
+  it("an existing conversation's createdAt only moves back, its time only forward", () => {
+    expect(historyConvPatch({ createdAt: 50, lastMessageAt: 500 }, { oldest: 10, newest: 100, snippet: "x", now })).toEqual({ autoAckSent: true, createdAt: 10 });
+    expect(historyConvPatch({ createdAt: 5, lastMessageAt: 50 }, { oldest: 10, newest: 100, snippet: "x", now })).toEqual({ autoAckSent: true, lastMessageAt: 100, lastMessageSnippet: "x" });
+  });
+  it("archived for being old, it comes back out when the import brings a message inside the week; a person's archive and a mute stay", () => {
+    const old = now - WA_IMPORT_ARCHIVE_MS - 1;
+    const recent = now - WA_IMPORT_ARCHIVE_MS + 1;
+    const o = { oldest: old, newest: recent, snippet: "x", now };
+    expect(historyConvPatch({ createdAt: old, lastMessageAt: old, archived: true, archivedAt: now }, o)).toMatchObject({ archived: false, archivedAt: null });
+    expect(historyConvPatch({ createdAt: old, lastMessageAt: old, archived: true, muted: true }, o)).not.toHaveProperty("archived");
+    expect(historyConvPatch({ createdAt: old, lastMessageAt: recent - 1, archived: true }, o)).not.toHaveProperty("archived");
+    expect(historyConvPatch({ createdAt: old, lastMessageAt: old - 1, archived: true }, { oldest: old, newest: old, snippet: "x", now })).not.toHaveProperty("archived");
+  });
+  it("progress and phase only move forward, and done is stamped once at 100", () => {
+    const a = historyProgress(null, { progress: 60, phase: 1 }, 1);
+    expect(historyProgress(a, { progress: 40, phase: 0 }, 2)).toMatchObject({ progress: 60, phase: 1, at: 2 });
+    const done = historyProgress(a, { progress: 100, phase: 2 }, 3);
+    expect(done.doneAt).toBe(3);
+    expect(historyProgress(done, { progress: 100 }, 4).doneAt).toBe(3);
+    expect(historyProgress(null, { progress: 250 }, 1).progress).toBe(100);
+  });
+  it("a new request drops what an earlier one recorded, and keeps what its own webhooks wrote first", () => {
+    expect(historyRequested({ requestId: "old", declined: true, progress: 100, doneAt: 3, at: 3 }, "new", 10)).toEqual({ requestId: "new", requestedAt: 10 });
+    expect(historyRequested({ progress: 40, phase: 0, at: 12 }, "new", 10)).toEqual({ progress: 40, phase: 0, at: 12, requestId: "new", requestedAt: 10 });
+    expect(historyRequested(null, "new", 10)).toEqual({ requestId: "new", requestedAt: 10 });
+  });
+  it("the phone's statuses read as this app's; a customer's message is delivered", () => {
+    expect(historyStatus({ history_context: { status: "PLAYED" } }, false)).toBe("read");
+    expect(historyStatus({ history_context: { status: "error" } }, false)).toBe("failed");
+    expect(historyStatus({}, false)).toBe("sent");
+    expect(historyStatus({ history_context: { status: "READ" } }, true)).toBe("delivered");
+  });
+});
+
+// ── Phase 6: "Not a customer" ───────────────────────────────────────────────
+describe("wa-inbound and the simulator — a muted conversation (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+  const muted = () => ({ conversations: { [KEY]: { phoneKey: KEY, autoAckSent: true, muted: true, archived: true, archivedAt: 9, createdAt: 5 } } });
+
+  it("the webhook stores the message and schedules no parse", async () => {
+    fake.state.tree = muted();
+    const res = await deliver({ messages: [inMsg({ type: "text", text: { body: "Mesa para 4 mañana" } })] });
+    expect(res.body).toMatchObject({ messages: 1 });
+    expect(inbound()).toHaveLength(1);
+    expect(scheduled).toEqual([]);
+    expect(convAt(KEY)).toMatchObject({ archived: true, unread: false });
+  });
+  it("the simulator's inbound schedules no parse either", async () => {
+    fake.state.tree = muted();
+    let later = null;
+    const r = await injectSimInbound({ phone: KEY, text: "Mesa para 4 personas mañana a las 21:00", name: "Sim" }, (p) => { later = p; });
+    expect(r).toMatchObject({ skipped: false, muted: true });
+    expect(later).toBeNull();
+  });
+});
+
+// ── Phase 7: the connection itself (account_update) ─────────────────────────
+const accountEvent = (event, info) => deliverChange("account_update", Object.assign({ phone_number: "34600000000", event }, info ? { disconnection_info: info } : {}));
+
+describe("wa-inbound — the connection's own events (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+  const linked = () => ({ waLink: { status: "connected", wabaId: "WABA", phoneNumberId: "111" } });
+
+  it("a disconnection of the connected account is recorded: status, why, and the last event", async () => {
+    fake.state.tree = linked();
+    const res = await accountEvent("PARTNER_REMOVED", { reason: "USER_ACTION", initiated_by: "BUSINESS" });
+    expect(res.body).toMatchObject({ ok: true, events: 1 });
+    const l = fake.read("waLink");
+    expect(l).toMatchObject({ status: "disconnected", wabaId: "WABA", phoneNumberId: "111" });
+    expect(l.disconnect).toMatchObject({ event: "PARTNER_REMOVED", reason: "USER_ACTION", initiatedBy: "BUSINESS" });
+    expect(l.lastEvent).toEqual(l.disconnect);
+  });
+  it("another event keeps the reason staff are shown; a reconnection clears it", async () => {
+    fake.state.tree = linked();
+    await accountEvent("ACCOUNT_OFFBOARDED");
+    await accountEvent("VERIFIED_ACCOUNT");
+    expect(fake.read("waLink")).toMatchObject({ status: "disconnected", disconnect: { event: "ACCOUNT_OFFBOARDED" }, lastEvent: { event: "VERIFIED_ACCOUNT" } });
+    await accountEvent("ACCOUNT_RECONNECTED");
+    const l = fake.read("waLink");
+    expect(l.status).toBe("connected");
+    expect(l.disconnect).toBeUndefined();
+  });
+  it("an event about another account, or with nothing connected, is ignored and writes nothing", async () => {
+    fake.state.tree = { waLink: { status: "connected", wabaId: "OTHER" } };
+    expect((await accountEvent("PARTNER_REMOVED")).body).toMatchObject({ ignored: 1, events: 0 });
+    fake.state.tree = {};
+    expect((await accountEvent("PARTNER_REMOVED")).body).toMatchObject({ ignored: 1, events: 0 });
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("a change with no event is ignored", async () => {
+    fake.state.tree = linked();
+    expect((await deliverChange("account_update", { phone_number: "34600000000" })).body).toMatchObject({ ignored: 1 });
+  });
+  it("the banner's sentence names the event in words and the reason as given", () => {
+    expect(disconnectSentence({ event: "PARTNER_REMOVED", reason: "USER_ACTION" })).toMatch(/^WhatsApp is disconnected from MGT: the connection was removed .* \(user action\)\. Replies from MGT won't send/);
+    expect(disconnectSentence({ event: "ACCOUNT_OFFBOARDED" })).toMatch(/opened at least every 14 days/);
+    expect(disconnectSentence(null)).toMatch(/Meta ended the connection/);
+  });
+});
+
 describe("inboundContent", () => {
   it("a text that is only spaces is stored and not parsed", () => {
     expect(inboundContent({ type: "text", text: { body: "  " } })).toEqual({ text: "  ", media: null, snippet: "  ", parseText: null });
   });
   it("an audio's caption, should one ever arrive, is not read", () => {
     expect(inboundContent({ type: "audio", audio: { id: "1", caption: "hola" } })).toMatchObject({ text: "Audio", parseText: null });
+  });
+  it("a message only the Business app can show (131060) says so; another unsupported one is a message to read on the phone", () => {
+    expect(inboundContent({ type: "unsupported", errors: [{ code: 131060, title: "Unsupported" }] })).toEqual({ text: WA_UNSUPPORTED_LINE, media: null, snippet: WA_UNSUPPORTED_LINE, parseText: null });
+    expect(inboundContent({ type: "unsupported", errors: [{ code: 131051 }] }).text).toBe("Message — open WhatsApp on the phone to see it");
   });
   it("a message with no type at all is a message to read on the phone", () => {
     expect(inboundContent({}).text).toBe("Message — open WhatsApp on the phone to see it");
@@ -948,6 +2014,139 @@ describe("the simulator endpoints, enabled and signed in", () => {
     const res = await call(simGenerateHandler, { token: "staff", body: { hint: "x" } });
     expect([res.statusCode, res.body.error]).toEqual([400, "GEMINI_API_KEY not set"]);
     expect(fake.state.writes).toEqual([]);
+  });
+});
+
+// ── api/wa-sim-inbound.js — the Business app's events (v18.9.0) ──────────────
+describe("wa-sim-inbound — the WhatsApp Business app's events (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("WA_SIM_ENABLED", "1"));
+  const ev = (event, extra) => call(simInboundHandler, { token: "staff", body: Object.assign({ event }, extra || {}) });
+  const REAL = { status: "connected", wabaId: "102030405060", phoneNumberId: "908070605040" };
+  const R = "+" + SIM_HISTORY_RECENT;
+  const O = "+" + SIM_HISTORY_OLD;
+
+  it("400 to an event it does not know, and to a phone's event with no phone or no text: a body with an event is never a message", async () => {
+    const unknown = await ev("nonsense", { phone: KEY, text: "hola" });
+    expect([unknown.statusCode, unknown.body.error]).toEqual([400, "Unknown event."]);
+    expect((await ev("toString", { phone: KEY })).statusCode).toBe(400);
+    expect((await ev("contact", { name: "Ana" })).statusCode).toBe(400);
+    expect((await ev("echo", { phone: KEY, text: "  " })).statusCode).toBe(400);
+    expect((await ev("edit", { phone: KEY })).statusCode).toBe(400);
+    expect(fake.state.writes).toEqual([]);
+  });
+
+  it("contact: saved on the phone, stamping the first sync once; removed again", async () => {
+    const res = await ev("contact", { phone: KEY, name: "Lucía (terraza)" });
+    expect([res.statusCode, res.body.results.contacts]).toEqual([200, 1]);
+    expect(fake.read("waContacts/" + KEY)).toMatchObject({ name: "Lucía (terraza)", first: "Lucía" });
+    const first = fake.read("waLink/contacts/firstAt");
+    expect(typeof first).toBe("number");
+    await ev("contact", { phone: KEY, remove: true });
+    expect(fake.read("waContacts/" + KEY)).toBeUndefined();
+    expect(fake.read("waLink/contacts/firstAt")).toBe(first);
+  });
+
+  it("echo: a reply from the phone is stored as one, and its conversation is read and back in the Inbox", async () => {
+    fake.state.tree = { conversations: { [KEY]: openConv({ unread: true, archived: true, archivedAt: 5, lastMessageAt: 1 }) } };
+    const res = await ev("echo", { phone: KEY, text: "  Os esperamos a las 21:00  " });
+    expect([res.statusCode, res.body.results.echoes]).toEqual([200, 1]);
+    const [m] = msgsAt(KEY);
+    expect(m).toMatchObject({ direction: "out", source: "phone", text: "Os esperamos a las 21:00", status: "sent" });
+    expect(m.providerMsgId).toMatch(/^wamid-SIMECHO-/);
+    expect(convAt(KEY)).toMatchObject({ unread: false, archived: false, lastMessageSnippet: "Os esperamos a las 21:00" });
+  });
+
+  it("edit and revoke: the customer's newest message that is not deleted, its line in the list following", async () => {
+    fake.state.tree = {
+      conversations: { [KEY]: openConv({ lastMessageAt: 20, lastMessageSnippet: "a las 9" }) },
+      messages: { [KEY]: {
+        in1: { id: "in1", direction: "in", text: "mesa para 2", ts: 10, providerMsgId: "wamid.A" },
+        out1: { id: "out1", direction: "out", text: "¡Claro!", ts: 15 },
+        in2: { id: "in2", direction: "in", text: "a las 9", ts: 20, providerMsgId: "wamid.B" },
+      } },
+    };
+    const edit = await ev("edit", { phone: KEY, text: "a las 10" });
+    expect([edit.statusCode, edit.body.outcome]).toEqual([200, "applied"]);
+    expect(fake.read("messages/" + KEY + "/in2")).toMatchObject({ text: "a las 10" });
+    expect(typeof fake.read("messages/" + KEY + "/in2/editedAt")).toBe("number");
+    expect(convAt(KEY).lastMessageSnippet).toBe("a las 10");
+    await ev("revoke", { phone: KEY });
+    expect(fake.read("messages/" + KEY + "/in2")).toMatchObject({ text: WA_REVOKED_IN });
+    expect(convAt(KEY).lastMessageSnippet).toBe(WA_REVOKED_IN);
+    await ev("revoke", { phone: KEY });
+    expect(fake.read("messages/" + KEY + "/in1")).toMatchObject({ text: WA_REVOKED_IN });
+    expect(fake.read("messages/" + KEY + "/out1/text")).toBe("¡Claro!");
+    const none = await ev("revoke", { phone: KEY });
+    expect([none.statusCode, none.body.error]).toEqual([409, "That conversation has no message from the customer to delete."]);
+  });
+
+  it("history: two chats, the old one straight to Archived, read and settled, its photo a placeholder; a second import stores nothing", async () => {
+    const res = await ev("history");
+    expect([res.statusCode, res.body.results.history]).toEqual([200, 6]);
+    expect(convAt(R)).toMatchObject({ archived: false, unread: false, autoAckSent: true, lastMessageSnippet: "Perfecto, a nombre de Lucía. ¡Gracias!" });
+    expect(convAt(O)).toMatchObject({ archived: true, unread: false, autoAckSent: true });
+    expect("windowExpiresAt" in convAt(R)).toBe(false);
+    const recent = msgsAt(R);
+    expect(recent.map((m) => [m.direction, m.imported, m.source || null])).toEqual([["in", true, null], ["out", true, "phone"], ["in", true, null], ["in", true, null]]);
+    expect(recent[1].status).toBe("read");
+    expect(recent[2].text).toBe("Photo or file — open WhatsApp on the phone to see it");
+    expect(fake.read("waLink/history")).toMatchObject({ progress: 100, phase: 0 });
+    const writes = fake.state.writes.length;
+    const again = await ev("history");
+    expect(again.body.results.history).toBe(0);
+    expect(fake.state.writes.slice(writes).filter((w) => /^messages|^$/.test(w.path) && JSON.stringify(w.value).includes("wamid-SIMHIST"))).toEqual([]);
+    expect(msgsAt(R)).toHaveLength(4);
+  });
+
+  it("history-media: the placeholder takes its photo and the caption", async () => {
+    await ev("history");
+    const res = await ev("history-media");
+    expect([res.statusCode, res.body.results.history]).toEqual([200, 1]);
+    const photo = fake.read("messages/" + R + "/" + SIM_HISTORY_PHOTO_ID);
+    expect(photo.text).toBe("La terraza");
+    expect(photo.media).toMatchObject({ kind: "image", mime: "image/jpeg" });
+    expect(photo.media.mediaId).toMatch(/^MOCK\.image\./);
+    expect((await ev("history-media")).body.results.skipped).toBe(1);
+  });
+
+  it("connect, disconnect, reconnect, forget: a connection marked as the simulator's, and its banner", async () => {
+    const early = await ev("disconnect");
+    expect([early.statusCode, early.body.error]).toEqual([409, "Connect (simulated) first."]);
+    vi.stubEnv("META_PHONE_NUMBER_ID", "555000111");
+    expect((await ev("connect")).statusCode).toBe(200);
+    expect(fake.read("waLink")).toMatchObject({ status: "connected", wabaId: SIM_WABA_ID, phoneNumberId: "555000111", sim: true, connectedBy: "ana@example.com" });
+    expect((await ev("disconnect")).body.results.events).toBe(1);
+    expect(fake.read("waLink")).toMatchObject({ status: "disconnected", disconnect: { event: "PARTNER_REMOVED", reason: "USER_REQUESTED", initiatedBy: "BUSINESS" } });
+    await ev("reconnect");
+    expect(fake.read("waLink/status")).toBe("connected");
+    expect(fake.read("waLink/disconnect")).toBeUndefined();
+    expect((await ev("forget")).body.removed).toBe(true);
+    expect(fake.read("waLink")).toBeUndefined();
+    expect((await ev("forget")).body.removed).toBe(false);
+  });
+
+  it("leaves a REAL connection alone: every event that writes waLink is 409, and nothing is written", async () => {
+    fake.state.tree = { waLink: Object.assign({}, REAL) };
+    for (const [event, extra] of [["contact", { phone: KEY, name: "Ana" }], ["history"], ["connect"], ["disconnect"], ["reconnect"], ["forget"]]) {
+      const res = await ev(event, extra);
+      expect([event, res.statusCode, res.body.error]).toEqual([event, 409, "A real Business-app connection is recorded on this database, so the simulator leaves it alone."]);
+    }
+    expect(fake.state.writes).toEqual([]);
+    expect(fake.read("waLink")).toEqual(REAL);
+    // A link that holds only a sync's stamp is no connection, and is fair game.
+    fake.state.tree = { waLink: { contacts: { firstAt: 5 } } };
+    expect((await ev("connect")).statusCode).toBe(200);
+  });
+
+  it("the client mode's reading of each message it builds agrees with the server's", () => {
+    const now = 1_800_000_000_000;
+    const msgs = simHistoryValue(now).history[0].threads.flatMap((t) => t.messages)
+      .concat(simEchoValue({ phone: KEY, text: "Os esperamos", now }).message_echoes);
+    expect(msgs).toHaveLength(7);
+    msgs.forEach((m) => {
+      const server = inboundContent(m);
+      expect([m.id, simContent(m)]).toEqual([m.id, { text: server.text, media: server.media, snippet: server.snippet }]);
+    });
   });
 });
 
@@ -1213,6 +2412,13 @@ describe("wa-media POST — a photo or a PDF sent", () => {
     expect("archivedAt" in convAt(KEY)).toBe(false);
   });
 
+  it("a send to a muted (\"Not a customer\") archived conversation leaves it archived", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    fake.state.tree = { conversations: { [KEY]: openConv({ archived: true, archivedAt: 5, muted: true }) } };
+    expect((await sendFile()).statusCode).toBe(200);
+    expect(convAt(KEY)).toMatchObject({ archived: true, archivedAt: 5, muted: true });
+  });
+
   // /code-review: Meta had the photo, the database write failed, and the
   // answer was a 500, so the composer said "Couldn't send … still attached"
   // and a second press sent the customer the same photo twice.
@@ -1465,5 +2671,34 @@ describe("wa-prune", () => {
     expect(staleMessageIds(node, cut, false)).toEqual(["a"]);
     expect(staleMessageIds(node, cut, true)).toEqual(["a", "c", "d", "e"]);
     expect(staleMessageIds(null, cut, true)).toEqual([]);
+  });
+});
+
+// v18.9.0 (/code-review): the body reader was a private copy in six handlers
+// and the bearer parse a copy in eight; one module serves them now, and a
+// handler that writes either out again fails here.
+describe("readJsonBody / bearerToken (api/_lib/request.js)", () => {
+  it("reads a body Vercel parsed, a string, a stream, and answers null for no JSON", async () => {
+    expect(await readJsonBody({ body: { a: 1 } })).toEqual({ a: 1 });
+    expect(await readJsonBody({ body: '{"b":2}' })).toEqual({ b: 2 });
+    expect(await readJsonBody({ body: "{bad" })).toBeNull();
+    expect(await readJsonBody(Readable.from([Buffer.from('{"c":'), Buffer.from("3}")]))).toEqual({ c: 3 });
+    expect(await readJsonBody(Readable.from([Buffer.from("not json")]))).toBeNull();
+  });
+  it("takes the token after \"Bearer \" and nothing else", () => {
+    expect(bearerToken({ headers: { authorization: "Bearer abc.def" } })).toBe("abc.def");
+    expect(bearerToken({ headers: { authorization: "Basic abc" } })).toBeNull();
+    expect(bearerToken({ headers: {} })).toBeNull();
+  });
+  it("no handler under api/ reads a body or a bearer token by itself", () => {
+    const files = ["api/", "api/_lib/"].flatMap((d) => readdirSync(new URL("../" + d, import.meta.url)).filter((f) => f.endsWith(".js")).map((f) => d + f)).filter((f) => f !== "api/_lib/request.js");
+    let users = 0;
+    for (const f of files) {
+      const src = stripComments(readFileSync(new URL("../" + f, import.meta.url), "utf8")).join("\n");
+      expect(src, f).not.toMatch(/function readJsonBody\b/);
+      expect(src, f).not.toMatch(/startsWith\("Bearer "\)/);
+      if (/bearerToken\(req\)/.test(src)) users++;
+    }
+    expect(users).toBe(8);
   });
 });

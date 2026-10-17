@@ -173,7 +173,10 @@ describe("WA hardening — phoneKey is sanitized at the path boundary", () => {
     // 11 since phase 7: the prune's `readMessageNode`, `removeConversationIf` and
     // `removeMessages` (its keys come from the stored node, which they leave as is).
     // 12 since the /code-review: `readOldMessages`, the prune's query on `ts`.
-    expect((src.match(/sanitizeKey\(phoneKey\)/g) || []).length).toBe(12);
+    // 14 since v18.9.0: `findMessageByWamid` (an edit or a delete finds its
+    // message) and `updateMessage` (and patches it). 15: `writeImportedThread`,
+    // which builds both an imported thread's paths from one sanitised key.
+    expect((src.match(/sanitizeKey\(phoneKey\)/g) || []).length).toBe(15);
   });
 });
 

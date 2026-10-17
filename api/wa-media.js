@@ -68,9 +68,10 @@ import { Readable } from "node:stream";
 import { readFile } from "node:fs/promises";
 import { sendMode } from "./_lib/env.js";
 import { verifyStaffToken, staffAuthError, getMessage, getConversation, appendMessage, upsertConversation } from "./_lib/rtdb.js";
+import { bearerToken } from "./_lib/request.js";
 import { mediaInfo, downloadMedia, uploadMedia, sendMedia } from "./_lib/meta.js";
 import {
-  isPhoneKey, sanitizeMedia, sendKindOf, mediaLabel, mediaSnippet, snippet,
+  isPhoneKey, sanitizeMedia, sendKindOf, mediaLabel, mediaSnippet, snippet, replyUnarchives,
   WA_SEND_MAX_BYTES, WA_CAPTION_MAX,
 } from "../src/lib/whatsapp.js";
 
@@ -103,8 +104,7 @@ const SAMPLES = {
 const MSG_ID_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,255}$/;
 
 async function staffFrom(req, res) {
-  const authHeader = req.headers["authorization"] || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const idToken = bearerToken(req);
   if (!idToken) { res.status(401).json({ error: "missing token" }); return null; }
   try {
     return await verifyStaffToken(idToken);
@@ -306,7 +306,7 @@ async function send(req, res) {
   }
   if (stored) {
     const patch = { lastMessageAt: ts, lastMessageSnippet: snippet(mediaSnippet(media || { kind }, text)) };
-    if (conv.archived) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
+    if (replyUnarchives(conv)) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
     try {
       await upsertConversation(phoneKey, patch);
     } catch (e) {

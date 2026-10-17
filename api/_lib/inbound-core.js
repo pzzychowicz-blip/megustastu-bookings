@@ -27,7 +27,7 @@
 // message id is the sanitized wamid, so a redelivery targets the same RTDB
 // path; we additionally skip the whole upsert when the message already exists.
 
-import { normalizePhone, isPhoneKey, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, mediaLabel, mediaSnippet } from "../../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet } from "../../src/lib/whatsapp.js";
 import { simMediaMessage } from "../../src/lib/wa-mock-media.js";
 import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours } from "./rtdb.js";
 import { sendText } from "./meta.js";
@@ -106,7 +106,9 @@ export async function applyParse(phoneKey, parse, ts) {
 //                  stored on the message, re-checked here.
 //   snippetText  — the conversation list's line when it is not `text` itself
 //                  (a media message's "Photo · caption").
-// Returns { phoneKey, skipped } — skipped=true when the wamid was seen before.
+// Returns { phoneKey, skipped, muted } — skipped=true when the wamid was seen
+// before; muted=true when the conversation is "Not a customer" (v18.9.0), so
+// the caller must not parse it.
 export async function processInbound({ phone, text, ts, wamid, profileName, parse, langHint, preloadedConv, willParse, media, snippetText }) {
   const phoneKey = normalizePhone(phone);
   // v18.0.0 phase 6 (CT-WA-04): `!phoneKey` is not the question — "+" is truthy,
@@ -126,7 +128,12 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
   const isDraftIntent = intent === "new_booking" || intent === "cancel" || intent === "modify";
 
   const existing = preloadedConv !== undefined ? preloadedConv : await getConversation(phoneKey);
-  const firstEver = !existing || !existing.autoAckSent;
+  // v18.9.0: a conversation staff marked "Not a customer" (a supplier, the
+  // gestor) is MUTED: its messages are stored, and nothing else happens — no
+  // auto-reply, no parse, it stays in Archived and does not count as unread.
+  // Staff undo it from Archived ("Customer again").
+  const muted = !!(existing && existing.muted);
+  const firstEver = !muted && (!existing || !existing.autoAckSent);
 
   // ── Conversation upsert (per-key update(); see rtdb.js on the keyed shape) ──
   const patch = {
@@ -135,14 +142,13 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
     channel: "whatsapp",
     lastMessageAt: ts,
     lastMessageSnippet: snippet(snippetText != null ? snippetText : text),
-    unread: true,
+    unread: !muted,
     windowExpiresAt: ts + WA_WINDOW_MS,
     language: lang,
     acceptedBadgeDismissedAt: null, // inbound re-shows the "confirmed" banner
-    archived: false,
-    archivedAt: null,               // auto-unarchive on inbound
     autoAckSent: true,
   };
+  if (!muted) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on inbound
   if (!existing) {
     patch.createdAt = ts;
     patch.acceptedBookingId = null;
@@ -150,14 +156,14 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
     patch.draftData = null;
   }
   if (profileName && (!existing || !existing.profileName)) patch.profileName = profileName;
-  if (isDraftIntent) Object.assign(patch, draftPatchFromParse(parse, ts));
+  if (isDraftIntent && !muted) Object.assign(patch, draftPatchFromParse(parse, ts));
   // Async path (parse runs after the response): flag "analyzing…" so the inbox
   // shows the LLM route in progress; applyParse clears it when the draft lands.
   // `parsingAt` bounds the flag: if nothing ever clears it (the process dies
   // mid-parse, a client tab closes mid-re-check), the client's isParsing()
   // stops believing it after WA_PARSING_STALE_MS instead of showing "Reading
   // the message…" on every device forever.
-  if (parse == null && willParse) { patch.parsing = true; patch.parsingAt = Date.now(); }
+  if (parse == null && willParse && !muted) { patch.parsing = true; patch.parsingAt = Date.now(); }
   await upsertConversation(phoneKey, patch);
 
   // ── The inbound message itself ────────────────────────────────────────────
@@ -216,7 +222,8 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
     }
   }
 
-  return { phoneKey, skipped: false };
+  // `muted`: the caller schedules no parse (the webhook's phase B, the sim's).
+  return { phoneKey, skipped: false, muted };
 }
 
 // inboundContent(m) — what one webhook message becomes (v18.8.0): the text to
@@ -232,12 +239,16 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
 //               text, a photo without one is not parsed at all.
 //   audio     → `media` (`voice: true` for a voice note) + "Voice message" /
 //               "Audio"; never parsed (no caption exists).
+//   unsupported with error 131060 (v18.9.0) → WA_UNSUPPORTED_LINE: a message
+//               only the Business app can show, under coexistence.
 //   anything else, or a media message whose id is not one → one line naming
 //               the kind and saying it stays on the phone (decided
 //               2026-10-14). It used to be "[image message]".
 const OTHER_LABEL = {
   image: "Photo", audio: "Audio", document: "Document", video: "Video", sticker: "Sticker",
   location: "Location", contacts: "Contact card", reaction: "Reaction", interactive: "Reply", button: "Reply",
+  // v18.9.0: an imported photo or file, until its media follows (history).
+  media_placeholder: "Photo or file",
 };
 export function inboundContent(m) {
   const type = m && typeof m.type === "string" ? m.type : "";
@@ -252,6 +263,10 @@ export function inboundContent(m) {
       const caption = type !== "audio" && typeof src.caption === "string" ? src.caption.trim() : "";
       return { text: caption || mediaLabel(media), media, snippet: mediaSnippet(media, caption), parseText: caption || null };
     }
+  }
+  // v18.9.0: a message only the Business app can show (coexistence, 131060).
+  if (type === "unsupported" && Array.isArray(m.errors) && m.errors.some((e) => e && Number(e.code) === WA_UNSUPPORTED_CODE)) {
+    return { text: WA_UNSUPPORTED_LINE, media: null, snippet: WA_UNSUPPORTED_LINE, parseText: null };
   }
   const line = (OTHER_LABEL[type] || "Message") + " — " + WA_OPEN_ON_PHONE;
   return { text: line, media: null, snippet: line, parseText: null };
@@ -295,7 +310,7 @@ export async function injectSimInbound({ phone, text, name, agoMs = 0, media }, 
   // result `applyParse` then discarded on the null key. The rule applied at one
   // of the two places that schedule a parse. v18.8.0: and a voice note or a
   // photo without a caption has nothing to parse, as in the webhook.
-  if (r.skipped || !r.phoneKey || !parseText) return r;
+  if (r.skipped || !r.phoneKey || !parseText || r.muted) return r;
   afterResponse((async () => {
     try {
       const hours = await readOperatingHours();

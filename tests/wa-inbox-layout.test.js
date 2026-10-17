@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { conversationName, conversationSearchNames } from "../src/lib/whatsapp.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
@@ -84,16 +85,36 @@ describe("W3 — the words are on the buttons, not in a tooltip", () => {
 // conversation; the composer's placeholder "Type a reply…". At 1280×800 the
 // header is still one line and the placeholder is the long one.
 describe("W4 — an unknown sender's number, once and formatted", () => {
+  // v18.9.0: the rule is `conversationName` (lib/whatsapp.js) now, read by the
+  // row, the open conversation and `describeConversation`, so it is RUN here
+  // and the two components are held to calling it.
+  const conv = { phoneKey: "+447811223344", phone: "+447811223344" };
   it("the row and the conversation title use the formatted number, and a nameless match falls through to it", () => {
-    for (const src of [Row, View]) {
-      expect(src).toMatch(/const named = !!\(match && match\.name\);/);
-      expect(src).toMatch(/const displayName = named \? match\.name : formatPhone\(conv\.phone \|\| conv\.phoneKey\);/);
-    }
+    expect(conversationName(conv, [], {})).toEqual({ title: "+44 7811223344", phoneLine: null, source: "phone" });
+    const walkIn = [{ id: "b1", name: "", phone: "+447811223344", date: "2026-01-01", time: "13:00", status: "completed" }];
+    expect(conversationName(conv, walkIn, {}).title).toBe("+44 7811223344");
+    expect(Row).toMatch(/const \{ title: displayName, phoneLine \} = conversationName\(conv, bookings, contacts\);/);
+    expect(View).toMatch(/const \{ title: displayName, phoneLine: phoneDisplay \} = conversationName\(conv, bookings, contacts\);/);
   });
 
   it("the grey number beside the title appears only under a name", () => {
-    expect(View).toMatch(/const phoneDisplay = named \? formatPhone\(conv\.phone \|\| conv\.phoneKey\) : null;/);
+    const named = [{ id: "b1", name: "Ana", phone: "+447811223344", date: "2026-01-01", time: "13:00", status: "completed" }];
+    expect(conversationName(conv, named, {})).toEqual({ title: "Ana", phoneLine: "+44 7811223344", source: "booking" });
     expect(View).toMatch(/\{phoneDisplay \? <span/);
+  });
+
+  it("v18.9.0: the phone's contact names it first, then the booking, then the WhatsApp profile", () => {
+    const named = [{ id: "b1", name: "Ana", phone: "+447811223344", date: "2026-01-01", time: "13:00", status: "completed" }];
+    const contacts = { "+447811223344": { name: "Ana (terrace)", at: 1 } };
+    expect(conversationName(conv, named, contacts)).toEqual({ title: "Ana (terrace)", phoneLine: "+44 7811223344", source: "contact" });
+    // A contact saved with no name is still saved, and names nothing.
+    expect(conversationName(conv, named, { "+447811223344": { name: "", at: 1 } }).source).toBe("booking");
+    const prof = Object.assign({ profileName: " Annie " }, conv);
+    expect(conversationName(prof, [], {})).toEqual({ title: "Annie", phoneLine: "+44 7811223344", source: "profile" });
+    expect(conversationName(prof, named, {}).source).toBe("booking");
+    // The search finds a thread by every name it has.
+    expect(conversationSearchNames(prof, named, contacts)).toEqual(["Ana (terrace)", "Ana", " Annie "]);
+    expect(Inbox).toMatch(/conversationSearchNames\(c, bookings, contacts\)\.some/);
   });
 });
 
@@ -153,5 +174,33 @@ describe("W-2 + W-3 — the conversation says each thing once", () => {
   });
   it("past bookings end at the party's size", () => {
     expect(View).not.toMatch(/guestsLabel\(b\.size\) \+ " · " \+ b\.status/);
+  });
+});
+
+// v18.9.0 phase 7 — the disconnection banner reads `waLink.status`, and its
+// live region stays mounted outside the Reveal (a region mounted with its
+// message announces nothing). It eases on `move`: a webhook raises it, not a
+// press (/find-animation-opportunities found it on the 520ms disclosure clock).
+describe("the inbox's disconnection banner (v18.9.0)", () => {
+  it("shows while waLink says disconnected, with the server's reason in words", () => {
+    expect(Inbox).toMatch(/const linkDown = !!\(waLink && waLink\.status === "disconnected"\);/);
+    expect(Inbox).toMatch(/<div role="alert">\s*<Reveal show=\{linkDown\} speed="move">/);
+    expect(Inbox).toMatch(/disconnectSentence\(waLink && waLink\.disconnect\)/);
+  });
+});
+
+// v18.9.0 follow-up, measured on DEV at 375×812: an archived thread has four
+// actions (Re-check · Restore · Not a customer · Delete), and they ran 40px
+// past the screen (Delete at x 337–415). The group inside wraps, but the box
+// around it does not shrink, so its width was the buttons' one-line width.
+// Capped at the header's width it wraps: Delete at 282–360 on a second row,
+// and at 1280 the row is one line as before.
+describe("the conversation header's actions stay on a phone's screen", () => {
+  it("caps the box around the actions at the header's width", () => {
+    expect(View).toContain('<div style={{ marginLeft: "auto", flexShrink: 0, maxWidth: "100%" }}>{headerActionBtns}</div>');
+  });
+  it("lets the actions themselves wrap, right-aligned, in both states", () => {
+    const groups = View.match(/headerActionBtns = \(\s*<div style=\{\{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" \}\}>/g) || [];
+    expect(groups.length).toBe(2);
   });
 });

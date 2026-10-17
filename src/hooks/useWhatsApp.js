@@ -41,7 +41,7 @@ import { EMPTY_FORM } from "../lib/constants";
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
-import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch } from "../lib/whatsapp";
+import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch, contactDeletePatch, replyUnarchives } from "../lib/whatsapp";
 import { sendsViaServer, sendViaBackend, sendMediaViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
@@ -76,6 +76,13 @@ export function useWhatsApp({
   const [conversations, setConversations] = useState([]);
   const [messagesMap, setMessagesMap] = useState({}); // { phoneKey: [msg, …] }
   const [templates, setTemplates] = useState(DEFAULT_TEMPLATES);
+  // v18.9.0 — coexistence. `contacts` is the restaurant phone's address book as
+  // the Business app synced it (`waContacts`, keyed by phone key); `waLink` is
+  // the record of the number's connection to the Business app (server-only,
+  // read here). Both are written by the backend alone, so neither has a saver.
+  const [contacts, setContacts] = useState({});
+  const [waLink, setWaLink] = useState(null);
+  const contactsRef = useRef({});
 
   // Write-guard refs — flip true only after each node's first onValue returns.
   // v18.8.0: `messages` is guarded PER KEY, because it is listened to per key
@@ -164,6 +171,25 @@ export function useWhatsApp({
       conversationsLoaded.current = true;
     }, dbError("conversations"));
     return unsub;
+  }, [on]);
+  // v18.9.0: the phone's contacts and the Business-app link. Read whole: the
+  // address book is names keyed by phone, a few hundred small rows, and every
+  // conversation row needs it to name itself. Written only by the backend
+  // (api/_lib/coexist-core.js); the browser's one write is Delete customer's
+  // per-key erase below.
+  useEffect(() => {
+    if (!on) return;
+    const unsubContacts = onValue(ref(db, "waContacts"), (snap) => {
+      const val = snap.val();
+      const next = val && typeof val === "object" && !Array.isArray(val) ? val : {};
+      contactsRef.current = next;
+      setContacts(next);
+    }, dbError("waContacts"));
+    const unsubLink = onValue(ref(db, "waLink"), (snap) => {
+      const val = snap.val();
+      setWaLink(val && typeof val === "object" ? val : null);
+    }, dbError("waLink"));
+    return () => { unsubContacts(); unsubLink(); };
   }, [on]);
   // ── Messages: ONE conversation at a time (v18.8.0) ─────────────────────────
   // There is no permanent `messages` listener any more. It downloaded every
@@ -342,6 +368,19 @@ export function useWhatsApp({
     if (!WA_SANDBOX || !on || !isPathKey(phoneKey) || !msg || !msg.id) return;
     set(ref(db, "messages/" + phoneKey + "/" + msg.id), msg).catch(function () {});
   }
+  // simSetContacts — the SIMULATOR's contacts writer (sandbox only, v18.9.0):
+  // one multi-path update of `waContacts` children (a contact, or null to
+  // remove it), the shape api/_lib/rtdb.js's updateWaContacts writes. Each
+  // path is checked on its own against the per-key grant, which is all the
+  // rules give a browser. Resolves when the server has it, so the panel can
+  // say a refusal. Dead in a production build (WA_SANDBOX).
+  function simSetContacts(patch) {
+    if (!WA_SANDBOX || !on || !patch) return Promise.resolve(false);
+    const clean = {};
+    Object.keys(patch).forEach(function (k) { if (isPathKey(k)) clean[k] = patch[k]; });
+    if (!Object.keys(clean).length) return Promise.resolve(false);
+    return update(ref(db, "waContacts"), clean).then(function () { return true; });
+  }
   function saveTemplates(next) {
     if (!templatesLoaded.current) {
       console.warn("[SAFE] Refused to write templates — initial read has not completed yet.");
@@ -384,7 +423,7 @@ export function useWhatsApp({
     appendMessage(phoneKey, msg);
     patchConversation(phoneKey, function (c) {
       const patch = { lastMessageAt: ts, lastMessageSnippet: snippet(text) };
-      if (c.archived) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
+      if (replyUnarchives(c)) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
       return patch;
     });
     // Mock provider round-trip. A one-shot simulated failure (simFailNextSend)
@@ -447,7 +486,7 @@ export function useWhatsApp({
   // its "+", the seating indoor/outdoor or "auto".
   function handleAcceptDraft(conv, over) {
     if (!conv || !conv.draftData) return;
-    const p = draftPrefill(conv, bookings);
+    const p = draftPrefill(conv, bookings, contactsRef.current);
     const date = p.date;
     const time = (over && over.time) || p.time;
     // v18.3.5: through App's `openNew`, which asks `bookingCreate` and clears a
@@ -551,8 +590,20 @@ export function useWhatsApp({
   function doArchive(phoneKey) {
     patchConversation(phoneKey, { archived: true, archivedAt: Date.now() });
   }
+  // v18.9.0: Restore also undoes "Not a customer", whichever door it comes
+  // through (the header's Customer again, the R key, a bulk Restore): a muted
+  // conversation in the Inbox would take messages and never say so.
   function handleUnarchive(phoneKey) {
-    patchConversation(phoneKey, { archived: false, archivedAt: null });
+    patchConversation(phoneKey, { archived: false, archivedAt: null, muted: null });
+  }
+  // v18.9.0 — "Not a customer" (a supplier, the gestor, a friend): archived and
+  // MUTED, so its next message is stored and nothing else happens (no
+  // auto-reply, no parse, no unread, it stays in Archived; processInbound on
+  // the server, simulateInbound in the sandbox). Read too, so it leaves the
+  // unread count at once. Undone by Restore, which the header names "Customer
+  // again" for a muted conversation.
+  function handleMute(phoneKey) {
+    patchConversation(phoneKey, { muted: true, archived: true, archivedAt: Date.now(), unread: false });
   }
   function handleDeleteConversation(phoneKey) { setConfirmDeleteConv(phoneKey); }
   // Auto-archive on completion (settings/whatsapp.autoArchiveOnComplete, default
@@ -780,7 +831,10 @@ export function useWhatsApp({
 
   // eraseConversation(phoneKey) — v18.3.1: the WhatsApp half of "Delete
   // customer & all data" (SECURITY.md §3). One atomic update nulls
-  // conversations/<key> and messages/<key>.
+  // conversations/<key> and messages/<key>; since v18.9.0 a second one nulls
+  // waContacts/<key>, apart on purpose (`contactDeletePatch`: one refused path
+  // refuses a whole multi-path update, and the rules for that node reach a
+  // database after the app does).
   //
   // Deliberately NOT gated on the loaded refs the savers above check, and not on
   // the module being on: those gates stop a stale device WRITING data over real
@@ -802,19 +856,31 @@ export function useWhatsApp({
       messagesMapRef.current = nextMap;
       setMessagesMap(nextMap);
     }
+    // v18.9.0: and the MGT copy of the phone's contact for the number (Patryk,
+    // 2026-10-15). The confirm tells staff to delete it from the phone too:
+    // MGT cannot, and the phone is the master, so an edit there brings it back.
+    if (contactsRef.current[phoneKey]) {
+      const nextContacts = Object.assign({}, contactsRef.current);
+      delete nextContacts[phoneKey];
+      contactsRef.current = nextContacts;
+      setContacts(nextContacts);
+    }
     update(ref(db), conversationDeletePatch([phoneKey])).catch(function (err) { console.error("[wa] erase failed for one guest", err); });
+    update(ref(db), contactDeletePatch([phoneKey])).catch(function (err) { console.error("[wa] contact erase failed for one guest", err); });
   }
 
-  const unreadCount = conversations.filter((c) => c.unread && !c.archived).length;
+  const unreadCount = conversations.filter((c) => c.unread && !c.archived && !c.muted).length;
 
   return {
     // data
     conversations, messagesMap, templates,
+    // v18.9.0: the phone's synced contacts and the Business-app link
+    contacts, waLink,
     // savers (used by the simulator core — keyed shape, Phase 1b)
     patchConversation, upsertConversation, appendMessage, patchMessage,
     saveTemplates, clearAllWaData, eraseConversation,
     // v18.8.0: the per-conversation listener seam, and the simulator's writer
-    watchMessages, simAppendMessage,
+    watchMessages, simAppendMessage, simSetContacts,
     // derived
     unreadCount,
     // draft seam (doSave calls completeDraftAccept, then linkBookingByPhone)
@@ -827,7 +893,7 @@ export function useWhatsApp({
     handleAcceptDraft, handleDismissDraft, handleMarkRead,
     handleDismissAcceptedBadge, handleMarkIntentHandled, autoHandleCancelIntent,
     recheckConversation,
-    handleArchive, doArchive, handleUnarchive,
+    handleArchive, doArchive, handleUnarchive, handleMute,
     handleDeleteConversation, doDeleteConversation,
     bulkArchive, bulkUnarchive, bulkDeleteConversations,
     handleCancelLinkedBooking, handleOpenLinkedBooking, handleApplyModify, completeModifyApply,
