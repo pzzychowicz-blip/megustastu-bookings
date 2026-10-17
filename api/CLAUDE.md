@@ -153,10 +153,19 @@ a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
   The counters it sums are ONE record, `freshResults()` (`_lib/coexist-core.js`), which the
   simulator's events start from too: a counter a handler bumps and the record lacks reads
   NaN, and the sum then never equals 0, so a delivery that failed everywhere is not resent.
-- **History size is a rehearsal risk, not a measured one.** Vercel caps a request body at
-  4.5 MB and Meta says one history webhook can describe thousands of messages. Record the
-  chunk sizes in the rehearsal's logs; a `maxDuration` for `wa-inbound` in `vercel.json`
-  if processing nears the default limit.
+- **What the rehearsal measures (v18.9.0 follow-up, "What a delivery measures" in
+  `coexist-core.js`).** Two questions only Meta's real webhooks answer: does an echo ever
+  name a message MGT sent (if never, `findMessageByWamid`'s whole-thread scan can go), and
+  how big and how slow is a history delivery (Vercel caps a request body at 4.5 MB, Meta
+  says one history webhook can describe thousands of messages, and the import runs against
+  the function's time limit: a `maxDuration` for `wa-inbound` in `vercel.json` if it nears
+  it). An echo found under another key is counted `mgtEchoes`, not `skipped`. Every
+  delivery with a coexistence change logs one `[wa-inbound] coexistence delivery` line
+  (status, bytes, ms, fields, a history delivery's threads and messages, the non-zero
+  counters), and a history delivery or an echo of MGT's own is also recorded on
+  `waLink/measured`, **because a Hobby project's runtime logs last one hour**. Counts only,
+  held to a strict shape by the tests; a record that fails is logged and changes nothing
+  about the answer. The simulator's events call the handlers directly, so never reach it.
 - **`wa-onboard.js`**, the server half of Embedded Signup for `/wa-connect`. GET answers
   `{appId, configId, graphVersion}` (not secrets); POST exchanges the 30-second code, then
   writes `waLink` BEFORE asking for any sync (the guard above), then subscribes the app to

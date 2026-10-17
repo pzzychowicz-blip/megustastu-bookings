@@ -40,13 +40,21 @@
 // is counted as `ignored` and answered 200. And before any of that, the NUMBER
 // GUARD: a change whose `metadata.phone_number_id` is not the restaurant's is
 // ignored (`numberIsOurs`, with why it accepts the id Embedded Signup wrote too).
+//
+// v18.9.0 follow-up — WHAT THE REHEARSAL MEASURES. A delivery that carried a
+// coexistence change logs one counts-only line (its answer, size, time, fields
+// and counters), and a history delivery or an echo of a message MGT sent is
+// also recorded on `waLink/measured`, since Vercel keeps a Hobby project's
+// logs for an hour (`reportDelivery`, _lib/coexist-core.js).
 
 import { env } from "./_lib/env.js";
 import { verifySignature } from "./_lib/meta.js";
 import { parseMessage, mockParse } from "./_lib/gemini.js";
 import { processInbound, applyParse, inboundContent } from "./_lib/inbound-core.js";
 import { updateMessageStatusByWamid, readOperatingHours, getConversation } from "./_lib/rtdb.js";
-import { makeNumberGuard, COEXIST_HANDLERS, applyMessageChange, freshResults } from "./_lib/coexist-core.js";
+import {
+  makeNumberGuard, COEXIST_HANDLERS, applyMessageChange, freshResults, newMeasure, noteChange, reportDelivery,
+} from "./_lib/coexist-core.js";
 import { normalizePhone, isPhoneKey } from "../src/lib/whatsapp.js";
 import { secondsTs, webhookPhoneKey, editedMessage } from "../src/lib/wa-coexist.js";
 
@@ -230,6 +238,7 @@ export default async function handler(req, res) {
   }
 
   // ── POST: events ────────────────────────────────────────────────────────────
+  const started = Date.now(); // v18.9.0 follow-up: a coexistence delivery's `ms`
   let raw;
   try {
     raw = await readRawBody(req);
@@ -257,6 +266,9 @@ export default async function handler(req, res) {
   // v18.9.0: a coexistence handler that must be sent again (a history chunk
   // with a thread that failed) says so; the delivery is then answered 500.
   let retry = false;
+  // v18.9.0 follow-up: what was handed to a coexistence handler, for the
+  // delivery's line and record (`reportDelivery`). `messages` is not tallied.
+  const measure = newMeasure();
   try {
     const entries = Array.isArray(payload.entry) ? payload.entry : [];
     for (const entry of entries) {
@@ -288,6 +300,7 @@ export default async function handler(req, res) {
         if (field === "messages") { await handleMessagesChange(value, results, parseJobs); continue; }
         const coexist = Object.prototype.hasOwnProperty.call(COEXIST_HANDLERS, field) ? COEXIST_HANDLERS[field] : null;
         if (!coexist) { results.ignored++; continue; } // a field this webhook does not handle
+        noteChange(measure, field, value);
         try {
           const out = await coexist(value, results, undefined, { wabaId: entry && entry.id ? String(entry.id) : "" });
           if (out && out.retry) retry = true;
@@ -329,7 +342,13 @@ export default async function handler(req, res) {
   // v18.9.0: or when a handler asked to be sent again (`retry`). Phase B is
   // scheduled first, so a text stored in the same delivery is still parsed:
   // the resend finds it stored and skips it, parse and all.
-  if ((results.errors > 0 && done === 0) || retry) {
+  const failed = (results.errors > 0 && done === 0) || retry;
+  // v18.9.0 follow-up: the line and the record, before the answer they report.
+  // Only a coexistence delivery has them; it never throws.
+  if (measure.changes > 0) {
+    await reportDelivery(measure, results, { status: failed ? 500 : 200, bytes: raw.length, ms: Date.now() - started });
+  }
+  if (failed) {
     res.status(500).json({ error: "processing failed", ...results });
     return;
   }

@@ -48,8 +48,114 @@ export const COEXIST_FIELDS = ["smb_app_state_sync", "smb_message_echoes", "hist
 // `errors`, so a counter a handler bumps and a copy lacks reads NaN, and a
 // delivery that failed everywhere is answered 200 and never sent again.
 // tests/api-handlers.test.js holds every `results.<name>++` under api/ to these.
+// `mgtEchoes` (v18.9.0 follow-up) is an echo that named a message MGT sent,
+// counted apart from `skipped` because the rehearsal asks whether one ever
+// comes (handleEchoes, and "What a delivery measures" below).
 export function freshResults() {
-  return { messages: 0, statuses: 0, echoes: 0, edits: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 };
+  return { messages: 0, statuses: 0, echoes: 0, mgtEchoes: 0, edits: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 };
+}
+
+// ── What a delivery measures (v18.9.0 follow-up) ─────────────────────────────
+// The rehearsal (go-live plan §3b) has two questions that only Meta's real
+// webhooks can answer, and this is their instrument:
+//
+//   Does an echo ever name a message MGT sent? (`mgtEchoes`, handleEchoes.)
+//     If never, a phone reply can be found by its key alone, and the
+//     whole-thread scan in findMessageByWamid can go (ROADMAP).
+//   How big and how slow is a history delivery? Vercel refuses a request body
+//     over 4.5 MB, and the import runs against the function's time limit.
+//
+// COUNTS ONLY: nothing here holds a message's text, a phone number, a name, a
+// wamid, an account id or a token. Every value is a number or one of this
+// file's own names, which tests/api-handlers.test.js holds to a strict shape.
+//
+// Each coexistence delivery logs ONE line (`deliveryLine`), for watching it
+// live. Vercel keeps a Hobby project's runtime logs for an hour, and a
+// week-long rehearsal cannot be watched for a week, so a history delivery and
+// an echo of a message MGT sent are also recorded on `waLink/measured`
+// (`measuredAfter`), which stays: read it in the Firebase console.
+
+// newMeasure() → the tally api/wa-inbound.js keeps while it dispatches: the
+// changes it handed to a coexistence handler, per field, and for `history` the
+// threads and messages they carried. Those are the PAYLOAD's counts, what the
+// size and the time were spent on; `results.history` is what was stored.
+export function newMeasure() {
+  return { changes: 0, fields: {}, threads: 0, messages: 0 };
+}
+
+// noteChange(m, field, value) — one change handed to a coexistence handler.
+// `field` is a COEXIST_HANDLERS key (the webhook asks before it calls this).
+export function noteChange(m, field, value) {
+  m.changes++;
+  m.fields[field] = (m.fields[field] || 0) + 1;
+  if (field !== "history") return;
+  for (const item of Array.isArray(value.history) ? value.history : []) {
+    for (const t of item && Array.isArray(item.threads) ? item.threads : []) {
+      m.threads++;
+      if (t && Array.isArray(t.messages)) m.messages += t.messages.length;
+    }
+  }
+  // A photo's media, sent after its placeholder (attachHistoryMedia).
+  if (Array.isArray(value.messages)) m.messages += value.messages.length;
+}
+
+// deliveryLine(m, results, d) → the line one coexistence delivery logs, `d`
+// being `{status, bytes, ms}`: the answer, the body's size, and the time from
+// the request's arrival until its answer was decided (the record's own write
+// comes after, and is not in it). `fields` are the coexistence fields
+// handed on, `threads` and `messages` a history delivery's, and `counts` the
+// delivery's counters that are not 0:
+//   [wa-inbound] coexistence delivery status=200 bytes=48211 ms=930 fields=history:1 threads=3 messages=41 counts=history:41
+export function deliveryLine(m, results, d) {
+  const fields = Object.keys(m.fields).sort().map(function (f) { return f + ":" + m.fields[f]; }).join(",");
+  const counts = Object.keys(results).filter(function (k) { return results[k]; }).map(function (k) { return k + ":" + results[k]; }).join(",");
+  return "[wa-inbound] coexistence delivery status=" + d.status + " bytes=" + d.bytes + " ms=" + d.ms + " fields=" + fields
+    + (m.fields.history ? " threads=" + m.threads + " messages=" + m.messages : "")
+    + " counts=" + (counts || "none");
+}
+
+// measuredAfter(cur, d, now) → `waLink/measured` after one delivery, `d` being
+// `{history, failed, bytes, ms, threads, messages, mgtEchoes}`:
+//   historyDeliveries   every history delivery received
+//   historyFailed       those answered 500, which Meta sends again
+//   historyLargest      {bytes, ms, threads, messages, at} of the largest
+//   historySlowest      the same, of the slowest; a tie keeps the first
+//   mgtEchoes           echoes that named a message MGT sent
+//   mgtEchoAt           when the last of them came
+// It keeps adding up for as long as the link lasts, across history requests,
+// because what the cap and the time limit are asked about is the maximum.
+export function measuredAfter(cur, d, now) {
+  const next = Object.assign({}, cur && typeof cur === "object" ? cur : {});
+  const beats = function (prev, key, v) { return !(prev && Number(prev[key]) >= v); };
+  if (d.history) {
+    const snap = { bytes: d.bytes, ms: d.ms, threads: d.threads, messages: d.messages, at: now };
+    next.historyDeliveries = (Number(next.historyDeliveries) || 0) + 1;
+    if (d.failed) next.historyFailed = (Number(next.historyFailed) || 0) + 1;
+    if (beats(next.historyLargest, "bytes", d.bytes)) next.historyLargest = snap;
+    if (beats(next.historySlowest, "ms", d.ms)) next.historySlowest = snap;
+  }
+  if (d.mgtEchoes > 0) {
+    next.mgtEchoes = (Number(next.mgtEchoes) || 0) + d.mgtEchoes;
+    next.mgtEchoAt = now;
+  }
+  return next;
+}
+
+// reportDelivery(m, results, d, now) — the line, then the record when the
+// delivery is one the rehearsal asks about (a history change, an echo of a
+// message MGT sent). It never throws, and a record that fails changes nothing
+// about the delivery's answer: it is a measurement, and a 500 would have Meta
+// send the delivery again for nothing but a second measurement.
+export async function reportDelivery(m, results, d, now = Date.now()) {
+  try {
+    console.info(deliveryLine(m, results, d));
+    const history = !!m.fields.history;
+    if (!history && !(results.mgtEchoes > 0)) return;
+    const one = { history, failed: d.status >= 500, bytes: d.bytes, ms: d.ms, threads: m.threads, messages: m.messages, mgtEchoes: results.mgtEchoes };
+    await transactWaLink("measured", function (cur) { return measuredAfter(cur, one, now); });
+  } catch (e) {
+    console.error("[wa-inbound] the delivery's measures were not recorded:", e.message);
+  }
 }
 
 // ── The number guard ─────────────────────────────────────────────────────────
@@ -180,7 +286,17 @@ export async function handleEchoes(value, results, now = Date.now()) {
       if (!wamid) { results.ignored++; continue; }
       // A message sent FROM MGT is stored under its own id with the wamid as
       // `providerMsgId`, so the look-up is by wamid, not by key alone.
-      if (await findMessageByWamid(phoneKey, wamid)) { results.skipped++; continue; }
+      const found = await findMessageByWamid(phoneKey, wamid);
+      if (found) {
+        // Found under another key, it is a message MGT sent (wa-send,
+        // wa-media, the auto-reply), which Meta is not expected to echo:
+        // counted apart, since whether it ever does decides that scan (v18.9.0
+        // follow-up, "What a delivery measures"). Under its own key it is a
+        // redelivery, or a history import that got there first.
+        if (found.key !== sanitizeKey(wamid)) results.mgtEchoes++;
+        else results.skipped++;
+        continue;
+      }
       const content = inboundContent(m);
       const ts = secondsTs(m.timestamp, now);
       const conv = await getConversation(phoneKey);

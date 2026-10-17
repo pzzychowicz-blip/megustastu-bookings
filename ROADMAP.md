@@ -40,7 +40,11 @@ session and keeping it in sync.
   `importThread` reads and writes the conversation in one transaction (a customer writing
   inside that round trip has the message marked read and, on an old thread, archived; the
   transaction costs about one more round trip per thread, on the path nearest Vercel's
-  time limit). Both from v18.9.0's `/code-review`. **Before any of it, publish
+  time limit). Both from v18.9.0's `/code-review`. **Where the answers are:** `waLink/measured`
+  in the DEV database (the largest and the slowest history delivery, each with its bytes,
+  milliseconds, threads and messages; `mgtEchoes`, absent for as long as no echo has named a
+  message MGT sent), and one `[wa-inbound] coexistence delivery` line per delivery in
+  Vercel's logs, which a Hobby project keeps for an hour. **Before any of it, publish
   `database.rules.json` to PROD** (the `waContacts` grant; DEV has it since 2026-10-16,
   checked: a per-key `waContacts` delete is allowed and a `waLink` write refused). If the rehearsal
   passes, the restaurant's number, with the Business app's greeting message turned off.

@@ -36771,3 +36771,44 @@ app's, `src/lib/wa-connect.js` for the page's: the excerpt names the file and li
 lint error (`✖ 64 problems (1 error, 63 warnings)`, exit 1, style not run). Stage timings
 re-measured: 0.2 · 0.5 · 4.2 · 7.7 · 0.4 s. `npm ls` cannot see a drift inside a range, so the
 skill also says to run `npm ci` after any pull that changes the lockfile.
+
+### Follow-up — the webhook records what the rehearsal measures
+
+Two of the rehearsal's questions had no instrument. **Does an echo ever name a message MGT
+sent?** `handleEchoes` counted that case in `skipped`, beside a plain redelivery, and logged
+nothing; the answer decides whether `findMessageByWamid`'s whole-thread scan stays. **How big and
+how slow is a history delivery?** Nothing logged a delivery's size, time or thread count, which
+the 4.5 MB request cap and the function's time limit are asked about.
+
+An echo found under ANOTHER key (a message MGT sent: `wa-send`, `wa-media`, the auto-reply, each
+stored under its own id with the wamid as `providerMsgId`) is now counted `mgtEchoes`, a new
+`freshResults()` key; one found under its own key is still `skipped`. Every delivery that handed a
+change to a coexistence handler logs one line (`deliveryLine`, `_lib/coexist-core.js`):
+
+    [wa-inbound] coexistence delivery status=200 bytes=48211 ms=930 fields=history:1 threads=3 messages=41 counts=history:41
+
+`ms` runs from the request's arrival to the answer's decision; `threads` and `messages` are the
+payload's own counts, where `counts` is what was stored. **The line alone could not answer a
+week-long rehearsal**: Vercel keeps a Hobby project's runtime logs for one hour (its runtime-logs
+page, read on 2026-10-17), so an echo of MGT's own on day 4, or a history chunk that arrived while
+nobody was watching, would leave no trace. So a history delivery, or a delivery with an echo of
+MGT's own, is also recorded on `waLink/measured` (`measuredAfter`, one transaction):
+`historyDeliveries`, `historyFailed` (answered 500), `historyLargest` and `historySlowest`
+(`{bytes, ms, threads, messages, at}` of the largest and of the slowest; a tie keeps the first),
+`mgtEchoes` and `mgtEchoAt`. It adds up for as long as the link lasts, since the cap and the time
+limit are asked about the maximum, and no screen reads it: the Firebase console does. This goes
+past the task's brief, which asked for a log line; the record is what makes the log's two answers
+outlast the hour. **Counts only**: the line's shape is held to a strict pattern (numbers and this
+code's own names) and every leaf of the record to a number, and one test sends a contact, a phone
+reply, an echo of MGT's own and a history chunk carrying a name, numbers and text, and finds none
+of them in either. A record that cannot be written is logged and changes nothing about the
+answer: a 500 would have Meta send the delivery again for a second measurement. The simulator's
+events call the handlers directly, so neither the line nor the record fires there.
+
+Eight new tests, and the redelivered-echo and empty-payload tests changed (`skipped: 1,
+mgtEchoes: 1`; `mgtEchoes: 0`). Nine of the ten fail on the code before this commit; the tenth
+(a delivery of messages alone, and a change for another number, are not measured) holds there
+too, as an absence should. Four breakages were
+each caught by a test: every echo found counted as MGT's own, the payload put in the line, a failed
+record thrown out of the webhook, and a 500 never counted as failed. Gate: main entry 422.34 kB /
+123.08 kB gz (unchanged, server code only), 3,578 tests, lint 0 errors and 63 warnings, style OK.

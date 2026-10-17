@@ -121,7 +121,7 @@ import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "
 import onboardHandler from "../api/wa-onboard.js";
 import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
-import { numberIsOurs, makeNumberGuard, freshResults } from "../api/_lib/coexist-core.js";
+import { numberIsOurs, makeNumberGuard, freshResults, measuredAfter } from "../api/_lib/coexist-core.js";
 import { readJsonBody, bearerToken } from "../api/_lib/request.js";
 import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyRequested, historyStatus, WA_IMPORT_ARCHIVE_MS, disconnectSentence } from "../src/lib/wa-coexist.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
@@ -154,6 +154,7 @@ beforeEach(() => {
     "CRON_SECRET", "META_APP_ID", "META_ES_CONFIG_ID",
   ].forEach((k) => vi.stubEnv(k, ""));
   vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   parseThread.mockReset();
@@ -974,7 +975,7 @@ describe("wa-inbound — the handshake, the method, the signature", () => {
   });
   it("answers 200 to a signed payload with nothing in it", async () => {
     const res = await deliver({});
-    expect([res.statusCode, res.body]).toEqual([200, { ok: true, messages: 0, statuses: 0, echoes: 0, edits: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 }]);
+    expect([res.statusCode, res.body]).toEqual([200, { ok: true, messages: 0, statuses: 0, echoes: 0, mgtEchoes: 0, edits: 0, contacts: 0, history: 0, events: 0, skipped: 0, ignored: 0, errors: 0 }]);
   });
   // The retry rule sums every counter but `errors`, so one a handler bumps that
   // the record lacks reads NaN and switches the retry off: every counter under
@@ -1385,11 +1386,13 @@ describe("wa-inbound — phone replies (v18.9.0)", () => {
     expect(convAt(KEY).lastMessageSnippet).toBe("newer");
     expect(msgsAt(KEY)).toHaveLength(1);
   });
-  it("a redelivered echo, and the echo of a message MGT sent itself, are skipped", async () => {
+  // v18.9.0 follow-up: both are left alone, and the second is counted apart,
+  // because the rehearsal asks whether Meta ever sends one.
+  it("a redelivered echo is skipped, and the echo of a message MGT sent itself is stored nowhere and counted apart", async () => {
     fake.state.tree = { messages: { [KEY]: { out1: { id: "out1", direction: "out", text: "x", ts: 1, providerMsgId: "wamid.MGT" } } } };
     await deliverEchoes([echo()]);
     const res = await deliverEchoes([echo(), echo({ id: "wamid.MGT" })]);
-    expect(res.body).toMatchObject({ echoes: 0, skipped: 2 });
+    expect(res.body).toMatchObject({ echoes: 0, skipped: 1, mgtEchoes: 1 });
     expect(msgsAt(KEY)).toHaveLength(2);
   });
   it("a photo sent from the phone keeps its media id, and its caption is the text", async () => {
@@ -1642,6 +1645,112 @@ describe("wa-inbound — the chats the phone already held (v18.9.0)", () => {
     fake.state.failWrite = (op, path) => op === "transaction" && path === "waLink/history";
     const res = await deliverHistory([{ errors: [{ code: 2593109, title: "History sharing declined" }] }]);
     expect([res.statusCode, res.body]).toMatchObject([500, { events: 0, errors: 1 }]);
+  });
+});
+
+// ── v18.9.0 follow-up: what a coexistence delivery measures ─────────────────
+// The rehearsal's two questions (does an echo ever name a message MGT sent; how
+// big and how slow is a history delivery) are answered by one log line per
+// delivery, for watching live, and by `waLink/measured`, which outlasts
+// Vercel's hour of logs. Counts only: the line's shape below admits nothing but
+// numbers and this code's own names.
+const LINE = /^\[wa-inbound\] coexistence delivery status=\d{3} bytes=\d+ ms=\d+ fields=[a-z_]+:\d+(,[a-z_]+:\d+)*( threads=\d+ messages=\d+)? counts=([a-zA-Z]+:\d+(,[a-zA-Z]+:\d+)*|none)$/;
+const coexistLines = () => console.info.mock.calls.map((c) => c.join(" ")).filter((l) => l.includes("coexistence delivery"));
+const mgtSent = () => ({ messages: { [KEY]: { out1: { id: "out1", direction: "out", text: "x", ts: 1, providerMsgId: "wamid.MGT" } } } });
+const leaves = (o) => Object.values(o).flatMap((v) => (v && typeof v === "object" ? leaves(v) : [v]));
+
+describe("wa-inbound — what a coexistence delivery measures (v18.9.0 follow-up)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+
+  it("a history delivery logs one line and records its size, time, threads and messages on waLink/measured", async () => {
+    const body = change("history", Object.assign(forNumber("111"), { history: [chunk([
+      { id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600), histMsg("wamid.H2", BIZ, 300)] },
+      { id: "34600999888", messages: [histMsg("wamid.H3", "34600999888", 600)] },
+    ])] }));
+    const res = await deliver(null, { raw: body });
+    expect(res.statusCode).toBe(200);
+    const lines = coexistLines();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(LINE);
+    expect(lines[0]).toMatch(/ fields=history:1 threads=2 messages=3 counts=history:3$/);
+    const m = fake.read("waLink/measured");
+    expect(m).toMatchObject({ historyDeliveries: 1, historyLargest: { bytes: Buffer.byteLength(body), threads: 2, messages: 3, at: expect.any(Number) } });
+    expect(lines[0]).toContain("status=200 bytes=" + Buffer.byteLength(body) + " ms=" + m.historyLargest.ms + " ");
+    expect(m.historySlowest).toEqual(m.historyLargest);
+    expect(Object.keys(m).sort()).toEqual(["historyDeliveries", "historyLargest", "historySlowest"]);
+  });
+  it("an echo of a message MGT sent is logged and recorded; a phone reply is logged only", async () => {
+    fake.state.tree = mgtSent();
+    await deliverEchoes([echo()]);
+    expect(coexistLines()).toEqual([expect.stringMatching(/ fields=smb_message_echoes:1 counts=echoes:1$/)]);
+    expect(fake.read("waLink/measured")).toBeUndefined();
+    await deliverEchoes([echo({ id: "wamid.MGT" })]);
+    await deliverEchoes([echo({ id: "wamid.MGT" })]);
+    expect(coexistLines().slice(1)).toEqual([expect.stringMatching(/ counts=mgtEchoes:1$/), expect.stringMatching(/ counts=mgtEchoes:1$/)]);
+    expect(fake.read("waLink/measured")).toEqual({ mgtEchoes: 2, mgtEchoAt: expect.any(Number) });
+    expect(msgsAt(KEY)).toHaveLength(2); // the echo of MGT's own is stored nowhere
+  });
+  it("nothing a customer said or is reaches the line or the record", async () => {
+    fake.state.tree = mgtSent();
+    await syncContacts([contactItem("34600111222", "add", "Ana López", "Ana")]);
+    await deliverEchoes([echo(), echo({ id: "wamid.MGT" })]);
+    await deliverHistory([chunk([{ id: "34600999888", messages: [histMsg("wamid.H9", "34600999888", 600, { text: { body: "Mesa para 4 el viernes" } })] }])]);
+    const lines = coexistLines();
+    expect(lines).toHaveLength(3);
+    expect(lines.every((l) => LINE.test(l))).toBe(true);
+    const measured = fake.read("waLink/measured");
+    expect(leaves(measured).every((v) => typeof v === "number")).toBe(true);
+    for (const s of lines.concat(JSON.stringify(measured))) {
+      for (const secret of ["600111222", "600999888", "34600000000", "Ana", "López", "Hola", "Mesa", "wamid", "WABA", "MGT"]) {
+        expect(s, secret).not.toContain(secret);
+      }
+    }
+  });
+  it("a delivery of messages alone, and a change for another number, are not measured", async () => {
+    await deliver(hola());
+    vi.stubEnv("META_PHONE_NUMBER_ID", "111");
+    const res = await deliverChange("history", Object.assign(forNumber("222"), { history: [chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600)] }])] }));
+    expect(res.body).toMatchObject({ ignored: 1, history: 0 });
+    expect(coexistLines()).toEqual([]);
+    expect(fake.read("waLink/measured")).toBeUndefined();
+  });
+  it("a contacts delivery is logged and not recorded", async () => {
+    await syncContacts([contactItem("34600111222", "add", "Ana López", "Ana")]);
+    expect(coexistLines()).toEqual([expect.stringMatching(/ fields=smb_app_state_sync:1 counts=contacts:1$/)]);
+    expect(fake.read("waLink/measured")).toBeUndefined();
+  });
+  it("a history delivery answered 500 says so in its line and is counted as failed", async () => {
+    const realRef = fake.db.ref;
+    fake.db.ref = (path) => { if (path === "messages/+34600999888") throw new Error("database unreachable"); return realRef(path); };
+    let res;
+    try {
+      res = await deliverHistory([chunk([{ id: "34600999888", messages: [histMsg("wamid.B1", "34600999888", 600)] }])]);
+    } finally { fake.db.ref = realRef; }
+    expect(res.statusCode).toBe(500);
+    expect(coexistLines()).toEqual([expect.stringMatching(/^\[wa-inbound\] coexistence delivery status=500 .* counts=errors:1$/)]);
+    expect(fake.read("waLink/measured")).toMatchObject({ historyDeliveries: 1, historyFailed: 1 });
+  });
+  it("a record that cannot be written leaves the delivery's answer and what it stored alone", async () => {
+    fake.state.failWrite = (op, path) => op === "transaction" && path === "waLink/measured";
+    const res = await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600)] }])]);
+    expect([res.statusCode, res.body]).toMatchObject([200, { history: 1, errors: 0 }]);
+    expect(msgsAt(KEY)).toHaveLength(1);
+    expect(coexistLines()).toHaveLength(1);
+    expect(console.error).toHaveBeenCalledWith(expect.stringMatching(/measures were not recorded/), "database unavailable");
+  });
+  it("measuredAfter: deliveries and failures add up, the largest and the slowest are kept apart, a tie keeps the first", () => {
+    let m = measuredAfter(null, { history: true, failed: false, bytes: 100, ms: 900, threads: 1, messages: 2 }, 1);
+    m = measuredAfter(m, { history: true, failed: true, bytes: 5000, ms: 300, threads: 4, messages: 40 }, 2);
+    m = measuredAfter(m, { history: true, failed: false, bytes: 5000, ms: 900, threads: 9, messages: 9 }, 3);
+    expect(m).toEqual({
+      historyDeliveries: 3, historyFailed: 1,
+      historyLargest: { bytes: 5000, ms: 300, threads: 4, messages: 40, at: 2 },
+      historySlowest: { bytes: 100, ms: 900, threads: 1, messages: 2, at: 1 },
+    });
+    const before = JSON.stringify(m);
+    expect(measuredAfter(m, { mgtEchoes: 2 }, 5)).toEqual(Object.assign({}, m, { mgtEchoes: 2, mgtEchoAt: 5 }));
+    expect(measuredAfter(m, { history: false, mgtEchoes: 0 }, 6)).toEqual(m);
+    expect(JSON.stringify(m)).toBe(before); // never changes what it was given
   });
 });
 
