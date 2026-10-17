@@ -36901,6 +36901,10 @@ change to what `sanitizeKey` writes would have left it green over a 400. It now 
 with `+`, `/` and `=` through `sanitizeKey`, the function `inbound-core.js` stores a message under,
 asserts the key it gets, and GETs that.
 
+**The comment where key shapes are defined (finding 4).** `api/_lib/rtdb.js`'s header said the
+dots map to `_` and nothing about `+` and `=`, the assumption that caused this version. It now says
+only six characters change, and points a new key check at `sanitizeKey(k) === k`.
+
 **Not fixed, finding 3** (the test calls the handler with `req.query` already decoded, so a `+`
 sent unencoded in a query string, which decodes to a space, is never tested). Traced: the only
 caller, `loadMedia` (`src/lib/wa-backend.js:190`), passes the key through `encodeURIComponent`
