@@ -36753,3 +36753,21 @@ on the same install: 121.71, so this version adds 1.37 kB gz). A gate run on a s
 measures the install, not the branch: compare `npx eslint --version` with `package.json` when a
 worktree's `node_modules` predates a dependency bump. Final gate on the lockfile's install: 3,570
 tests (Vitest 5), lint 0 errors and 63 warnings, style OK, `test:rules` 311.
+
+### Follow-up — the ship gate measures what CI measures
+
+The `mgt-workflow` skill's gate block had two defects this version exposed. **`npm run build`
+is two builds since phase 8** (`vite build && vite build -c vite.wa-connect.config.js`), so its
+`tail -3` reported the `/wa-connect` page's bundle as the main bundle, and on a failed build it
+printed three lines of Rolldown's stack trace and no error at all, in either build. **And it ran
+on whatever `node_modules` held**, which is how the CI failure above got past it. The block now
+starts with `npm ls --depth=0` (silent when the install satisfies `package.json`; a STOP line
+asking for `npm ci` when it does not), greps the build's output for the main entry
+(`dist/assets/index-*.js`), and on a failed build prints its last 15 lines with the stack frames
+and colour codes removed: the message, the file and line, the code frame. Verified against a
+passing tree (four lines, exit 0, in zsh and in bash), an install reporting ESLint 9.39.4 (the
+STOP line, exit 1, nothing else run), a syntax error in each build (`src/lib/whatsapp.js` for the
+app's, `src/lib/wa-connect.js` for the page's: the excerpt names the file and line, exit 1) and a
+lint error (`✖ 64 problems (1 error, 63 warnings)`, exit 1, style not run). Stage timings
+re-measured: 0.2 · 0.5 · 4.2 · 7.7 · 0.4 s. `npm ls` cannot see a drift inside a range, so the
+skill also says to run `npm ci` after any pull that changes the lockfile.
