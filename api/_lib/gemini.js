@@ -46,8 +46,9 @@ function waContext() {
 }
 import { mergeDraft, WA_PARSE_TEXT_LEN } from "../../src/lib/whatsapp.js";
 
-// gemini-3.1-flash-lite answered in <1s when measured (2026-06-05); the default
-// since v18.4.1, 3.5-flash-lite, has not been timed (see DEFAULT_MODEL). This
+// The default, 3.5-flash-lite, answered in a median of 853ms and at most
+// 3737ms over 17 live parses on the sandbox (2026-10-17, see DEFAULT_MODEL),
+// so the slowest used a quarter of this cap. This
 // generous cap catches the occasional
 // free-tier latency spike while still failing gracefully (timeout → null →
 // message saved with no draft, staff handles it). Since the async-parse change
@@ -61,10 +62,15 @@ const TIMEOUT_MS = 15000;
 // v18.4.1 (2026-10-07): gemini-3.5-flash-lite, Google's named replacement for
 // gemini-3.1-flash-lite, which shuts down on 2027-05-07 (ai.google.dev/
 // gemini-api/docs/deprecations). Patryk's call to move now rather than wait.
-// NOT benchmarked against a live key when it was made the default: no key was
-// available where the change was written, so its accuracy and its time per
-// parse against TIMEOUT_MS are still to be measured on the sandbox (ROADMAP).
-// What was measured, on 2026-06-05, is the model it replaces: 3.1-flash-lite
+// It was made the default without a live run (no key where it was written)
+// and measured on the sandbox on 2026-10-17 (go-live plan A5-7): 17 of the
+// simulator's canned scenarios and one staff Re-check. Intent 17/17, every
+// date, size and time it filled matched the message, and it invented
+// nothing; the misses left a field empty ("4 of us maybe 5", "around 8") or
+// said medium where low was expected. Time per parse: median 853ms, slowest
+// 3737ms, Re-check 803ms. Free tier on the sandbox's key: 15 requests a
+// minute, 500 a day, 250K tokens a minute, the same as 3.1-flash-lite.
+// Measured on 2026-06-05, the model it replaces: 3.1-flash-lite
 // was sub-second and honoured the never-invent rule. Rejected that day:
 // gemini-3.5-flash is accurate but its latency swings to ~20s (timeouts);
 // gemini-3-flash-preview always times out; gemini-2.0-flash 429s on free tier.

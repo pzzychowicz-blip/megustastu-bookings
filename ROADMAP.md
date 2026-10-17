@@ -59,18 +59,6 @@ session and keeping it in sync.
   and admin** by default, grantable to staff by an admin, like `hoursEdit` / `layoutEdit`.
   Decided 2026-09-21; the pricing analysis is § 4a of the go-live plan.
 
-- **Measure `gemini-3.5-flash-lite`, and clear `gemini-3.1-flash-lite` out before
-  7 May 2027** (v18.4.1, 2026-10-07). The code default moved to 3.5 without a live
-  run, because no key was available where it was written. Still to do, on the sandbox:
-  (a) run the simulator's canned scenarios in live mode and record accuracy and time
-  per parse against `TIMEOUT_MS` (15 s) in `api/_lib/gemini.js`; (b) check every
-  deployment's `GEMINI_MODEL` env var — one that still names `gemini-3.1-flash-lite`
-  overrides the default and stops working on 7 May 2027, the id's shutdown date (since
-  v18.9.2 Settings → Admin → Integrations names the model each deployment calls, and each
-  `[wa-parse]` / `[wa-recheck]` line of a real Gemini call carries its `ms`);
-  (c) read the free-tier requests per minute and per day in AI Studio → Rate limits,
-  which Google no longer publishes in the docs.
-
 The entries marked `#N` come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
 in its register, and the report
 (`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
