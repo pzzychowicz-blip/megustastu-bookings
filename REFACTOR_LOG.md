@@ -37098,3 +37098,41 @@ counts) · `api/CLAUDE.md` (wa-usage, eight functions) · `src/hooks/CLAUDE.md`
 `src/components/Settings.jsx` · `src/components/SettingsChrome.jsx` ·
 `src/components/AdminSettings.jsx` · `src/App.jsx` (version) · the tests above.
 No stored shape changed and no device needs a refresh.
+
+### Phase 2 — the prompt rules for hedged times and sizes (A5-7)
+
+The live run of 3.5 Flash-Lite on the sandbox (2026-10-17) invented nothing, and its
+misses were all one shape: a field the customer gave with a hedge was left empty ("4 of
+us maybe 5", "around 8"), or marked medium where low was expected. Patryk's rules, in the
+rules block every prompt shares (one message, and a staff Re-check's transcript):
+
+- **An approximate time with a number gets that hour**, confidence low, and the
+  ambiguity note says it is approximate: "around 8" → 20:00, "sobre las 9" → 21:00. A
+  time with no number ("evening", "por la noche") stays null, as before. To make "around
+  8" mean 20:00, the time rule also says to read a bare hour against the restaurant's
+  hours, which the scenarios already assumed ("Friday at 9" → 21:00).
+- **A hedged party size gets the larger number**, confidence low, and the note names both:
+  "4 maybe 5" → 5, "2 or 3" → 3.
+- **The ambiguity note is written in the language of the customer's message.**
+
+The never-invent rule stays and now says why these are not inventions: the customer wrote
+the number. The model's measurement comment in `gemini.js` records the change.
+
+**The simulator's canned parses follow the rules** (they stand in for the model in mock
+mode): "2 or 3" → 3 and "4 maybe 5" → 5, low; "sobre las nueve" → 21:00 and "sobre las
+20:30" → 20:30, both low with a Spanish note; and "el sábado por la noche", whose canned
+parse had filled 20:00 with high confidence (a time with no number, which the rule
+already said stays null), is now null and medium. The regex mock parser
+(`mockParse`) is unchanged: it fills only what its patterns find.
+
+**Test.** `tests/wa-prompt-rules.test.js` reads the prompt out of the request body the
+real `parseMessage` and `parseThread` build (live mode, a stubbed Gemini), so a rule
+written but never sent fails; and holds the five changed scenarios to the rules. With
+"the LARGER number" changed in gemini.js, two of its five fail (checked).
+
+**Not measured here.** What the model does with the rules is A5-7's re-run of the 17
+scenarios on the sandbox after merge: "4 maybe 5" should fill 5, "around 8" 20:00, both
+low, and "sobre las nueve" 21:00 low with a Spanish note; nothing else may change.
+
+**Files:** `api/_lib/gemini.js` · `src/lib/wa-sim-scenarios.js` ·
+`tests/wa-prompt-rules.test.js` (new).

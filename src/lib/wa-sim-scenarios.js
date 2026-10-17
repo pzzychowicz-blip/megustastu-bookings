@@ -170,7 +170,7 @@ export const SCENARIOS = [
   },
   {
     id: "new_en_low", group: "New bookings", label: "New booking · EN · low conf (ambiguous)",
-    run: (ctx) => simulateInbound({ phone: PH.enLow, language: "en", text: "hi can i book tomorrow 8pm ish? we're 2 or 3", parse: { intent: "new_booking", size: 2, date: isoPlus(1), time: "20:00", confidence: "low", ambiguity: "Size unclear — customer said '2 or 3'. Time '8pm ish' rounded to 20:00." } }, ctx),
+    run: (ctx) => simulateInbound({ phone: PH.enLow, language: "en", text: "hi can i book tomorrow 8pm ish? we're 2 or 3", parse: { intent: "new_booking", size: 3, date: isoPlus(1), time: "20:00", confidence: "low", ambiguity: "Size given as '2 or 3', set to 3; the time '8pm ish' is approximate." } }, ctx),
   },
   {
     id: "new_firsttime", group: "New bookings", label: "New booking · first-time customer (auto-ack)",
@@ -227,8 +227,8 @@ export const SCENARIOS = [
     run: (ctx) => simulateInbound({ phone: "+34601000002", language: "es", text: "Buenas, querríamos reservar para 6 el sábado a las 21:00", parse: { intent: "new_booking", size: 6, date: nextDow(6), time: "21:00", confidence: "high" } }, ctx),
   },
   {
-    id: "nb_es_tonight3", group: "New bookings · ES", label: "Cena · 3 pers · esta noche 20:30 · alta",
-    run: (ctx) => simulateInbound({ phone: "+34601000003", language: "es", text: "¿Tenéis sitio para 3 esta noche sobre las 20:30?", parse: { intent: "new_booking", size: 3, date: isoPlus(0), time: "20:30", confidence: "high" } }, ctx),
+    id: "nb_es_tonight3", group: "New bookings · ES", label: "Cena · 3 pers · esta noche 'sobre las 20:30' · baja",
+    run: (ctx) => simulateInbound({ phone: "+34601000003", language: "es", text: "¿Tenéis sitio para 3 esta noche sobre las 20:30?", parse: { intent: "new_booking", size: 3, date: isoPlus(0), time: "20:30", confidence: "low", ambiguity: "Hora aproximada: 'sobre las 20:30'." } }, ctx),
   },
   {
     id: "nb_es_terrace2", group: "New bookings · ES", label: "Cena · 2 pers · viernes · terraza (nota)",
@@ -243,8 +243,8 @@ export const SCENARIOS = [
     run: (ctx) => simulateInbound({ phone: "+34601000006", language: "es", text: "Mesa para 4 mañana a las 13:30, vamos con un bebé, ¿tenéis trona?", parse: { intent: "new_booking", size: 4, date: isoPlus(1), time: "13:30", notes: "Necesita trona para un bebé", confidence: "high" } }, ctx),
   },
   {
-    id: "nb_es_timefuzzy", group: "New bookings · ES", label: "Hora imprecisa · 'sobre las 9' · baja",
-    run: (ctx) => simulateInbound({ phone: "+34601000007", language: "es", text: "Para 2 el jueves, sobre las nueve más o menos", parse: { intent: "new_booking", size: 2, date: nextDow(4), time: null, confidence: "low", ambiguity: "Hora imprecisa — 'sobre las nueve' (¿21:00?). Sin confirmar." } }, ctx),
+    id: "nb_es_timefuzzy", group: "New bookings · ES", label: "Hora imprecisa · 'sobre las 9' → 21:00 · baja",
+    run: (ctx) => simulateInbound({ phone: "+34601000007", language: "es", text: "Para 2 el jueves, sobre las nueve más o menos", parse: { intent: "new_booking", size: 2, date: nextDow(4), time: "21:00", confidence: "low", ambiguity: "Hora aproximada: 'sobre las nueve más o menos'." } }, ctx),
   },
 
   // ── New bookings · EN (tourists) ────────────────────────────────────────────
@@ -269,8 +269,8 @@ export const SCENARIOS = [
     run: (ctx) => simulateInbound({ phone: "+4915112000001", language: "en", text: "Hello, table for 4 on Saturday 8pm. One of us is gluten free, is that ok?", parse: { intent: "new_booking", size: 4, date: nextDow(6), time: "20:00", notes: "One guest gluten-free", confidence: "high" } }, ctx),
   },
   {
-    id: "nb_en_sizefuzzy", group: "New bookings · EN", label: "Size unclear · '4 maybe 5' · low",
-    run: (ctx) => simulateInbound({ phone: "+447900222004", language: "en", text: "hey, dinner tomorrow around 8, there's 4 of us maybe 5", parse: { intent: "new_booking", size: 4, date: isoPlus(1), time: "20:00", confidence: "low", ambiguity: "Size unclear — '4 maybe 5'." } }, ctx),
+    id: "nb_en_sizefuzzy", group: "New bookings · EN", label: "Size unclear · '4 maybe 5' → 5 · low",
+    run: (ctx) => simulateInbound({ phone: "+447900222004", language: "en", text: "hey, dinner tomorrow around 8, there's 4 of us maybe 5", parse: { intent: "new_booking", size: 5, date: isoPlus(1), time: "20:00", confidence: "low", ambiguity: "Size given as '4 maybe 5', set to 5; the time 'around 8' is approximate." } }, ctx),
   },
   {
     id: "nb_en_latedinner2", group: "New bookings · EN", label: "Late dinner · 2 · 22:00 edge (NL)",
@@ -285,7 +285,7 @@ export const SCENARIOS = [
   {
     id: "lg_20_over", group: "Large groups & events", label: "20 pers · sábado (roza el aforo)",
     note: "Stress-tests a very large party (TOTAL_SEATS = 28).",
-    run: (ctx) => simulateInbound({ phone: "+34602000002", language: "es", text: "Necesitaríamos mesa para 20 personas el sábado por la noche", parse: { intent: "new_booking", size: 20, date: nextDow(6), time: "20:00", confidence: "high" } }, ctx),
+    run: (ctx) => simulateInbound({ phone: "+34602000002", language: "es", text: "Necesitaríamos mesa para 20 personas el sábado por la noche", parse: { intent: "new_booking", size: 20, date: nextDow(6), time: null, confidence: "medium", ambiguity: "Hora sin concretar: 'el sábado por la noche'." } }, ctx),
   },
   {
     id: "lg_business10", group: "Large groups & events", label: "Cena empresa · 10 · factura (nota)",
