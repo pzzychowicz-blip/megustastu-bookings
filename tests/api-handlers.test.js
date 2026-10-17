@@ -626,8 +626,11 @@ describe("wa-onboard", () => {
       expect(fake.read("waLink/disconnect")).toBeUndefined();
       expect(fake.read("waLink/contacts")).toEqual({ firstAt: 5 });
       fake.state.tree.waLink.phoneNumberId = "123123123";
+      fake.state.tree.waLink.measured = { historyDeliveries: 2, mgtEchoes: 1 };
       await connect(ids());
       expect(fake.read("waLink/contacts")).toBeUndefined();
+      // /code-review: the rehearsal's record is about Meta, not one number, so it stays.
+      expect(fake.read("waLink/measured")).toEqual({ historyDeliveries: 2, mgtEchoes: 1 });
     });
 
     // /code-review: the same number connected again kept the earlier import's

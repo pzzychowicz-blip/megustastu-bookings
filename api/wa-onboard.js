@@ -182,7 +182,10 @@ export default async function handler(req, res) {
     };
     // Another number than the one connected before: what was recorded about
     // the old one's syncs is not this one's. The contacts themselves stay
-    // (waContacts is keyed by the customer's number, not ours).
+    // (waContacts is keyed by the customer's number, not ours), and so does
+    // `measured` (/code-review): it records what Meta sends, which another
+    // number does not change, and cleared here it would take the rehearsal's
+    // answers with it at the next connection.
     if (prev && prev.phoneNumberId && String(prev.phoneNumberId) !== phoneNumberId) {
       patch.contacts = null; patch.history = null; patch.phone = null; patch.subscribedAt = null;
     }

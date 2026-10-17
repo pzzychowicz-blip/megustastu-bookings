@@ -36853,3 +36853,11 @@ made on the phone to a reply MGT sent would be stored as a second bubble, and a 
 with its words left in MGT. Whether the Business app can edit a message the API sent is not
 known. ROADMAP already scoped the decision right (`handleEchoes`' look-up of a new phone reply);
 the two comments and this entry's sentence now say the same. No code changed.
+
+**Whether the record outlasts a change of number was undecided.** Connecting another number clears
+that number's sync records (`contacts`, `history`, `phone`, `subscribedAt`, in `wa-onboard.js`)
+and left `measured`, which the reset list predates, with nothing saying whether it should. It
+stays, and both places say why: it records what Meta sends, which another number does not change,
+and cleared there it would take the rehearsal's answers with it at the next connection. The
+onboarding test for a different number now seeds a record and expects it back unchanged; with
+`measured` added to the reset list, that test fails.

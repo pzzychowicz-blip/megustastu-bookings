@@ -162,8 +162,11 @@ export function deliveryLine(m, results, d) {
 //                       runs, or one that failed every time it was sent
 //   mgtEchoes           echoes that named a message MGT sent
 //   mgtEchoAt           when the last of them came
-// It keeps adding up for as long as the link lasts, across history requests,
-// because what the cap and the time limit are asked about is the maximum.
+// It keeps adding up for as long as `waLink` is there: across history requests
+// and across another number connected later (api/wa-onboard.js clears that
+// number's sync records and not this, /code-review), because what it answers
+// is what Meta sends, and the cap and the time limit are asked about the
+// maximum.
 export function measuredAfter(cur, d, now) {
   const next = Object.assign({}, cur && typeof cur === "object" ? cur : {});
   const beats = function (prev, key, v) { return !(prev && Number(prev[key]) >= v); };
