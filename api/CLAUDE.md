@@ -66,8 +66,8 @@ Four rules, each the reason for a line of it:
 - **Streamed, never buffered.** Vercel caps a function's request and response body at
   4.5 MB, and its guide says a streamed response does not have the cap; the bytes are
   piped as they arrive (`pipeline(Readable.fromWeb(…), res)`). The cap here is the
-  browser's: over `MEDIA_VIEW_MAX` (16 MB) is 413, "open WhatsApp on the phone". The real
-  measurement needs a deployment (the plan's A5-6, after merge).
+  browser's: over `MEDIA_VIEW_MAX` (16 MB) is 413, "open WhatsApp on the phone". Measured
+  on the sandbox (the plan's A5-6, 2026-10-17): a customer's 11.2 MB PDF opened.
 - **Only harmless types keep their type.** A customer chooses what they send, and the
   client opens a document from a blob URL on this origin, so an HTML or SVG file would run
   as the app there. `INLINE_TYPES` (pictures without SVG, audio, PDF, plain text) keep
