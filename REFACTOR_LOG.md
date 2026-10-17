@@ -36776,7 +36776,8 @@ skill also says to run `npm ci` after any pull that changes the lockfile.
 
 Two of the rehearsal's questions had no instrument. **Does an echo ever name a message MGT
 sent?** `handleEchoes` counted that case in `skipped`, beside a plain redelivery, and logged
-nothing; the answer decides whether `findMessageByWamid`'s whole-thread scan stays. **How big and
+nothing; the answer decides whether `handleEchoes` reads the whole thread for each new phone reply
+(corrected by the `/code-review` below). **How big and
 how slow is a history delivery?** Nothing logged a delivery's size, time or thread count, which
 the 4.5 MB request cap and the function's time limit are asked about.
 
@@ -36843,3 +36844,12 @@ chunk that never landed. A delivery answered 500 lists nothing, since Meta sends
 chunk that failed every time would otherwise look landed; a declined share carries no threads and
 is not a chunk. Two new tests and four assertions; listing a 500's chunks fails two tests, and
 listing a declined share fails one.
+
+**The echo count's question was stated too wide.** The instrument's comment and `api/CLAUDE.md`
+said that a zero `mgtEchoes` lets `findMessageByWamid`'s whole-thread scan go. That scan also
+finds the original of an echoed EDIT or DELETE of a message MGT sent (`applyMessageChange`),
+which `mgtEchoes` never counts (it is an `edits`): removed on the strength of a zero, an edit
+made on the phone to a reply MGT sent would be stored as a second bubble, and a delete skipped
+with its words left in MGT. Whether the Business app can edit a message the API sent is not
+known. ROADMAP already scoped the decision right (`handleEchoes`' look-up of a new phone reply);
+the two comments and this entry's sentence now say the same. No code changed.

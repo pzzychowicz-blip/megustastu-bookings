@@ -155,7 +155,9 @@ a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
   NaN, and the sum then never equals 0, so a delivery that failed everywhere is not resent.
 - **What the rehearsal measures (v18.9.0 follow-up, "What a delivery measures" in
   `coexist-core.js`).** Two questions only Meta's real webhooks answer: does an echo ever
-  name a message MGT sent (if never, `findMessageByWamid`'s whole-thread scan can go), and
+  name a message MGT sent (if never, `handleEchoes` can find a new phone reply by its key
+  alone; `findMessageByWamid` keeps its scan for an echoed edit or delete of a message MGT
+  sent, which the count does not see), and
   how big and how slow is a history delivery (Vercel caps a request body at 4.5 MB, Meta
   says one history webhook can describe thousands of messages, and the import runs against
   the function's time limit: a `maxDuration` for `wa-inbound` in `vercel.json` if it nears

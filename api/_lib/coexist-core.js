@@ -60,8 +60,11 @@ export function freshResults() {
 // webhooks can answer, and this is their instrument:
 //
 //   Does an echo ever name a message MGT sent? (`mgtEchoes`, handleEchoes.)
-//     If never, a phone reply can be found by its key alone, and the
-//     whole-thread scan in findMessageByWamid can go (ROADMAP).
+//     If never, handleEchoes can find a new phone reply by its key alone
+//     instead of reading the whole thread for it (ROADMAP). findMessageByWamid
+//     keeps its scan either way: an echoed edit or delete of a message MGT sent
+//     finds its original through it (applyMessageChange), a case this count
+//     does not see (/code-review).
 //   How big and how slow is a history delivery? Vercel refuses a request body
 //     over 4.5 MB, and the import runs against the function's time limit.
 //     A body over the cap is refused BEFORE this function runs, so nothing
@@ -355,8 +358,9 @@ export async function handleEchoes(value, results, now = Date.now()) {
       if (found) {
         // Found under another key, it is a message MGT sent (wa-send,
         // wa-media, the auto-reply), which Meta is not expected to echo:
-        // counted apart, since whether it ever does decides that scan (v18.9.0
-        // follow-up, "What a delivery measures"). Under its own key it is a
+        // counted apart, since whether it ever does decides whether this
+        // look-up needs the scan (v18.9.0 follow-up, "What a delivery
+        // measures"). Under its own key it is a
         // redelivery, or a history import that got there first.
         if (found.key !== sanitizeKey(wamid)) results.mgtEchoes++;
         else results.skipped++;
