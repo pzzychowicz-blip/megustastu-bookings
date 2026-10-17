@@ -29,8 +29,8 @@
 // body at 4.5 MB; its guide on the limit says a streamed response does not have
 // it. A photo is under 5 MB, a voice note usually far under, a document up to
 // 100 MB, so the bytes are piped through as they arrive and the cap here is
-// the browser's, not Vercel's. The real 4.5 MB measurement is a sandbox step
-// after merge (the plan's A5-6).
+// the browser's, not Vercel's. Measured on the sandbox (plan A5-6, 2026-10-17,
+// v18.9.1): a customer's 11.2 MB PDF opened through this endpoint.
 //
 // **What may be opened inline.** A customer chooses what they send. The file is
 // handed to the page as a blob URL on THIS origin, and opened in a new tab for a
