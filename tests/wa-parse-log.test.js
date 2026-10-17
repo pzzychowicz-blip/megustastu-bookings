@@ -49,6 +49,14 @@ describe("the parse log", () => {
     expect(lines[0]).not.toMatch(/Luc|marisco/);
   });
 
+  // v18.9.2: the time per parse, for the go-live plan's A5-7.
+  it("records how long the parse took, in both shapes of the line", async () => {
+    expect(await logged()).toMatch(/"ms":\d+/);
+    vi.restoreAllMocks();
+    process.env.WA_SIM_ENABLED = "1";
+    expect(await logged()).toMatch(/"ms":\d+/);
+  });
+
   it("parseLogFields keeps the plain fields and names the filled content ones", () => {
     const parsed = { intent: "booking", name: "Lucía", size: 4, date: "2026-10-01", time: "21:00", notes: "shellfish allergy", preference: "indoor", language: "es", confidence: "high", ambiguity: null };
     expect(parseLogFields(parsed, false)).toEqual({ intent: "booking", language: "es", confidence: "high", preference: "indoor", filled: ["name", "size", "date", "time", "notes"] });

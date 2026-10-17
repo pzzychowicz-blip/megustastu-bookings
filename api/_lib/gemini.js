@@ -322,13 +322,19 @@ export async function parseMessage(text, { hours, existingDraft } = {}) {
     existingDraft: existingDraft || null,
   };
   const mode = llmMode();
+  // v18.9.2: how long the parse took, on the log line. The parse runs after the
+  // webhook has answered (waitUntil), so no request timing isolates it, and its
+  // time against TIMEOUT_MS is the question the go-live plan's A5-7 asks of the
+  // default model. A timed-out live parse reads about TIMEOUT_MS here.
+  const t0 = Date.now();
   let parsed = mode === "live" ? await liveParse(text, ctx) : mockParse(text);
+  const ms = Date.now() - t0;
   if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
   // Drift-review log: every parse, one line (content only in a sandbox, above).
   const full = simEnabled();
   console.log("[wa-parse:" + mode + "] " + JSON.stringify(full
-    ? { text: String(text).slice(0, 200), merged: !!existingDraft, parsed }
-    : { len: String(text).length, merged: !!existingDraft, parsed: parseLogFields(parsed, false) }));
+    ? { text: String(text).slice(0, 200), merged: !!existingDraft, ms, parsed }
+    : { len: String(text).length, merged: !!existingDraft, ms, parsed: parseLogFields(parsed, false) }));
   return parsed;
 }
 

@@ -36918,3 +36918,25 @@ open, and whether the 11.2 MB PDF streams through Vercel's 4.5 MB response cap a
 
 **Files:** `api/wa-media.js` · `tests/api-handlers.test.js` · `api/CLAUDE.md` · `src/App.jsx`
 (version). No stored shape changed, no rules, no `SCHEMA` raise; no device needs a refresh.
+
+## v18.9.2 — the parse log times each parse; Integrations names the Gemini model
+
+**Date:** 2026-10-17 · **Branch:** `feat/v18.9.2-gemini-timing-model` · Two small changes for
+the go-live plan's A5-7 (measure 3.5 Flash-Lite, the default, on the sandbox), the second
+Patryk's idea.
+
+### Phase 1 — the parse log records how long the parse took
+
+A5-7 asks for the time per parse against the 15 s cap (`TIMEOUT_MS`), and nothing recorded it:
+the parse runs after the webhook has answered (`waitUntil`), so a request's own duration in
+Vercel's logs also holds the store and the auto-reply, and the only exact signal was a timeout
+error. `parseMessage` (`api/_lib/gemini.js`) now times the parse, live or mock, and the
+`[wa-parse:<mode>]` line carries `ms` in both of its shapes (sandbox: text and full result;
+elsewhere: no guest content, as before). The time covers the model call and its parsing, not a
+merge in mock mode. A timed-out live parse reads about 15000.
+
+**Test.** `tests/wa-parse-log.test.js`: both shapes of the line carry `"ms":<n>`. With `ms`
+removed from the line, it fails.
+
+**Files:** `api/_lib/gemini.js` · `tests/wa-parse-log.test.js` · `src/App.jsx` (version).
+No stored shape changed, no rules, no `SCHEMA` raise; no device needs a refresh.
