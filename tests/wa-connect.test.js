@@ -248,7 +248,7 @@ describe("Settings → WhatsApp shows the connection to admins only", () => {
   const settings = read("src/components/Settings.jsx");
   it("renders the section behind isAdmin, from the waLink App hands down", () => {
     expect(settings).toContain("{isAdmin ? <BusinessAppSection waLink={waLink} /> : null}");
-    expect(settings).toContain("content = <WhatsAppTabContent waSettings={waSettings} onSaveWaSettings={onSaveWaSettings} isAdmin={isAdmin} waLink={waLink} />;");
+    expect(settings).toContain("content = <WhatsAppTabContent waSettings={waSettings} onSaveWaSettings={onSaveWaSettings} isAdmin={isAdmin} waLink={waLink} can={can} />;");
     expect(read("src/App.jsx")).toContain("waLink={wa.waLink} /></Suspense>");
   });
   it("links to the page, and warns only on a definite mismatch from wa-config", () => {

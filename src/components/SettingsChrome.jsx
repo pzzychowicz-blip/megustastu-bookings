@@ -66,7 +66,10 @@ export const SETTINGS_TABS = [
   // setting behind this tab (auto-archive on completion). The INBOX is not gated
   // on a capability: reading and replying to a guest is service work, the same
   // judgement that leaves Customers and Vouchers open (Patryk's call, phase 5).
-  { id: "whatsapp",  label: "WhatsApp", module: "whatsapp", caps: ["settingsWrite"] },
+  // v18.10.0: or `waCostView`, the cost counter's own capability, so a person
+  // granted only that still reaches it; each section gates itself
+  // (`WhatsAppTabContent` takes `can`, as `GeneralTabContent` does).
+  { id: "whatsapp",  label: "WhatsApp", module: "whatsapp", caps: ["settingsWrite", "waCostView"] },
   { id: "app",       label: "App" },
   { id: "shortcuts", label: "Shortcuts" },
   // v18.0.0 phase 3: the 8th tab, and the FIRST one that is not always there.

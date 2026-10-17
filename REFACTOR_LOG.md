@@ -37014,3 +37014,87 @@ from `/api/wa-config` is checked first (`KeyChip`'s `typeof state === "boolean"`
 straight into a `<strong>`, where an object (a future `{id, version}` shape, a harness) would throw
 "Objects are not valid as a React child" and take the Admin tab down. It renders only as a
 non-empty string; anything else reads as an older backend's sentence.
+
+## v18.10.0 — WhatsApp go-live: the cost counter, the prompt rules, the docs in step
+
+**Date:** 2026-10-18 · **Branch:** `feat/v18.10.0-wa-cost-counter` · The work ROADMAP's
+Deferred section had for the WhatsApp go-live that could move before the rehearsal's SIM,
+chosen by Patryk over three rounds of questions: the cost counter (built now, so the
+rehearsal's R-9, "an app-sent message is free", is read off it on a real coexistence
+number before the restaurant's), the two A5-7 prompt rules, and ROADMAP and the go-live
+page brought in line with what is done.
+
+### Phase 1 — Settings › WhatsApp › Messages and cost
+
+**What it shows.** Meta's own count for the restaurant's WhatsApp Business account: this
+month so far, "43 messages delivered · 37 of 1,000 free · 2 billed · €0.03", and last
+month's totals on one line; a note for messages sent inside a free entry point's window
+(free, and outside the 1,000); and a faint line that these are Meta's figures for
+DELIVERED messages, approximate, possibly hours behind and not the invoice. The summary
+beside the closed section says "€x this month" once anything is billed, else "N of 1,000
+free". Mock send mode and "no account to ask about yet" are said in words; a failure is a
+warning under the figures already on screen, which stay.
+
+**Nothing is stored (Patryk).** The section asks Meta when it OPENS and on Refresh, never
+on mount, so there is no node, no rules change, no `SCHEMA` raise and no PROD console
+step. `GET /api/wa-usage` (production's eighth function) calls Pricing Analytics on the
+WABA (`pricingAnalytics`, `api/_lib/meta.js`):
+`fields=currency,pricing_analytics.start(…).end(…).granularity(DAILY).dimensions(PRICING_CATEGORY,PRICING_TYPE)`.
+`summariseUsage` (`src/lib/wa-usage.js`) adds the points up per month:
+`FREE_CUSTOMER_SERVICE` is free inside the 1,000 (Meta's pricing from 1 Oct 2026),
+`REGULAR` billed, `FREE_ENTRY_POINT` free and outside it, an unknown type delivered only.
+
+**Two choices worth knowing.** DAILY buckets, not the MONTHLY granularity the plan named:
+Meta cuts a bucket at the ACCOUNT's midnight, so a month asked in UTC would split one
+day across two months; a daily bucket is filed by its midpoint (`monthOf`) and the range
+starts a day before last month, the extra day dropped (tested with a Madrid and a
+Pacific account). And the WABA's `currency` rides in the same call; when Meta names no
+ISO code the cost shows without a symbol. Whether the field comes back is read on the
+sandbox after merge, not here.
+
+**Which account (Patryk).** `waLink.wabaId`, the one Embedded Signup connected, unless the
+link is the simulator's; else `META_WABA_ID`, a new optional deployment variable (in
+`wa-config`'s KEYS and the Integrations panel, "WhatsApp cost counter"), for Meta's test
+account on the sandbox before the rehearsal or the API-only fallback. Either is checked
+as a Meta id before it becomes a Graph path with the token on it.
+
+**Who sees it (Patryk): `waCostView`**, a new capability in the Money group, "See WhatsApp
+costs": managers and admins by default, grantable to staff. **The server asks it too**:
+`assertCapability` (`api/_lib/rtdb.js`) reads `/roles/<uid>` and
+`settings/admin/enforceRoles` and asks the client's own `can()`, so with roles enforced a
+member of staff without it gets 403 and a failed roles read 503 (`ROLES_UNREADABLE`, the
+wa-onboard rule). Not marked enforced: no database rule carries it, since nothing is
+written. The WhatsApp tab's caps became `["settingsWrite", "waCostView"]` (ANY), so a
+member of staff granted only this sees the tab, and each section asks its own: the Inbox
+setting still needs `settingsWrite`.
+
+**Tests.** `tests/wa-usage.test.js` (the bounds across a year turn and at a month's first
+and last second, the midpoint filing, the sums with junk input, the helpers, the grants,
+and that the section asks on open and never on mount). `tests/api-handlers.test.js`: the
+shared method and staff gate, then its own block on fake timers at 2026-10-18 with a
+stubbed Graph (the figures and the URL asked, no write, the link over the env, a sim link
+ignored, a bad id refused, mock mode, no token 503, Meta's 400 → 502, and the capability:
+staff refused when enforced, an extra or a manager allowed, a flag that is not exactly
+`true` read as not enforced, a roles read that fails 503). Replacing `assertCapability`
+with a no-op fails two of them (checked). Four pinned counts moved, each with its reason:
+eight → nine bearer users, eighteen → nineteen capabilities, the tab caps set, the tab's
+mount string.
+
+**Verified in the dev server**, with `/api/wa-usage` stubbed in the page (the dev server
+runs no functions): the figures, the mock and not-connected sentences, the error under
+kept figures, "Asking…" while loading, one call per open and none on close, both themes,
+and 375px with no sideways scroll; the Capabilities grid shows the new row. **Not checked
+live:** the section hidden for a staff account with roles enforced (the tests read the
+gates instead), and Meta's real answer, which waits for `META_WABA_ID` on the sandbox
+after merge.
+
+**Docs:** `GLOSSARY.md` (the section, `waCostView`, the WhatsApp tab, the capability
+counts) · `api/CLAUDE.md` (wa-usage, eight functions) · `src/hooks/CLAUDE.md`
+(useWaUsage, nineteen capabilities) · `src/lib/CLAUDE.md` (wa-usage.js).
+
+**Files:** `api/wa-usage.js` (new) · `api/_lib/meta.js` · `api/_lib/rtdb.js` ·
+`api/wa-config.js` · `scripts/wa-backend-dev.mjs` · `src/lib/wa-usage.js` (new) ·
+`src/lib/wa-backend.js` · `src/lib/roles.js` · `src/hooks/useWaUsage.js` (new) ·
+`src/components/Settings.jsx` · `src/components/SettingsChrome.jsx` ·
+`src/components/AdminSettings.jsx` · `src/App.jsx` (version) · the tests above.
+No stored shape changed and no device needs a refresh.

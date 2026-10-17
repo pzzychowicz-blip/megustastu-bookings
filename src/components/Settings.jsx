@@ -33,6 +33,8 @@ import { VouchersTabContent } from "./VouchersSettings";
 import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, InlineAlert, ALERT_TONES, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE, textWidth } from "./atoms";
 import { connectionLines } from "../lib/wa-coexist";
 import { useIntegrationStatus } from "../hooks/useIntegrationStatus";
+import { useWaUsage } from "../hooks/useWaUsage";
+import { FREE_TIER_MONTHLY, costLabel, monthName } from "../lib/wa-usage";
 import { BTN, R, M, T, FW, H, IC, SP, APP_NAME } from "../lib/constants";
 // v18.2.0: how TabBar lays its tabs out.
 import { tabColumns } from "../lib/tab-rows";
@@ -1174,14 +1176,20 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
 //
 // v18.9.0: an admin also sees the Business app connection (`waLink`, which only
 // the server writes) and the door to the /wa-connect page.
-function WhatsAppTabContent({ waSettings, onSaveWaSettings, isAdmin, waLink }) {
+//
+// v18.10.0: each section gates itself, since the tab opens for `settingsWrite`
+// OR `waCostView` (SETTINGS_TABS): the Inbox toggle writes `settings/whatsapp`
+// and asks the first, the cost counter asks the second. `can` is optional, as
+// `visibleTabs`' is, and reads as "allowed" when absent.
+function WhatsAppTabContent({ waSettings, onSaveWaSettings, isAdmin, waLink, can }) {
+  const allowed = function (cap) { return typeof can === "function" ? can(cap) : true; };
   const s = waSettings || {};
   // Default-ON tri-state read, resolved ONCE: the toggle's state and the value
   // it writes are then obviously each other's inverse.
   const autoArchive = s.autoArchiveOnComplete !== false;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <Collapsible
+      {allowed("settingsWrite") ? <Collapsible
         title="Inbox"
         subtitle="How conversations leave the inbox. Shared across all devices."
         summary={autoArchive ? "Auto-archive on" : "Auto-archive off"}
@@ -1204,9 +1212,100 @@ function WhatsAppTabContent({ waSettings, onSaveWaSettings, isAdmin, waLink }) {
             on={autoArchive}
             onClick={function () { onSaveWaSettings({ autoArchiveOnComplete: !autoArchive }); }} />
         </div>
-      </Collapsible>
+      </Collapsible> : null}
+      {allowed("waCostView") ? <WaCostSection /> : null}
       {isAdmin ? <BusinessAppSection waLink={waLink} /> : null}
     </div>
+  );
+}
+
+// ── Messages and cost (v18.10.0) ────────────────────────────────────────────
+// The WhatsApp cost counter: this month's and last month's messages as META
+// counted them (Pricing Analytics, through /api/wa-usage), so it matches the
+// invoice even for what the phone sent. Nothing is stored; the figures are
+// asked for when the section OPENS and on Refresh (useWaUsage), never on
+// mount, because each ask is a Graph call and a closed section shows nothing.
+// Who sees it is `waCostView` (manager and admin, grantable to staff), which
+// the endpoint checks again.
+//
+// Figures stay on screen through a failed Refresh, with the failure under
+// them, so a blip does not blank what was already known.
+function usageLine(m, currency) {
+  return [
+    countLabel(m.delivered, "message", "messages") + " delivered",
+    countLabel(m.free, "of " + FREE_TIER_MONTHLY.toLocaleString("en-GB") + " free"),
+    countLabel(m.billed, "billed"),
+    costLabel(m.cost, currency),
+  ].join(" · ");
+}
+
+function WaCostSection() {
+  const usage = useWaUsage();
+  const [open, setOpen] = useState(false);
+  const d = usage.data;
+  const loading = usage.status === "loading";
+  function toggle(next) {
+    setOpen(next);
+    if (next && !loading) usage.load();
+  }
+  const figures = !!(d && d.configured && d.this && d.last && d.months);
+  const summary = figures
+    ? (d.this.billed > 0 ? costLabel(d.this.cost, d.currency) + " this month" : countLabel(d.this.free, "of " + FREE_TIER_MONTHLY.toLocaleString("en-GB") + " free"))
+    : null;
+  const text = { fontSize: T.body, color: "var(--text-primary)", textAlign: "left" };
+  const faint = { fontSize: T.micro, color: "var(--text-muted)", textAlign: "left" };
+  const updated = figures && Number.isFinite(d.at)
+    ? new Date(d.at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+    : null;
+  return (
+    <Collapsible
+      title="Messages and cost"
+      subtitle="What Meta counts and charges for this WhatsApp account, asked from Meta each time this opens."
+      summary={summary}
+      open={open}
+      onToggle={toggle}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: SP.tight, paddingTop: SP.tight }}>
+        {figures ? (
+          <>
+            <div style={text}>
+              <strong>{monthName(d.months.thisStart)} so far:</strong> {usageLine(d.this, d.currency)}
+            </div>
+            <div style={text}>
+              <strong>{monthName(d.months.lastStart)}:</strong> {usageLine(d.last, d.currency)}
+            </div>
+            {d.this.entryPoint > 0 || d.last.entryPoint > 0 ? (
+              <div style={faint}>
+                Also free and not counted toward the {FREE_TIER_MONTHLY.toLocaleString("en-GB")}: {countLabel(d.this.entryPoint, "message", "messages")} this month and {countLabel(d.last.entryPoint, "message", "messages")} last month, sent inside a free entry point&rsquo;s window.
+              </div>
+            ) : null}
+            <div style={faint}>
+              Meta&rsquo;s own figures for messages it delivered. They are approximate, can lag by a few hours and may differ slightly from the invoice. The first {FREE_TIER_MONTHLY.toLocaleString("en-GB")} replies each month are free.
+            </div>
+          </>
+        ) : null}
+        {d && d.mock ? (
+          <div style={text}>Sending is in mock mode on this deployment, so there is nothing at Meta to count.</div>
+        ) : null}
+        {d && !d.mock && d.configured === false ? (
+          <div style={text}>No WhatsApp Business account to ask about yet. Connect the Business app, or set META_WABA_ID in this deployment&rsquo;s environment variables and redeploy.</div>
+        ) : null}
+        {loading && !d ? <div style={text}>Asking Meta&hellip;</div> : null}
+        {usage.status === "error" ? (
+          <InlineAlert tone={ALERT_TONES.warn.tone} tint={ALERT_TONES.warn.tint}>
+            Couldn&rsquo;t get the figures: {usage.error}.
+          </InlineAlert>
+        ) : null}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.base, paddingTop: SP.tight }}>
+          <button type="button" className="mgt-hover-scale mgt-press" disabled={loading} aria-busy={loading}
+            onClick={function () { usage.load(); }}
+            style={mkBtn({ minHeight: H.control })}>
+            {loading ? "Asking…" : "Refresh"}
+          </button>
+          {updated ? <span style={faint}>Updated at {updated}</span> : null}
+        </div>
+      </div>
+    </Collapsible>
   );
 }
 
@@ -1482,7 +1581,7 @@ export function SettingsContent({
     // and merely hidden, so `tab` would render the WhatsApp settings for a
     // restaurant whose module is off. `cur` is the id validated against
     // `visibleTabs`; it is the gate, and every other branch here uses it.
-    content = <WhatsAppTabContent waSettings={waSettings} onSaveWaSettings={onSaveWaSettings} isAdmin={isAdmin} waLink={waLink} />;
+    content = <WhatsAppTabContent waSettings={waSettings} onSaveWaSettings={onSaveWaSettings} isAdmin={isAdmin} waLink={waLink} can={can} />;
   } else if (cur === "reminders") {
     content = (
       <RemindersTabContent

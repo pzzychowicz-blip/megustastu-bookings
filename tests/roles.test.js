@@ -446,7 +446,8 @@ describe("GATED_CAPS — the capabilities a person can actually lack", () => {
       expect(ROLE_GRANTS.staff[id]).toBe(true);
       expect(GATED_CAPS).toContain(id);
     });
-    expect(GATED_CAPS.length).toBe(18);
+    // v18.10.0: `waCostView`, the WhatsApp cost counter, is the nineteenth.
+    expect(GATED_CAPS.length).toBe(19);
   });
 
   it("every one of them is gated — by a tab capability or by refused()", () => {

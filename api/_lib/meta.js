@@ -223,6 +223,17 @@ export async function requestSmbSync(phoneNumberId, syncType, token) {
   return typeof data.request_id === "string" ? data.request_id : null;
 }
 
+// v18.10.0: the cost counter's one call. The account's currency and Meta's
+// daily pricing breakdown between two UNIX times (seconds), by category and
+// type (`src/lib/wa-usage.js` reads the answer). Daily rather than monthly so
+// each bucket can be filed under a calendar month by its own middle, whatever
+// timezone the account counts its days in.
+export function pricingAnalytics(wabaId, startS, endS, token) {
+  const fields = "currency,pricing_analytics.start(" + startS + ").end(" + endS + ")"
+    + ".granularity(DAILY).dimensions(PRICING_CATEGORY,PRICING_TYPE)";
+  return graphJson("GET", wabaId + "?fields=" + fields, token);
+}
+
 // Is the number on the Business app, and on which platform? The last check of
 // an onboarding: a coexistence number answers `is_on_biz_app: true`.
 export async function phoneInfo(phoneNumberId, token) {
