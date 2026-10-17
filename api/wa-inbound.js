@@ -45,7 +45,9 @@
 // coexistence change logs one counts-only line (its answer, size, time, fields
 // and counters), and a history delivery or an echo of a message MGT sent is
 // also recorded on `waLink/measured`, since Vercel keeps a Hobby project's
-// logs for an hour (`reportDelivery`, _lib/coexist-core.js).
+// logs for an hour (`reportDelivery`, _lib/coexist-core.js). A history
+// delivery is counted there as it begins too (`recordBegun`), so one the
+// function's time limit ends, before any of that, still shows (/code-review).
 
 import { env } from "./_lib/env.js";
 import { verifySignature } from "./_lib/meta.js";
@@ -53,7 +55,7 @@ import { parseMessage, mockParse } from "./_lib/gemini.js";
 import { processInbound, applyParse, inboundContent } from "./_lib/inbound-core.js";
 import { updateMessageStatusByWamid, readOperatingHours, getConversation } from "./_lib/rtdb.js";
 import {
-  makeNumberGuard, COEXIST_HANDLERS, applyMessageChange, freshResults, newMeasure, noteChange, reportDelivery,
+  makeNumberGuard, COEXIST_HANDLERS, applyMessageChange, freshResults, newMeasure, noteChange, recordBegun, reportDelivery,
 } from "./_lib/coexist-core.js";
 import { normalizePhone, isPhoneKey } from "../src/lib/whatsapp.js";
 import { secondsTs, webhookPhoneKey, editedMessage } from "../src/lib/wa-coexist.js";
@@ -301,6 +303,10 @@ export default async function handler(req, res) {
         const coexist = Object.prototype.hasOwnProperty.call(COEXIST_HANDLERS, field) ? COEXIST_HANDLERS[field] : null;
         if (!coexist) { results.ignored++; continue; } // a field this webhook does not handle
         noteChange(measure, field, value);
+        // v18.9.0 /code-review: a history delivery is on the record as it
+        // begins, not only once it answers, so one the time limit ends still
+        // shows. Not awaited here: the import goes on beside it.
+        if (field === "history" && !measure.begun) measure.begun = recordBegun();
         try {
           const out = await coexist(value, results, undefined, { wabaId: entry && entry.id ? String(entry.id) : "" });
           if (out && out.retry) retry = true;
@@ -344,7 +350,10 @@ export default async function handler(req, res) {
   // the resend finds it stored and skips it, parse and all.
   const failed = (results.errors > 0 && done === 0) || retry;
   // v18.9.0 follow-up: the line and the record, before the answer they report.
-  // Only a coexistence delivery has them; it never throws.
+  // Only a coexistence delivery has them; it never throws. BEFORE the answer
+  // on purpose (/code-review): the end's record and the start's then tell a
+  // delivery that never answered from one that did, which a record written
+  // after the answer, and lost with the invocation, would not.
   if (measure.changes > 0) {
     await reportDelivery(measure, results, { status: failed ? 500 : 200, bytes: raw.length, ms: Date.now() - started });
   }

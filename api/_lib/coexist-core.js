@@ -74,13 +74,21 @@ export function freshResults() {
 // week-long rehearsal cannot be watched for a week, so a history delivery and
 // an echo of a message MGT sent are also recorded on `waLink/measured`
 // (`measuredAfter`), which stays: read it in the Firebase console.
+//
+// That record is written at the END of the handler, so a delivery that never
+// gets there would leave nothing on it, and the one that does not get there is
+// the one the time question is about: an invocation the function's time limit
+// ends (/code-review). A history delivery is therefore also counted as it
+// BEGINS (`recordBegun`): `historyBegun` above `historyDeliveries` is a
+// delivery that never answered.
 
 // newMeasure() → the tally api/wa-inbound.js keeps while it dispatches: the
 // changes it handed to a coexistence handler, per field, and for `history` the
 // threads and messages they carried. Those are the PAYLOAD's counts, what the
 // size and the time were spent on; `results.history` is what was stored.
+// `begun` is a history delivery's start record while it is being written.
 export function newMeasure() {
-  return { changes: 0, fields: {}, threads: 0, messages: 0 };
+  return { changes: 0, fields: {}, threads: 0, messages: 0, begun: null };
 }
 
 // noteChange(m, field, value) — one change handed to a coexistence handler.
@@ -116,7 +124,9 @@ export function deliveryLine(m, results, d) {
 
 // measuredAfter(cur, d, now) → `waLink/measured` after one delivery, `d` being
 // `{history, failed, bytes, ms, threads, messages, mgtEchoes}`:
-//   historyDeliveries   every history delivery received
+//   historyBegun        every history delivery that began (beganAfter)
+//   historyDeliveries   every one that was answered, 200 or 500: fewer than
+//                       historyBegun means one ended first (the time limit)
 //   historyFailed       those answered 500, which Meta sends again
 //   historyLargest      {bytes, ms, threads, messages, at} of the largest
 //   historySlowest      the same, of the slowest; a tie keeps the first
@@ -141,6 +151,25 @@ export function measuredAfter(cur, d, now) {
   return next;
 }
 
+// beganAfter(cur) → `waLink/measured` once a history delivery has begun:
+// `historyBegun` one higher, the rest as it was (it never changes `cur`).
+export function beganAfter(cur) {
+  const next = Object.assign({}, cur && typeof cur === "object" ? cur : {});
+  next.historyBegun = (Number(next.historyBegun) || 0) + 1;
+  return next;
+}
+
+// recordBegun() → a promise that never rejects: a history delivery's start, on
+// the record. api/wa-inbound.js starts it as it hands on the delivery's first
+// history change and does not wait for it, so the import is not held up by a
+// measurement; reportDelivery waits for it before the end's record. A start
+// that cannot be recorded is logged, like an end that cannot.
+export function recordBegun() {
+  return transactWaLink("measured", beganAfter).catch(function (e) {
+    console.error("[wa-inbound] a history delivery's start was not recorded:", e.message);
+  });
+}
+
 // reportDelivery(m, results, d, now) — the line, then the record when the
 // delivery is one the rehearsal asks about (a history change, an echo of a
 // message MGT sent). It never throws, and a record that fails changes nothing
@@ -149,6 +178,7 @@ export function measuredAfter(cur, d, now) {
 export async function reportDelivery(m, results, d, now = Date.now()) {
   try {
     console.info(deliveryLine(m, results, d));
+    if (m.begun) await m.begun; // the start's record first (recordBegun); it never rejects
     const history = !!m.fields.history;
     if (!history && !(results.mgtEchoes > 0)) return;
     const one = { history, failed: d.status >= 500, bytes: d.bytes, ms: d.ms, threads: m.threads, messages: m.messages, mgtEchoes: results.mgtEchoes };

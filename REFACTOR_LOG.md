@@ -36812,3 +36812,22 @@ too, as an absence should. Four breakages were
 each caught by a test: every echo found counted as MGT's own, the payload put in the line, a failed
 record thrown out of the webhook, and a 500 never counted as failed. Gate: main entry 422.34 kB /
 123.08 kB gz (unchanged, server code only), 3,578 tests, lint 0 errors and 63 warnings, style OK.
+
+### `/code-review` of the three follow-ups
+
+The review ran over `1420c664..49582b65` (the lint fix, the gate block, the instrument): five
+findings, two confirmed. Each fix below is its own commit.
+
+**A history delivery the time limit ends left no trace.** `waLink/measured` was written only by
+`reportDelivery`, at the end of the handler, so an invocation Vercel ends for running too long
+never reached it. Meta then resends the chunk, the resend skips the threads that landed and
+answers in time, and the record showed one delivery and a `historySlowest` under the limit: the
+answer "within the limit" for a chunk that hit it. A history delivery is now counted as it
+begins (`historyBegun`, `beganAfter` / `recordBegun`): the webhook starts that transaction as it
+hands on the delivery's first history change, does not wait for it, and `reportDelivery` awaits
+it before the end's record. `historyBegun` above `historyDeliveries` is a delivery that never
+answered. The record stays BEFORE the answer for this reason (a finding asked to move it after,
+to answer Meta a round trip sooner; written after the answer, it would be lost with an
+invocation ended at that point and make an answered delivery read as one that never answered).
+Two new assertions and one new test (a thread read that never returns, as on an invocation the
+limit ends: `{historyBegun: 1}` and no answer); with the start's record removed, four tests fail.

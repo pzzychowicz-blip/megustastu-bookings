@@ -121,7 +121,7 @@ import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "
 import onboardHandler from "../api/wa-onboard.js";
 import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
-import { numberIsOurs, makeNumberGuard, freshResults, measuredAfter } from "../api/_lib/coexist-core.js";
+import { numberIsOurs, makeNumberGuard, freshResults, measuredAfter, beganAfter } from "../api/_lib/coexist-core.js";
 import { readJsonBody, bearerToken } from "../api/_lib/request.js";
 import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyRequested, historyStatus, WA_IMPORT_ARCHIVE_MS, disconnectSentence } from "../src/lib/wa-coexist.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
@@ -1674,10 +1674,10 @@ describe("wa-inbound — what a coexistence delivery measures (v18.9.0 follow-up
     expect(lines[0]).toMatch(LINE);
     expect(lines[0]).toMatch(/ fields=history:1 threads=2 messages=3 counts=history:3$/);
     const m = fake.read("waLink/measured");
-    expect(m).toMatchObject({ historyDeliveries: 1, historyLargest: { bytes: Buffer.byteLength(body), threads: 2, messages: 3, at: expect.any(Number) } });
+    expect(m).toMatchObject({ historyBegun: 1, historyDeliveries: 1, historyLargest: { bytes: Buffer.byteLength(body), threads: 2, messages: 3, at: expect.any(Number) } });
     expect(lines[0]).toContain("status=200 bytes=" + Buffer.byteLength(body) + " ms=" + m.historyLargest.ms + " ");
     expect(m.historySlowest).toEqual(m.historyLargest);
-    expect(Object.keys(m).sort()).toEqual(["historyDeliveries", "historyLargest", "historySlowest"]);
+    expect(Object.keys(m).sort()).toEqual(["historyBegun", "historyDeliveries", "historyLargest", "historySlowest"]);
   });
   it("an echo of a message MGT sent is logged and recorded; a phone reply is logged only", async () => {
     fake.state.tree = mgtSent();
@@ -1728,7 +1728,21 @@ describe("wa-inbound — what a coexistence delivery measures (v18.9.0 follow-up
     } finally { fake.db.ref = realRef; }
     expect(res.statusCode).toBe(500);
     expect(coexistLines()).toEqual([expect.stringMatching(/^\[wa-inbound\] coexistence delivery status=500 .* counts=errors:1$/)]);
-    expect(fake.read("waLink/measured")).toMatchObject({ historyDeliveries: 1, historyFailed: 1 });
+    expect(fake.read("waLink/measured")).toMatchObject({ historyBegun: 1, historyDeliveries: 1, historyFailed: 1 });
+  });
+  // /code-review: the record is written at the end of the handler, so an
+  // invocation the time limit ends would leave nothing; its start is recorded.
+  it("a history delivery that never answers, as one the time limit ends, still leaves its start on the record", async () => {
+    const realRef = fake.db.ref;
+    // The thread's read never comes back, so the handler never reaches its end.
+    fake.db.ref = (path) => (path === "messages/+34600111222" ? { get: () => new Promise(() => {}) } : realRef(path));
+    try {
+      let answered = false;
+      deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600)] }])]).then(() => { answered = true; });
+      await vi.waitFor(() => expect(fake.read("waLink/measured")).toEqual({ historyBegun: 1 }));
+      expect(answered).toBe(false);
+      expect(coexistLines()).toEqual([]);
+    } finally { fake.db.ref = realRef; }
   });
   it("a record that cannot be written leaves the delivery's answer and what it stored alone", async () => {
     fake.state.failWrite = (op, path) => op === "transaction" && path === "waLink/measured";
@@ -1737,6 +1751,7 @@ describe("wa-inbound — what a coexistence delivery measures (v18.9.0 follow-up
     expect(msgsAt(KEY)).toHaveLength(1);
     expect(coexistLines()).toHaveLength(1);
     expect(console.error).toHaveBeenCalledWith(expect.stringMatching(/measures were not recorded/), "database unavailable");
+    expect(console.error).toHaveBeenCalledWith(expect.stringMatching(/start was not recorded/), "database unavailable");
   });
   it("measuredAfter: deliveries and failures add up, the largest and the slowest are kept apart, a tie keeps the first", () => {
     let m = measuredAfter(null, { history: true, failed: false, bytes: 100, ms: 900, threads: 1, messages: 2 }, 1);
@@ -1751,6 +1766,9 @@ describe("wa-inbound — what a coexistence delivery measures (v18.9.0 follow-up
     expect(measuredAfter(m, { mgtEchoes: 2 }, 5)).toEqual(Object.assign({}, m, { mgtEchoes: 2, mgtEchoAt: 5 }));
     expect(measuredAfter(m, { history: false, mgtEchoes: 0 }, 6)).toEqual(m);
     expect(JSON.stringify(m)).toBe(before); // never changes what it was given
+    expect(beganAfter(null)).toEqual({ historyBegun: 1 });
+    expect(beganAfter(beganAfter(m))).toEqual(Object.assign({}, m, { historyBegun: 2 }));
+    expect(JSON.stringify(m)).toBe(before);
   });
 });
 

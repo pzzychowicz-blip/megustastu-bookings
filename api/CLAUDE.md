@@ -166,6 +166,11 @@ a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
   `waLink/measured`, **because a Hobby project's runtime logs last one hour**. Counts only,
   held to a strict shape by the tests; a record that fails is logged and changes nothing
   about the answer. The simulator's events call the handlers directly, so never reach it.
+  **That record is written at the END of the handler, before the answer**, so a history
+  delivery is also counted as it begins (`recordBegun`, started beside the import and
+  awaited before the answer): `historyBegun` above `historyDeliveries` is a delivery that
+  never answered, an invocation the time limit ended (the /code-review; a record after
+  the answer would be lost with the invocation and blur the two).
 - **`wa-onboard.js`**, the server half of Embedded Signup for `/wa-connect`. GET answers
   `{appId, configId, graphVersion}` (not secrets); POST exchanges the 30-second code, then
   writes `waLink` BEFORE asking for any sync (the guard above), then subscribes the app to
