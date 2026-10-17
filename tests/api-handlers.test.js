@@ -422,6 +422,11 @@ describe("wa-config", () => {
     expect((await config()).body.llmModel).toBe("gemini-9-test");
     vi.stubEnv("GEMINI_MODEL", "");
     expect((await config()).body.llmModel).toBe("gemini-3.5-flash-lite");
+    // /code-review: a pasted newline would 404 every live parse while looking right.
+    vi.stubEnv("GEMINI_MODEL", " gemini-9-test\n");
+    expect((await config()).body.llmModel).toBe("gemini-9-test");
+    vi.stubEnv("GEMINI_MODEL", " \n");
+    expect((await config()).body.llmModel).toBe("gemini-3.5-flash-lite");
   });
 
   // v18.9.0: the /wa-connect page's two ids, and whether the environment's

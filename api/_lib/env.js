@@ -64,7 +64,11 @@ export function sendMode() { return env("WA_SEND_MODE", "mock") === "live" ? "li
 // break anywhere in that chain would 500 the endpoint api/CLAUDE.md names as
 // the cheapest health check. Why the default is 3.5 Flash-Lite: gemini.js.
 export const DEFAULT_MODEL = "gemini-3.5-flash-lite";
-export function geminiModel() { return env("GEMINI_MODEL", DEFAULT_MODEL); }
+// Trimmed (/code-review): the id goes into the request URL, and a value pasted
+// into Vercel with a trailing newline 404s every live parse while the Admin tab,
+// where whitespace is invisible, shows a name that looks right. Blank after the
+// trim is unset, as env() already treats "".
+export function geminiModel() { return String(env("GEMINI_MODEL", "")).trim() || DEFAULT_MODEL; }
 export function allowUnsigned() { return env("WA_ALLOW_UNSIGNED", "") === "1"; }
 
 // ── The simulator's kill switch (v18.0.0 phase 5b) ───────────────────────────

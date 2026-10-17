@@ -36979,3 +36979,8 @@ every cold start of the endpoint `api/CLAUDE.md` names as the cheapest health ch
 to read one variable, and a break anywhere in that chain would have made it 500. `DEFAULT_MODEL` and
 `geminiModel()` moved to `_lib/env.js`, beside `llmMode()`; gemini.js imports them.
 `wa-parse-guard` pins that wa-config takes the model from env.js and never imports gemini.js.
+
+**The model id is trimmed (finding 5).** It goes into the request URL unencoded, and a
+`GEMINI_MODEL` pasted into Vercel with a trailing newline would 404 every live parse while the
+panel showed a name that looked right. `geminiModel()` trims; blank after the trim is the default,
+as `env()` already treats `""`. Tested both ways in `api-handlers`.
