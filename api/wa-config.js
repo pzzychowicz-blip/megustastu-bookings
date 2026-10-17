@@ -29,7 +29,7 @@
 // rather than inventing a "no" — an unrecognised key is a question this
 // deployment cannot answer, which is different from a key that is not set.
 
-import { env, llmMode, sendMode, geminiModel } from "./_lib/env.js";
+import { env, llmMode, sendMode, geminiModel, geminiCalled } from "./_lib/env.js";
 import { verifyStaffToken, staffAuthError, readWaLink } from "./_lib/rtdb.js";
 import { bearerToken } from "./_lib/request.js";
 
@@ -102,10 +102,15 @@ export default async function handler(req, res) {
   // every Gemini call uses, so it is the EFFECTIVE id (the default when
   // GEMINI_MODEL is unset), never the raw variable: CT-WA-07's lesson, above.
   // Reported in mock mode too, as the model that would be called once live.
+  // `llmCalls` (/code-review): whether a parse really calls it. Live mode with no
+  // GEMINI_API_KEY falls back to the regex mock, so "live" alone would show a
+  // model nothing calls, the CT-WA-07 shape; `geminiCalled()` is the condition
+  // the parse log times on.
   res.status(200).json({
     set,
     modes: { llm: llmMode(), send: sendMode() },
     llmModel: geminiModel(),
+    llmCalls: geminiCalled(),
     phoneNumberIdMatches: await phoneNumberIdMatches(),
   });
 }

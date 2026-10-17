@@ -37001,3 +37001,10 @@ only.
 transcript, the longest prompt the backend sends and the likeliest to near `TIMEOUT_MS`, and its
 `[wa-recheck]` line had no `ms`. It is timed the same way, on the same `geminiCalled()` condition.
 Tested with the same held 60 ms call, and without a call.
+
+**The panel no longer names a model nothing calls (finding 1).** With `WA_LLM_MODE=live` and no
+`GEMINI_API_KEY`, the panel read "live, on gemini-3.5-flash-lite" while every parse was the regex
+mock: the CT-WA-07 shape this version said it avoided. `/api/wa-config` also reports `llmCalls`
+(`geminiCalled()`, the condition the log's `ms` uses), and the sentence then reads "live, but with
+no Gemini key set the built-in parser runs instead". Tested: false when live with no key, true
+with one, false in mock.
