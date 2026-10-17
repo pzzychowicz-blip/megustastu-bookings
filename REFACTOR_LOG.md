@@ -36896,6 +36896,19 @@ no real key. `isStoredMsgKey` (`api/wa-media.js`, exported for its test) accepts
 those in a path, a 500 instead of a 400). It refuses `/`, `.`, `#`, `$`, `[`, `]` as before.
 `MSG_ID_RE` is gone.
 
+**The test derives its key (finding 2).** It seeded a hand-written, already-sanitized key, so a
+change to what `sanitizeKey` writes would have left it green over a 400. It now runs a raw wamid
+with `+`, `/` and `=` through `sanitizeKey`, the function `inbound-core.js` stores a message under,
+asserts the key it gets, and GETs that.
+
+**Not fixed, finding 3** (the test calls the handler with `req.query` already decoded, so a `+`
+sent unencoded in a query string, which decodes to a space, is never tested). Traced: the only
+caller, `loadMedia` (`src/lib/wa-backend.js:190`), passes the key through `encodeURIComponent`
+(`+` → `%2B`), and Vercel and the dev backend (`scripts/wa-backend-dev.mjs:91`, URLSearchParams)
+both decode `%2B` back to `+`. A test of that would test URL parsing, not this code; a future
+caller that skips the encoding is refused with 400, never served the wrong message. No code built
+for it.
+
 **Still to measure on the sandbox once deployed (A5-6):** a received photo, voice note and PDF
 open, and whether the 11.2 MB PDF streams through Vercel's 4.5 MB response cap as its guide says.
 

@@ -119,7 +119,7 @@ import simGenerateHandler from "../api/wa-sim-generate.js";
 import mediaHandler, { MEDIA_VIEW_MAX, servedType, sniffType, isStoredMsgKey } from "../api/wa-media.js";
 import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "../api/wa-prune.js";
 import onboardHandler from "../api/wa-onboard.js";
-import { removeConversationIf } from "../api/_lib/rtdb.js";
+import { removeConversationIf, sanitizeKey } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { numberIsOurs, makeNumberGuard, freshResults, measuredAfter, beganAfter, chunkKeys } from "../api/_lib/coexist-core.js";
 import { readJsonBody, bearerToken } from "../api/_lib/request.js";
@@ -2187,8 +2187,13 @@ describe("wa-media GET", () => {
   });
   // v18.9.1: a real wamid is base64, so its stored key can carry `+` and `=`.
   // v18.8.0's check refused both, and every received file answered 400.
-  it("serves a message keyed by a real-shaped wamid, with + and = in it", async () => {
-    const id = "wamid_HBgLMzQ2MTIyMDIzNTkVAgASGBQzQUY1+RjA4QkU2QzE4MjQ0RkI4AA==";
+  // The key is DERIVED, through the function inbound-core stores a message
+  // under (`sanitizeKey(wamid)`), from a raw wamid carrying every base64
+  // character that is not a letter or digit: so a change to what that function
+  // writes cannot leave this test passing while received media answers 400.
+  it("serves a message keyed by a real-shaped wamid, with + / and = in it", async () => {
+    const id = sanitizeKey("wamid.HBgLMzQ2MTIyMDIzNTkVAgASGBQzQUY1+RjA4/QkU2QzE4MjQ0RkI4AA==");
+    expect(id).toBe("wamid_HBgLMzQ2MTIyMDIzNTkVAgASGBQzQUY1+RjA4_QkU2QzE4MjQ0RkI4AA==");
     seedMedia(MEDIA_MSG({ kind: "image", mediaId: "1234567890", mime: "image/jpeg" }, { id }));
     vi.stubGlobal("fetch", metaFetch());
     const res = await mediaCall({ query: { phoneKey: KEY, msgId: id } });
