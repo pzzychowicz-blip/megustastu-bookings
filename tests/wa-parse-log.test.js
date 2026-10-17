@@ -5,7 +5,7 @@
 // default, because that is the case a mode-keyed rule would have let through.
 import { describe, it, expect, vi, afterEach } from "vitest";
 import process from "node:process";
-import { parseMessage, parseLogFields } from "../api/_lib/gemini.js";
+import { parseMessage, parseThread, parseLogFields } from "../api/_lib/gemini.js";
 
 const MSG = "Mesa para 4 mañana a las 21:00, alergia al marisco, soy Lucía Pérez";
 
@@ -47,6 +47,52 @@ describe("the parse log", () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("not valid JSON");
     expect(lines[0]).not.toMatch(/Luc|marisco/);
+  });
+
+  // v18.9.2: the time per parse, for the go-live plan's A5-7, and only when
+  // Gemini was really called (/code-review). The fetch is held for DELAY ms, so
+  // a timer that does not wrap the call (started after it, or read before it)
+  // logs less than DELAY and fails.
+  const DELAY = 60;
+  const slowGemini = () => vi.stubGlobal("fetch", async () => {
+    await new Promise((r) => setTimeout(r, DELAY));
+    return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: "{}" }] } }] }) };
+  });
+  const msOf = (line) => { const m = line.match(/"ms":(\d+)/); return m ? Number(m[1]) : null; };
+
+  it("times a live Gemini call, in both shapes of the line", async () => {
+    process.env.WA_LLM_MODE = "live";
+    process.env.GEMINI_API_KEY = "test-key";
+    slowGemini();
+    expect(msOf(await logged())).toBeGreaterThanOrEqual(DELAY);
+    vi.restoreAllMocks();
+    slowGemini();
+    process.env.WA_SIM_ENABLED = "1";
+    expect(msOf(await logged())).toBeGreaterThanOrEqual(DELAY);
+  });
+  // /code-review: the Re-check's transcript parse, the longest prompt, is timed too.
+  it("times a live Re-check of a whole thread, and not a mock one", async () => {
+    const thread = [{ direction: "in", text: MSG }, { direction: "out", text: "¿Para cuántos?" }, { direction: "in", text: "Somos 4" }];
+    const recheckLine = async () => {
+      const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+      await parseThread(thread, {});
+      const lines = spy.mock.calls.map((c) => c.join(" ")).filter((l) => l.startsWith("[wa-recheck:"));
+      expect(lines).toHaveLength(1);
+      return lines[0];
+    };
+    expect(msOf(await recheckLine())).toBe(null);
+    vi.restoreAllMocks();
+    process.env.WA_LLM_MODE = "live";
+    process.env.GEMINI_API_KEY = "test-key";
+    slowGemini();
+    expect(msOf(await recheckLine())).toBeGreaterThanOrEqual(DELAY);
+  });
+  it("logs no ms when no model was called: mock mode, or live with no key", async () => {
+    expect(msOf(await logged())).toBe(null);
+    vi.restoreAllMocks();
+    process.env.WA_LLM_MODE = "live";
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(msOf(await logged())).toBe(null);
   });
 
   it("parseLogFields keeps the plain fields and names the filled content ones", () => {

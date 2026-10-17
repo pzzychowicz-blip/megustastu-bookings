@@ -65,7 +65,9 @@ session and keeping it in sync.
   (a) run the simulator's canned scenarios in live mode and record accuracy and time
   per parse against `TIMEOUT_MS` (15 s) in `api/_lib/gemini.js`; (b) check every
   deployment's `GEMINI_MODEL` env var — one that still names `gemini-3.1-flash-lite`
-  overrides the default and stops working on 7 May 2027, the id's shutdown date;
+  overrides the default and stops working on 7 May 2027, the id's shutdown date (since
+  v18.9.2 Settings → Admin → Integrations names the model each deployment calls, and each
+  `[wa-parse]` / `[wa-recheck]` line of a real Gemini call carries its `ms`);
   (c) read the free-tier requests per minute and per day in AI Studio → Rate limits,
   which Google no longer publishes in the docs.
 

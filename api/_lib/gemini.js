@@ -22,7 +22,7 @@
 // exact current string in AI Studio (the local harness exposes GET /dev/models
 // to list what the key can see).
 
-import { env, llmMode, simEnabled } from "./env.js";
+import { env, llmMode, simEnabled, geminiModel, geminiCalled } from "./env.js";
 
 // ── Who this restaurant is, for the prompts (v18.0.0 phase 5c) ───────────────
 // The prompts carried "a small restaurant in the Canary Islands" as a literal,
@@ -69,7 +69,8 @@ const TIMEOUT_MS = 15000;
 // gemini-3.5-flash is accurate but its latency swings to ~20s (timeouts);
 // gemini-3-flash-preview always times out; gemini-2.0-flash 429s on free tier.
 // Confirm an id is available to the key via the harness's /dev/models.
-const DEFAULT_MODEL = "gemini-3.5-flash-lite";
+// The constant and `geminiModel()`, the one function every call below reads
+// it through, live in env.js since the v18.9.2 /code-review, beside llmMode().
 
 // The strict response schema (Gemini "controlled generation"). Mirrors
 // draftData on the conversation + language detection.
@@ -224,7 +225,7 @@ export function mockParse(text) {
 async function liveParse(text, ctx) {
   const key = env("GEMINI_API_KEY", null);
   if (!key) { console.warn("[gemini] GEMINI_API_KEY missing — falling back to mock parse"); return mockParse(text); }
-  const model = env("GEMINI_MODEL", DEFAULT_MODEL);
+  const model = geminiModel();
   const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + key;
   const body = {
     contents: [{ parts: [{ text: buildPrompt(text, ctx) }] }],
@@ -322,13 +323,23 @@ export async function parseMessage(text, { hours, existingDraft } = {}) {
     existingDraft: existingDraft || null,
   };
   const mode = llmMode();
+  // v18.9.2: how long the Gemini call took, on the log line. The parse runs
+  // after the webhook has answered (waitUntil), so no request timing isolates
+  // it, and its time against TIMEOUT_MS is the question the go-live plan's A5-7
+  // asks of the default model. A timed-out parse reads about TIMEOUT_MS. Only
+  // when Gemini was really CALLED (/code-review): live mode with no key falls
+  // back to the mock, and a near-zero `ms` on a "live" line would read as a
+  // very fast model. No call, no `ms`.
+  const timed = geminiCalled();
+  const t0 = Date.now();
   let parsed = mode === "live" ? await liveParse(text, ctx) : mockParse(text);
+  const took = timed ? { ms: Date.now() - t0 } : {};
   if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
   // Drift-review log: every parse, one line (content only in a sandbox, above).
   const full = simEnabled();
   console.log("[wa-parse:" + mode + "] " + JSON.stringify(full
-    ? { text: String(text).slice(0, 200), merged: !!existingDraft, parsed }
-    : { len: String(text).length, merged: !!existingDraft, parsed: parseLogFields(parsed, false) }));
+    ? { text: String(text).slice(0, 200), merged: !!existingDraft, ...took, parsed }
+    : { len: String(text).length, merged: !!existingDraft, ...took, parsed: parseLogFields(parsed, false) }));
   return parsed;
 }
 
@@ -406,9 +417,15 @@ export async function parseThread(history, { hours, existingDraft } = {}) {
     prefText: lastInbound,
   };
   const mode = llmMode();
+  // v18.9.2 /code-review: timed as parseMessage is, and only when Gemini is
+  // called. A Re-check sends the whole transcript, the longest prompt this
+  // backend sends, so it is the parse most likely to near TIMEOUT_MS.
+  const timed = geminiCalled();
+  const t0 = Date.now();
   let parsed = mode === "live" ? await liveParse(transcript, ctx) : mockParse(lastInbound);
+  const took = timed ? { ms: Date.now() - t0 } : {};
   if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
-  console.log("[wa-recheck:" + mode + "] " + JSON.stringify({ msgs: list.length, merged: !!existingDraft, parsed: parseLogFields(parsed, simEnabled()) }));
+  console.log("[wa-recheck:" + mode + "] " + JSON.stringify({ msgs: list.length, merged: !!existingDraft, ...took, parsed: parseLogFields(parsed, simEnabled()) }));
   return parsed;
 }
 
@@ -422,7 +439,7 @@ export async function parseThread(history, { hours, existingDraft } = {}) {
 export async function generateCustomerReply(history, language) {
   const key = env("GEMINI_API_KEY", null);
   if (!key) { const e = new Error("GEMINI_API_KEY not set"); e.status = 400; throw e; }
-  const model = env("GEMINI_MODEL", DEFAULT_MODEL);
+  const model = geminiModel();
   const langName = language === "en" ? "English" : "Spanish";
   // Same rule as parseThread (CT-WA-08). This one is sandbox tooling and is
   // stripped from production, and it is fixed anyway: it had no whitespace
@@ -480,7 +497,7 @@ const SCENARIO_SCHEMA = {
 export async function generateScenarioMessage({ hint } = {}) {
   const key = env("GEMINI_API_KEY", null);
   if (!key) { const e = new Error("GEMINI_API_KEY not set"); e.status = 400; throw e; }
-  const model = env("GEMINI_MODEL", DEFAULT_MODEL);
+  const model = geminiModel();
   const seed = Math.random().toString(36).slice(2) + "-" + Date.now().toString(36);
   const prompt = [
     "Invent ONE realistic inbound WhatsApp message from a (potential) customer to " + waContext() + ". It is test data for a booking system — make it varied and natural.",

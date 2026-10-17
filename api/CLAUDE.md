@@ -37,7 +37,12 @@ because it never holds one (`Boolean(env(k, null))` is the whole of it), and it 
 staff-auth gated because a map of which integrations are unconfigured is a map of where
 a deployment is soft. The client keeps its own labels and groups and asks only the
 question a browser cannot answer — presentation there, fact here, so the key list is not
-one list in two places
+one list in two places. **Beside the booleans it reports three non-secret VALUES**, each
+through the function the backend itself runs on, so the Admin tab shows what runs and never
+the raw variable (CT-WA-07): the two modes (`llmMode()`, `sendMode()`), and since v18.9.2
+the Gemini model (`llmModel`, `geminiModel()` in `_lib/env.js`, which every Gemini call
+uses: the default when `GEMINI_MODEL` is unset; in env.js and not gemini.js so this endpoint
+never loads the booking-logic chain)
 
 **The `jose` override in `package.json` is load-bearing for every function here**
 (`"overrides": { "jose": "^5.9.6" }`, currently resolving to 5.10.0). firebase-admin

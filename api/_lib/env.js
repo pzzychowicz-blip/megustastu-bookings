@@ -54,6 +54,27 @@ export function env(name, fallback) {
 export function dbUrl() { return env("WA_DB_URL", DEV_DB_URL); }
 export function llmMode() { return env("WA_LLM_MODE", "mock") === "live" ? "live" : "mock"; }
 export function sendMode() { return env("WA_SEND_MODE", "mock") === "live" ? "live" : "mock"; }
+
+// The Gemini model the backend calls (v18.9.2), as ONE function. It was three
+// copies of `env("GEMINI_MODEL", DEFAULT_MODEL)` in _lib/gemini.js, and the Admin
+// tab now shows it (api/wa-config.js): a fourth copy there could drift from what
+// runs, the defect CT-WA-07 found in the modes. HERE rather than in gemini.js
+// (/code-review): wa-config would otherwise import gemini.js and with it
+// src/lib/whatsapp.js and the booking-logic chain, to read one variable, and a
+// break anywhere in that chain would 500 the endpoint api/CLAUDE.md names as
+// the cheapest health check. Why the default is 3.5 Flash-Lite: gemini.js.
+export const DEFAULT_MODEL = "gemini-3.5-flash-lite";
+// Trimmed (/code-review): the id goes into the request URL, and a value pasted
+// into Vercel with a trailing newline 404s every live parse while the Admin tab,
+// where whitespace is invisible, shows a name that looks right. Blank after the
+// trim is unset, as env() already treats "".
+export function geminiModel() { return String(env("GEMINI_MODEL", "")).trim() || DEFAULT_MODEL; }
+
+// Whether a parse really CALLS Gemini (v18.9.2 /code-review): live mode AND a
+// key. Live with no key falls back to the regex mock (liveParse in gemini.js),
+// so "live" alone overstates it, the CT-WA-07 shape again. The parse log's `ms`
+// and the Admin tab's model both ask this, not llmMode().
+export function geminiCalled() { return llmMode() === "live" && Boolean(env("GEMINI_API_KEY", null)); }
 export function allowUnsigned() { return env("WA_ALLOW_UNSIGNED", "") === "1"; }
 
 // ── The simulator's kill switch (v18.0.0 phase 5b) ───────────────────────────

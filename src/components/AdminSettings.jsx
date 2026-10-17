@@ -230,7 +230,24 @@ function IntegrationsSection() {
       </div>
       {status ? (
         <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: SP.wide }}>
-          Message understanding is <strong>{status.modes.llm}</strong> and sending
+          {/* v18.9.2: the model the backend calls (`llmModel`, api/wa-config.js),
+              named in mock mode too as the one that will run once live. Live
+              with no Gemini key runs the built-in parser instead (`llmCalls`
+              false, /code-review), and the sentence says so rather than naming
+              a model nothing calls. A backend older than v18.9.2 sends neither,
+              and the sentence reads as before. */}
+          Message understanding is <strong>{status.modes.llm}</strong>
+          {/* A string or nothing (/code-review): every other field this panel
+              shows is type-checked first (KeyChip's `typeof state`), and an
+              object here would throw inside <strong> and take the tab down. */}
+          {typeof status.llmModel === "string" && status.llmModel
+            ? (status.modes.llm !== "live"
+              ? <> (<strong>{status.llmModel}</strong> once live)</>
+              : status.llmCalls === true
+                ? <>, on <strong>{status.llmModel}</strong>,</>
+                : <>, but with no Gemini key set the built-in parser runs instead,</>)
+            : null}
+          {" "}and sending
           is <strong>{status.modes.send}</strong>. These are separate from the keys
           above: a key can be set while the mode is still <em>mock</em>, which
           means nothing is being called and nothing is being spent.
