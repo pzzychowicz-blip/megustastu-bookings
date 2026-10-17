@@ -36940,3 +36940,33 @@ removed from the line, it fails.
 
 **Files:** `api/_lib/gemini.js` · `tests/wa-parse-log.test.js` · `src/App.jsx` (version).
 No stored shape changed, no rules, no `SCHEMA` raise; no device needs a refresh.
+
+### Phase 2 — Integrations names the Gemini model (Patryk's idea)
+
+Settings → Admin → Integrations said whether `GEMINI_MODEL` was set, and nothing about which
+model runs; an unset variable means the code default, which the panel could not show. Its closing
+sentence now reads "Message understanding is **live**, on **gemini-3.5-flash-lite**, and sending
+is …"; in mock mode the model is named as the one that will run once live. A backend older than
+this version sends no model, and the sentence reads as before.
+
+**Why a value is allowed through an endpoint built on booleans.** `/api/wa-config` answers a
+boolean per KEY so that it can never leak a secret, and already reports the two modes as values
+because they are not secrets. A model id is not one either. It is reported as `llmModel` beside
+the modes (`modes` itself is untouched, which `wa-parse-guard`'s CT-WA-07 pin requires).
+
+**One spelling of the model.** `geminiModel()` (`api/_lib/gemini.js`) replaces three copies of
+`env("GEMINI_MODEL", DEFAULT_MODEL)` in the parse, the reply generator and the scenario
+generator, and `wa-config` calls it too. A fourth copy in `wa-config` could drift from what runs,
+the exact defect CT-WA-07 found in the modes: it showed `LIVE` while the backend mocked.
+
+**Test.** `tests/api-handlers.test.js`: `llmModel` is the default when `GEMINI_MODEL` is unset or
+blank, and the variable when set.
+
+**Not verified on screen here.** The dev server runs no serverless functions, so the panel shows
+its "could not ask" state locally; the sentence is checked on the sandbox after merge.
+
+**Docs:** `api/CLAUDE.md` (wa-config's values), `GLOSSARY.md` (the integrations panel's row),
+`ROADMAP.md` (the Flash-Lite entry points at the panel and the `ms`).
+
+**Files:** `api/_lib/gemini.js` · `api/wa-config.js` · `src/components/AdminSettings.jsx` ·
+`tests/api-handlers.test.js` · the three docs above.

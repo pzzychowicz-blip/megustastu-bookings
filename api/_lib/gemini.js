@@ -71,6 +71,12 @@ const TIMEOUT_MS = 15000;
 // Confirm an id is available to the key via the harness's /dev/models.
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 
+// v18.9.2: the model the backend actually calls, as ONE function. It was three
+// copies of `env("GEMINI_MODEL", DEFAULT_MODEL)`, and the Admin tab now shows it
+// (api/wa-config.js): a fourth copy there could drift from what runs, which is
+// the exact defect CT-WA-07 found in the modes.
+export function geminiModel() { return env("GEMINI_MODEL", DEFAULT_MODEL); }
+
 // The strict response schema (Gemini "controlled generation"). Mirrors
 // draftData on the conversation + language detection.
 const RESPONSE_SCHEMA = {
@@ -224,7 +230,7 @@ export function mockParse(text) {
 async function liveParse(text, ctx) {
   const key = env("GEMINI_API_KEY", null);
   if (!key) { console.warn("[gemini] GEMINI_API_KEY missing — falling back to mock parse"); return mockParse(text); }
-  const model = env("GEMINI_MODEL", DEFAULT_MODEL);
+  const model = geminiModel();
   const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + key;
   const body = {
     contents: [{ parts: [{ text: buildPrompt(text, ctx) }] }],
@@ -428,7 +434,7 @@ export async function parseThread(history, { hours, existingDraft } = {}) {
 export async function generateCustomerReply(history, language) {
   const key = env("GEMINI_API_KEY", null);
   if (!key) { const e = new Error("GEMINI_API_KEY not set"); e.status = 400; throw e; }
-  const model = env("GEMINI_MODEL", DEFAULT_MODEL);
+  const model = geminiModel();
   const langName = language === "en" ? "English" : "Spanish";
   // Same rule as parseThread (CT-WA-08). This one is sandbox tooling and is
   // stripped from production, and it is fixed anyway: it had no whitespace
@@ -486,7 +492,7 @@ const SCENARIO_SCHEMA = {
 export async function generateScenarioMessage({ hint } = {}) {
   const key = env("GEMINI_API_KEY", null);
   if (!key) { const e = new Error("GEMINI_API_KEY not set"); e.status = 400; throw e; }
-  const model = env("GEMINI_MODEL", DEFAULT_MODEL);
+  const model = geminiModel();
   const seed = Math.random().toString(36).slice(2) + "-" + Date.now().toString(36);
   const prompt = [
     "Invent ONE realistic inbound WhatsApp message from a (potential) customer to " + waContext() + ". It is test data for a booking system — make it varied and natural.",

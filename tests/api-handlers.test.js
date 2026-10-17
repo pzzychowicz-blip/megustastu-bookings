@@ -414,6 +414,16 @@ describe("wa-config", () => {
     expect((await config()).body.modes).toEqual({ llm: "live", send: "mock" });
   });
 
+  // v18.9.2: the Gemini model the backend calls: the default when GEMINI_MODEL
+  // is unset, the variable when it is set, and the same id the parse uses.
+  it("reports the EFFECTIVE Gemini model, the default when GEMINI_MODEL is unset", async () => {
+    expect((await config()).body.llmModel).toBe("gemini-3.5-flash-lite");
+    vi.stubEnv("GEMINI_MODEL", "gemini-9-test");
+    expect((await config()).body.llmModel).toBe("gemini-9-test");
+    vi.stubEnv("GEMINI_MODEL", "");
+    expect((await config()).body.llmModel).toBe("gemini-3.5-flash-lite");
+  });
+
   // v18.9.0: the /wa-connect page's two ids, and whether the environment's
   // number is the one Embedded Signup connected — a boolean, never either id.
   it("reports the Connect page's two keys", async () => {

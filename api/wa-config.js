@@ -30,6 +30,7 @@
 // deployment cannot answer, which is different from a key that is not set.
 
 import { env, llmMode, sendMode } from "./_lib/env.js";
+import { geminiModel } from "./_lib/gemini.js";
 import { verifyStaffToken, staffAuthError, readWaLink } from "./_lib/rtdb.js";
 import { bearerToken } from "./_lib/request.js";
 
@@ -96,9 +97,16 @@ export default async function handler(req, res) {
   // capable than it was, on the value this handler's own header calls the one
   // that spends money, so an operator who typed `LIVE` would have believed the
   // LLM was running.
+  // v18.9.2: the Gemini model the backend calls, a VALUE for the same reason the
+  // modes are: a model id is not a secret, and which one runs is what an admin
+  // checking Integrations wants to know. Through `geminiModel()`, the function
+  // every Gemini call uses, so it is the EFFECTIVE id (the default when
+  // GEMINI_MODEL is unset), never the raw variable: CT-WA-07's lesson, above.
+  // Reported in mock mode too, as the model that would be called once live.
   res.status(200).json({
     set,
     modes: { llm: llmMode(), send: sendMode() },
+    llmModel: geminiModel(),
     phoneNumberIdMatches: await phoneNumberIdMatches(),
   });
 }
