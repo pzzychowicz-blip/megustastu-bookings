@@ -43,7 +43,9 @@ session and keeping it in sync.
   time limit). Both from v18.9.0's `/code-review`. **Where the answers are:** `waLink/measured`
   in the DEV database (the largest and the slowest history delivery, each with its bytes,
   milliseconds, threads and messages; `historyBegun` above `historyDeliveries`, a delivery the
-  time limit ended; `mgtEchoes`, absent for as long as no echo has named a message MGT sent), and one `[wa-inbound] coexistence delivery` line per delivery in
+  time limit ended; `historyChunks`, the chunks that landed per phase, where a gap is one the
+  4.5 MB cap refused before MGT saw it; `mgtEchoes`, absent for as long as no echo has named a
+  message MGT sent), and one `[wa-inbound] coexistence delivery` line per delivery in
   Vercel's logs, which a Hobby project keeps for an hour. **Before any of it, publish
   `database.rules.json` to PROD** (the `waContacts` grant; DEV has it since 2026-10-16,
   checked: a per-key `waContacts` delete is allowed and a `waLink` write refused). If the rehearsal

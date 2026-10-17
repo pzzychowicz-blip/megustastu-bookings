@@ -170,7 +170,11 @@ a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
   delivery is also counted as it begins (`recordBegun`, started beside the import and
   awaited before the answer): `historyBegun` above `historyDeliveries` is a delivery that
   never answered, an invocation the time limit ended (the /code-review; a record after
-  the answer would be lost with the invocation and blur the two).
+  the answer would be lost with the invocation and blur the two). **A body over the cap
+  never reaches the function** (Vercel answers 413 first), so the record lists the chunks
+  that did land, per phase (`historyChunks`, `{p0: {c1: 1}}`, from each chunk's
+  `metadata.chunk_order`; a 500's wait for the resend): a gap in the numbers is a chunk
+  that never landed.
 - **`wa-onboard.js`**, the server half of Embedded Signup for `/wa-connect`. GET answers
   `{appId, configId, graphVersion}` (not secrets); POST exchanges the 30-second code, then
   writes `waLink` BEFORE asking for any sync (the guard above), then subscribes the app to

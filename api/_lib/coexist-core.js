@@ -64,6 +64,10 @@ export function freshResults() {
 //     whole-thread scan in findMessageByWamid can go (ROADMAP).
 //   How big and how slow is a history delivery? Vercel refuses a request body
 //     over 4.5 MB, and the import runs against the function's time limit.
+//     A body over the cap is refused BEFORE this function runs, so nothing
+//     here can see it; what it can see is which chunks did land, listed per
+//     phase (`historyChunks`): a gap in their numbers is one that never did
+//     (/code-review).
 //
 // COUNTS ONLY: nothing here holds a message's text, a phone number, a name, a
 // wamid, an account id or a token. Every value is a number or one of this
@@ -86,9 +90,24 @@ export function freshResults() {
 // changes it handed to a coexistence handler, per field, and for `history` the
 // threads and messages they carried. Those are the PAYLOAD's counts, what the
 // size and the time were spent on; `results.history` is what was stored.
-// `begun` is a history delivery's start record while it is being written.
+// `begun` is a history delivery's start record while it is being written, and
+// `chunks` the chunks it carried, as `{phase: "p0", chunk: "c1"}` (chunkKeys).
 export function newMeasure() {
-  return { changes: 0, fields: {}, threads: 0, messages: 0, begun: null };
+  return { changes: 0, fields: {}, threads: 0, messages: 0, begun: null, chunks: [] };
+}
+
+// chunkKeys(item) → `{phase, chunk}` naming one history chunk on the record, or
+// null when its metadata has no whole numbers in a sane range: the keys are
+// `p<phase>` and `c<chunk_order>`, letters first so the database keeps them an
+// object (all-number keys can read back as an array).
+export function chunkKeys(item) {
+  const meta = item && item.metadata;
+  if (!meta || typeof meta !== "object") return null;
+  const phase = Number(meta.phase);
+  const order = Number(meta.chunk_order);
+  if (!Number.isInteger(phase) || phase < 0 || phase > 9) return null;
+  if (!Number.isInteger(order) || order < 0 || order > 99999) return null;
+  return { phase: "p" + phase, chunk: "c" + order };
 }
 
 // noteChange(m, field, value) — one change handed to a coexistence handler.
@@ -102,6 +121,9 @@ export function noteChange(m, field, value) {
       m.threads++;
       if (t && Array.isArray(t.messages)) m.messages += t.messages.length;
     }
+    // A chunk of chats (a declined share carries none, and is not one).
+    const ck = item && Array.isArray(item.threads) ? chunkKeys(item) : null;
+    if (ck) m.chunks.push(ck);
   }
   // A photo's media, sent after its placeholder (attachHistoryMedia).
   if (Array.isArray(value.messages)) m.messages += value.messages.length;
@@ -123,13 +145,18 @@ export function deliveryLine(m, results, d) {
 }
 
 // measuredAfter(cur, d, now) → `waLink/measured` after one delivery, `d` being
-// `{history, failed, bytes, ms, threads, messages, mgtEchoes}`:
+// `{history, failed, bytes, ms, threads, messages, chunks, mgtEchoes}`:
 //   historyBegun        every history delivery that began (beganAfter)
 //   historyDeliveries   every one that was answered, 200 or 500: fewer than
 //                       historyBegun means one ended first (the time limit)
 //   historyFailed       those answered 500, which Meta sends again
 //   historyLargest      {bytes, ms, threads, messages, at} of the largest
 //   historySlowest      the same, of the slowest; a tie keeps the first
+//   historyChunks       per phase, each chunk of a delivery answered 200 and
+//                       how many times: {p0: {c1: 1, c2: 2}}. A number missing
+//                       between two that came is a chunk that never landed:
+//                       one over the 4.5 MB cap, refused before this function
+//                       runs, or one that failed every time it was sent
 //   mgtEchoes           echoes that named a message MGT sent
 //   mgtEchoAt           when the last of them came
 // It keeps adding up for as long as the link lasts, across history requests,
@@ -143,6 +170,14 @@ export function measuredAfter(cur, d, now) {
     if (d.failed) next.historyFailed = (Number(next.historyFailed) || 0) + 1;
     if (beats(next.historyLargest, "bytes", d.bytes)) next.historyLargest = snap;
     if (beats(next.historySlowest, "ms", d.ms)) next.historySlowest = snap;
+    // A delivery answered 500 is sent again, so its chunks wait for the one
+    // that lands; listed now, a chunk that fails every time would look landed.
+    for (const ck of !d.failed && Array.isArray(d.chunks) ? d.chunks : []) {
+      const all = next.historyChunks && typeof next.historyChunks === "object" ? next.historyChunks : {};
+      const phase = Object.assign({}, all[ck.phase] && typeof all[ck.phase] === "object" ? all[ck.phase] : {});
+      phase[ck.chunk] = (Number(phase[ck.chunk]) || 0) + 1;
+      next.historyChunks = Object.assign({}, all, { [ck.phase]: phase });
+    }
   }
   if (d.mgtEchoes > 0) {
     next.mgtEchoes = (Number(next.mgtEchoes) || 0) + d.mgtEchoes;
@@ -181,7 +216,7 @@ export async function reportDelivery(m, results, d, now = Date.now()) {
     if (m.begun) await m.begun; // the start's record first (recordBegun); it never rejects
     const history = !!m.fields.history;
     if (!history && !(results.mgtEchoes > 0)) return;
-    const one = { history, failed: d.status >= 500, bytes: d.bytes, ms: d.ms, threads: m.threads, messages: m.messages, mgtEchoes: results.mgtEchoes };
+    const one = { history, failed: d.status >= 500, bytes: d.bytes, ms: d.ms, threads: m.threads, messages: m.messages, chunks: m.chunks, mgtEchoes: results.mgtEchoes };
     await transactWaLink("measured", function (cur) { return measuredAfter(cur, one, now); });
   } catch (e) {
     console.error("[wa-inbound] the delivery's measures were not recorded:", e.message);

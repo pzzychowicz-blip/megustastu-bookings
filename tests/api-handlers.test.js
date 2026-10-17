@@ -121,7 +121,7 @@ import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "
 import onboardHandler from "../api/wa-onboard.js";
 import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
-import { numberIsOurs, makeNumberGuard, freshResults, measuredAfter, beganAfter } from "../api/_lib/coexist-core.js";
+import { numberIsOurs, makeNumberGuard, freshResults, measuredAfter, beganAfter, chunkKeys } from "../api/_lib/coexist-core.js";
 import { readJsonBody, bearerToken } from "../api/_lib/request.js";
 import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyRequested, historyStatus, WA_IMPORT_ARCHIVE_MS, disconnectSentence } from "../src/lib/wa-coexist.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
@@ -1677,7 +1677,8 @@ describe("wa-inbound — what a coexistence delivery measures (v18.9.0 follow-up
     expect(m).toMatchObject({ historyBegun: 1, historyDeliveries: 1, historyLargest: { bytes: Buffer.byteLength(body), threads: 2, messages: 3, at: expect.any(Number) } });
     expect(lines[0]).toContain("status=200 bytes=" + Buffer.byteLength(body) + " ms=" + m.historyLargest.ms + " ");
     expect(m.historySlowest).toEqual(m.historyLargest);
-    expect(Object.keys(m).sort()).toEqual(["historyBegun", "historyDeliveries", "historyLargest", "historySlowest"]);
+    expect(Object.keys(m).sort()).toEqual(["historyBegun", "historyChunks", "historyDeliveries", "historyLargest", "historySlowest"]);
+    expect(m.historyChunks).toEqual({ p0: { c1: 1 } });
   });
   it("an echo of a message MGT sent is logged and recorded; a phone reply is logged only", async () => {
     fake.state.tree = mgtSent();
@@ -1729,6 +1730,29 @@ describe("wa-inbound — what a coexistence delivery measures (v18.9.0 follow-up
     expect(res.statusCode).toBe(500);
     expect(coexistLines()).toEqual([expect.stringMatching(/^\[wa-inbound\] coexistence delivery status=500 .* counts=errors:1$/)]);
     expect(fake.read("waLink/measured")).toMatchObject({ historyBegun: 1, historyDeliveries: 1, historyFailed: 1 });
+    expect(fake.read("waLink/measured").historyChunks).toBeUndefined(); // Meta sends it again: the resend lists it
+  });
+  // /code-review: a body over the 4.5 MB cap is refused before the function
+  // runs, so the record lists the chunks that DID land; a gap is one that did not.
+  it("the chunks that landed are listed per phase with how often, so a gap in their numbers is one that never did", async () => {
+    await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600)] }])]);
+    await deliverHistory([
+      chunk([{ id: "34600999888", messages: [histMsg("wamid.H2", "34600999888", 600)] }], { chunk_order: 3, progress: 90 }),
+      chunk([{ id: "34600999777", messages: [histMsg("wamid.H3", "34600999777", 900)] }], { phase: 1, chunk_order: 1, progress: 100 }),
+    ]);
+    await deliverHistory([chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600)] }])]); // chunk 1 again
+    expect(fake.read("waLink/measured").historyChunks).toEqual({ p0: { c1: 2, c3: 1 }, p1: { c1: 1 } });
+  });
+  it("a chunk whose numbers are not whole numbers in range, and a declined share, are not listed", async () => {
+    await deliverHistory([
+      chunk([{ id: "34600111222", messages: [histMsg("wamid.H1", "34600111222", 600)] }], { phase: "zero", chunk_order: 2 }),
+      chunk([{ id: "34600999888", messages: [histMsg("wamid.H2", "34600999888", 600)] }], { chunk_order: 1.5 }),
+      { metadata: { phase: 0, chunk_order: 4 }, errors: [{ code: 2593109 }] },
+    ]);
+    expect(fake.read("waLink/measured")).toMatchObject({ historyBegun: 1, historyDeliveries: 1 });
+    expect(fake.read("waLink/measured").historyChunks).toBeUndefined();
+    expect([chunkKeys({ metadata: { phase: 2, chunk_order: 7 } }), chunkKeys({ metadata: { phase: 10, chunk_order: 1 } }), chunkKeys({ metadata: { phase: 0, chunk_order: -1 } }), chunkKeys({})])
+      .toEqual([{ phase: "p2", chunk: "c7" }, null, null, null]);
   });
   // /code-review: the record is written at the end of the handler, so an
   // invocation the time limit ends would leave nothing; its start is recorded.
@@ -1766,6 +1790,11 @@ describe("wa-inbound — what a coexistence delivery measures (v18.9.0 follow-up
     expect(measuredAfter(m, { mgtEchoes: 2 }, 5)).toEqual(Object.assign({}, m, { mgtEchoes: 2, mgtEchoAt: 5 }));
     expect(measuredAfter(m, { history: false, mgtEchoes: 0 }, 6)).toEqual(m);
     expect(JSON.stringify(m)).toBe(before); // never changes what it was given
+    const listed = measuredAfter(m, { history: true, failed: false, bytes: 1, ms: 1, threads: 1, messages: 1, chunks: [{ phase: "p0", chunk: "c2" }] }, 4);
+    expect(measuredAfter(listed, { history: true, failed: false, bytes: 1, ms: 1, threads: 1, messages: 1, chunks: [{ phase: "p0", chunk: "c2" }, { phase: "p1", chunk: "c1" }] }, 5).historyChunks)
+      .toEqual({ p0: { c2: 2 }, p1: { c1: 1 } });
+    expect(listed.historyChunks).toEqual({ p0: { c2: 1 } }); // the next one copied, never changed it
+    expect(measuredAfter(m, { history: true, failed: true, bytes: 1, ms: 1, threads: 1, messages: 1, chunks: [{ phase: "p0", chunk: "c2" }] }, 6).historyChunks).toBeUndefined();
     expect(beganAfter(null)).toEqual({ historyBegun: 1 });
     expect(beganAfter(beganAfter(m))).toEqual(Object.assign({}, m, { historyBegun: 2 }));
     expect(JSON.stringify(m)).toBe(before);

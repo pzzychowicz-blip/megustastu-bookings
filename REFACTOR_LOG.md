@@ -36831,3 +36831,15 @@ to answer Meta a round trip sooner; written after the answer, it would be lost w
 invocation ended at that point and make an answered delivery read as one that never answered).
 Two new assertions and one new test (a thread read that never returns, as on an invocation the
 limit ends: `{historyBegun: 1}` and no answer); with the start's record removed, four tests fail.
+
+**A chunk the 4.5 MB cap refuses could not show at all.** Vercel answers a body over the cap with
+413 before the function runs, so `historyLargest` only ever held a delivery that fit, the refused
+chunk's threads never imported, and its 413s sat in Vercel's logs for one hour: the checklist's
+"did any history delivery hit the cap" had no answer that lasts. The record now lists the chunks
+that landed, per phase and with how many times (`historyChunks: {p0: {c1: 1, c2: 2}}`, from each
+chunk's `metadata.phase` and `chunk_order`, through `chunkKeys`: whole numbers in range only, keys
+prefixed so the database keeps them an object). A number missing between two that came is a
+chunk that never landed. A delivery answered 500 lists nothing, since Meta sends it again and a
+chunk that failed every time would otherwise look landed; a declined share carries no threads and
+is not a chunk. Two new tests and four assertions; listing a 500's chunks fails two tests, and
+listing a declined share fails one.
