@@ -5,7 +5,7 @@
 // default, because that is the case a mode-keyed rule would have let through.
 import { describe, it, expect, vi, afterEach } from "vitest";
 import process from "node:process";
-import { parseMessage, parseLogFields } from "../api/_lib/gemini.js";
+import { parseMessage, parseThread, parseLogFields } from "../api/_lib/gemini.js";
 
 const MSG = "Mesa para 4 mañana a las 21:00, alergia al marisco, soy Lucía Pérez";
 
@@ -69,6 +69,23 @@ describe("the parse log", () => {
     slowGemini();
     process.env.WA_SIM_ENABLED = "1";
     expect(msOf(await logged())).toBeGreaterThanOrEqual(DELAY);
+  });
+  // /code-review: the Re-check's transcript parse, the longest prompt, is timed too.
+  it("times a live Re-check of a whole thread, and not a mock one", async () => {
+    const thread = [{ direction: "in", text: MSG }, { direction: "out", text: "¿Para cuántos?" }, { direction: "in", text: "Somos 4" }];
+    const recheckLine = async () => {
+      const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+      await parseThread(thread, {});
+      const lines = spy.mock.calls.map((c) => c.join(" ")).filter((l) => l.startsWith("[wa-recheck:"));
+      expect(lines).toHaveLength(1);
+      return lines[0];
+    };
+    expect(msOf(await recheckLine())).toBe(null);
+    vi.restoreAllMocks();
+    process.env.WA_LLM_MODE = "live";
+    process.env.GEMINI_API_KEY = "test-key";
+    slowGemini();
+    expect(msOf(await recheckLine())).toBeGreaterThanOrEqual(DELAY);
   });
   it("logs no ms when no model was called: mock mode, or live with no key", async () => {
     expect(msOf(await logged())).toBe(null);

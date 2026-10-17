@@ -36996,3 +36996,8 @@ it (checked).
 
 Phase 1's paragraph above says the line carries `ms` "live or mock"; since this fix, live calls
 only.
+
+**The Re-check is timed too (finding 3).** `parseThread`, behind a staff Re-check, sends the whole
+transcript, the longest prompt the backend sends and the likeliest to near `TIMEOUT_MS`, and its
+`[wa-recheck]` line had no `ms`. It is timed the same way, on the same `geminiCalled()` condition.
+Tested with the same held 60 ms call, and without a call.

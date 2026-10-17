@@ -417,9 +417,15 @@ export async function parseThread(history, { hours, existingDraft } = {}) {
     prefText: lastInbound,
   };
   const mode = llmMode();
+  // v18.9.2 /code-review: timed as parseMessage is, and only when Gemini is
+  // called. A Re-check sends the whole transcript, the longest prompt this
+  // backend sends, so it is the parse most likely to near TIMEOUT_MS.
+  const timed = geminiCalled();
+  const t0 = Date.now();
   let parsed = mode === "live" ? await liveParse(transcript, ctx) : mockParse(lastInbound);
+  const took = timed ? { ms: Date.now() - t0 } : {};
   if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
-  console.log("[wa-recheck:" + mode + "] " + JSON.stringify({ msgs: list.length, merged: !!existingDraft, parsed: parseLogFields(parsed, simEnabled()) }));
+  console.log("[wa-recheck:" + mode + "] " + JSON.stringify({ msgs: list.length, merged: !!existingDraft, ...took, parsed: parseLogFields(parsed, simEnabled()) }));
   return parsed;
 }
 
