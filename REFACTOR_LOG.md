@@ -37008,3 +37008,9 @@ mock: the CT-WA-07 shape this version said it avoided. `/api/wa-config` also rep
 (`geminiCalled()`, the condition the log's `ms` uses), and the sentence then reads "live, but with
 no Gemini key set the built-in parser runs instead". Tested: false when live with no key, true
 with one, false in mock.
+
+**The model is type-checked before it renders (finding 7).** Every other field the panel shows
+from `/api/wa-config` is checked first (`KeyChip`'s `typeof state === "boolean"`); `llmModel` went
+straight into a `<strong>`, where an object (a future `{id, version}` shape, a harness) would throw
+"Objects are not valid as a React child" and take the Admin tab down. It renders only as a
+non-empty string; anything else reads as an older backend's sentence.

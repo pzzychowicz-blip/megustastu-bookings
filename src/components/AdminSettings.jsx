@@ -237,7 +237,10 @@ function IntegrationsSection() {
               a model nothing calls. A backend older than v18.9.2 sends neither,
               and the sentence reads as before. */}
           Message understanding is <strong>{status.modes.llm}</strong>
-          {status.llmModel
+          {/* A string or nothing (/code-review): every other field this panel
+              shows is type-checked first (KeyChip's `typeof state`), and an
+              object here would throw inside <strong> and take the tab down. */}
+          {typeof status.llmModel === "string" && status.llmModel
             ? (status.modes.llm !== "live"
               ? <> (<strong>{status.llmModel}</strong> once live)</>
               : status.llmCalls === true
