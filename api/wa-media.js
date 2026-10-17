@@ -67,7 +67,7 @@ import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { readFile } from "node:fs/promises";
 import { sendMode } from "./_lib/env.js";
-import { verifyStaffToken, staffAuthError, getMessage, getConversation, appendMessage, upsertConversation } from "./_lib/rtdb.js";
+import { verifyStaffToken, staffAuthError, getMessage, getConversation, appendMessage, upsertConversation, sanitizeKey } from "./_lib/rtdb.js";
 import { bearerToken } from "./_lib/request.js";
 import { mediaInfo, downloadMedia, uploadMedia, sendMedia } from "./_lib/meta.js";
 import {
@@ -101,13 +101,21 @@ const SAMPLES = {
   document: { url: new URL("./_lib/mock-media/menu.pdf", import.meta.url), type: "application/pdf" },
 };
 
-// A message's KEY, as stored. A customer's is the sanitized wamid
-// (`sanitizeKey`, _lib/rtdb.js): "wamid." and base64, so `+` and a trailing
-// `=` are part of it. v18.8.0 left both out and every received photo, voice
-// note and PDF answered 400 on the sandbox (v18.9.1); the tests had only ever
-// asked for "wamid_P". `/` cannot reach here (sanitizeKey turns it into `_`),
-// so the key still names one child and nothing above it.
-const MSG_ID_RE = /^[A-Za-z0-9_+=-][A-Za-z0-9._+=-]{0,255}$/;
+// A message's KEY, as stored. The check asks the function that STORED it
+// rather than guessing at its output: a key `sanitizeKey` (_lib/rtdb.js)
+// leaves unchanged is one it could have written. v18.8.0 guessed with a
+// character list, left out the `+` and `=` a wamid's base64 carries, and
+// every received photo, voice note and PDF answered 400 on the sandbox
+// (v18.9.1). Asking `sanitizeKey` accepts every stored key by construction,
+// and still refuses `/` and `.`, so the key names one child and nothing above
+// it. Control characters are refused too: RTDB refuses them in a path, which
+// would be a 500 rather than a 400.
+const MSG_ID_MAX = 256;
+export function isStoredMsgKey(msgId) {
+  return typeof msgId === "string" && msgId.length > 0 && msgId.length <= MSG_ID_MAX
+    && Array.from(msgId).every((ch) => ch.charCodeAt(0) > 31 && ch !== "\u007f")
+    && sanitizeKey(msgId) === msgId;
+}
 
 async function staffFrom(req, res) {
   const idToken = bearerToken(req);
@@ -141,7 +149,7 @@ async function view(req, res) {
   const q = req.query || {};
   const phoneKey = typeof q.phoneKey === "string" ? q.phoneKey : "";
   const msgId = typeof q.msgId === "string" ? q.msgId : "";
-  if (!isPhoneKey(phoneKey) || !MSG_ID_RE.test(msgId)) {
+  if (!isPhoneKey(phoneKey) || !isStoredMsgKey(msgId)) {
     res.status(400).json({ error: "phoneKey and msgId are required" });
     return;
   }

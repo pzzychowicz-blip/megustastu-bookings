@@ -75,8 +75,9 @@ Four rules, each the reason for a line of it:
   The client asks the same question (`opensInline`, `src/lib/wa-backend.js`).
 - **The message key is a STORED key, and a customer's carries `+` and `=` (v18.9.1).** It is
   the wamid through `sanitizeKey`, which replaces only `. # $ / [ ]`, so base64's `+` and `=`
-  padding stay. v18.8.0's check refused both and every received file answered 400. A test
-  key for a received message should look like a real wamid, not `wamid_P`.
+  padding stay. v18.8.0's character list refused both and every received file answered 400,
+  so the check now asks the storing function itself (`isStoredMsgKey`: `sanitizeKey(k) === k`,
+  bounded, no control characters). A new endpoint that takes a message key asks the same.
 
 Guards in order: 405 → the staff gate (`staffAuthError`) → 400 → 404 → 410 (Meta answers
 4xx: it keeps a received file 7 days, a sent one 30) → 413 → 502. **Mock media:** while

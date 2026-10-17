@@ -116,7 +116,7 @@ import inboundHandler, { inboundContent } from "../api/wa-inbound.js";
 import simInboundHandler from "../api/wa-sim-inbound.js";
 import simSuggestHandler from "../api/wa-sim-suggest.js";
 import simGenerateHandler from "../api/wa-sim-generate.js";
-import mediaHandler, { MEDIA_VIEW_MAX, servedType, sniffType } from "../api/wa-media.js";
+import mediaHandler, { MEDIA_VIEW_MAX, servedType, sniffType, isStoredMsgKey } from "../api/wa-media.js";
 import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "../api/wa-prune.js";
 import onboardHandler from "../api/wa-onboard.js";
 import { removeConversationIf } from "../api/_lib/rtdb.js";
@@ -2194,6 +2194,14 @@ describe("wa-media GET", () => {
     const res = await mediaCall({ query: { phoneKey: KEY, msgId: id } });
     expect(res.statusCode).toBe(200);
     expect(res.bytes.equals(PIC)).toBe(true);
+  });
+  // v18.9.1 /code-review: the key check asks sanitizeKey instead of a hand-kept
+  // character list, so any key it could have stored passes and nothing that
+  // could reach outside one message's child does.
+  it("isStoredMsgKey: every key sanitizeKey could store, and nothing that leaves the child", () => {
+    for (const k of ["wamid_HBgL+AA==", "mmvcuojx87osu", "in1x2y", "sim_abc", "r-1"]) expect(isStoredMsgKey(k)).toBe(true);
+    for (const k of ["", "../x", "a/b", "a.b", "a#b", "a$b", "a[b]", "a\u0000b", "a\nb", "x".repeat(257), null, 7]) expect(isStoredMsgKey(k)).toBe(false);
+    expect(isStoredMsgKey("x".repeat(256))).toBe(true);
   });
   it("404 for a message nobody has, and for one with no media", async () => {
     vi.stubGlobal("fetch", vi.fn());

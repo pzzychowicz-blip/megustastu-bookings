@@ -36886,6 +36886,16 @@ and the check still refuses it. The `../x` case in the 400 test still answers 40
 `wamid_HBgL…+RjA4…AA==` is served, 200 with the file. Run against v18.9.0's check it fails
 (`expected 400 to be 200`); with the fix it passes.
 
+### /code-review fixes
+
+**The check asks the storing function (findings 1 and 5).** Widening the character list fixed
+today's wamids and kept the defect's shape: a list that guesses what `sanitizeKey` writes fails
+again the day Meta's ids carry another character, and `+=` in the first-character class described
+no real key. `isStoredMsgKey` (`api/wa-media.js`, exported for its test) accepts a key exactly when
+`sanitizeKey` leaves it unchanged, up to 256 characters, with no control characters (RTDB refuses
+those in a path, a 500 instead of a 400). It refuses `/`, `.`, `#`, `$`, `[`, `]` as before.
+`MSG_ID_RE` is gone.
+
 **Still to measure on the sandbox once deployed (A5-6):** a received photo, voice note and PDF
 open, and whether the 11.2 MB PDF streams through Vercel's 4.5 MB response cap as its guide says.
 
