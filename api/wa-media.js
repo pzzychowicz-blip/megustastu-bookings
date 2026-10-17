@@ -101,7 +101,13 @@ const SAMPLES = {
   document: { url: new URL("./_lib/mock-media/menu.pdf", import.meta.url), type: "application/pdf" },
 };
 
-const MSG_ID_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,255}$/;
+// A message's KEY, as stored. A customer's is the sanitized wamid
+// (`sanitizeKey`, _lib/rtdb.js): "wamid." and base64, so `+` and a trailing
+// `=` are part of it. v18.8.0 left both out and every received photo, voice
+// note and PDF answered 400 on the sandbox (v18.9.1); the tests had only ever
+// asked for "wamid_P". `/` cannot reach here (sanitizeKey turns it into `_`),
+// so the key still names one child and nothing above it.
+const MSG_ID_RE = /^[A-Za-z0-9_+=-][A-Za-z0-9._+=-]{0,255}$/;
 
 async function staffFrom(req, res) {
   const idToken = bearerToken(req);

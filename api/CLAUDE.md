@@ -56,7 +56,7 @@ of those is true on a deployment, not locally.
 
 **`wa-media.js` — the media proxy (v18.8.0).** One function for both directions of a
 conversation's files, to keep the count low: GET views (phase 4), POST sends (phase 5).
-Three rules, each the reason for a line of it:
+Four rules, each the reason for a line of it:
 - **Never trust a client media id.** The browser names a MESSAGE (`phoneKey` + `msgId`);
   the id is read from the database (`getMessage`). It goes into a Graph path with the
   restaurant's token on it, so one taken from a query string would let any signed-in
@@ -73,6 +73,10 @@ Three rules, each the reason for a line of it:
   as the app there. `INLINE_TYPES` (pictures without SVG, audio, PDF, plain text) keep
   theirs; anything else is `application/octet-stream` with `attachment`, plus `nosniff`.
   The client asks the same question (`opensInline`, `src/lib/wa-backend.js`).
+- **The message key is a STORED key, and a customer's carries `+` and `=` (v18.9.1).** It is
+  the wamid through `sanitizeKey`, which replaces only `. # $ / [ ]`, so base64's `+` and `=`
+  padding stay. v18.8.0's check refused both and every received file answered 400. A test
+  key for a received message should look like a real wamid, not `wamid_P`.
 
 Guards in order: 405 → the staff gate (`staffAuthError`) → 400 → 404 → 410 (Meta answers
 4xx: it keeps a received file 7 days, a sent one 30) → 413 → 502. **Mock media:** while

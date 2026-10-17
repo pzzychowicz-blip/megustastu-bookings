@@ -2185,6 +2185,16 @@ describe("wa-media GET", () => {
     expect((await mediaCall({ query: { phoneKey: KEY, msgId: "../x" } })).statusCode).toBe(400);
     expect(fake.state.writes).toEqual([]);
   });
+  // v18.9.1: a real wamid is base64, so its stored key can carry `+` and `=`.
+  // v18.8.0's check refused both, and every received file answered 400.
+  it("serves a message keyed by a real-shaped wamid, with + and = in it", async () => {
+    const id = "wamid_HBgLMzQ2MTIyMDIzNTkVAgASGBQzQUY1+RjA4QkU2QzE4MjQ0RkI4AA==";
+    seedMedia(MEDIA_MSG({ kind: "image", mediaId: "1234567890", mime: "image/jpeg" }, { id }));
+    vi.stubGlobal("fetch", metaFetch());
+    const res = await mediaCall({ query: { phoneKey: KEY, msgId: id } });
+    expect(res.statusCode).toBe(200);
+    expect(res.bytes.equals(PIC)).toBe(true);
+  });
   it("404 for a message nobody has, and for one with no media", async () => {
     vi.stubGlobal("fetch", vi.fn());
     expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(404);

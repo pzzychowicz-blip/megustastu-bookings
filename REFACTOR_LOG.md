@@ -36861,3 +36861,33 @@ stays, and both places say why: it records what Meta sends, which another number
 and cleared there it would take the rehearsal's answers with it at the next connection. The
 onboarding test for a different number now seeds a record and expects it back unchanged; with
 `measured` added to the reset list, that test fails.
+
+## v18.9.1 — a customer's photo, voice note or PDF opens again
+
+**Date:** 2026-10-17 · **Branch:** `fix/v18.9.1-wa-media-wamid` · **Behavioural change:** yes,
+a bug fix: every file a customer sent answered 400 and showed "Couldn't load".
+
+**Found on the sandbox, go-live plan A5-6** (the first run of v18.8.0's media against real
+WhatsApp). A photo, a voice note and a PDF sent from Patryk's phone each showed *Couldn't load*
+with Retry; everything sent from MGT opened. DevTools on the sandbox: `GET /api/wa-media` was
+**200** for every `msgId=mmvcu…` (a message MGT sent) and **400** for every `msgId=wamid_HBgLM…`
+(a received one), with the same `phoneKey`, so the message key was the only difference.
+
+**Cause.** `view()` checks the key against `MSG_ID_RE`, which allowed `A–Z a–z 0–9 . _ -`. A
+received message is stored under its wamid through `sanitizeKey` (`_lib/rtdb.js`), which replaces
+only `. # $ / [ ]`; a wamid is `wamid.` plus base64, so the key keeps any `+` and the `=` padding,
+and the check refused it before Meta was asked anything. The tests asked only for `"wamid_P"`.
+
+**Fix.** `MSG_ID_RE` also allows `+` and `=`. Both are legal in an RTDB key; `/`, the one character
+that could reach above the message, cannot arrive because `sanitizeKey` already turns it into `_`,
+and the check still refuses it. The `../x` case in the 400 test still answers 400.
+
+**Test.** `tests/api-handlers.test.js`: a message keyed
+`wamid_HBgL…+RjA4…AA==` is served, 200 with the file. Run against v18.9.0's check it fails
+(`expected 400 to be 200`); with the fix it passes.
+
+**Still to measure on the sandbox once deployed (A5-6):** a received photo, voice note and PDF
+open, and whether the 11.2 MB PDF streams through Vercel's 4.5 MB response cap as its guide says.
+
+**Files:** `api/wa-media.js` · `tests/api-handlers.test.js` · `api/CLAUDE.md` · `src/App.jsx`
+(version). No stored shape changed, no rules, no `SCHEMA` raise; no device needs a refresh.
