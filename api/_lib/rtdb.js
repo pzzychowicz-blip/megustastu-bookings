@@ -19,7 +19,11 @@
 // RTDB key constraint: keys may not contain . # $ [ ] /. Meta message ids
 // ("wamid.HBg…") contain dots → sanitizeKey() maps them to "_" for use as the
 // msgId path segment; the raw wamid is preserved in the message body as
-// providerMsgId.
+// providerMsgId. **Only those six characters change.** A wamid is "wamid."
+// plus base64, so a stored key also carries `+` and `=` padding (and `/`
+// becomes `_`). Never check a message key against a character list: v18.8.0's
+// wa-media did, left out `+` and `=`, and every received file answered 400
+// (v18.9.1). Ask `sanitizeKey(k) === k`, as `isStoredMsgKey` in wa-media.js does.
 //
 // PHONE KEYS GO THROUGH sanitizeKey TOO, at every path-building site below.
 // A well-formed one ("+34600…") is already a valid RTDB key — "+" is allowed —

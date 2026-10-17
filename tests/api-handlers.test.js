@@ -116,10 +116,10 @@ import inboundHandler, { inboundContent } from "../api/wa-inbound.js";
 import simInboundHandler from "../api/wa-sim-inbound.js";
 import simSuggestHandler from "../api/wa-sim-suggest.js";
 import simGenerateHandler from "../api/wa-sim-generate.js";
-import mediaHandler, { MEDIA_VIEW_MAX, servedType, sniffType } from "../api/wa-media.js";
+import mediaHandler, { MEDIA_VIEW_MAX, servedType, sniffType, isStoredMsgKey } from "../api/wa-media.js";
 import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "../api/wa-prune.js";
 import onboardHandler from "../api/wa-onboard.js";
-import { removeConversationIf } from "../api/_lib/rtdb.js";
+import { removeConversationIf, sanitizeKey } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { numberIsOurs, makeNumberGuard, freshResults, measuredAfter, beganAfter, chunkKeys } from "../api/_lib/coexist-core.js";
 import { readJsonBody, bearerToken } from "../api/_lib/request.js";
@@ -2184,6 +2184,29 @@ describe("wa-media GET", () => {
     expect((await mediaCall({ query: { phoneKey: "+", msgId: "wamid_P" } })).statusCode).toBe(400);
     expect((await mediaCall({ query: { phoneKey: KEY, msgId: "../x" } })).statusCode).toBe(400);
     expect(fake.state.writes).toEqual([]);
+  });
+  // v18.9.1: a real wamid is base64, so its stored key can carry `+` and `=`.
+  // v18.8.0's check refused both, and every received file answered 400.
+  // The key is DERIVED, through the function inbound-core stores a message
+  // under (`sanitizeKey(wamid)`), from a raw wamid carrying every base64
+  // character that is not a letter or digit: so a change to what that function
+  // writes cannot leave this test passing while received media answers 400.
+  it("serves a message keyed by a real-shaped wamid, with + / and = in it", async () => {
+    const id = sanitizeKey("wamid.HBgLMzQ2MTIyMDIzNTkVAgASGBQzQUY1+RjA4/QkU2QzE4MjQ0RkI4AA==");
+    expect(id).toBe("wamid_HBgLMzQ2MTIyMDIzNTkVAgASGBQzQUY1+RjA4_QkU2QzE4MjQ0RkI4AA==");
+    seedMedia(MEDIA_MSG({ kind: "image", mediaId: "1234567890", mime: "image/jpeg" }, { id }));
+    vi.stubGlobal("fetch", metaFetch());
+    const res = await mediaCall({ query: { phoneKey: KEY, msgId: id } });
+    expect(res.statusCode).toBe(200);
+    expect(res.bytes.equals(PIC)).toBe(true);
+  });
+  // v18.9.1 /code-review: the key check asks sanitizeKey instead of a hand-kept
+  // character list, so any key it could have stored passes and nothing that
+  // could reach outside one message's child does.
+  it("isStoredMsgKey: every key sanitizeKey could store, and nothing that leaves the child", () => {
+    for (const k of ["wamid_HBgL+AA==", "mmvcuojx87osu", "in1x2y", "sim_abc", "r-1"]) expect(isStoredMsgKey(k)).toBe(true);
+    for (const k of ["", "../x", "a/b", "a.b", "a#b", "a$b", "a[b]", "a\u0000b", "a\nb", "x".repeat(257), null, 7]) expect(isStoredMsgKey(k)).toBe(false);
+    expect(isStoredMsgKey("x".repeat(256))).toBe(true);
   });
   it("404 for a message nobody has, and for one with no media", async () => {
     vi.stubGlobal("fetch", vi.fn());

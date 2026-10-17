@@ -36861,3 +36861,60 @@ stays, and both places say why: it records what Meta sends, which another number
 and cleared there it would take the rehearsal's answers with it at the next connection. The
 onboarding test for a different number now seeds a record and expects it back unchanged; with
 `measured` added to the reset list, that test fails.
+
+## v18.9.1 — a customer's photo, voice note or PDF opens again
+
+**Date:** 2026-10-17 · **Branch:** `fix/v18.9.1-wa-media-wamid` · **Behavioural change:** yes,
+a bug fix: every file a customer sent answered 400 and showed "Couldn't load".
+
+**Found on the sandbox, go-live plan A5-6** (the first run of v18.8.0's media against real
+WhatsApp). A photo, a voice note and a PDF sent from Patryk's phone each showed *Couldn't load*
+with Retry; everything sent from MGT opened. DevTools on the sandbox: `GET /api/wa-media` was
+**200** for every `msgId=mmvcu…` (a message MGT sent) and **400** for every `msgId=wamid_HBgLM…`
+(a received one), with the same `phoneKey`, so the message key was the only difference.
+
+**Cause.** `view()` checks the key against `MSG_ID_RE`, which allowed `A–Z a–z 0–9 . _ -`. A
+received message is stored under its wamid through `sanitizeKey` (`_lib/rtdb.js`), which replaces
+only `. # $ / [ ]`; a wamid is `wamid.` plus base64, so the key keeps any `+` and the `=` padding,
+and the check refused it before Meta was asked anything. The tests asked only for `"wamid_P"`.
+
+**Fix.** `MSG_ID_RE` also allows `+` and `=`. Both are legal in an RTDB key; `/`, the one character
+that could reach above the message, cannot arrive because `sanitizeKey` already turns it into `_`,
+and the check still refuses it. The `../x` case in the 400 test still answers 400.
+
+**Test.** `tests/api-handlers.test.js`: a message keyed
+`wamid_HBgL…+RjA4…AA==` is served, 200 with the file. Run against v18.9.0's check it fails
+(`expected 400 to be 200`); with the fix it passes.
+
+### /code-review fixes
+
+**The check asks the storing function (findings 1 and 5).** Widening the character list fixed
+today's wamids and kept the defect's shape: a list that guesses what `sanitizeKey` writes fails
+again the day Meta's ids carry another character, and `+=` in the first-character class described
+no real key. `isStoredMsgKey` (`api/wa-media.js`, exported for its test) accepts a key exactly when
+`sanitizeKey` leaves it unchanged, up to 256 characters, with no control characters (RTDB refuses
+those in a path, a 500 instead of a 400). It refuses `/`, `.`, `#`, `$`, `[`, `]` as before.
+`MSG_ID_RE` is gone.
+
+**The test derives its key (finding 2).** It seeded a hand-written, already-sanitized key, so a
+change to what `sanitizeKey` writes would have left it green over a 400. It now runs a raw wamid
+with `+`, `/` and `=` through `sanitizeKey`, the function `inbound-core.js` stores a message under,
+asserts the key it gets, and GETs that.
+
+**The comment where key shapes are defined (finding 4).** `api/_lib/rtdb.js`'s header said the
+dots map to `_` and nothing about `+` and `=`, the assumption that caused this version. It now says
+only six characters change, and points a new key check at `sanitizeKey(k) === k`.
+
+**Not fixed, finding 3** (the test calls the handler with `req.query` already decoded, so a `+`
+sent unencoded in a query string, which decodes to a space, is never tested). Traced: the only
+caller, `loadMedia` (`src/lib/wa-backend.js:190`), passes the key through `encodeURIComponent`
+(`+` → `%2B`), and Vercel and the dev backend (`scripts/wa-backend-dev.mjs:91`, URLSearchParams)
+both decode `%2B` back to `+`. A test of that would test URL parsing, not this code; a future
+caller that skips the encoding is refused with 400, never served the wrong message. No code built
+for it.
+
+**Still to measure on the sandbox once deployed (A5-6):** a received photo, voice note and PDF
+open, and whether the 11.2 MB PDF streams through Vercel's 4.5 MB response cap as its guide says.
+
+**Files:** `api/wa-media.js` · `tests/api-handlers.test.js` · `api/CLAUDE.md` · `src/App.jsx`
+(version). No stored shape changed, no rules, no `SCHEMA` raise; no device needs a refresh.
