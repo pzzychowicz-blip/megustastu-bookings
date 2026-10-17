@@ -36984,3 +36984,15 @@ to read one variable, and a break anywhere in that chain would have made it 500.
 `GEMINI_MODEL` pasted into Vercel with a trailing newline would 404 every live parse while the
 panel showed a name that looked right. `geminiModel()` trims; blank after the trim is the default,
 as `env()` already treats `""`. Tested both ways in `api-handlers`.
+
+**`ms` only when Gemini was called, and tested live (findings 2 and 6).** Live mode with no
+`GEMINI_API_KEY` falls back to the regex mock (`liveParse`), so a `[wa-parse:live]` line carried
+an `ms` of 0 or 1 that never touched Gemini, which A5-7 would read as a very fast model; and the
+test ran only in mock mode, where `ms` is always 0, so it proved the key and not the timer.
+`geminiCalled()` (`_lib/env.js`: live AND a key) decides, and a line without a call has no `ms`.
+The test now holds a stubbed Gemini call for 60 ms and asserts `ms >= 60` in both shapes of the
+line, and no `ms` in mock mode or live with no key. Moving the timer's start below the call fails
+it (checked).
+
+Phase 1's paragraph above says the line carries `ms` "live or mock"; since this fix, live calls
+only.

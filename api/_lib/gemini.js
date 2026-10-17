@@ -22,7 +22,7 @@
 // exact current string in AI Studio (the local harness exposes GET /dev/models
 // to list what the key can see).
 
-import { env, llmMode, simEnabled, geminiModel } from "./env.js";
+import { env, llmMode, simEnabled, geminiModel, geminiCalled } from "./env.js";
 
 // ── Who this restaurant is, for the prompts (v18.0.0 phase 5c) ───────────────
 // The prompts carried "a small restaurant in the Canary Islands" as a literal,
@@ -323,19 +323,23 @@ export async function parseMessage(text, { hours, existingDraft } = {}) {
     existingDraft: existingDraft || null,
   };
   const mode = llmMode();
-  // v18.9.2: how long the parse took, on the log line. The parse runs after the
-  // webhook has answered (waitUntil), so no request timing isolates it, and its
-  // time against TIMEOUT_MS is the question the go-live plan's A5-7 asks of the
-  // default model. A timed-out live parse reads about TIMEOUT_MS here.
+  // v18.9.2: how long the Gemini call took, on the log line. The parse runs
+  // after the webhook has answered (waitUntil), so no request timing isolates
+  // it, and its time against TIMEOUT_MS is the question the go-live plan's A5-7
+  // asks of the default model. A timed-out parse reads about TIMEOUT_MS. Only
+  // when Gemini was really CALLED (/code-review): live mode with no key falls
+  // back to the mock, and a near-zero `ms` on a "live" line would read as a
+  // very fast model. No call, no `ms`.
+  const timed = geminiCalled();
   const t0 = Date.now();
   let parsed = mode === "live" ? await liveParse(text, ctx) : mockParse(text);
-  const ms = Date.now() - t0;
+  const took = timed ? { ms: Date.now() - t0 } : {};
   if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
   // Drift-review log: every parse, one line (content only in a sandbox, above).
   const full = simEnabled();
   console.log("[wa-parse:" + mode + "] " + JSON.stringify(full
-    ? { text: String(text).slice(0, 200), merged: !!existingDraft, ms, parsed }
-    : { len: String(text).length, merged: !!existingDraft, ms, parsed: parseLogFields(parsed, false) }));
+    ? { text: String(text).slice(0, 200), merged: !!existingDraft, ...took, parsed }
+    : { len: String(text).length, merged: !!existingDraft, ...took, parsed: parseLogFields(parsed, false) }));
   return parsed;
 }
 

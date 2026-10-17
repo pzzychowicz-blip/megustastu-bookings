@@ -69,6 +69,12 @@ export const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 // where whitespace is invisible, shows a name that looks right. Blank after the
 // trim is unset, as env() already treats "".
 export function geminiModel() { return String(env("GEMINI_MODEL", "")).trim() || DEFAULT_MODEL; }
+
+// Whether a parse really CALLS Gemini (v18.9.2 /code-review): live mode AND a
+// key. Live with no key falls back to the regex mock (liveParse in gemini.js),
+// so "live" alone overstates it, the CT-WA-07 shape again. The parse log's `ms`
+// and the Admin tab's model both ask this, not llmMode().
+export function geminiCalled() { return llmMode() === "live" && Boolean(env("GEMINI_API_KEY", null)); }
 export function allowUnsigned() { return env("WA_ALLOW_UNSIGNED", "") === "1"; }
 
 // ── The simulator's kill switch (v18.0.0 phase 5b) ───────────────────────────
