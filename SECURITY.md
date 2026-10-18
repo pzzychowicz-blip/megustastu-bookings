@@ -200,22 +200,32 @@ Keep that in mind when writing either.
   refreshed, up to an hour later. A check that only looks at a signed-in device in the
   first minutes proves nothing.
 
-  **The DEV key's list** (project `megustastu-bookings-dev`; worked out 2026-10-09 from
-  what runs against DEV: every `npm run dev`, the tablet's DEV tab over `adb reverse`,
-  the simulator's web clips, and the sandbox deployment). Four entries. Google's rule
-  is two per host, the bare host and the host with `/*`, and an entry with no port
-  matches every port, so one pair covers 5173, 5176, 5179 and the rest:
+  **The DEV key's list, APPLIED** (project `megustastu-bookings-dev`; worked out
+  2026-10-09 from what runs against DEV: every `npm run dev`, the tablet's DEV tab over
+  `adb reverse`, the simulator's web clips, and the sandbox deployment; in place by
+  2026-10-15). Google's rule is two per host, the bare host and the host with `/*`, and
+  an entry with no port matches every port, so one pair covers 5173, 5176, 5179 and the
+  rest:
 
   ```
   localhost
   localhost/*
   megustastu-bookings-wa-sandbox.vercel.app
   megustastu-bookings-wa-sandbox.vercel.app/*
+  megustastu-bookings-dev.firebaseapp.com/*
+  http://192.168.1.34:5179/*
   ```
 
-  Not listed, on purpose: `megustastu-bookings-dev.firebaseapp.com` (the page Firebase
-  uses for pop-up and redirect sign-in; the app signs in with email and password
-  only, `LoginScreen.jsx`), `127.0.0.1` (only the rules emulator uses it, with no
+  The last two were added after the first four. `firebaseapp.com` (2026-10-14) is the
+  page a password-reset link opens: the app signs in with email and password only
+  (`LoginScreen.jsx`), but without it every reset link said "expired or already used".
+  The LAN address (2026-10-18) lets Patryk's iPhone sign in to a dev server started
+  with `--host` on port 5179; it is bound to the Mac's current LAN IP. Probed
+  2026-10-18 (a sign-in with an unknown email, the `Referer` set by hand:
+  `EMAIL_NOT_FOUND` is allowed, "Requests from referer … are blocked" is refused): all
+  six pass, `127.0.0.1:5173` and an outside origin are refused.
+
+  Not listed, on purpose: `127.0.0.1` (only the rules emulator uses it, with no
   key), and the sandbox project's per-deployment URLs (a sign-in from one of those is
   refused, which is the intent). Google's page documents the port rule and the two
   entries per host; it does not mention `localhost` as a website entry at all, which
@@ -226,8 +236,11 @@ Keep that in mind when writing either.
   for over an hour and confirm it still saves. If either fails, set Application
   restrictions back to "None": that undoes it.
 
-  **The PROD key's list, proposed, not yet applied** (project `megustastu-bookings`):
-  `megustastu-bookings.vercel.app` and `megustastu-bookings.vercel.app/*`. That leaves
+  **The PROD key's list, proposed, not yet applied** (project `megustastu-bookings`;
+  due about 2026-10-25, a week after DEV's list settled): `megustastu-bookings.vercel.app`,
+  `megustastu-bookings.vercel.app/*` and `megustastu-bookings.firebaseapp.com/*`, the
+  last for password-reset links, as on DEV. Check it the way DEV was checked, plus one
+  reset sent and opened. That leaves
   out Vercel's preview addresses, which build against PROD (the stray-preview incident
   behind the never-push rule): a preview could then load and not sign in. Confirm the
   list against the Vercel project's domains before applying it.

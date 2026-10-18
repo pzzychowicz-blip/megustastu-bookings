@@ -50,35 +50,6 @@ in its register, and the report
 (`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
 evidence for each.
 
-- **Daily PROD backup (#5): running since 2026-10-09, restore rehearsed 2026-10-10.**
-  The job is in the private repository `pzzychowicz-blip/mgt-backups` (this one is
-  public, so its Actions logs and artifacts are world-readable): every day at 04:30 UTC
-  it reads the database as a read-only service account, builds the file v18.1.1's
-  `lib/backup.js` builds (imported from this repository's `main`), encrypts it with
-  `age` to a key only Patryk holds, and keeps it 90 days. Its README has how to open
-  one. The rehearsal: the first run's file (1,640 bookings, 2,326,413 bytes) decrypted
-  with his key, imported at the root of DEV through the console, exported again and
-  compared: 15 of 15 nodes identical. DEV was then put back from its own export (20 of
-  20 identical). **Still owed:** Patryk storing the key in the password manager and on
-  paper, then deleting `~/mgt-backup-key.txt`. **Not proven:** that the service
-  account is refused a write; its role says so and nobody should try one against PROD.
-  A change to `src/lib/backup.js` that breaks its import fails the next run there, and
-  GitHub emails him.
-
-- **Delete customer: a rule removal refused four times, or cut short, leaves the
-  paused rule** (v18.6.0). The removal is retried by itself three times (300, 600,
-  900 ms). If all four attempts are refused, or the page is closed or reloaded before
-  one lands, the rule stays, paused, still holding the name and phone, and is deleted
-  by hand in Settings. Closing that needs something stored (a mark on the rule that
-  any device sweeps), which raises `SCHEMA`; Patryk chose the retry without it
-  (2026-10-10).
-
-- **Find a booking's folded Done row, on the tablet itself** (v18.6.0). Built and
-  measured in the Browser pane at the tablet's keyboard-up size (998 × 231) with the
-  focus events dispatched by script, since the pane's document does not take focus.
-  To check on the HONOR tablet after the merge: with the keyboard up the Done row is
-  gone and three result rows show; closing the keyboard brings Done back.
-
 - **Design the bookings archive at 2,500 bookings or 2.5 GB a month (#3).** Every
   device subscribes to every booking ever made, each with an uncapped `history`, and
   a resync re-reads the lot. Nothing purges old bookings. Archiving needs design,
@@ -96,14 +67,13 @@ evidence for each.
   reached at about 22 MB, roughly three years off at this rate. `REFACTOR_LOG.md`
   v18.5.0 has the table and DEV's node-by-node sizes. Not read: the peak-load graph.
 
-- **The public repository (#12): restrict the browser API keys by HTTP referrer**
-  (decided 2026-10-08: the DEV key first, PROD after a week on DEV shows nothing). The
-  step is Patryk's, in Google Cloud → APIs & Services → Credentials; a wrong list locks
-  every device out of sign-in until it is corrected. SECURITY.md §4 has the DEV key's
-  four entries, how to check them (a fresh sign-in, then an hour), and how to undo it
-  (2026-10-09). Still owed: Patryk applying the DEV list; then, a week later, the PROD
-  list, which is proposed there and must be confirmed against the Vercel project's
-  domains first.
+- **The public repository (#12): restrict the PROD browser API key by HTTP referrer,
+  about 2026-10-25.** The DEV key has been restricted since mid-October (six entries,
+  probed 2026-10-18). The PROD list and how to check and undo it are in SECURITY.md §4:
+  `megustastu-bookings.vercel.app` (bare and `/*`) and
+  `megustastu-bookings.firebaseapp.com/*` for reset links. Confirm it against the Vercel
+  project's domains first. The step is Patryk's, in Google Cloud → APIs & Services →
+  Credentials; a wrong list stops sign-in on every device until it is corrected.
 
 ## Designed, not implemented
 
@@ -118,7 +88,8 @@ two ideas, deposits reporting and structured guest tags, shipped in v18.5.0.
   item A5-7). v18.8.0 stores and plays a customer's voice note, and nothing reads it: the
   parse runs on text only. Gemini takes audio, so the note could be fetched as the media
   proxy fetches it (`mediaInfo` + `downloadMedia`, `api/_lib/meta.js`) and parsed like a
-  message.
+  message. **Built after go-live** (Patryk, 2026-10-18), once real customers send them; the
+  simulator's audio message can test it without Meta.
 
 - **MGT names written back to the phone** (2026-10-15, planning v18.9.0). The phone is the
   master for contact names because Meta has no API that writes one. If the restaurant

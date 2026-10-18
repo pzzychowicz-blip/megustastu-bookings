@@ -37480,3 +37480,37 @@ padding / margin / gap / `height` / `minHeight` number", which reads as "every l
 It now says off-scale, and that on-scale literals pass inside a builder too.
 
 **Files:** `tests/style-check.test.js` · `CLAUDE.md` · `ROADMAP.md`.
+
+### Phase 6 — settled entries closed; the PROD key's step dated
+
+Decided with Patryk on 2026-10-18 and deleted from `ROADMAP.md`:
+
+- **The daily PROD backup (#5) is finished.** The private `mgt-backups` job has run daily
+  since 2026-10-09, and the restore was rehearsed on 2026-10-10 (15 of 15 nodes identical).
+  The last owed step is done: Patryk stored the `age` key in the password manager and on
+  paper, and `~/mgt-backup-key.txt` is gone (checked: no such file). That the read-only
+  service account is refused a write stays unproven on purpose, because the only test is
+  a write against PROD.
+- **Delete customer's paused rule is a won't-fix.** If the rule removal is refused four
+  times (300, 600 and 900 ms retries), or the page closes first, the standing rule stays
+  paused with the name and phone, and it is deleted by hand in Settings. Closing it would
+  need a mark any device sweeps, which raises `SCHEMA`. Patryk chose the retry without it
+  on 2026-10-10 and confirmed it as final.
+- **Find a booking's folded Done row was checked on the HONOR tablet** by Patryk: with the
+  keyboard up the Done row folds away and three result rows show, and closing the keyboard
+  brings Done back.
+
+**#12, the public repository's API keys, stays with a date.** The DEV key has been
+restricted since mid-October. SECURITY.md §4 still listed four entries and said
+`firebaseapp.com` was left out on purpose, but the key holds six:
+`megustastu-bookings-dev.firebaseapp.com/*` went in on 2026-10-14 (reset links failed
+without it) and `http://192.168.1.34:5179/*` on 2026-10-18 (Patryk's iPhone on a `--host`
+dev server). Probed 2026-10-18 with an unknown email and a hand-set `Referer`: the six pass,
+and `127.0.0.1:5173` and an outside origin are refused. §4 now lists what is applied, and
+the PROD proposal gains `megustastu-bookings.firebaseapp.com/*` for the same reason, as the
+go-live checklist already had it. The PROD step is due about 2026-10-25.
+
+**Ideas:** the voice note waits for go-live (Patryk). Names written back to the phone wait
+for Patryk to check what the restaurant iPhone's contacts sync to.
+
+**Files:** `ROADMAP.md` · `SECURITY.md`.
