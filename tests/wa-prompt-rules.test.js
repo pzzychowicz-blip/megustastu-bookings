@@ -10,7 +10,7 @@
 // not from the source, so a rule that is written but never sent fails.
 import { describe, it, expect, vi, afterEach } from "vitest";
 import process from "node:process";
-import { parseMessage, parseThread } from "../api/_lib/gemini.js";
+import { parseMessage, parseThread, hoursLineOf } from "../api/_lib/gemini.js";
 import { SCENARIOS } from "../src/lib/wa-sim-scenarios.js";
 
 // A scenario's only call is simulateInbound; the stub hands its first argument
@@ -50,6 +50,28 @@ describe("the prompt rules for hedged times and sizes", () => {
   it("reach a Re-check's transcript prompt", async () => {
     const p = await promptOf(() => parseThread([{ direction: "in", text: "Para 2 el jueves, sobre las nueve" }], {}));
     RULES.forEach((r) => expect(p).toMatch(r));
+  });
+});
+
+// v18.10.0 /code-review: the special days share settings/operatingHours, and the
+// prompt's line says "per weekday", so they stay out of it.
+describe("the hours line", () => {
+  const node = {
+    days: { 0: { open: 13, close: 22, closed: false } },
+    exceptions: { a1: { from: "2026-12-24", to: "2026-12-26", closed: false, open: 18, close: 23, note: "Christmas" } },
+  };
+  it("carries the weekdays and not the special days", () => {
+    const line = hoursLineOf(node);
+    expect(line).toMatch(/per weekday/);
+    expect(line).toContain('"days"');
+    expect(line).not.toMatch(/exceptions|Christmas|2026-12-24/);
+    expect(node.exceptions.a1.note).toBe("Christmas"); // the node itself is untouched
+    expect(hoursLineOf(null)).toBe(null);
+  });
+  it("is the line both prompts use", async () => {
+    const one = await promptOf(() => parseMessage("mesa para 2", { hours: node }));
+    const thread = await promptOf(() => parseThread([{ direction: "in", text: "mesa para 2" }], { hours: node }));
+    [one, thread].forEach((p) => { expect(p).toContain(hoursLineOf(node)); expect(p).not.toMatch(/Christmas/); });
   });
 });
 

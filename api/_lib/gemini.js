@@ -318,6 +318,20 @@ export function parseLogFields(parsed, full) {
   return out;
 }
 
+// The prompt's hours line: the WEEKDAY hours only. v18.10.0 put the special
+// days (`exceptions`, src/lib/special-days.js) in the same node, and the line
+// says "per weekday", so a special day's hours could be read as a weekday's
+// when the model places a bare hour ("at 9"), and every past special day and
+// staff note would ride along in every parse (/code-review). The parse only
+// extracts what the customer wrote; whether that date is open is the draft
+// check's question in the app, which reads the special days through hoursFor.
+export function hoursLineOf(hours) {
+  if (!hours || typeof hours !== "object") return null;
+  const weekly = Object.assign({}, hours);
+  delete weekly.exceptions;
+  return "Operating hours config (per weekday, 24h): " + JSON.stringify(weekly);
+}
+
 // parseMessage(text, {hours, existingDraft}) → parse object or null (= save
 // without draft). hours: the settings/operatingHours node or null.
 // existingDraft: the conversation's PENDING draftData (draftStatus "parsed") or
@@ -331,7 +345,7 @@ export async function parseMessage(text, { hours, existingDraft } = {}) {
   const ctx = {
     todayIso: now.toISOString().slice(0, 10),
     weekday: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][now.getUTCDay()],
-    hoursLine: hours ? "Operating hours config (per weekday, 24h): " + JSON.stringify(hours) : null,
+    hoursLine: hoursLineOf(hours),
     existingDraft: existingDraft || null,
   };
   const mode = llmMode();
@@ -419,7 +433,7 @@ export async function parseThread(history, { hours, existingDraft } = {}) {
   const ctx = {
     todayIso: now.toISOString().slice(0, 10),
     weekday: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][now.getUTCDay()],
-    hoursLine: hours ? "Operating hours config (per weekday, 24h): " + JSON.stringify(hours) : null,
+    hoursLine: hoursLineOf(hours),
     existingDraft: existingDraft || null,
     threadMode: true,
     // ONLY the newest inbound, matching what the single-message path sees.
