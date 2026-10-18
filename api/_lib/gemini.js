@@ -46,7 +46,7 @@ import { env, llmMode, simEnabled, geminiModel, geminiCalled } from "./env.js";
 function waContext() {
   return env("TENANT_WA_CONTEXT", "a small restaurant in the Canary Islands");
 }
-import { mergeDraft, WA_PARSE_TEXT_LEN } from "../../src/lib/whatsapp.js";
+import { mergeDraft, occasionIdsIn, WA_PARSE_TEXT_LEN } from "../../src/lib/whatsapp.js";
 import { cleanTagIds } from "../../src/lib/tags.js";
 
 // The default, 3.5-flash-lite, answered in a median of 853ms and at most
@@ -133,20 +133,43 @@ export function responseSchemaFor(occasions) {
 // already says so for a live answer; this is for the mock, for a key-less live
 // fallback, and for an existing draft merged in after a tag was removed.
 export function knownOccasions(ids, occasions) {
-  const known = occasionList(occasions).map((t) => t.id);
-  const out = cleanTagIds(ids).filter((id) => known.indexOf(id) >= 0);
+  const out = occasionIdsIn(ids, occasionList(occasions));
   return out.length ? out : null;
+}
+
+// What a parse keeps of its occasions (/code-review). `occasions` is the list
+// the caller read, or null when the read FAILED (readOccasionTags): with no
+// list there is nothing to check an answer against and the schema had no
+// field, so a pending draft keeps the occasions it had rather than losing them
+// to a blip. A list that is there, even empty, is the answer.
+function parseOccasions(parsed, occasions, existingDraft) {
+  if (Array.isArray(occasions)) return knownOccasions(parsed.occasions, occasions);
+  const kept = cleanTagIds(existingDraft && existingDraft.occasions);
+  return kept.length ? kept : null;
 }
 
 // The mock's words for the two seed ids, beside each tag's own label. A tag
 // added in Settings is matched by its label alone.
+//
+// WHOLE words (/code-review): the mock is the production default (WA_LLM_MODE
+// unset), and a substring read "se cumplen 2 años" as a birthday, and a tag
+// called "Cena" would have fired on "cenamos". The message and each word are
+// cut to runs of letters and digits and compared with a space either side, so
+// a two-word label ("Date night") still matches, and no RegExp is built from a
+// label staff typed (the free-text rule in lib/activity.js).
 const OCCASION_WORDS = {
-  "o-birthday": ["cumple", "birthday", "bday"],
+  "o-birthday": ["cumpleaños", "cumple", "birthday", "bday"],
   "o-anniversary": ["aniversario", "anniversary"],
 };
+function wordsOf(s) {
+  return " " + String(s || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim() + " ";
+}
 export function mockOccasions(text, occasions) {
-  const t = String(text || "").toLowerCase();
-  const hit = occasionList(occasions).filter((o) => [o.label.toLowerCase()].concat(OCCASION_WORDS[o.id] || []).some((w) => w && t.includes(w)));
+  const t = wordsOf(text);
+  const hit = occasionList(occasions).filter((o) => [o.label].concat(OCCASION_WORDS[o.id] || []).some((w) => {
+    const word = wordsOf(w);
+    return word.trim() !== "" && t.includes(word);
+  }));
   return hit.length ? cleanTagIds(hit.map((o) => o.id)) : null;
 }
 
@@ -396,7 +419,8 @@ export function hoursLineOf(hours) {
 // parseMessage(text, {hours, existingDraft, occasions}) → parse object or null
 // (= save without draft). hours: the settings/operatingHours node or null.
 // occasions: the restaurant's occasion tags, `[{id, label}]` (readOccasionTags),
-// or absent, which leaves occasions out of the request (v18.11.0).
+// or null/absent when they could not be read, which leaves occasions out of the
+// request and keeps a pending draft's own (v18.11.0, parseOccasions).
 // existingDraft: the conversation's PENDING draftData (draftStatus "parsed") or
 // null — when present, live mode lets Gemini merge semantically (see
 // buildPrompt) and mock mode applies the shared mechanical mergeDraft rule.
@@ -425,7 +449,7 @@ export async function parseMessage(text, { hours, existingDraft, occasions } = {
   let parsed = mode === "live" ? await liveParse(text, ctx) : mockParse(text, ctx.occasions);
   const took = timed ? { ms: Date.now() - t0 } : {};
   if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
-  if (parsed) parsed.occasions = knownOccasions(parsed.occasions, ctx.occasions);
+  if (parsed) parsed.occasions = parseOccasions(parsed, occasions, existingDraft);
   // Drift-review log: every parse, one line (content only in a sandbox, above).
   const full = simEnabled();
   console.log("[wa-parse:" + mode + "] " + JSON.stringify(full
@@ -517,7 +541,7 @@ export async function parseThread(history, { hours, existingDraft, occasions } =
   let parsed = mode === "live" ? await liveParse(transcript, ctx) : mockParse(lastInbound, ctx.occasions);
   const took = timed ? { ms: Date.now() - t0 } : {};
   if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
-  if (parsed) parsed.occasions = knownOccasions(parsed.occasions, ctx.occasions);
+  if (parsed) parsed.occasions = parseOccasions(parsed, occasions, existingDraft);
   console.log("[wa-recheck:" + mode + "] " + JSON.stringify({ msgs: list.length, merged: !!existingDraft, ...took, parsed: parseLogFields(parsed, simEnabled()) }));
   return parsed;
 }

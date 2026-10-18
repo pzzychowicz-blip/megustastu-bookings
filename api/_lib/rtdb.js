@@ -342,14 +342,16 @@ export async function readOperatingHours() {
 // v18.11.0: the restaurant's occasion tags, `[{id, label}]`, for the parse's
 // occasions (gemini.js, responseSchemaFor). Read through the client's own
 // `sanitizeTagList`, so an absent node is the seed list exactly as the booking
-// form sees it, and a stored one is cleaned the same way. A failed read is no
-// occasions: the parse still runs, and the message keeps its draft.
+// form sees it, and a stored one is cleaned the same way. A failed read is
+// NULL, not "none" (/code-review): the parse still runs without occasions, and
+// a pending draft keeps the ones it had (gemini.js, parseOccasions), where an
+// empty list would have wiped them on a blip.
 export async function readOccasionTags() {
   try {
     const snap = await getDb().ref("settings/tags").get();
     return sanitizeTagList(snap.exists() ? snap.val() : null).occasion;
   } catch {
-    return [];
+    return null;
   }
 }
 

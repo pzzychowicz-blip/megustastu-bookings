@@ -37592,3 +37592,33 @@ opens with `p.tags`).
 `src/hooks/useWhatsApp.js` · `src/App.jsx` · `src/components/whatsapp/{InboxPanel,
 ConversationView,DraftCard}.jsx` · `GLOSSARY.md` · `api/CLAUDE.md` · `src/lib/CLAUDE.md` ·
 `src/hooks/CLAUDE.md`.
+
+### /code-review fixes (high effort, 2026-10-18)
+
+Seven findings. Five fixed, one needed no change, and one became phases 9 and 10:
+- **The occasions schema shape (no change).** An ARRAY of STRING enums, `nullable`, in
+  every live request. Gemini's API reference allows it: `items` is the element schema
+  of an ARRAY, `enum` is for STRING, and `nullable` applies to any type. It is
+  measured live on the sandbox after the merge (go-live A5-7), with the
+  `new_occasion` scenario.
+- **The mock matched substrings.** The mock is the production default, so "se cumplen 2
+  años" read as a birthday and a tag called "Cena" would fire on "cenamos". It now
+  matches whole words: the message and each word are cut to runs of letters and digits
+  and compared with spaces either side. A two-word label still matches, and no RegExp
+  is built from a label staff typed.
+- **A failed read of the tag list wiped a draft's occasions.** `readOccasionTags`
+  answered `[]` on an error, which reads as "the restaurant has none". It answers
+  `null` now, and `parseOccasions` keeps a pending draft's own occasions when the list
+  is unknown. A list that was read, even an empty one, is the answer.
+- **The compact bar's name** pushed the time and the occasion past the ellipsis. The
+  one-line bar shows `barSummary` (no name), and the name is a "Name:" line in the
+  detail its tap opens (Patryk). The full card keeps the name first.
+- **One rule for "the ids the list still has".** `occasionIdsIn` (`whatsapp.js`, through
+  `tagsOf`) is asked by `draftOccasions` and by the server's `knownOccasions`. There
+  were two hand-written copies.
+- **The tag list's path to the card is pinned** at each of its four links. A dropped
+  link was silent, because `tagLabels` of an undefined list is `[]`. The pin was
+  checked by removing one link: the test failed.
+- **The two gaps this version left** (a change request naming an occasion, and a
+  waitlist entry without one): Patryk asked for both in this version. They are phases 9
+  and 10.

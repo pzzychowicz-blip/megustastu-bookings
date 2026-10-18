@@ -13,8 +13,10 @@
 // holds what reaches the request, and what the app keeps of the answer.
 import { describe, it, expect, vi, afterEach } from "vitest";
 import process from "node:process";
+import { readFileSync } from "node:fs";
+import { stripComments } from "../scripts/strip-comments.mjs";
 import { parseMessage, parseThread, mockParse, responseSchemaFor, occasionList, knownOccasions } from "../api/_lib/gemini.js";
-import { sanitizeParse, mergeDraft, draftOccasions } from "../src/lib/whatsapp.js";
+import { sanitizeParse, mergeDraft, draftOccasions, occasionIdsIn } from "../src/lib/whatsapp.js";
 import { draftPrefill } from "../src/lib/draft-check.js";
 import { DEFAULT_TAG_LIST } from "../src/lib/tags.js";
 import { SCENARIOS } from "../src/lib/wa-sim-scenarios.js";
@@ -88,12 +90,49 @@ describe("what the app keeps of the answer", () => {
   });
 });
 
+// /code-review: a failed read of settings/tags (readOccasionTags → null) must
+// not wipe a pending draft's occasions; a list that was read, even empty, is
+// the answer.
+describe("when the occasion list could not be read", () => {
+  const draft = { intent: "new_booking", size: 4, occasions: ["o-birthday"] };
+  it("keeps the pending draft's occasions, live and in a Re-check", async () => {
+    const answer = { intent: "new_booking", language: "es", confidence: "high", size: 5 };
+    const one = await liveCall(() => parseMessage("somos 5", { existingDraft: draft, occasions: null }), answer);
+    expect(one.schema.properties.occasions).toBeUndefined();
+    expect(one.parsed.occasions).toEqual(["o-birthday"]);
+    const thread = await liveCall(() => parseThread([{ direction: "in", text: "somos 5" }], { existingDraft: draft, occasions: null }), answer);
+    expect(thread.parsed.occasions).toEqual(["o-birthday"]);
+  });
+  it("drops them when the list was read and no longer has them", async () => {
+    const answer = { intent: "new_booking", language: "es", confidence: "high", size: 5, occasions: ["o-birthday"] };
+    expect((await liveCall(() => parseMessage("somos 5", { existingDraft: draft, occasions: [] }), answer)).parsed.occasions).toBe(null);
+  });
+});
+
+describe("the one rule for the ids a list still has", () => {
+  it("is what Accept and the server's answer both ask", () => {
+    expect(occasionIdsIn(["o-grad", "o-gone", "o-birthday", "o-birthday", "bad id"], OCC)).toEqual(["o-birthday", "o-grad"]);
+    expect(occasionIdsIn(["o-birthday"], undefined)).toEqual([]);
+    expect(knownOccasions(["o-gone"], OCC)).toBe(null);
+  });
+});
+
 describe("the mock parser (no network) reads occasions too", () => {
   it("by each tag's label, and by the seed tags' Spanish and English words", () => {
     expect(mockParse("mesa para 4 mañana a las 21, es un cumpleaños", OCC).occasions).toEqual(["o-birthday"]);
     expect(mockParse("table for 2 tomorrow at 8pm, our anniversary", OCC).occasions).toEqual(["o-anniversary"]);
     expect(mockParse("somos 6 el viernes a las 21, cena de graduación", OCC).occasions).toEqual(["o-grad"]);
     expect(mockParse("somos 6 el viernes a las 21", OCC).occasions).toBe(null);
+  });
+  // /code-review: the mock is the production default, so a substring match was a
+  // false Birthday on "se cumplen 2 años" and a tag called "Cena" on "cenamos".
+  it("by whole words only, labels of two words included", () => {
+    const more = OCC.concat([{ id: "o-cena", label: "Cena" }, { id: "o-date", label: "Date night" }]);
+    expect(mockParse("se cumplen 2 años, mesa para 2 mañana", more).occasions).toBe(null);
+    expect(mockParse("cenamos 4 el viernes a las 21", more).occasions).toBe(null);
+    expect(mockParse("mesa para 2 mañana, cena de empresa", more).occasions).toEqual(["o-cena"]);
+    expect(mockParse("table for 2 tomorrow, date night!", more).occasions).toEqual(["o-date"]);
+    expect(mockParse("Cumple de Ana, mesa para 6 mañana", more).occasions).toEqual(["o-birthday"]);
   });
   it("only on a booking intent, and only from the list", () => {
     expect(mockParse("¿abrís el día de mi cumpleaños?", OCC).occasions).toBe(null);
@@ -119,6 +158,24 @@ describe("the name rule", () => {
     const { prompt } = await liveCall(() => parseMessage("mesa para 4 a nombre de Juan", {}));
     expect(prompt).toMatch(/- name:[^\n]*a nombre de Juan[^\n]*under Smith/);
     expect(prompt).toMatch(/- name:[^\n]*never a name you only infer/i);
+  });
+});
+
+// /code-review: the list reaches the card by hand through three components, and
+// `tagLabels` of an undefined list is quietly [], so a dropped link would make
+// the card name no occasion while Accept still presses it.
+describe("the tag list reaches the draft card", () => {
+  const src = (f) => stripComments(readFileSync(new URL("../src/" + f, import.meta.url), "utf8")).join("\n");
+  it("at every link: App, InboxPanel, ConversationView, DraftCard", () => {
+    expect(src("App.jsx")).toMatch(/<InboxPanel[\s\S]*?tagList=\{tagList\}/);
+    expect(src("components/whatsapp/InboxPanel.jsx")).toMatch(/<ConversationView[\s\S]*?tagList=\{tagList\}/);
+    expect(src("components/whatsapp/ConversationView.jsx")).toMatch(/<DraftCard[\s\S]*?tagList=\{tagList\}/);
+    expect(src("components/whatsapp/DraftCard.jsx")).toMatch(/tagLabels\(tagList, "occasion", d\.occasions\)/);
+  });
+  it("and the compact bar leaves the name to its detail", () => {
+    const card = src("components/whatsapp/DraftCard.jsx");
+    expect(card).toMatch(/\{barSummary\}<\/span>/);
+    expect(card).toMatch(/"Name: " \+ draftName/);
   });
 });
 
