@@ -55,7 +55,7 @@ export function SeatNoteModal({ note, onClose }) {
       {note.notes ? <div style={{
         whiteSpace: "pre-wrap", overflowWrap: "anywhere",
         fontSize: T.lead, color: S.text,
-        maxHeight: 300, overflowY: "auto",
+        maxHeight: 300, overflowY: "auto", overscrollBehavior: "contain",
         borderRadius: R.card,
         border: "1px solid var(--border-soft)",
         background: "var(--bg-soft)",

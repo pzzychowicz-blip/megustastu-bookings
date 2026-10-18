@@ -1555,6 +1555,10 @@ re-confirmed by Patryk in S3 (2026-09-27) on these facts:
 - It stops iOS zooming into a focused field whose text is under 16px. S3 counted
   29 of 30 text inputs at 16px or more (`mkInp` is `T.title`); the one the lock
   still protects is the header's Viewed date field (`T.lead`, 14px).
+  v18.10.0's audit found two more drawn under 16px since (the inbox search at
+  12px, the reply box at 14px). They keep their size for a mouse and take 16px
+  under touch (`.mgt-touch-16` in `index.css`), so the lock is not their only
+  defence. **A new text field under 16px takes that class.**
 - It stops staff pinch-zooming the timeline's small text by accident.
 - It removes the double-tap-zoom tap delay. That is why `touch-action:
   manipulation` is set only on the view switcher: undoing the lock means adding

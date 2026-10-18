@@ -106,6 +106,9 @@ function TagRow({ tag, index, kind, tagList, onSave, armed, onArm, onDirty }) {
           onChange={function (e) { setDraft(e.target.value); if (refusal) setRefusal(null); }}
           onBlur={commit}
           onKeyDown={function (e) { if (e.key === "Enter") e.currentTarget.blur(); }}
+          // v18.10.0 (the mobile-native audit): the phone keyboard's return
+          // key says what Enter does here.
+          enterKeyHint="done"
           className="mgt-hover-scale"
           style={{ ...mkInp(), width: NAME_W, maxWidth: "100%", boxSizing: "border-box" }} />
         <div style={{ minWidth: ARMED_W, display: "flex" }}>
@@ -168,6 +171,7 @@ function AddTagRow({ kind, tagList, onSave, onDirty }) {
           aria-describedby={refusal ? hintId : undefined}
           onChange={function (e) { setDraft(e.target.value); if (refusal) setRefusal(null); }}
           onKeyDown={function (e) { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          enterKeyHint="done"
           className="mgt-hover-scale"
           style={{ ...mkInp(), width: NAME_W, maxWidth: "100%", boxSizing: "border-box", opacity: full ? 0.5 : 1 }} />
         <button

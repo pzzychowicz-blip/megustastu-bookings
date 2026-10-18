@@ -119,7 +119,7 @@ export function ConversationList({ conversations, drafts, activeKey, onSelect, b
          which render through this same component. */
       role="list"
       aria-label={archivedView ? "Archived conversations" : "Conversations"}
-      style={{ padding: "10px 10px 18px", height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
+      style={{ padding: "10px 10px 18px", height: "100%", overflowY: "auto", overscrollBehavior: "contain", boxSizing: "border-box" }}>
       {/* A collapsing row stays mounted for the whole prune window, so it is
           made inert: without this you can click a row on its way out and select
           a conversation no longer in this tab, which the leaves-the-tab effect

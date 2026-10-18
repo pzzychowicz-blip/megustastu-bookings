@@ -447,7 +447,7 @@ export function ConversationView({
         </div>
       ) : null}
       </Reveal>
-      <div ref={threadRef} onScroll={onThreadScroll} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "14px" }}>
+      <div ref={threadRef} onScroll={onThreadScroll} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", padding: "14px" }}>
         {threadItems(msgsForConv, today).map((it) => (it.msg
           ? <MessageBubble key={it.msg.id} msg={it.msg} isLast={it.msg.id === animateId} onRetry={onResend} phoneKey={conv.phoneKey} onOpenPhoto={onOpenPhoto} />
           : <DaySeparator key={"day-" + it.day} label={it.label} enter={it.firstId === animateId} />))}

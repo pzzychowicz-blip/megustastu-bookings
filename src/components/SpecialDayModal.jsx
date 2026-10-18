@@ -16,7 +16,7 @@
 // contract) so App's discard guard covers Cancel, Escape and the backdrop.
 
 import { useState, useEffect } from "react";
-import { S, T, FW, IC } from "../lib/constants";
+import { S, T, FW, IC, H } from "../lib/constants";
 import { formatDay } from "../lib/day";
 import { hourLabel } from "../lib/time-grid";
 import { countLabel } from "../lib/booking-logic";
@@ -118,7 +118,7 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
             {[[true, "Closed"], [false, "Open"]].map(([v, lbl]) => (
               <button key={lbl} type="button" className="mgt-hover-scale" aria-pressed={draft.closed === v}
                 onClick={() => change({ closed: v })}
-                style={{ ...segStyle(draft.closed === v), padding: "6px 16px" }}>{lbl}</button>
+                style={{ ...segStyle(draft.closed === v), padding: "6px 16px", minHeight: H.chrome }}>{lbl}</button>
             ))}
           </div>
           <Reveal show={!draft.closed}>

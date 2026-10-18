@@ -351,6 +351,11 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
           // does in a form: it is about what you did, and you are moving on.
           onChange={(e) => { setTxt(e.target.value); if (note) setNoteState(null); }}
           onKeyDown={onKey}
+          // v18.10.0 (the mobile-native audit): 16px under a finger
+          // (.mgt-touch-16, index.css; it is 14px for the desk), and the
+          // phone keyboard's return key says Send, which is what Enter does.
+          className="mgt-touch-16"
+          enterKeyHint="send"
           // v18.2.0 (W5): the Enter / Shift+Enter hint only where there is a
           // keyboard to press them on — on a touch screen it spent two lines of
           // a phone's composer on keys the on-screen keyboard does not have.

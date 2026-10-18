@@ -37268,3 +37268,68 @@ writing both halves pruned. `tests/schema.test.js` pins 4 and the new sanitisers
 `src/lib/schema.js` · `src/App.jsx` · `Settings.jsx` · `Summary.jsx` · `AppBanners.jsx` ·
 `useModalStack.js` · `useKeyboardShortcuts.js` · `tests/special-days.test.js` (new) ·
 `tests/schema.test.js` · GLOSSARY · the CLAUDE.md notes.
+
+### Phase 6 — the mobile-native audit (the first since v18.3.0)
+
+Patryk asked for the `/mobile-native` check over everything since the last one (v18.3.0,
+2026-09-27), the new UI included, with every clear defect fixed. The code was swept item
+by item against the skill's table. Then the changes were measured in the Browser pane's
+phone emulation, where touch and a coarse pointer are both reported, and on the
+restaurant tablet (Chrome 155, a DEV tab over `adb reverse`, read through CDP).
+
+**What was wrong, and what changed:**
+- **Two text fields under 16px**, which iOS zooms the page into on focus: the inbox
+  search (12px) and the reply box (14px). A new rule in `index.css`, `.mgt-touch-16`,
+  gives them 16px under `(hover: none), (pointer: coarse)`. They keep their size for a
+  mouse (measured 14px in the pane at desktop size). The search box got
+  `enterKeyHint="search"` and the reply box `"send"`. DESIGN.md's zoom-lock note now
+  says a new field under 16px takes the class.
+- **Scroll that ran out of an inner list moved what was behind it.** `overscroll-behavior:
+  contain` went on `Overlay`'s four scrollers, the inbox's list and thread, the Plan
+  table popover, the connected-devices list, the history popup, the seat note, the
+  notification strip's body, the country list and the name / phone suggestions
+  (`useAcRow`). The page and the Split View panes are top-level scrollers and stay as
+  they were. The body was already `overscroll-behavior: none` (`App.jsx`), so there is
+  no pull-to-refresh.
+- **Link-buttons could be selected by a long press.** The control rule
+  (`user-select: none`, `-webkit-touch-callout: none`) covered `button` and
+  `[role="button"]`, not a link drawn as a button: Save photo, Settings' Connect, and the
+  connect page's two links back to the app. It now covers `a.mgt-press`. A link in
+  running text (the Vercel link in Admin) has no `mgt-press` and stays selectable.
+- **The Plan table popover's cap was `70vh`.** On the tablet, `vh` is the viewport
+  without Chrome's toolbar (594px) while 507px is visible, so the cap was 416px of 507.
+  It is `70dvh` now, measured at 355px.
+- **The `/wa-connect` page had one `theme-color`.** It has one per scheme now, and
+  `applyTheme` sets both to the resolved `--bg-app`, as `useThemeMode` does for the app.
+- **The tag editor's name boxes** got `enterKeyHint="done"`.
+- **The special-day editor's Closed / Open buttons were 26px tall**, the only segmented
+  control in the app without a height from `H`. They are `H.chrome` (36px) now, like the
+  print chooser's (measured on the tablet).
+
+**Checked and left alone:** every `:hover` in `index.css` is behind the hover query, and
+the one JS hover (the timeline's group lift) is a mouse event. `theme-color` per scheme
+and the safe areas were done in v18.3.0. The tap highlight is off globally. No
+`touch-action: manipulation` outside the view switcher, which DESIGN.md records with the
+zoom lock (Patryk's decision, unchanged). The privacy page is not app UI. The header's
+date field (14px) is still covered only by the zoom lock, as DESIGN.md says.
+
+**Measured on the tablet:** search 16px with a Search key (44px tall), reply box 16px
+with a Send key, the inbox list and thread `contain`, the special-day editor's fields at
+17px with its body `contain`, Settings' special-days list (Change 32px, the compact row
+button, and Add 36px), and the Plan popover at 355px and `contain`. **Measurement trap:**
+CDP's `Page.captureScreenshot` on the tablet draws the large viewport (594px), so the
+page's own background shows under a dialog that fits the 507px Chrome leaves. That
+strip is the capture, not the layout.
+
+**Not measured, and only a real iPhone can settle it:** whether iOS zooms into the
+reply box or the inbox search now (the simulator's home-screen clips were signed out,
+and the DEV password is never typed); the long press on Save photo (no selection, no
+callout); a scroll that reaches the end of the reply thread or a modal (the page behind
+must not move); and the status bar colour on `/wa-connect` in both themes.
+
+**Files:** `src/index.css` · `src/components/atoms.jsx` · `whatsapp/InboxPanel.jsx` ·
+`whatsapp/ReplyComposer.jsx` · `whatsapp/ConversationList.jsx` ·
+`whatsapp/ConversationView.jsx` · `PlanView.jsx` · `ConnectionStatus.jsx` ·
+`HistoryPopup.jsx` · `SeatNoteModal.jsx` · `NotificationStrip.jsx` · `CountryPicker.jsx` ·
+`hooks/useAcRow.js` · `TagListEditor.jsx` · `SpecialDayModal.jsx` · `wa-connect.html` ·
+`src/wa-connect/main.jsx` · DESIGN.md.

@@ -67,7 +67,7 @@ export const AC_MENU = {
   position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, zIndex: 30,
   background: "var(--bg-ac-menu)", border: "1px solid var(--border-sheet)",
   borderRadius: R.card, boxShadow: "var(--shadow-sheet)",
-  overflowX: "hidden", overflowY: "auto", maxHeight: 264,
+  overflowX: "hidden", overflowY: "auto", overscrollBehavior: "contain", maxHeight: 264,
 };
 
 // One row of it. Pair with `className="mgt-ac-row"`, which is where the hover

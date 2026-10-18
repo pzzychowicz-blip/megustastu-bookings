@@ -42,7 +42,7 @@ export function HistoryPopup({ booking, onClose }) {
         {booking.name + " — " + formatDay(booking.date) + " " + booking.time}
       </div>
       <div style={{
-        maxHeight: 300, overflowY: "auto",
+        maxHeight: 300, overflowY: "auto", overscrollBehavior: "contain",
         borderRadius: R.card,
         border: "1px solid var(--border-soft)",
         background: "var(--bg-soft)",

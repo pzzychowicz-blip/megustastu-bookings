@@ -285,7 +285,7 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
               <div style={{ fontSize: T.small, marginBottom: 6, color: S.muted }}>
                 {"Connected device" + (deviceList.length === 1 ? "" : "s") + " (" + deviceList.length + ")"}
               </div>
-              <div style={{ maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ maxHeight: 200, overflowY: "auto", overscrollBehavior: "contain", display: "flex", flexDirection: "column", gap: 6 }}>
                 {deviceList.map(function (d) {
                   const mine = d.key === myKey;
                   return (

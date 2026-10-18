@@ -624,6 +624,10 @@ export function InboxPanel({
               // v18.2.0 (W5): a phone cut the long one to "Search name, number
               // or". The field is named either way (aria-label above).
               placeholder={twoPane ? "Search name, number or message…" : "Search…"}
+              // v18.10.0: 16px under a finger (.mgt-touch-16, index.css), and a
+              // Search key on the phone's keyboard.
+              className="mgt-touch-16"
+              enterKeyHint="search"
               style={Object.assign({}, mkInp(), { fontSize: T.body, padding: "8px 12px", paddingRight: query ? 30 : 12 })}
             />
             {query ? <button /* @no-lift transparent, radius-less and absolutely positioned INSIDE the input: the class supplies an opaque --bg-hover-card and no radius (v17.7.0), which is the hard-edged rectangle ConnectionStatus's dot hit — and its scale would be out-specified by this element's own inline translateY(-50%) anyway */ onClick={() => setQuery("")} title="Clear search" className="mgt-press" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "var(--text-muted)", padding: "2px 6px", lineHeight: 1 }}><CloseIcon size={IC.inline} /></button> : null}
