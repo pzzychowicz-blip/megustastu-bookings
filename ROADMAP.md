@@ -105,51 +105,6 @@ evidence for each.
   list, which is proposed there and must be confirmed against the Vercel project's
   domains first.
 
-- **Keep extracting `BookingApp` by domain (#17).** `App.jsx` went from 2,545 to 5,393
-  lines after the July scan and took 187 of the 616 commits, 90 of them fixes. Extract
-  one domain per patch version. The save path went first, in v18.3.4 (#13): its
-  decisions are `lib/booking-save.js`, App keeps the effects, and `App.jsx` is 5,340
-  lines (5,727 before it). Recurring generation followed in v18.4.4 (`withOccurrences`,
-  `lib/recurring.js`; `App.jsx` 5,410 lines), and backup/export in v18.4.5 (`runBackup` in
-  `lib/backup.js`, `hooks/useBackup.js`, `lib/download.js`; 5,354 lines) and the timeline
-  drop (`planDrop`, `lib/drop-plan.js`; 5,210 lines), and manual table assignment in
-  v18.4.7 (`planAssign`, `lib/manual-assign.js`; 5,220 lines; the drop's displacement
-  shares its release, `releaseSwapped`), and status changes in v18.5.0 (`planStatus`,
-  `planCancel`, `completeCleared`, `lib/status-change.js`; 5,091 lines), and delete and
-  undo in v18.5.1 (`planDelete`, `planUndo`, `lib/delete-undo.js`; 5,093 lines) with
-  Book Again's draft (`againDraft`, `lib/booking-save.js`) and the Overlap banner's
-  Reassign (`planReassign`, `lib/manual-assign.js`; 4,984 lines), and in v18.6.0 the redeem
-  prompt's answer and the voucher carry (`planSettle`, `settleEffects`, `carryOffer`,
-  `carryTransform`, `lib/voucher-settle.js`; 4,987 lines after a version that also added
-  to App). That was the last of the five measured 2026-10-08. **The render, begun
-  2026-10-10:** measured at 1,484 lines from the first top-level JSX constant (84
-  statements; the `return` 562, `notifSections` 118, the clash derivations 95, the
-  four view elements 140). The clash derivations are `lib/clash-view.js` (`App.jsx`
-  4,980 lines). **What is left of the render is prop wiring** (read 2026-10-10):
-  `notifSections` is 57 lines of code (the 118 counted the comments after it) and
-  would need about 40 values passed for 10 to 15 lines saved; the Settings mount is
-  94 lines, 88 of them one prop each, and a wrapper saves about 6. Patryk dropped
-  both. They shrink only when the state behind them moves into hooks by domain,
-  which is a design of its own and not started. **The form's save, 2026-10-10:**
-  what `doSave` and `save` still decided inline is `draftForSave`, `draftRefusal`,
-  `formSeatClash` and `kitchenAsk` (`lib/booking-save.js`); `doSave` is 64 lines (132
-  in the table below), `save` 27 (31), `App.jsx` 4,898. What `doSave` keeps is the
-  order of its questions, the refs and the setters; `doSaveNew` and `doSaveEdit` were
-  already plans since v18.3.4.
-  **Re-measured 2026-10-09** (`App.jsx` 4,987 lines; the functions declared directly in
-  `BookingApp`, by length, with the commits since 2026-07-24 that touched their lines
-  and how many of those say fix, /code-review or correction; `git log -L` on today's
-  line range, so the counts follow the lines back and are approximate):
-  `doSave` 132 lines, 18 commits, 2 fixes · `doSaveNew` 59, 18, 3 · `deleteCustomer` 45,
-  8, 1 (its decisions are already `planCustomerDelete`; what is left is comments and
-  effects) · `settleVoucher` 39, 8, 3 (likewise) · `doClearActivity` 37, 3, 2 ·
-  `delBooking` 34, 8, 1 · `save` 31, 3, 1 · `addFormToWaitlist` 31, 4, 0 · `doSaveEdit`
-  30, 31, 7. The render (from the first top-level JSX constant to the end) is 1,471
-  lines, 29% of the file. By churn the next candidate is the form's save
-  (`doSave` + `doSaveNew` + `doSaveEdit` + `save`: 252 lines, `doSaveEdit` alone 31
-  commits and 7 fixes), whose decisions v18.3.4 already moved to `lib/booking-save.js`;
-  by size it is the render. Not chosen: Patryk's call.
-
 - **`check:style` does not see inside an `mkBtn(...)` / `mkDangerBtn(...)` argument.** A
   bare `minHeight: 32` there passes the gate (v18.10.0's review found five, now `H`
   tokens; Summary's Print and More still carry two). Teach the height rule to read the

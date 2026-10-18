@@ -37441,3 +37441,19 @@ phase 20).
 
 **Files:** `src/lib/activity.js` · `src/App.jsx` · `src/lib/CLAUDE.md` ·
 `tests/activity.test.js`.
+
+### Phase 4 — #17 closed
+
+The extraction of `BookingApp` by domain (the 2026-09-23 tech-debt scan's #17) is done.
+Every domain measured on 2026-10-08 left the file, one patch version each: the save path
+(v18.3.4), recurring generation (v18.4.4), backup and the timeline drop (v18.4.5), manual
+assignment (v18.4.7), status changes (v18.5.0), delete and undo (v18.5.1), the voucher
+settle, the clash derivations and the form's save decisions (v18.6.0), and this version's
+waitlist doors and activity clear. `App.jsx` was 5,393 lines at the scan's peak and is
+4,937.
+
+**What stays, and why.** `delBooking`'s decisions are `planDelete` already; what is left
+is its effects, in their order. The render's remaining bulk is prop wiring (`notifSections`,
+the Settings mount), which Patryk dropped on 2026-10-10: a wrapper saves a few lines for
+about forty values passed. It shrinks only if the state behind it moves into hooks by
+domain, which is a design of its own and was not started; it is not on the roadmap.
