@@ -41,7 +41,7 @@ import { EMPTY_FORM } from "../lib/constants";
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
-import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch, contactDeletePatch, replyUnarchives, draftOccasions } from "../lib/whatsapp";
+import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch, contactDeletePatch, replyUnarchives, requestedOccasions } from "../lib/whatsapp";
 import { unionTagIds } from "../lib/tags";
 import { sendsViaServer, sendViaBackend, sendMediaViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
@@ -746,8 +746,9 @@ export function useWhatsApp({
     // v18.11.0: an occasion the request names ("it's for a birthday now") is
     // ADDED to the booking's occasion tags, never in place of them: a change
     // request says what is new, and a tag already on the booking was put there
-    // by somebody. Removing one stays a tap in the form.
-    const occ = draftOccasions(d, tagList);
+    // by somebody. Removing one stays a tap in the form. Only the ones the
+    // booking does not have yet (`requestedOccasions`), the banner's list.
+    const occ = requestedOccasions(d, booking, tagList);
     if (occ.length) changes.tags = unionTagIds(booking.tags, occ);
     if (!openEdit(booking, changes)) return;
     modifyApplyRef.current = { phoneKey: conv.phoneKey, bookingId: booking.id };

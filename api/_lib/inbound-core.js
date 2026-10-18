@@ -27,7 +27,7 @@
 // message id is the sanitized wamid, so a redelivery targets the same RTDB
 // path; we additionally skip the whole upsert when the message already exists.
 
-import { normalizePhone, isPhoneKey, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet } from "../../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey, pendingDraftOf, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet } from "../../src/lib/whatsapp.js";
 import { simMediaMessage } from "../../src/lib/wa-mock-media.js";
 import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours, readOccasionTags } from "./rtdb.js";
 import { sendText } from "./meta.js";
@@ -291,7 +291,7 @@ export function inboundContent(m) {
 export async function injectSimInbound({ phone, text, name, agoMs = 0, media }, afterResponse) {
   const ts = Date.now() - (Number(agoMs) || 0);
   const conv = await getConversation(normalizePhone(phone));
-  const existingDraft = conv && conv.draftStatus === "parsed" ? conv.draftData : null;
+  const existingDraft = pendingDraftOf(conv);
   const content = inboundContent((media && simMediaMessage(media, text)) || { type: "text", text: { body: String(text || "") } });
   const parseText = content.parseText;
   const r = await processInbound({

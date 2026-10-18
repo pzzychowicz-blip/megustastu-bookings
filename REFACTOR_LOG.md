@@ -37676,3 +37676,31 @@ names them, the mock reads one on a modify, the scenario).
 **Files:** `src/hooks/useWhatsApp.js` · `src/components/whatsapp/{IntentBanner,
 ConversationView}.jsx` · `src/lib/wa-sim-scenarios.js` · `GLOSSARY.md` ·
 `src/hooks/CLAUDE.md`.
+
+### /code-review fixes, round 2 (phases 9–10)
+
+Five findings; four fixed, one left on purpose.
+- **The request banner listed occasions the booking already had.** After an
+  Apply that added Anniversary, the next request ("make it 21:00") still read
+  "Requested: 21:00 · Anniversary", and an occasion-only message for a tag already
+  on the booking offered Apply for nothing. `requestedOccasions(draft, booking,
+  tagList)` (`lib/whatsapp.js`) is the ones the booking does not have yet; the
+  banner lists those and Apply changes adds those.
+- **Apply changes put back an occasion staff had removed.** A handled request's
+  draft was still `parsed`, so the next message merged into it and carried its
+  size, time and occasions forward. `pendingDraftOf(conv)` leaves out a cancel or
+  modify request already handled (`intentBannerVisible` false), and all four
+  merge sites ask it (`api/wa-inbound.js`, `api/wa-recheck.js`,
+  `api/_lib/inbound-core.js`, `lib/wa-sim.js`), where each had restated the
+  `draftStatus === "parsed"` test. This changes the carry-over for every field,
+  not only occasions: a handled request is done, and repeating its size or time
+  as a request again was the same fault.
+- **Phase 10 was pinned by source text only.** Both rules now run in
+  `tests/wa-occasions.test.js`, and each test was seen to fail with its rule
+  sabotaged.
+- **`src/components/CLAUDE.md` had no v18.11.0 note.** WaitlistPanel, DraftCard
+  and IntentBanner have one; `src/lib/CLAUDE.md`'s line saying "the waitlist
+  takes none" (stale since phase 9) is corrected.
+- **Left: `addToWaitlist` cleans tags the builder already cleaned.** The hook is
+  the storage boundary and its header says it takes raw fields, so it keeps its
+  own clean.

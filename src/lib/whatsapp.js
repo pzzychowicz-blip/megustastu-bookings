@@ -581,6 +581,16 @@ export function draftOccasions(draft, tagList) {
   return occasionIdsIn(draft && draft.occasions, tagList && tagList.occasion);
 }
 
+// requestedOccasions(draft, booking, tagList) → the occasions a change request
+// names that its booking does NOT already carry (v18.11.0, /code-review). Only
+// those are a change: the request banner lists them and Apply changes adds
+// them, so a tag already on the booking is neither offered as a request nor
+// counted as one.
+export function requestedOccasions(draft, booking, tagList) {
+  const has = cleanTagIds(booking && booking.tags);
+  return draftOccasions(draft, tagList).filter(function (id) { return has.indexOf(id) < 0; });
+}
+
 // clampConfidence(stated, draft) — the confidence ceiling rule (decided
 // 2026-06-26). HIGH is allowed ONLY when every crucial field (size, date, time)
 // is present AND there is no ambiguity. Count "issues" = missing crucial fields
@@ -669,6 +679,20 @@ export function mergeDraft(oldDraft, newParse) {
 // an actionable message re-raises the alert. Conversations written before the
 // field existed read as 0: a handled banner stays hidden until the next
 // actionable inbound stamps it.
+// pendingDraftOf(conv) → the draft a new message is merged into, or null
+// (v18.11.0, /code-review). A PENDING draft only (`draftStatus` "parsed"), as
+// before, and not a cancel or modify request staff have already handled: that
+// request is done, so a later message starts a new one rather than carrying
+// its size, time and occasions forward (an occasion staff took off the
+// booking came back with the next, unrelated change). The server's two parse
+// paths, the re-check and the simulator all ask it.
+export function pendingDraftOf(conv) {
+  if (!conv || conv.draftStatus !== "parsed" || !conv.draftData) return null;
+  const intent = conv.draftData.intent;
+  if ((intent === "cancel" || intent === "modify") && !intentBannerVisible(conv)) return null;
+  return conv.draftData;
+}
+
 export function intentBannerVisible(conv) {
   if (!conv || !conv.draftData) return false;
   const intent = conv.draftData.intent;

@@ -29,7 +29,7 @@
 // phoneKeyOverride params are ignored on that path — the server decides, like
 // production will (see src/lib/wa-backend.js).
 
-import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, mergeDraft, clampConfidence, WA_MAX_TEXT_LEN, sanitizeParse, snippet } from "./whatsapp";
+import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, mergeDraft, pendingDraftOf, clampConfidence, WA_MAX_TEXT_LEN, sanitizeParse, snippet } from "./whatsapp";
 import { backendEnabled } from "./wa-backend";
 import { countLabel } from "./booking-logic";
 import { backendInbound, postSimEvent } from "./wa-backend-sim";
@@ -143,10 +143,12 @@ export function simulateInbound(params, ctx) {
   // draftUpdatedAt: the intent-banner re-show gate (intentBannerVisible) —
   // stamped ONLY where a parse sets/updates the draft, so "thank you" can't
   // re-raise a handled banner. Mirrors the server's draftPatchFromParse.
+  // v18.11.0: a handled cancel or modify request is not pending (pendingDraftOf).
+  const pending = pendingDraftOf(ex);
   const draftPatch = isDraftIntent && !muted ? {
     draftStatus: "parsed",
     draftUpdatedAt: ts,
-    draftData: ex && ex.draftStatus === "parsed" && ex.draftData ? mergeDraft(ex.draftData, draftData) : draftData,
+    draftData: pending ? mergeDraft(pending, draftData) : draftData,
   } : null;
 
   // Two-phase (only for a draft intent, and only when a patcher is available):

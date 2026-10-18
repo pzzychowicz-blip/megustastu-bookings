@@ -16,7 +16,7 @@ import process from "node:process";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { parseMessage, parseThread, mockParse, responseSchemaFor, occasionList, knownOccasions } from "../api/_lib/gemini.js";
-import { sanitizeParse, mergeDraft, draftOccasions, occasionIdsIn } from "../src/lib/whatsapp.js";
+import { sanitizeParse, mergeDraft, draftOccasions, occasionIdsIn, requestedOccasions, pendingDraftOf } from "../src/lib/whatsapp.js";
 import { draftPrefill } from "../src/lib/draft-check.js";
 import { DEFAULT_TAG_LIST } from "../src/lib/tags.js";
 import { SCENARIOS } from "../src/lib/wa-sim-scenarios.js";
@@ -182,14 +182,37 @@ describe("the tag list reaches the draft card", () => {
 // Phase 10 (Patryk, after the review): a change request naming an occasion.
 describe("a change request's occasion reaches the booking", () => {
   const src = (f) => stripComments(readFileSync(new URL("../src/" + f, import.meta.url), "utf8")).join("\n");
-  it("Apply changes ADDS it to the booking's occasion tags", () => {
+  it("only an occasion the booking does not have yet is a request (/code-review)", () => {
+    const d = { intent: "modify", occasions: ["o-anniversary", "o-birthday", "o-gone"] };
+    expect(requestedOccasions(d, { tags: ["o-birthday"] }, DEFAULT_TAG_LIST)).toEqual(["o-anniversary"]);
+    expect(requestedOccasions(d, { tags: ["o-anniversary", "o-birthday"] }, DEFAULT_TAG_LIST)).toEqual([]);
+    expect(requestedOccasions(d, null, DEFAULT_TAG_LIST)).toEqual(["o-anniversary", "o-birthday"]);
+    expect(requestedOccasions({ intent: "modify" }, { tags: [] }, DEFAULT_TAG_LIST)).toEqual([]);
+  });
+  it("Apply changes ADDS those to the booking's tags, and the banner lists those", () => {
     const hook = src("hooks/useWhatsApp.js");
     const apply = hook.slice(hook.indexOf("function handleApplyModify("), hook.indexOf("function completeModifyApply("));
-    expect(apply).toMatch(/const occ = draftOccasions\(d, tagList\);\s*if \(occ\.length\) changes\.tags = unionTagIds\(booking\.tags, occ\);\s*if \(!openEdit\(booking, changes\)\) return;/);
-  });
-  it("the banner names it, so an occasion alone offers Apply changes", () => {
-    expect(src("components/whatsapp/IntentBanner.jsx")).toMatch(/tagLabels\(tagList, "occasion", draftData\.occasions\)\.forEach\(function \(l\) \{ reqParts\.push\(l\); \}\)/);
+    expect(apply).toMatch(/const occ = requestedOccasions\(d, booking, tagList\);\s*if \(occ\.length\) changes\.tags = unionTagIds\(booking\.tags, occ\);\s*if \(!openEdit\(booking, changes\)\) return;/);
+    expect(src("components/whatsapp/IntentBanner.jsx")).toMatch(/tagLabels\(tagList, "occasion", requestedOccasions\(draftData, linkedBooking, tagList\)\)\.forEach/);
     expect(src("components/whatsapp/ConversationView.jsx")).toMatch(/<IntentBanner[^>]*tagList=\{tagList\}/);
+  });
+  it("a handled request is not merged into the next message (/code-review)", () => {
+    const draftData = { intent: "modify", size: 6, occasions: ["o-anniversary"] };
+    expect(pendingDraftOf({ draftStatus: "parsed", draftData, draftUpdatedAt: 100 })).toBe(draftData);
+    expect(pendingDraftOf({ draftStatus: "parsed", draftData, draftUpdatedAt: 100, intentHandledAt: 200 })).toBe(null);
+    // A request renewed after it was handled is pending again.
+    expect(pendingDraftOf({ draftStatus: "parsed", draftData, draftUpdatedAt: 300, intentHandledAt: 200 })).toBe(draftData);
+    // A new booking's draft is not a handled request; anything not parsed is not pending.
+    const nb = { intent: "new_booking", size: 4 };
+    expect(pendingDraftOf({ draftStatus: "parsed", draftData: nb, intentHandledAt: 200 })).toBe(nb);
+    expect(pendingDraftOf({ draftStatus: "accepted", draftData: nb })).toBe(null);
+    expect(pendingDraftOf(null)).toBe(null);
+    // All four merge sites ask it, and none restates the old test.
+    const read = (f) => stripComments(readFileSync(new URL("../" + f, import.meta.url), "utf8")).join("\n");
+    for (const f of ["api/wa-inbound.js", "api/wa-recheck.js", "api/_lib/inbound-core.js", "src/lib/wa-sim.js"]) {
+      expect(read(f), f).toMatch(/pendingDraftOf\((conv|ex)\)/);
+      expect(read(f), f).not.toMatch(/draftStatus === "parsed" \?/);
+    }
   });
   it("the mock reads one on a modify intent too", () => {
     expect(mockParse("can we change it to 6 people? it's our anniversary", OCC)).toMatchObject({ intent: "modify", occasions: ["o-anniversary"] });

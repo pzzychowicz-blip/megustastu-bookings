@@ -57,7 +57,7 @@ import { updateMessageStatusByWamid, readOperatingHours, readOccasionTags, getCo
 import {
   makeNumberGuard, COEXIST_HANDLERS, applyMessageChange, freshResults, newMeasure, noteChange, recordBegun, reportDelivery,
 } from "./_lib/coexist-core.js";
-import { normalizePhone, isPhoneKey } from "../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey, pendingDraftOf } from "../src/lib/whatsapp.js";
 import { secondsTs, webhookPhoneKey, editedMessage } from "../src/lib/wa-coexist.js";
 
 export const config = { api: { bodyParser: false } };
@@ -164,7 +164,7 @@ async function handleMessagesChange(value, results, parseJobs) {
       // instead of replacing it blind. Accepted/dismissed drafts are not
       // draft context. The same conv object is handed to processInbound.
       const conv = await getConversation(normalizePhone(phone));
-      const existingDraft = conv && conv.draftStatus === "parsed" ? conv.draftData : null;
+      const existingDraft = pendingDraftOf(conv);
       const r = await processInbound({
         phone, text: content.text, ts,
         media: content.media,
