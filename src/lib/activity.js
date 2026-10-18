@@ -77,6 +77,8 @@ export const PRUNE_AFTER_MS = 31536000000;
 // caller keeps its import, and there is still ONE normaliser for both deletes.
 export { DEFAULT_RETENTION_DAYS, RETENTION_MIN_DAYS, RETENTION_MAX_DAYS, retentionDaysOf } from "./retention.js";
 import { DEFAULT_RETENTION_DAYS, retentionDaysOf } from "./retention.js";
+// v18.10.0: a special day's entry names its dates and hours.
+import { rangeLabel, specialHoursLabel } from "./special-days.js";
 export const RETENTION_CHOICES = [
   { days: 90, label: countLabel(3, "month", "months") },
   { days: 180, label: countLabel(6, "month", "months") },
@@ -405,6 +407,17 @@ export function settingsWriteEntry(path, prev, next, ctx) {
     auto: auto,
     text: "changed " + label + " · " + keys.join(", "),
   });
+}
+
+// v18.10.0: a special day (lib/special-days.js) is logged by what it IS — "added
+// a special day · Thu 24.12 – Sat 26.12 · Closed · Christmas" — where the key
+// diff above would say "changed opening hours · exceptions", the database's
+// word. `verb` is "added", "changed" or "removed".
+export function specialDayEntry(verb, ex) {
+  if (!ex) return null;
+  const parts = [rangeLabel(ex), specialHoursLabel(ex)];
+  if (ex.note) parts.push(ex.note);
+  return clean({ kind: kindForPath("settings/operatingHours"), text: verb + " a special day · " + parts.join(" · ") });
 }
 
 // The node's name as a person would say it. A path is a fallback, not a label:

@@ -446,6 +446,11 @@ export var DEFAULT_WEEK_HOURS={0:DEFAULT_DAY,1:DEFAULT_DAY,2:DEFAULT_DAY,3:DEFAU
 // Module-held weekly schedule. Replaced wholesale by setWeekHours() on each
 // Firebase snapshot. Read via hoursFor()/weekRange(); never mutate in place.
 var WEEK_HOURS={0:DEFAULT_DAY,1:DEFAULT_DAY,2:DEFAULT_DAY,3:DEFAULT_DAY,4:DEFAULT_DAY,5:DEFAULT_DAY,6:DEFAULT_DAY};
+// v18.10.0: the special days, by date ({ "YYYY-MM-DD": {open, close, closed,
+// note, …} }, `exceptionIndex` in lib/special-days.js). Replaced wholesale by
+// setHourExceptions on each snapshot of settings/operatingHours; an object with
+// no own prototype, so a date can never meet an inherited key.
+var HOUR_EXCEPTIONS=Object.create(null);
 
 export let OPEN=13,CLOSE=22,GRID_CLOSE=23;
 // v15.0.0: layout-derived (cfg.kitchenLimit) — reassigned by setLayout, seeded
@@ -463,11 +468,22 @@ export function weekdayOf(dateStr){
 // Hours for a specific date: {open, close, gridClose, closed}. THE accessor for
 // any date that isn't necessarily the active view-day. Defensive against a day
 // missing its open/close (e.g. a closed day stored bare).
+//
+// v18.10.0: a SPECIAL DAY wins over the weekday (lib/special-days.js): the date
+// is looked up in HOUR_EXCEPTIONS first, and then `special` is true and `note`
+// carries its label. Every reader of a date's hours follows it by itself.
 export function hoursFor(dateStr){
+  var x=HOUR_EXCEPTIONS[dateStr];
+  if(x) return {open:x.open,close:x.close,gridClose:x.close+1,closed:!!x.closed,special:true,note:x.note||""};
   var d=WEEK_HOURS[weekdayOf(dateStr)]||DEFAULT_DAY;
   var open=Number.isFinite(d.open)?d.open:DEFAULT_DAY.open;
   var close=Number.isFinite(d.close)?d.close:DEFAULT_DAY.close;
-  return {open:open,close:close,gridClose:close+1,closed:!!d.closed};
+  return {open:open,close:close,gridClose:close+1,closed:!!d.closed,special:false,note:""};
+}
+export function setHourExceptions(index){
+  var next=Object.create(null);
+  if(index&&typeof index==="object") Object.keys(index).forEach(function(d){next[d]=index[d];});
+  HOUR_EXCEPTIONS=next;
 }
 // Replace the whole schedule (the hook sanitizes before calling).
 export function setWeekHours(week){

@@ -75,7 +75,7 @@ function parkedMessage(labels) {
   return (labels[0] || "A change") + " — not saved, and undone.";
 }
 
-export function appBannerSections({ isOnline, writeWarning, onDismissWarning, parkedWrites, onRetryParked, onDiscardParked, ineffShow, onDismissIneff, onReshuffle, loadFailed, readError, hasConnected, dayClosed }) {
+export function appBannerSections({ isOnline, writeWarning, onDismissWarning, parkedWrites, onRetryParked, onDiscardParked, ineffShow, onDismissIneff, onReshuffle, loadFailed, readError, hasConnected, dayClosed, closedSpecial = null }) {
   const out = [];
 
   // v17.8.0 (strip audit): this used to be a floating TOAST. It is the one
@@ -213,7 +213,12 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, pa
     title: "Closed this day", count: 1,
     node: body(
       <span style={{ color: "var(--warn-text)" }}>
-        No bookings or walk-ins can be saved for this date. Adjust it in Settings → Opening hours.
+        {/* v18.10.0: a SPECIAL day (lib/special-days.js) says so, with its
+            note, and where it is changed. `closedSpecial` is its note ("" for
+            none), or null on a weekday that is closed. */}
+        {closedSpecial !== null
+          ? (closedSpecial ? "Closed: " + closedSpecial + ". " : "Closed as a special day. ") + "No bookings or walk-ins can be saved for this date. Change it under Hours for this day, or Settings → Opening hours → Special days."
+          : "No bookings or walk-ins can be saved for this date. Adjust it in Settings → Opening hours."}
       </span>
     )
   });

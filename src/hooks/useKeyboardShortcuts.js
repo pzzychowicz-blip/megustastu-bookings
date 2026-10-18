@@ -81,6 +81,7 @@ function escapeAction(K,id){
     case "prefpicker":  return function(){K.setShowPrefPicker(false);};
     case "search":      return function(){K.setShowSearch(false);};
     case "block":       return K.requestCloseBlock;
+    case "specialday":  return K.requestCloseSpecialDay;
     case "manual":      return K.requestCloseManual;
     case "walkin":      return K.requestCloseWalkin;
     // v17.14.0: new. The waitlist Overlay had no Esc branch, so it was the one

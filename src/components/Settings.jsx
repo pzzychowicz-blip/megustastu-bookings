@@ -71,6 +71,7 @@ const TIER_ARMED_W = 153;
 import { SETTINGS_TABS, visibleTabs } from "./SettingsChrome";
 import { AdminTabContent } from "./AdminSettings";
 import { hourLabel } from "../lib/time-grid";
+import { splitExceptions, rangeLabel, specialHoursLabel } from "../lib/special-days";
 import { CloseIcon, DownloadIcon, TrashIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
@@ -329,6 +330,48 @@ function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt, label }
 // closed day can also be copied across the week). Fully controlled — each change
 // calls onChange(patch); the Firebase echo re-renders. Bounds mirror sanitizeDay
 // (open 6–22, close (open+1)–25).
+// ── Special days (v18.10.0) ─────────────────────────────────────────────────
+// Under the weekday rows of Opening hours: the dates whose hours differ from
+// their weekday's (lib/special-days.js). Each row opens the editor
+// (SpecialDayModal, mounted by App above this overlay); a special day that has
+// passed stays listed, faded and not editable, for 30 days after its last date,
+// and the next save of the hours drops it.
+function SpecialDaysList({ exceptions, onOpen }) {
+  const today = todayStr();
+  const { upcoming, past } = splitExceptions(exceptions || {}, today);
+  const line = (ex) => rangeLabel(ex, today) + " · " + specialHoursLabel(ex) + (ex.note ? " · " + ex.note : "");
+  return (
+    <div style={{ marginTop: SP.base, paddingTop: SP.base, borderTop: "1px solid var(--border-soft)" }}>
+      <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Special days</div>
+      <div style={{ fontSize: T.body, color: "var(--text-faint)", marginTop: 2, marginBottom: SP.snug }}>
+        Dates that are closed, or open with other hours. Bookings already made stay.
+      </div>
+      {upcoming.length ? upcoming.map((ex) => (
+        <div key={ex.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: SP.snug, flexWrap: "wrap", padding: "6px 0" }}>
+          <span style={{ fontSize: T.body, color: "var(--text-primary)", flex: "1 1 200px" }}>{line(ex)}</span>
+          <button type="button" className="mgt-hover-scale" onClick={() => onOpen(ex.id)}
+            aria-label={"Change " + rangeLabel(ex, today)}
+            style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav })}>Change</button>
+        </div>
+      )) : (
+        <div style={{ fontSize: T.body, color: "var(--text-muted)", padding: "6px 0" }}>None planned.</div>
+      )}
+      {past.length ? (
+        <div style={{ opacity: PAUSED_FADE, marginTop: SP.snug }}>
+          <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-muted)" }}>Past</div>
+          {past.map((ex) => (
+            <div key={ex.id} style={{ fontSize: T.body, color: "var(--text-muted)", padding: "4px 0" }}>{line(ex)}</div>
+          ))}
+        </div>
+      ) : null}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: SP.snug }}>
+        <button type="button" className="mgt-hover-scale" onClick={() => onOpen(null)}
+          style={mkBtn({ fontSize: T.body, minHeight: 36, padding: "6px 14px", background: BTN.nav })}>Add a special day</button>
+      </div>
+    </div>
+  );
+}
+
 function DayHoursRow({ label, day, onChange, onCopyAll }) {
   const closed = day && day.closed === true;
   const o = day && Number.isFinite(day.open) ? day.open : 13;
@@ -591,7 +634,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
   );
 }
 
-export function GeneralTabContent({ can = function () { return true; }, appVersion, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, backupStatus = null, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {}, onDirty = null }) {
+export function GeneralTabContent({ can = function () { return true; }, appVersion, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, exceptions = {}, onOpenSpecialDay = null, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, backupStatus = null, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {}, onDirty = null }) {
   // v15.0.0: the shift split + optimizer cutoff are single GLOBAL values, so their
   // stepper bounds use the STABLE week range (min-open … max-close across open days),
   // never a single day's hours.
@@ -696,6 +739,9 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
     const uniform = openCfgs.every((d) => (Number.isFinite(d.open) ? d.open : 13) === o0 && (Number.isFinite(d.close) ? d.close : 22) === c0);
     hoursSummary = (uniform ? hhLabel(o0) + "–" + hhLabel(c0) : "Varies") + (closedCount > 0 ? " · " + closedCount + " closed" : "");
   }
+  // v18.10.0: and how many special days are still to come.
+  const specialAhead = splitExceptions(exceptions, todayStr()).upcoming.length;
+  if (specialAhead) hoursSummary += " · " + countLabel(specialAhead, "special day", "special days");
   return (
     <div>
       {/* v17.11.0: the mirror of the line that moved to the App tab. Every
@@ -752,6 +798,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               onCopyAll={() => onSaveAllDays(wh[idx])} />
           );
         })}
+        {onOpenSpecialDay ? <SpecialDaysList exceptions={exceptions} onOpen={onOpenSpecialDay} /> : null}
       </Collapsible>
       {/* v14.6.0: Shifts — on/off toggle + the Afternoon/Evening split hour for
           the day Summary. Firebase-shared (settings/dayShifts). */}
@@ -1427,6 +1474,8 @@ export function SettingsContent({
   weekHours,
   onSaveDayHours,
   onSaveAllDays,
+  exceptions,
+  onOpenSpecialDay,
   weekRange,
   splitHour,
   shiftsEnabled,
@@ -1559,7 +1608,7 @@ export function SettingsContent({
   } else if (cur === "app") {
     content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} planAvail={planAvail} onTogglePlanAvail={onTogglePlanAvail} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} />;
   } else if (cur === "general") {
-    content = <GeneralTabContent can={can} appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} backupStatus={backupStatus} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
+    content = <GeneralTabContent can={can} appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} exceptions={exceptions} onOpenSpecialDay={onOpenSpecialDay} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} backupStatus={backupStatus} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
   } else if (cur === "layout") {
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} onDirty={reportDirty} />;
   } else if (cur === "customers") {

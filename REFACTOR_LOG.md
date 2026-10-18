@@ -37200,3 +37200,71 @@ localStorage, a throwing storage, a corrupt value, and the three callers of
 `ReplyComposer.jsx` · `ConversationRow.jsx` · `ConversationList.jsx` · `ConversationView.jsx`
 · `InboxPanel.jsx` · `useWhatsApp.js` · `App.jsx` · `tests/wa-reply-drafts.test.js` (new) ·
 `tests/contrast.test.js` · GLOSSARY.
+
+### Phase 5 — special days: closed dates and other hours
+
+Patryk, 2026-10-18: "adding closing dates on a single day or different opening hours on a
+given day or days which are different from the normal opening hours". Decided in two rounds
+of questions: one date or a range; closed or with its own hours, plus a short note; stored
+in the opening-hours node; bookings already made are named and KEPT; past ones listed
+greyed for 30 days, then dropped; edited in Settings and from the viewed date.
+
+**Stored** inside `settings/operatingHours` as `exceptions: {<id>: {from, to, closed, open,
+close, note}}` beside `days`, so the node's rev pair and its `hoursEdit` rule cover it with
+no rules deploy (the node has no `.validate`). **SCHEMA 3 → 4**: an older build's
+`sanitizeWeek` has no `exceptions`, and its next weekday edit writes `{days}` back without
+them. Every write now carries both halves and prunes special days whose last date is more
+than 30 days ago (`pruneExceptions`), so the list never grows. The server's WhatsApp prompt
+already sends the whole node to Gemini, so the model sees the special days with their dates
+and needed no change.
+
+**Read** by `hoursFor(date)` before the weekday (`HOUR_EXCEPTIONS`, a date index the hook
+builds with `exceptionIndex` and hands to `setHourExceptions`; constants.js imports nothing
+new). It answers `special` and `note` as well, so every reader follows a special day with
+no edit of its own: new bookings (`findTimes`, `getBlockSlots`), walk-ins, standing weeks
+(`dueOccurrences` skips a closed one), the waitlist, the WhatsApp draft check, the
+timeline's Closed notice and the header. Overlaps are refused by the editor; two devices
+that each save one resolve the same way everywhere (earlier start, then id). The memoised
+views' repaint key `hoursSig` is now the hook's `{week, exceptions}` state, not `weekHours`,
+or a special day saved for the viewed date would not repaint the timeline.
+
+**The editor** (`SpecialDayModal`, lazy, 2.1 kB gz): From / To, Closed · Open with Opens /
+Closes, a note. Save asks `specialDayRefusal` (a missing date, the last before the first,
+over 92 days, already past, hours out of bounds, an overlap named). `affectedBookings` names
+the bookings already made that fall outside the new hours (all of them on a closed run;
+otherwise a start before opening or after closing less 15 minutes, the form's own last
+start) and the button reads "Save, keep 3 bookings": the bookings are kept, nothing is moved
+or cancelled. Remove is two taps. A drafting surface with the discard guard (modal id
+`specialday`, above Settings at z=250 like the reminder editor). Two doors, both through
+App's `openSpecialDay`, which asks `hoursEdit`: Settings › General › Opening hours ›
+**Special days** (upcoming with Change, past faded, Add a special day; the section's summary
+counts the ones to come) and the Summary's **Hours for this day** (the special day covering
+the viewed date, else a new Closed one on it). The Closed notice on a special day reads
+"Closed: Staff party. …" and says where to change it; the header reads "Closed · Staff
+party" or the day's own hours and its note. The activity log says what happened ("added a
+special day · Sun 25.10 · Closed · Staff party"), where the key diff would have said
+"exceptions".
+
+**Verified on DEV** (the Browser pane): Sun 25.10 saved Closed with a note; the strip and the
+header named it and Mon 26.10 kept 13:00–22:00; Settings listed it and counted it; today
+opened at 18:00 named the three bookings at 13:30–14:30 and offered "Save, keep 3
+bookings" (cancelled, not saved); an untouched editor closed without the discard prompt; the
+25.10 test day was removed through the editor. A second special day (22–23.10, 17:00–00:00)
+appeared on DEV during the run, made in the pane by someone else at the same time, and was
+left as it is.
+
+**Deploy note: refresh every device.** The SCHEMA raise is the point: once a refreshed
+device announces 4, a device still on the previous build stops writing until reloaded,
+instead of saving a weekday's hours with the special days gone.
+
+**Test.** `tests/special-days.test.js` (18): the reader, the cap, the index and its overlap
+order, `hoursFor` on and off a run and over a closed weekday, `findTimes` refusing a closed
+special day and offering only its own hours, a standing week skipping one, every refusal,
+the bookings named, pruning, the list split, the labels and the activity line, and the hook
+writing both halves pruned. `tests/schema.test.js` pins 4 and the new sanitisers.
+
+**Files:** `src/lib/special-days.js` (new) · `src/components/SpecialDayModal.jsx` (new) ·
+`src/lib/constants.js` · `src/hooks/useOperatingHours.js` · `src/lib/activity.js` ·
+`src/lib/schema.js` · `src/App.jsx` · `Settings.jsx` · `Summary.jsx` · `AppBanners.jsx` ·
+`useModalStack.js` · `useKeyboardShortcuts.js` · `tests/special-days.test.js` (new) ·
+`tests/schema.test.js` · GLOSSARY · the CLAUDE.md notes.

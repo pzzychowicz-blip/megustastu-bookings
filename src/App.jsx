@@ -364,6 +364,9 @@ import { WaitAvailBanner } from "./components/WaitAvailBanner";
 // sheet has to mount synchronously inside the Print click, so it cannot be a
 // lazy component of its own, and it is loaded by the time Print can be pressed.
 const PrintModal = lazyChunk(function(){return import("./components/PrintModal").then(function(m){return {default:m.PrintModal};});},"Print");
+// v18.10.0: the special-day editor — opened from Settings (itself lazy) and the
+// Summary, rarely, so it stays out of the startup chunk (3.2 kB gz measured).
+const SpecialDayModal = lazyChunk(function(){return import("./components/SpecialDayModal").then(function(m){return {default:m.SpecialDayModal};});},"Special day");
 const SearchPanel = lazyChunk(function(){return import("./components/SearchPanel").then(function(m){return {default:m.SearchPanel};});},"SearchPanel"); // v17.1.0: lazy (opened on demand)
 import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
@@ -997,6 +1000,9 @@ function BookingApp({uid}){
   },[setModal]);
   const blockTarget = modalOpen.block || null;
   const setBlockTarget = setModalFns.block;
+  // v18.10.0: the special-day editor — {id, draft} (SpecialDayModal).
+  const specialDay = modalOpen.specialday || null;
+  const setSpecialDay = setModalFns.specialday;
   const [viewDate, setViewDate] = useState(todayStr());
   const showForm = !!modalOpen.form;
   const setShowForm = setModalFns.form;
@@ -1074,6 +1080,8 @@ function BookingApp({uid}){
   // and Settings do the same — their drafts are component-local too.
   const [manualDirty, setManualDirty] = useState(false);
   const [blockDirty, setBlockDirty] = useState(false);
+  // v18.10.0: the special-day editor (SpecialDayModal) reports its draft too.
+  const [specialDirty, setSpecialDirty] = useState(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
   // v17.0.0: status override for the pending flow — set by save("pending"/
   // "confirmed") ("Save pending" / "Save&confirm" buttons) and read by doSave.
@@ -1359,7 +1367,9 @@ function BookingApp({uid}){
   // live OPEN/CLOSE/GRID_CLOSE on each render (keyed to viewDate); `weekHours` drives
   // the re-render that repaints the timeline + form time limits. saveDayHours /
   // saveAllDays are wired to the Settings General-tab 7-day editor below.
-  const { weekHours, saveDayHours, saveAllDays } = useOperatingHours(viewDate);
+  // v18.10.0: and the special days (`hourExceptions`), which `hoursFor` reads.
+  // `hoursSig` is both halves as ONE object, the memoised views' repaint key.
+  const { weekHours, exceptions: hourExceptions, hoursSig, saveDayHours, saveAllDays, saveException, removeException } = useOperatingHours(viewDate);
   // v18.2.0: then stretch the viewed day's grid to its latest booking's end
   // (constants.js `extendActiveGrid` — display only, never shorter). Same
   // render-time module mutation as the line above, and it must come AFTER it,
@@ -1379,6 +1389,20 @@ function BookingApp({uid}){
   // v18.4.0: the print chooser opens on the range this grid draws. Declared
   // below `viewLatestEnd`, which it reads.
   function openPrint(){setPrintAsk(printRange(hoursFor(viewDate),viewLatestEnd));}
+  // v18.10.0: open the special-day editor. `id` edits that special day; else
+  // `date` opens the one covering it, or a new one-date special day there,
+  // starting Closed with the date's present hours behind the Open switch.
+  // Both doors (Settings' list, the Summary's "Hours for this day") need
+  // `hoursEdit`, asked here once.
+  function openSpecialDay(date,id){
+    if(refused("hoursEdit")) return;
+    let key=id||null;
+    if(!key&&date){const hit=Object.keys(hourExceptions).find(function(k){const x=hourExceptions[k];return x.from<=date&&x.to>=date;});if(hit) key=hit;}
+    if(key&&hourExceptions[key]){setSpecialDay({id:key,draft:Object.assign({},hourExceptions[key])});return;}
+    const d=date&&date>=todayStr()?date:todayStr();
+    const h=hoursFor(d);
+    setSpecialDay({id:null,draft:{from:d,to:d,closed:true,open:h.open,close:h.close,note:""}});
+  }
   // ── v14.6.0: Day shifts (Firebase settings/dayShifts, shared) ────────────
   // The Afternoon/Evening split hour for the Summary panel — the app's 2nd
   // Firebase settings node. saveDayShifts is wired to the Settings General tab.
@@ -2660,6 +2684,7 @@ function BookingApp({uid}){
   function closeSettings(){setShowSettings(false);setSettingsTab("general");setCustomerSeek("");endBackupOpen();}
   function requestCloseReminderEditor(){if(reminderDirty) setConfirmDiscard("reminder");else setReminderEditor(null);}
   function requestCloseBlock(){if(blockDirty) setConfirmDiscard("block");else setBlockTarget(null);}
+  function requestCloseSpecialDay(){if(specialDirty) setConfirmDiscard("specialday");else setSpecialDay(null);}
   function requestCloseSettings(){if(settingsDirty) setConfirmDiscard("settings");else closeSettings();}
   // Commit the discard: shut the surface the modal was asked about.
   function doDiscard(){
@@ -2670,13 +2695,14 @@ function BookingApp({uid}){
     else if(which==="manual") setManualTarget(null);
     else if(which==="reminder") setReminderEditor(null);
     else if(which==="block") setBlockTarget(null);
+    else if(which==="specialday") setSpecialDay(null);
     else if(which==="settings") closeSettings();
   }
 
   // Tab/window close + reload. Registered ONLY while something is dirty, so the
   // browser never nags on a clean page. Custom text is not possible — every
   // modern browser shows its own generic wording and ignores the string.
-  const anyDirty=formDirty||walkinDirty||manualDirty||reminderDirty||blockDirty||settingsDirty;
+  const anyDirty=formDirty||walkinDirty||manualDirty||reminderDirty||blockDirty||settingsDirty||specialDirty;
   useEffect(function(){
     if(!anyDirty) return undefined;
     function onBeforeUnload(e){e.preventDefault();e.returnValue="";}
@@ -3139,7 +3165,9 @@ function BookingApp({uid}){
     confirmDiscard:confirmDiscard,setConfirmDiscard:setConfirmDiscard,doDiscard:doDiscard,
     requestCloseForm:requestCloseForm,requestCloseWalkin:requestCloseWalkin,requestCloseManual:requestCloseManual,
     // v17.8.0: the three surfaces added to the guard — same reason as above.
-    requestCloseReminderEditor:requestCloseReminderEditor,requestCloseBlock:requestCloseBlock,requestCloseSettings:requestCloseSettings
+    requestCloseReminderEditor:requestCloseReminderEditor,requestCloseBlock:requestCloseBlock,requestCloseSettings:requestCloseSettings,
+    // v18.10.0: the special-day editor, the seventh drafting surface.
+    requestCloseSpecialDay:requestCloseSpecialDay
   });
 
   // v18.5.0 (#17): the two money questions a status change can raise are
@@ -3785,7 +3813,9 @@ function BookingApp({uid}){
       loadFailed:!bookingsReady&&loadStalled,
       readError:readError,
       hasConnected:hasConnected,
-      dayClosed:dayClosed
+      dayClosed:dayClosed,
+      // v18.10.0: a special day's note, or null on a weekday's closing.
+      closedSpecial:viewHours.special?viewHours.note:null
     }),
     hasClash?[{id:"clash",tone:"var(--danger-text)",tint:"var(--danger-bg)",icon:ClashIcon,
       title:clashBannerPairs.length===1?"Double-booked":"Double-bookings",count:clashBannerPairs.length,
@@ -3957,7 +3987,7 @@ function BookingApp({uid}){
   // close over fresh state), and the props are ONE-TIME wrapper functions that
   // read the ref at event time — stable identity, always-fresh behavior.
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint};
+  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -3993,7 +4023,9 @@ function BookingApp({uid}){
       // v18.4.0: Print opens the chooser (day sheet, timeline, both).
       // Through the ref, like every wrapper here: this object is built once,
       // and the range it opens with is the VIEWED day's.
-      onPrint:function(){R.current.openPrint();}
+      onPrint:function(){R.current.openPrint();},
+      // v18.10.0: the Summary's "Hours for this day", for the viewed date.
+      onSpecialHours:function(){R.current.openSpecialDay(R.current.viewDate);}
     };
   });
 
@@ -4033,7 +4065,7 @@ function BookingApp({uid}){
     emptyWalkin={emptyWalkin}
     isEmpty={isEmptyDay}
     dayClosed={dayClosed}
-    hoursSig={weekHours} />;
+    hoursSig={hoursSig} />;
   // v17.1.0 perf note: hoursSig / layoutSig are identity-only props — the views
   // read OPEN/GRID_CLOSE/QUARTER_HOURS/TIMELINE_TABLES/TOTAL_SEATS as LIVE
   // module bindings, which React.memo cannot see. Passing the weekHours/layout
@@ -4078,7 +4110,7 @@ function BookingApp({uid}){
     turnBuffer={turnBuffer}
     waitGhosts={waitGhosts}
     onBookWait={VA.onBookWait}
-    hoursSig={weekHours}
+    hoursSig={hoursSig}
     layoutSig={layout}
     onNew={VA.onNew}
     emptyWalkin={emptyWalkin}
@@ -4193,13 +4225,14 @@ function BookingApp({uid}){
     isToday={viewDate===todayStr()}
     open={summaryOpen}
     freeing={freeingList}
-    hoursSig={weekHours}
+    hoursSig={hoursSig}
     layoutSig={layout}
     unplacedCount={unplacedItems.length}
     currency={generalSettings.currency}
     onToggle={VA.onSummaryToggle}
     onOpenWeek={VA.onOpenWeek}
-    onPrint={VA.onPrint} />;
+    onPrint={VA.onPrint}
+    onSpecialHours={can("hoursEdit")?VA.onSpecialHours:null} />;
   // v17.9.1: the vertical position of the two date-nav control groups — see
   // DATE_CTRL_DROP. Applied to BOTH groups so the arrows/date field and the
   // Today/waitlist pills stay on one line as they move.
@@ -4401,7 +4434,7 @@ function BookingApp({uid}){
               style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{/* v18.2.0: separators. The double spaces between the three facts were
                 collapsed by HTML to one, so it read "4 indoor 9 outdoor 13:00 -
                 22:00" — one run of numbers (the design critique). A middle dot
-                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))}</div></div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div><div ref={headCtrlRef} style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",justifyContent:"flex-end",flexGrow:1,minWidth:0}}><ViewSwitcher
+                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))+(viewHours.special?" · "+(viewHours.note||"special day"):"")}</div></div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div><div ref={headCtrlRef} style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",justifyContent:"flex-end",flexGrow:1,minWidth:0}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -4724,6 +4757,8 @@ function BookingApp({uid}){
             weekHours={weekHours}
             onSaveDayHours={function(i,p){if(refused("hoursEdit"))return;saveDayHours(i,p);}}
             onSaveAllDays={function(d){if(refused("hoursEdit"))return;saveAllDays(d);}}
+            exceptions={hourExceptions}
+            onOpenSpecialDay={function(id){openSpecialDay(null,id||null);}}
             weekRange={weekRange()}
             splitHour={dayShifts.split}
             shiftsEnabled={dayShifts.enabled}
@@ -4804,7 +4839,17 @@ function BookingApp({uid}){
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
           onSave={saveReminderFromEditor}
           onCancel={requestCloseReminderEditor}
-          isNew={reminderEditor.id==="new"} />:null}</ModalPresence>{/* v18.0.0 phase 5 review: `whatsappOn &&`, not `showInbox`
+          isNew={reminderEditor.id==="new"} />:null}</ModalPresence><ModalPresence show={!!specialDay}>{/* v18.10.0: the special-day editor. Opened from Settings too, so it
+          stacks above it the way the reminder editor does (z=250 vs 200). */
+        specialDay?<div style={{position:"relative",zIndex:250}}><Suspense fallback={null}><SpecialDayModal
+          initial={specialDay}
+          exceptions={hourExceptions}
+          bookings={bookings}
+          today={todayStr()}
+          onSave={function(id,d){if(refused("hoursEdit"))return false;return saveException(id,d);}}
+          onRemove={function(id){if(refused("hoursEdit"))return false;return removeException(id);}}
+          onDirty={setSpecialDirty}
+          onClose={function(done){if(done)setSpecialDay(null);else requestCloseSpecialDay();}} /></Suspense></div>:null}</ModalPresence>{/* v18.0.0 phase 5 review: `whatsappOn &&`, not `showInbox`
           alone. Gating only the ENTRY POINTS left an inbox that was already open
           when an admin switched the module off still mounted — reachable,
           because `?` opens Settings above the `anyModal` guard, so Admin is one

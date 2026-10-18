@@ -96,6 +96,10 @@ export const MODAL_Z=[
   // it is opened from the Admin tab and so must sit above the Settings overlay
   // it was opened from. The two never stack with each other.
   "activity",
+  // v18.10.0: the special-day editor. Opened from Settings' Opening hours and
+  // from the Summary, so it ranks above Settings; it never stacks with the
+  // capability grid or the activity log.
+  "specialday",
   "reminderdel", // renders above Settings in DOM order…
   "reminder",    // …and the editor is checked before it (v14 p7 order, kept)
   "discard",     // z=260 — raised by the surface below it, so it must be near the top
