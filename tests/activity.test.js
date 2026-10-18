@@ -17,7 +17,7 @@ import {
   bookingWriteEntries, voucherWriteEntries, settingsWriteEntry, changedKeys,
   isPrunable, activityWindow, activityCsv, activityCsvName, clearedEntry,
   retentionMs, retentionLabel, RETENTION_CHOICES, DEFAULT_RETENTION_DAYS,
-  retentionDaysOf, RETENTION_MIN_DAYS,
+  retentionDaysOf, RETENTION_MIN_DAYS, clearOutcome, CLEAR_FAILED,
 } from "../src/lib/activity.js";
 import {
   setActivitySink, emitActivity, resetActivitySink,
@@ -1016,5 +1016,31 @@ describe("rowText — a booking row says whose it is", () => {
   it("does not lead a row about several bookings, or one that is not about a booking", () => {
     expect(rowText({ kind: "booking", text: "2 bookings re-placed", bookings: { b1: true, b2: true } }, byId)).toBe("2 bookings re-placed");
     expect(rowText({ kind: "reminder", text: "changed the reminders" }, byId)).toBe("changed the reminders");
+  });
+});
+
+// ── v18.10.1 (#17): the Clear button's four sentences ─────────────────────
+// Moved out of App's doClearActivity. The expected strings are copied from
+// v18.10.0's App.jsx (lines 1702–1709), so the move is held to what shipped.
+// "\u00a0" is countLabel's no-break space.
+describe("clearOutcome — one sentence per outcome (v18.10.1)", () => {
+  const PERM = " — check you still have permission to administer the app.";
+  it("refused after removing some names how many went", () => {
+    expect(clearOutcome({ removed: 3, refused: true })).toBe("Cleared 3\u00a0entries, then the server refused the rest" + PERM);
+  });
+  it("refused before removing any says only that it was refused", () => {
+    expect(clearOutcome({ removed: 0, refused: true })).toBe("The server refused that clear" + PERM);
+  });
+  it("a range cut short says there are more, and refusal wins over truncation", () => {
+    expect(clearOutcome({ removed: 1, truncated: true })).toBe("Cleared 1\u00a0entry — there are more in that range. Press again to continue.");
+    expect(clearOutcome({ removed: 2, refused: true, truncated: true })).toMatch(/^Cleared 2\u00a0entries, then the server refused/);
+  });
+  it("a complete clear says how many; an empty one says there was nothing", () => {
+    expect(clearOutcome({ removed: 5 })).toBe("Cleared 5\u00a0entries.");
+    expect(clearOutcome({ removed: 0 })).toBe("There was nothing to clear in that range.");
+    expect(clearOutcome(null)).toBe("There was nothing to clear in that range.");
+  });
+  it("a clear that threw has its own sentence", () => {
+    expect(CLEAR_FAILED).toBe("Couldn't clear that range.");
   });
 });

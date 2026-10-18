@@ -585,6 +585,35 @@ export function clearedEntry(fromDay, toDay, count) {
   };
 }
 
+// ── v18.10.1 (#17): what the Clear button says when the clear comes back ────
+// Moved out of App's `doClearActivity`, which keeps the guards, the ref and
+// the setters. `res` is `clearActivityAndLog`'s answer: `{removed, refused,
+// truncated}`. FOUR outcomes and four sentences. Any two of them sharing a
+// sentence is how one situation gets mistaken for another — which is the
+// whole reason `refused` and `truncated` are separate flags rather than a
+// count of zero and a count that looks complete.
+export function clearOutcome(res) {
+  const n = res ? res.removed : 0;
+  const said = countLabel(n, "entry", "entries");
+  if (res && res.refused) {
+    // /code-review: this used to name ONE cause — "only once the
+    // updated database rules are deployed" — which was true of DEV on the day
+    // it was written and is now historical, since the rules are deployed and
+    // the clear works. A refusal today means something else: a capability
+    // taken away, a role changed, a write that failed. Saying the old sentence
+    // would send an admin to redo a deploy they have already done, which is
+    // worse than saying less.
+    return n > 0
+      ? "Cleared " + said + ", then the server refused the rest — check you still have permission to administer the app."
+      : "The server refused that clear — check you still have permission to administer the app.";
+  }
+  if (res && res.truncated) return "Cleared " + said + " — there are more in that range. Press again to continue.";
+  if (n > 0) return "Cleared " + said + ".";
+  return "There was nothing to clear in that range.";
+}
+// The clear threw before it could answer.
+export const CLEAR_FAILED = "Couldn't clear that range.";
+
 
 // ── CSV (v18.0.0 session 11) ─────────────────────────────────────────────────
 //

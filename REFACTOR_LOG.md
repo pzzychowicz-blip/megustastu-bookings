@@ -37422,3 +37422,22 @@ lifts `cleanPhoneOf`.
 comment naming `cleanPhoneOf`) · `src/lib/CLAUDE.md` · `tests/booking-save-waitlist.test.js`
 (new) · `tests/phone-countries.test.js` · `tests/draft-check.test.js` ·
 `tests/waitlist-match.test.js` · `tests/save-path.test.js`.
+
+### Phase 3 — #17: the activity clear's sentences
+
+`doClearActivity` decided which of five sentences an admin reads after Clear (refused
+after removing some, refused before any, a range cut short, cleared, nothing there) inline
+in a promise handler. They are `clearOutcome(res)` in `lib/activity.js` now, with the
+comment on why there are four outcomes and the `/code-review` note on the refusal's wording,
+plus `CLEAR_FAILED` for a clear that threw. App keeps the admin and range guards, the ref
+that stops a second press, and the two setters.
+
+**Test.** `tests/activity.test.js`: each outcome against the sentence copied from
+v18.10.0's App.jsx, and that a refusal wins over a cut-short range. Sabotaged to check
+truncation first, it fails.
+
+**`App.jsx`: 4,987 lines before this version, 4,937 after it** (phase 2 took 30, this
+phase 20).
+
+**Files:** `src/lib/activity.js` · `src/App.jsx` · `src/lib/CLAUDE.md` ·
+`tests/activity.test.js`.

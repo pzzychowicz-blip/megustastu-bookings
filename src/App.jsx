@@ -373,7 +373,7 @@ import { todayStr, stepDate, formatDay } from "./lib/day";
 import { onPrintEnd, printOrReport, PRINT_IGNORED_TEXT } from "./lib/print-end";
 // v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
 // stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
-import { activityWindow, retentionMs, retentionLabel } from "./lib/activity";
+import { activityWindow, retentionMs, retentionLabel, clearOutcome, CLEAR_FAILED } from "./lib/activity";
 
 // ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
 // `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
@@ -1670,30 +1670,10 @@ function BookingApp({uid}){
     setActivityClearing(true);
     setActivityClearMsg("");
     clearActivityAndLog(activityFrom,activityTo,activityFromDay,activityToDay)
-      .then(function(res){
-        // FOUR outcomes and four sentences. Any two of them sharing a sentence
-        // is how one situation gets mistaken for another — which is the whole
-        // reason `refused` and `truncated` are separate flags rather than a
-        // count of zero and a count that looks complete.
-        const n=res?res.removed:0;
-        const said=countLabel(n,"entry","entries");
-        if(res&&res.refused){
-          // /code-review: this used to name ONE cause — "only once the updated
-          // database rules are deployed" — which was true of DEV on the day it
-          // was written and is now historical, since the rules are deployed and
-          // the clear works. A refusal today means something else: a capability
-          // taken away, a role changed, a write that failed. Saying the old
-          // sentence would send an admin to redo a deploy they have already
-          // done, which is worse than saying less.
-          setActivityClearMsg(n>0
-            ?"Cleared "+said+", then the server refused the rest — check you still have permission to administer the app."
-            :"The server refused that clear — check you still have permission to administer the app.");
-        }
-        else if(res&&res.truncated) setActivityClearMsg("Cleared "+said+" — there are more in that range. Press again to continue.");
-        else if(n>0) setActivityClearMsg("Cleared "+said+".");
-        else setActivityClearMsg("There was nothing to clear in that range.");
-      })
-      .catch(function(){setActivityClearMsg("Couldn't clear that range.");})
+      // v18.10.1 (#17): the sentence for each outcome is `clearOutcome`
+      // (lib/activity.js), with why there are four.
+      .then(function(res){setActivityClearMsg(clearOutcome(res));})
+      .catch(function(){setActivityClearMsg(CLEAR_FAILED);})
       .then(function(){activityClearingRef.current=false;setActivityClearing(false);});
   }
   // v18.0.0 session 11: the CSV. Gated on `dataExport` and NOT on `isAdmin`,
