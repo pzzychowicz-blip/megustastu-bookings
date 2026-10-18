@@ -200,6 +200,13 @@ export const SCENARIOS = [
     run: (ctx) => simulateInbound({ phone: PH.sofia, language: "es", text: "Hola, ¿podríamos cambiar a 6 personas en vez de 4?", parse: { intent: "modify", name: "Sofía García", size: 6, confidence: "high" }, acceptedBookingId: "wasimS1" }, ctx),
   },
   {
+    // v18.11.0: a change request that is only an occasion. Apply changes adds
+    // it to the booking's occasion tags.
+    id: "modify_occasion", group: "Cancel / Modify", label: "Modify · now an anniversary (Sofía)",
+    note: "Needs sample bookings seeded (links to wasimS1). Apply changes opens it with Anniversary pressed.",
+    run: (ctx) => simulateInbound({ phone: PH.sofia, language: "es", text: "Hola! Por cierto, la cena de nuestra reserva es para celebrar nuestro aniversario", parse: { intent: "modify", name: "Sofía García", occasions: ["o-anniversary"], confidence: "high" }, acceptedBookingId: "wasimS1" }, ctx),
+  },
+  {
     id: "cancel_nolink", group: "Cancel / Modify", label: "Cancel · NO linked booking (manual)",
     note: "Cancel button hidden — staff handles manually.",
     run: (ctx) => simulateInbound({ phone: PH.cancelNoLink, language: "en", text: "Need to cancel my reservation for tonight please", parse: { intent: "cancel", confidence: "high" } }, ctx),

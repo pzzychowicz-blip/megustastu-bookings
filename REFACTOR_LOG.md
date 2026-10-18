@@ -37653,3 +37653,26 @@ say so: `draft-check`, `phone-countries`, `waitlist-match`.
 **Files:** `src/lib/tags.js` · `src/lib/whatsapp.js` · `src/lib/booking-save.js` ·
 `src/hooks/useWaitlist.js` · `src/App.jsx` · `src/components/WaitlistPanel.jsx` ·
 `GLOSSARY.md` · `src/hooks/CLAUDE.md`.
+
+### Phase 10 — a change request's occasion reaches the booking
+
+Patryk, after the review: a customer who writes "it's our anniversary" about a booking
+they already have gets a modify draft. The parse already reads its occasions, since
+the prompt rule and the mock apply to every booking intent. Two things used them:
+- **The request banner** (`IntentBanner`) lists them among the requested changes
+  ("Anniversary"). An occasion alone is a change, so it offers Apply changes.
+- **Apply changes** (`handleApplyModify`) ADDS them to the booking's occasion tags
+  (`unionTagIds`), and never puts them in place of the booking's own: a change
+  request says what is new, and a tag already on the booking was put there by
+  somebody. Taking a tag off stays a tap in the form, and the edit's history line
+  names the change, as it does for any occasion tap.
+
+A simulator scenario, `modify_occasion` (Sofía, linked to `wasimS1`), covers it for the
+live run.
+
+**Tests:** `tests/wa-occasions.test.js` (Apply adds to the booking's tags, the banner
+names them, the mock reads one on a modify, the scenario).
+
+**Files:** `src/hooks/useWhatsApp.js` · `src/components/whatsapp/{IntentBanner,
+ConversationView}.jsx` · `src/lib/wa-sim-scenarios.js` · `GLOSSARY.md` ·
+`src/hooks/CLAUDE.md`.

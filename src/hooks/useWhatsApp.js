@@ -41,7 +41,8 @@ import { EMPTY_FORM } from "../lib/constants";
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
-import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch, contactDeletePatch, replyUnarchives } from "../lib/whatsapp";
+import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch, contactDeletePatch, replyUnarchives, draftOccasions } from "../lib/whatsapp";
+import { unionTagIds } from "../lib/tags";
 import { sendsViaServer, sendViaBackend, sendMediaViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
@@ -741,7 +742,14 @@ export function useWhatsApp({
     const preference = (d.preference === "indoor" || d.preference === "outdoor") ? d.preference : (booking.preference || "auto");
     // The booking's own draft with the requested changes on top (`openEdit`),
     // so a field the request does not mention keeps its value.
-    if (!openEdit(booking, { date, time, size, preference })) return;
+    const changes = { date, time, size, preference };
+    // v18.11.0: an occasion the request names ("it's for a birthday now") is
+    // ADDED to the booking's occasion tags, never in place of them: a change
+    // request says what is new, and a tag already on the booking was put there
+    // by somebody. Removing one stays a tap in the form.
+    const occ = draftOccasions(d, tagList);
+    if (occ.length) changes.tags = unionTagIds(booking.tags, occ);
+    if (!openEdit(booking, changes)) return;
     modifyApplyRef.current = { phoneKey: conv.phoneKey, bookingId: booking.id };
     setReturnToInboxKey(conv.phoneKey);
     setShowInbox(false); setViewDate(date);

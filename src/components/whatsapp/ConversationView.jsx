@@ -445,7 +445,7 @@ export function ConversationView({
         <div style={{ padding: "0 14px" }}>
           {/* key=phoneKey: the fade's `leaving` state must die with the conversation —
               without it, switching threads mid-fade leaves the next banner invisible */}
-          <IntentBanner key={conv.phoneKey} narrow={phone} intent={intent} linkedBooking={linkedBooking} phoneKey={conv.phoneKey} draftData={conv.draftData} onMarkHandled={() => { if (onMarkIntentHandled) onMarkIntentHandled(conv.phoneKey); }} onApplyChanges={() => { if (onApplyModify) onApplyModify(conv); }} />
+          <IntentBanner key={conv.phoneKey} narrow={phone} tagList={tagList} intent={intent} linkedBooking={linkedBooking} phoneKey={conv.phoneKey} draftData={conv.draftData} onMarkHandled={() => { if (onMarkIntentHandled) onMarkIntentHandled(conv.phoneKey); }} onApplyChanges={() => { if (onApplyModify) onApplyModify(conv); }} />
         </div>
       ) : null}
       </Reveal>

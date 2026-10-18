@@ -179,6 +179,28 @@ describe("the tag list reaches the draft card", () => {
   });
 });
 
+// Phase 10 (Patryk, after the review): a change request naming an occasion.
+describe("a change request's occasion reaches the booking", () => {
+  const src = (f) => stripComments(readFileSync(new URL("../src/" + f, import.meta.url), "utf8")).join("\n");
+  it("Apply changes ADDS it to the booking's occasion tags", () => {
+    const hook = src("hooks/useWhatsApp.js");
+    const apply = hook.slice(hook.indexOf("function handleApplyModify("), hook.indexOf("function completeModifyApply("));
+    expect(apply).toMatch(/const occ = draftOccasions\(d, tagList\);\s*if \(occ\.length\) changes\.tags = unionTagIds\(booking\.tags, occ\);\s*if \(!openEdit\(booking, changes\)\) return;/);
+  });
+  it("the banner names it, so an occasion alone offers Apply changes", () => {
+    expect(src("components/whatsapp/IntentBanner.jsx")).toMatch(/tagLabels\(tagList, "occasion", draftData\.occasions\)\.forEach\(function \(l\) \{ reqParts\.push\(l\); \}\)/);
+    expect(src("components/whatsapp/ConversationView.jsx")).toMatch(/<IntentBanner[^>]*tagList=\{tagList\}/);
+  });
+  it("the mock reads one on a modify intent too", () => {
+    expect(mockParse("can we change it to 6 people? it's our anniversary", OCC)).toMatchObject({ intent: "modify", occasions: ["o-anniversary"] });
+  });
+  it("the scenario carries it, linked to a booking", () => {
+    let args = null;
+    SCENARIOS.find((x) => x.id === "modify_occasion").run({ __capture: (a) => { args = a; } });
+    expect(args).toMatchObject({ acceptedBookingId: "wasimS1", parse: { intent: "modify", occasions: ["o-anniversary"] } });
+  });
+});
+
 describe("the simulator scenario", () => {
   it("carries the occasion and the name the live run is expected to return", () => {
     const s = SCENARIOS.find((x) => x.id === "new_occasion");
