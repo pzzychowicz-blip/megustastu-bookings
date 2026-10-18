@@ -105,11 +105,6 @@ evidence for each.
   list, which is proposed there and must be confirmed against the Vercel project's
   domains first.
 
-- **`check:style` does not see inside an `mkBtn(...)` / `mkDangerBtn(...)` argument.** A
-  bare `minHeight: 32` there passes the gate (v18.10.0's review found five, now `H`
-  tokens; Summary's Print and More still carry two). Teach the height rule to read the
-  object passed to the style builders, then move the remaining literals.
-
 ## Designed, not implemented
 
 Nothing at present.

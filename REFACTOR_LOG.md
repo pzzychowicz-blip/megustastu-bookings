@@ -37457,3 +37457,26 @@ is its effects, in their order. The render's remaining bulk is prop wiring (`not
 the Settings mount), which Patryk dropped on 2026-10-10: a wrapper saves a few lines for
 about forty values passed. It shrinks only if the state behind it moves into hooks by
 domain, which is a design of its own and was not started; it is not on the roadmap.
+
+### Phase 5 — the `check:style` entry withdrawn: the gate was never blind
+
+v18.10.0's `/code-review` moved five bare heights in `mkBtn(...)` arguments to `H` tokens
+and filed a ROADMAP entry saying `check:style` "does not see inside an `mkBtn(...)` /
+`mkDangerBtn(...)` argument", to be taught to. **Measured, it does**: `styleValue`
+(`scripts/check-style-invariants.mjs`) finds the key anywhere on the line, so
+`mkBtn({ minHeight: 33 })`, `mkDangerBtn({ minHeight: 30 })`, the same over several lines,
+and an off-scale `padding` inside the argument all fail the gate. What passed there was
+`minHeight: 32`, which is ON the scale, and on-scale literals pass everywhere by design:
+DESIGN.md's "`SP` and `H` are LINTED, not tokenised". The review's tokens were harmless (the
+same values, named), and Print and More stay at 32. The 149 on-scale literal heights in
+`src` are not a backlog.
+
+**Pinned** in `tests/style-check.test.js`: the four off-scale cases above each fail with
+their rule named (the fixtures carry `mgt-hover-scale`, or the hover-lift rule would fail
+them first and prove nothing), and an on-scale height inside a builder passes.
+
+**The wording that invited it.** Root `CLAUDE.md` said the gate fails on "a bare …
+padding / margin / gap / `height` / `minHeight` number", which reads as "every literal".
+It now says off-scale, and that on-scale literals pass inside a builder too.
+
+**Files:** `tests/style-check.test.js` · `CLAUDE.md` · `ROADMAP.md`.
