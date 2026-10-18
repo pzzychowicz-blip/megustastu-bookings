@@ -65,7 +65,7 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
     });
   }
 
-  const affected = affectedBookings(bookings, draft.from && draft.to >= draft.from ? draft : null);
+  const affected = affectedBookings(bookings, draft.from && draft.to >= draft.from ? draft : null, today);
 
   function save() {
     const why = specialDayRefusal(draft, exceptions, initial.id, today);

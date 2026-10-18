@@ -161,11 +161,15 @@ function startMins(t) {
 // open run, those starting before it opens or after its last start (closing
 // less 15 minutes, the form's own rule, `lastStartMins`). Sorted by date and
 // time. They are KEPT; this is what the editor names before saving.
-export function affectedBookings(bookings, ex) {
+// `today`, when given, starts the count there: a run already under way is
+// edited from today on, and a past booking nobody marked completed is not one
+// its new hours could move (/code-review).
+export function affectedBookings(bookings, ex, today) {
   if (!ex || !Array.isArray(bookings)) return [];
   const lastStart = lastStartMins(ex.close);
+  const from = today && today > ex.from ? today : ex.from;
   return bookings
-    .filter((b) => b && b.date >= ex.from && b.date <= ex.to && b.status !== "cancelled" && b.status !== "completed")
+    .filter((b) => b && b.date >= from && b.date <= ex.to && b.status !== "cancelled" && b.status !== "completed")
     .filter((b) => {
       if (ex.closed) return true;
       const m = startMins(b.time);

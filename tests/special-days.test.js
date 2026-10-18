@@ -118,6 +118,12 @@ describe("the editor's questions", () => {
     expect(affectedBookings(bk, { ...NYE, open: 13, close: 20 }).map((b) => b.name)).toEqual(["Ben", "Cleo"]);
     expect(affectedBookings(bk, XMAS).map((b) => b.name)).toEqual(["Eve"]);
     expect(affectedBookings(bk, null)).toEqual([]);
+    // /code-review: a run already under way counts from today, so a past
+    // booking nobody marked completed is not named.
+    expect(affectedBookings(bk, XMAS, "2026-12-25").map((b) => b.name)).toEqual(["Eve"]);
+    expect(affectedBookings(bk, XMAS, "2026-12-26")).toEqual([]);
+    expect(affectedBookings(bk, NYE, "2026-12-01").map((b) => b.name)).toEqual(["Ana", "Cleo"]);
+    expect(read("src/components/SpecialDayModal.jsx")).toMatch(/affectedBookings\(bookings, [^;]*, today\)/);
   });
 });
 
