@@ -26,6 +26,11 @@ import { AlertPanel, AlertRow } from "./AlertPanel";
 import { ClosedIcon, TrashIcon } from "./Icons";
 
 const ERROR_ID = "mgt-special-day-error";
+// What a refused write says (/code-review): `onSave` / `onRemove` answer false
+// when nothing was written (the hours have not loaded yet, which passes; a
+// missing permission, which App's refusal names on its own), and the button
+// that did nothing must say so rather than sit there.
+const NOT_SAVED = "Not saved: the opening hours could not be written just now. Try again in a moment.";
 // How many of the bookings it leaves outside the hours are named one by one.
 const NAMED_MAX = 6;
 const OPEN_HOURS = Array.from({ length: 17 }, (_, i) => 6 + i);      // 06–22
@@ -66,6 +71,7 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
     const why = specialDayRefusal(draft, exceptions, initial.id, today);
     if (why) { setRefusal(why); return; }
     if (onSave(initial.id, draft) !== false) onClose(true);
+    else setRefusal(NOT_SAVED);
   }
 
   const saveLabel = affected.length ? "Save, keep " + countLabel(affected.length, "booking", "bookings") : "Save";
@@ -78,6 +84,7 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
           onClick={() => {
             if (!armed) { setArmed(true); return; }
             if (onRemove(initial.id) !== false) onClose(true);
+            else { setArmed(false); setRefusal(NOT_SAVED); }
           }}
         ><TrashIcon size={IC.control} />{armed ? "Confirm — remove" : "Remove"}</button>
       ) : null}

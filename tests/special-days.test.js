@@ -159,3 +159,19 @@ describe("the hook carries both halves on every write", () => {
     expect((A.match(/hoursSig=\{hoursSig\}/g) || []).length).toBe(3);
   });
 });
+
+// /code-review: a Save or Remove that wrote nothing (the hours not loaded yet,
+// a missing permission) says so, instead of a button that seems to do nothing.
+describe("the editor says when nothing was written", () => {
+  const M = read("src/components/SpecialDayModal.jsx");
+  it("on Save and on Remove", () => {
+    expect(M).toMatch(/if \(onSave\(initial\.id, draft\) !== false\) onClose\(true\);\s*else setRefusal\(NOT_SAVED\);/);
+    expect(M).toMatch(/if \(onRemove\(initial\.id\) !== false\) onClose\(true\);\s*else \{ setArmed\(false\); setRefusal\(NOT_SAVED\); \}/);
+  });
+  it("and the hook's two writers answer false when the write was refused", () => {
+    const H = read("src/hooks/useOperatingHours.js");
+    expect(H).toMatch(/if\(!loaded\.current\)\{\s*console\.warn\([^)]*\);\s*return false;/);
+    expect(H).toMatch(/return persist\(cur\.week, \{ \.\.\.cur\.exceptions, \[key\]: ex \}/);
+    expect(H).toMatch(/return persist\(cur\.week, next,/);
+  });
+});
