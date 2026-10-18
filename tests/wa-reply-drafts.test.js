@@ -148,6 +148,14 @@ describe("a conversation that goes takes its drafts", () => {
     // One mechanism: no delete path forgets by hand any more.
     ["deleteConversations", "clearAllWaData", "eraseConversation"].forEach((n) => expect(body(n)).not.toMatch(/ReplyDrafts/));
   });
+  // /code-review: a reply the server refused stores nothing (no failed bubble,
+  // no Retry), so the box gets its text back rather than losing the draft.
+  it("a refused send puts the text back in its thread's box", () => {
+    expect(body("handleSendReply")).toMatch(/return sendViaBackend\(phoneKey, text\)\.then\(function \(\) \{ return true; \}, function \(e\) \{[\s\S]*?return false;/);
+    const composer = read("src/components/whatsapp/ReplyComposer.jsx");
+    expect(composer).toMatch(/const went = onSend\(t\);\s*setTxt\(""\);/);
+    expect(composer).toMatch(/went\.then\(\(ok\) => \{ if \(ok === false\) setTxt\(\(cur\) => cur \|\| typed, key\); \}\)/);
+  });
   it("the reply box and each row read the same store, for the signed-in account", () => {
     expect(read("src/components/whatsapp/ReplyComposer.jsx")).toMatch(/useReplyDraft\(draftOwner, threadKey\)/);
     expect(read("src/components/whatsapp/ConversationRow.jsx")).toMatch(/useReplyDraft\(draftOwner, conv\.phoneKey\)/);

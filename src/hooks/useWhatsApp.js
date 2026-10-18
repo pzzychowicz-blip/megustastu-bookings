@@ -415,12 +415,16 @@ export function useWhatsApp({
     // every reply fell through to the mock below — appended locally and marked
     // "delivered" 800ms later, for a guest who received nothing. See the note
     // on `sendsViaServer` in lib/wa-backend.js.
+    // v18.10.0 (/code-review): the server path resolves whether the message
+    // went. A refused send stores nothing, so there is no failed bubble to
+    // Retry, and the composer puts the text back in the box (ReplyComposer's
+    // send). The mock path below needs none: its failure is a bubble.
     if (sendsViaServer()) {
-      sendViaBackend(phoneKey, text).catch(function (e) {
+      return sendViaBackend(phoneKey, text).then(function () { return true; }, function (e) {
         console.warn("[wa] backend send failed:", e.message);
         if (setWriteWarning) setWriteWarning("WhatsApp send failed: " + e.message);
+        return false;
       });
-      return;
     }
     const msgId = "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
     const ts = Date.now();

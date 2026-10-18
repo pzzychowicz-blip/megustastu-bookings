@@ -220,8 +220,16 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
     }
     const t = txt.trim();
     if (!t) return;
-    onSend(t);
+    const key = threadKey;
+    const typed = txt;
+    const went = onSend(t);
     setTxt("");
+    // v18.10.0 (/code-review): a send the server refused stored nothing, so
+    // the kept draft must not have been the casualty. `false` puts the text
+    // back, into that thread's box, unless something was typed there since.
+    if (went && typeof went.then === "function") {
+      went.then((ok) => { if (ok === false) setTxt((cur) => cur || typed, key); });
+    }
   }
   function onKey(e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
