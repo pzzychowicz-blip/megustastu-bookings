@@ -585,7 +585,7 @@ export function clearedEntry(fromDay, toDay, count) {
   };
 }
 
-// ── v18.10.1 (#17): what the Clear button says when the clear comes back ────
+// ── v18.11.0 (#17): what the Clear button says when the clear comes back ────
 // Moved out of App's `doClearActivity`, which keeps the guards, the ref and
 // the setters. `res` is `clearActivityAndLog`'s answer: `{removed, refused,
 // truncated}`. FOUR outcomes and four sentences. Any two of them sharing a

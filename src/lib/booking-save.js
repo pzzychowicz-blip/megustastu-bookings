@@ -937,7 +937,7 @@ export function kitchenAsk(f,orig,bookings,editId){
   return kitchenRelevant(orig,f,size)&&load.starts+1>=KITCHEN_TABLE_LIMIT;
 }
 
-// ── v18.10.1 (#17): the entry an "Add to waitlist" door writes ──────────────
+// ── v18.11.0 (#17): the entry an "Add to waitlist" door writes ──────────────
 // Three doors add a party to the waitlist: the booking form's no-tables banner,
 // the walk-in form, and a WhatsApp draft. Each wrote its own object literal,
 // renaming `time` to `prefTime` and cleaning the phone; this is that mapping,

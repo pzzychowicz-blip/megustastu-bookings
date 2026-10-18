@@ -37364,9 +37364,13 @@ The review raised nine findings at high effort. Eight were confirmed and fixed, 
 
 **Still for Patryk's iPhone, on the sandbox after the merge:** long-press Save photo on a received photo. Nothing should get selected and no menu should open. Photos do not reach a localhost run.
 
-## v18.10.1 — clearing the roadmap: the write trace goes, the last #17 slice, settled entries closed
+## v18.11.0 — clearing the roadmap, and WhatsApp drafts that read occasions
 
-**Date:** 2026-10-18 · **Branch:** `fix/v18.10.1-roadmap-clearing` · Patryk asked for the
+**Date:** 2026-10-18 · **Branch:** `feat/v18.11.0-roadmap-and-wa-occasions` · Phases 1–6 were
+planned and committed as patch v18.10.1 (`fix/v18.10.1-roadmap-clearing`; their commit
+subjects still say so). Patryk then asked for WhatsApp drafts to recognise occasions and
+chose to fold that feature into this branch as v18.11.0 rather than ship the patch first,
+so the version was raised and the branch renamed in phase 7. Patryk asked for the
 roadmap to be cleared of everything that can be cleared. Each entry was put to him on
 2026-10-18. What could not be cleared waits on something outside the code: the WhatsApp
 rehearsal (a disposable number), the PROD key list (due about 2026-10-25), the archive's

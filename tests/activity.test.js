@@ -1019,11 +1019,11 @@ describe("rowText — a booking row says whose it is", () => {
   });
 });
 
-// ── v18.10.1 (#17): the Clear button's four sentences ─────────────────────
+// ── v18.11.0 (#17): the Clear button's four sentences ─────────────────────
 // Moved out of App's doClearActivity. The expected strings are copied from
 // v18.10.0's App.jsx (lines 1702–1709), so the move is held to what shipped.
 // "\u00a0" is countLabel's no-break space.
-describe("clearOutcome — one sentence per outcome (v18.10.1)", () => {
+describe("clearOutcome — one sentence per outcome (v18.11.0)", () => {
   const PERM = " — check you still have permission to administer the app.";
   it("refused after removing some names how many went", () => {
     expect(clearOutcome({ removed: 3, refused: true })).toBe("Cleared 3\u00a0entries, then the server refused the rest" + PERM);

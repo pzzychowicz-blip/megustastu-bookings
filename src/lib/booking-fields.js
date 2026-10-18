@@ -89,7 +89,7 @@ export function isReadableTime(v){
 // Empty, a bare "+", or exactly the untouched prefix seed all mean "no phone" —
 // the prefix is a typing convenience the form puts in the field, not data.
 // App's `cleanPhoneOf` applied that rule on the SAVE path from v17.0.0 until
-// v18.10.1, when its last callers moved to booking-save.js, which asks this.
+// v18.11.0, when its last callers moved to booking-save.js, which asks this.
 // `diffBooking` applied HALF of it to one side ("+" only) and NONE of it to the
 // other, so a booking with no stored phone, opened in a form that seeds "+34"
 // into the field, differed from itself on every save: history recorded "phone

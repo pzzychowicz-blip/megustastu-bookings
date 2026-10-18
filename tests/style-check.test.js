@@ -185,7 +185,7 @@ describe("check:style — height scale", () => {
     expect(r.code).toBe(0);
   });
 
-  // v18.10.1: a ROADMAP entry (from v18.10.0's /code-review) said the gate
+  // v18.11.0: a ROADMAP entry (from v18.10.0's /code-review) said the gate
   // could not see inside a style builder's argument. It can: `styleValue`
   // reads the key wherever it sits on the line. An on-scale literal passing
   // there is the design (DESIGN.md: SP and H are LINTED, not tokenised), not

@@ -435,7 +435,7 @@ describe("Add to waitlist takes the phone the way Save does (v18.2.0 phase 80)",
   const add = App.slice(App.indexOf("function addFormToWaitlist(){"), App.indexOf("function addWalkinToWaitlist(){"));
   it("finds a code typed without its plus, then refuses a number that still names no country", () => {
     // v18.3.2: through `phoneForSave`, and never with Save's exemption — the
-    // button is offered on a new booking only. v18.10.1: `waitlistEntry` asks
+    // button is offered on a new booking only. v18.11.0: `waitlistEntry` asks
     // it (`checkPhone`); what it rewrites and refuses is tested on the builder
     // (tests/booking-save-waitlist.test.js), and this pins that the door asks.
     expect(add).toMatch(/const w=waitlistEntry\(formRef\.current,\{checkPhone:true,pinned:generalSettings\.pinnedCountries,prefix:generalSettings\.phonePrefix,date:viewDate\}\);/);
@@ -449,7 +449,7 @@ describe("Add to waitlist takes the phone the way Save does (v18.2.0 phase 80)",
   // door spells the sentence or either half of the rule any more.
   it("Save and this one ask ONE helper, and App spells neither the rule nor its sentence", () => {
     const save = App.slice(App.indexOf("function doSave(){"));
-    // v18.6.0 (#17): Save reaches it through `draftForSave`. v18.10.1: the two
+    // v18.6.0 (#17): Save reaches it through `draftForSave`. v18.11.0: the two
     // waitlist doors through `waitlistEntry`, so App calls it nowhere and
     // booking-save.js twice.
     expect(save).toMatch(/draftForSave\(/);

@@ -1,7 +1,7 @@
-// v18.10.1 (ROADMAP #17) — `waitlistEntry` (src/lib/booking-save.js), the
+// v18.11.0 (ROADMAP #17) — `waitlistEntry` (src/lib/booking-save.js), the
 // entry the three "Add to waitlist" doors write.
 //
-// Each door wrote its own object literal until v18.10.1. Those three literals
+// Each door wrote its own object literal until v18.11.0. Those three literals
 // are copied below VERBATIM from v18.10.0's App.jsx (only `cleanPhoneOf` and
 // `generalSettings` turned into arguments), and the builder is held to them
 // over generated drafts: the move changes nothing a door hands `addToWaitlist`
@@ -53,7 +53,7 @@ function oldWalkinDoor(walkinForm) {
   return { args: { name: wf.name || "", phone: clean(wf.phone), size: Number(wf.size) || 2, date: TODAY, prefTime: wf.time || null, notes: wf.notes || "" } };
 }
 
-// ── the three doors as v18.10.1 calls the builder ───────────────────────────
+// ── the three doors as v18.11.0 calls the builder ───────────────────────────
 const opts = { checkPhone: true, pinned: P, prefix: PREFIX };
 const newDraftDoor = (p) => waitlistEntry(p, opts);
 const newFormDoor = (f) => waitlistEntry(f, Object.assign({ date: VIEW }, opts));
@@ -85,7 +85,7 @@ function same(oldR, newR) {
   return JSON.stringify(stored(oldR.args)) === JSON.stringify(stored(newR.entry));
 }
 
-describe("waitlistEntry stores what each door stored before it (v18.10.1)", () => {
+describe("waitlistEntry stores what each door stored before it (v18.11.0)", () => {
   const list = drafts(4000);
   it("the WhatsApp draft's door", () => {
     const bad = list.filter((d) => !same(oldDraftDoor(d), newDraftDoor(d)));
@@ -108,7 +108,7 @@ describe("waitlistEntry stores what each door stored before it (v18.10.1)", () =
   });
 });
 
-describe("waitlistEntry's phone rule (v18.2.0 phase 80, moved in v18.10.1)", () => {
+describe("waitlistEntry's phone rule (v18.2.0 phase 80, moved in v18.11.0)", () => {
   it("gives a code typed without its plus its plus, and stores the checked number", () => {
     expect(newFormDoor({ phone: "34 600 111 333" }).entry.phone).toBe("+34 600 111 333");
   });

@@ -53,7 +53,7 @@ import {
   // v18.0.0 session 8 (C3): the seat that follows a clearing reads the same
   // completion. (v18.6.0: who is still seated there is `formSeatClash`, booking-save.js.)
   completedSeatedPatch,
-  // (v18.10.1: `enteredPhone` and `phoneForSave`, the phone rules, are asked by
+  // (v18.11.0: `enteredPhone` and `phoneForSave`, the phone rules, are asked by
   // lib/booking-save.js alone now: the save and `waitlistEntry`.)
   // v18.0.0 session 8 (C8): what the save toast is allowed to claim.
   // (v18.3.4: its zone note, `offZoneNote`, is the saves' own, in booking-save.js.)
@@ -423,7 +423,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.10.1"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.11.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1670,7 +1670,7 @@ function BookingApp({uid}){
     setActivityClearing(true);
     setActivityClearMsg("");
     clearActivityAndLog(activityFrom,activityTo,activityFromDay,activityToDay)
-      // v18.10.1 (#17): the sentence for each outcome is `clearOutcome`
+      // v18.11.0 (#17): the sentence for each outcome is `clearOutcome`
       // (lib/activity.js), with why there are four.
       .then(function(res){setActivityClearMsg(clearOutcome(res));})
       .catch(function(){setActivityClearMsg(CLEAR_FAILED);})
@@ -2433,7 +2433,7 @@ function BookingApp({uid}){
     // and the same guest with and without "+34" is two customers. The button is
     // offered on a NEW booking only, so Save's untouched-number exemption has
     // nothing to exempt here. v18.3.2: both halves are `phoneForSave`, the one
-    // copy Save asks too (ROADMAP #13). v18.10.1: the entry is `waitlistEntry`
+    // copy Save asks too (ROADMAP #13). v18.11.0: the entry is `waitlistEntry`
     // (lib/booking-save.js), with the other two doors; it carries the draft's
     // `preference` (v18.2.0 phase 68, L-1), the zone the party was refused for,
     // so the match offers only that zone and the row says it.
@@ -2447,7 +2447,7 @@ function BookingApp({uid}){
   // Same from the walk-in form (today, current draft time).
   function addWalkinToWaitlist(){
     if(refused("waitlistManage"))return;
-    // v18.10.1: `waitlistEntry`, with no phone check (the form has no phone
+    // v18.11.0: `waitlistEntry`, with no phone check (the form has no phone
     // field) and no zone, which this door never passed.
     addToWaitlist(waitlistEntry(Object.assign({},walkinForm,{date:todayStr(),preference:undefined}),{prefix:generalSettings.phonePrefix}).entry);
     setShowWalkin(false);
