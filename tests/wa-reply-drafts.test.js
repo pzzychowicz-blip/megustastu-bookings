@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { sanitizeDrafts, withDraft, withoutKeys, DRAFT_MAX, DRAFTS_KEY } from "../src/lib/wa-reply-drafts.js";
+import { sanitizeDrafts, withDraft, withoutKeys, withOnlyKeys, DRAFT_MAX, DRAFTS_KEY } from "../src/lib/wa-reply-drafts.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => stripComments(readFileSync(join(ROOT, p), "utf8")).join("\n");
@@ -49,6 +49,14 @@ describe("the pure core", () => {
     s = withDraft(s, "u1", "+2", "b", 1);
     s = withDraft(s, "u2", "+1", "c", 1);
     expect(withoutKeys(s, ["+1"])).toEqual({ u1: { "+2": { text: "b", at: 1 } } });
+  });
+  it("keeps only the conversations that exist, for every account", () => {
+    let s = withDraft({}, "u1", "+1", "a", 1);
+    s = withDraft(s, "u1", "+2", "b", 1);
+    s = withDraft(s, "u2", "+3", "c", 1);
+    expect(withOnlyKeys(s, ["+2"])).toEqual({ u1: { "+2": { text: "b", at: 1 } } });
+    expect(withOnlyKeys(s, ["+1", "+2", "+3", "+9"])).toBe(s);
+    expect(withOnlyKeys(s, [])).toEqual({});
   });
 });
 
@@ -111,7 +119,7 @@ describe("the store", () => {
     const m = await import("../src/lib/wa-reply-drafts.js");
     m.setReplyDraft("u1", "k", "still here");
     expect(m.draftsOf("u1").k.text).toBe("still here");
-    m.forgetReplyDrafts(["k"]);
+    m.keepReplyDraftsFor([]);
     expect(m.draftsOf("u1")).toEqual({});
   });
   it("ignores a corrupt stored value", async () => {
@@ -121,9 +129,10 @@ describe("the store", () => {
   });
 });
 
-// A deleted conversation, the simulator's wipe and Delete customer's erasure
-// each forget the drafts to those numbers on this device.
-describe("deleting a conversation forgets its drafts", () => {
+// A conversation gone by any route (a delete or Delete customer on any device,
+// the nightly prune, the simulator's wipe) takes its drafts on this device with
+// it: the conversations listener keeps only the drafts to numbers it holds.
+describe("a conversation that goes takes its drafts", () => {
   const src = read("src/hooks/useWhatsApp.js");
   const body = (name) => {
     const i = src.indexOf("function " + name + "(");
@@ -131,10 +140,13 @@ describe("deleting a conversation forgets its drafts", () => {
     const j = src.indexOf("\n  function ", i + 10);
     return src.slice(i, j === -1 ? undefined : j);
   };
-  it("in deleteConversations, clearAllWaData and eraseConversation", () => {
-    expect(body("deleteConversations")).toMatch(/forgetReplyDrafts\(keys\)/);
-    expect(body("clearAllWaData")).toMatch(/forgetReplyDrafts\(/);
-    expect(body("eraseConversation")).toMatch(/forgetReplyDrafts\(\[phoneKey\]\)/);
+  it("in the conversations listener, after the snapshot is read", () => {
+    const at = src.indexOf('onValue(ref(db, "conversations")');
+    expect(at).toBeGreaterThan(-1);
+    const listener = src.slice(at, src.indexOf('dbError("conversations")', at));
+    expect(listener).toMatch(/conversationsLoaded\.current = true;\s*keepReplyDraftsFor\(Object\.keys\(byKey\)\);/);
+    // One mechanism: no delete path forgets by hand any more.
+    ["deleteConversations", "clearAllWaData", "eraseConversation"].forEach((n) => expect(body(n)).not.toMatch(/ReplyDrafts/));
   });
   it("the reply box and each row read the same store, for the signed-in account", () => {
     expect(read("src/components/whatsapp/ReplyComposer.jsx")).toMatch(/useReplyDraft\(draftOwner, threadKey\)/);

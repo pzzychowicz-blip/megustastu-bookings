@@ -23,9 +23,13 @@
 // the `storage` event. Every storage access is in a try: a private window, a
 // full quota or blocked site data leave the drafts in memory for this session.
 //
-// Removed for EVERY account on this device when the conversation is deleted or
-// Delete customer erases it (`forgetReplyDrafts`, called by useWhatsApp): a
-// guest's erased conversation must not survive as somebody's draft to them.
+// Removed for EVERY account on this device once the conversation is gone, by
+// whatever removed it: a delete or Delete customer on any device, or the
+// nightly retention prune (`keepReplyDraftsFor`, from useWhatsApp's
+// conversations listener, whose local echo makes a delete here immediate). A
+// guest's erased conversation must not survive as somebody's draft to them;
+// /code-review found the first version forgot them only for a delete made on
+// this device.
 
 export const DRAFTS_KEY = "mgt-wa-drafts";
 // Longer than WhatsApp's 4,096-character message, so nothing typed is cut; the
@@ -82,6 +86,15 @@ export function withoutKeys(all, keys) {
     if (Object.keys(kept).length) out[uid] = kept;
   });
   return changed ? out : all;
+}
+
+// The store with only these conversations' drafts, for every account: what
+// the conversations listener keeps. `all` itself when nothing goes.
+export function withOnlyKeys(all, keys) {
+  const live = new Set(keys || []);
+  const gone = [];
+  Object.keys(all).forEach((uid) => { Object.keys(all[uid]).forEach((k) => { if (!live.has(k)) gone.push(k); }); });
+  return gone.length ? withoutKeys(all, gone) : all;
 }
 
 // ── The store ────────────────────────────────────────────────────────────────
@@ -144,6 +157,8 @@ export function setReplyDraft(uid, key, text) {
   commit(withDraft(load(), uid || "", key, text, Date.now()));
 }
 
-export function forgetReplyDrafts(keys) {
-  commit(withoutKeys(load(), keys));
+// Every conversation that exists, from the `conversations` listener: a draft to
+// any other number is dropped, for every account on this device.
+export function keepReplyDraftsFor(keys) {
+  commit(withOnlyKeys(load(), keys));
 }
