@@ -21,7 +21,7 @@
 
 import { useMemo, memo } from "react";
 import { daySummary, countLabel, depositSummary, depositParts } from "../lib/booking-logic";
-import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC, SP } from "../lib/constants";
+import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC, SP, H } from "../lib/constants";
 import { mkBtn, Reveal, TBadge } from "./atoms";
 // v17.9.0: the local `hh` was one of six copies of this label — see lib/time-grid.js.
 import { hourLabel as hh } from "../lib/time-grid";
@@ -285,7 +285,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                 <button
                   onClick={onSpecialHours}
                   className="mgt-hover-scale mgt-press"
-                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav })}>Hours for this day</button>
+                  style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.nav })}>Hours for this day</button>
               ) : null}
               {onPrint ? (
                 <button

@@ -80,7 +80,7 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
       {editing ? (
         <button
           className="mgt-hover-scale"
-          style={mkDangerBtn({ minHeight: 44, padding: "10px 18px", marginRight: "auto" })}
+          style={mkDangerBtn({ minHeight: H.touch, padding: "10px 18px", marginRight: "auto" })}
           onClick={() => {
             if (!armed) { setArmed(true); return; }
             if (onRemove(initial.id) !== false) onClose(true);
@@ -90,7 +90,7 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
       ) : null}
       <button
         className="mgt-hover-scale"
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
+        style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: "var(--app-btn-slate)" })}
         onClick={() => onClose(false)}
       >Cancel</button>
       <button

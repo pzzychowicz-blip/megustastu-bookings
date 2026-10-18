@@ -351,7 +351,7 @@ function SpecialDaysList({ exceptions, onOpen }) {
           <span style={{ fontSize: T.body, color: "var(--text-primary)", flex: "1 1 200px" }}>{line(ex)}</span>
           <button type="button" className="mgt-hover-scale" onClick={() => onOpen(ex.id)}
             aria-label={"Change " + rangeLabel(ex, today)}
-            style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav })}>Change</button>
+            style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.nav })}>Change</button>
         </div>
       )) : (
         <div style={{ fontSize: T.body, color: "var(--text-muted)", padding: "6px 0" }}>None planned.</div>
@@ -366,7 +366,7 @@ function SpecialDaysList({ exceptions, onOpen }) {
       ) : null}
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: SP.snug }}>
         <button type="button" className="mgt-hover-scale" onClick={() => onOpen(null)}
-          style={mkBtn({ fontSize: T.body, minHeight: 36, padding: "6px 14px", background: BTN.nav })}>Add a special day</button>
+          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "6px 14px", background: BTN.nav })}>Add a special day</button>
       </div>
     </div>
   );
