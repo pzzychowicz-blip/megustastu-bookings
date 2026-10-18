@@ -37363,3 +37363,36 @@ The review raised nine findings at high effort. Eight were confirmed and fixed, 
 **Gate after the fixes:** main entry 429.19 kB, 125.27 kB gz · 3677 tests · 0 errors and 63 warnings · style OK.
 
 **Still for Patryk's iPhone, on the sandbox after the merge:** long-press Save photo on a received photo. Nothing should get selected and no menu should open. Photos do not reach a localhost run.
+
+## v18.10.1 — clearing the roadmap: the write trace goes, the last #17 slice, settled entries closed
+
+**Date:** 2026-10-18 · **Branch:** `fix/v18.10.1-roadmap-clearing` · Patryk asked for the
+roadmap to be cleared of everything that can be cleared. Each entry was put to him on
+2026-10-18. What could not be cleared waits on something outside the code: the WhatsApp
+rehearsal (a disposable number), the PROD key list (due about 2026-10-25), the archive's
+trigger (2,500 bookings) and two ideas.
+
+### Phase 1 — the DEV write trace is removed, the fault left unexplained
+
+v18.6.0 put `lib/write-trace.js` into DEV builds to explain one sighting (v18.4.9, DEV): a
+parked write stored with a write stamp 76 s after its edit's history stamp, 28 s after that
+session's turn ended, with no tool call running and no Retry anyone remembers pressing.
+`retryParked` has one caller, the banner's button. The clean 120 s trial on 2026-10-08 (no
+reload, real visibility changes, two clicks by Patryk on the strip header) made no
+`saveBookings` or `retryParked` call. In the ten days since the trace went in, nothing has
+recurred. The likeliest explanation is still a click in the shared Browser pane, which
+Patryk does use during checks; it was never shown. Patryk chose to remove the instrument
+now rather than keep it to January.
+
+Removed: `src/lib/write-trace.js`, `tests/write-trace.test.js`, and the import, the
+module-load `startClickTrace()` and the four `traceWrite` calls in `usePersistence.js`
+(park, Retry, Discard, replay). Every one was behind `import.meta.env.DEV`, so no build
+changes. **If the fault comes back**, the module and its test are in git (`git log --diff-filter=D --
+src/lib/write-trace.js` names the commit that removed them) and can be restored as they were.
+
+**Docs:** `src/hooks/CLAUDE.md` (usePersistence), `src/lib/CLAUDE.md` (the module's row),
+`ROADMAP.md` (the entry).
+
+**Files:** `src/hooks/usePersistence.js` · `src/lib/write-trace.js` (deleted) ·
+`tests/write-trace.test.js` (deleted) · `src/App.jsx` (version) · the docs above. No stored
+shape changed, no rules, no `SCHEMA` raise; no device needs a refresh.

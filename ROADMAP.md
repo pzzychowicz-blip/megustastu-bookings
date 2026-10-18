@@ -150,27 +150,6 @@ evidence for each.
   commits and 7 fixes), whose decisions v18.3.4 already moved to `lib/booking-save.js`;
   by size it is the render. Not chosen: Patryk's call.
 
-- **A parked write was seen stored without Retry, once, and not reproduced** (v18.4.9,
-  DEV; investigated again 2026-10-08). The stored booking carries the edit's history
-  stamp (10:46:33.804Z) and a write stamp of 10:47:49.550Z, so the same in-page change
-  was replayed, 28 s after that session's turn ended and with no tool call running.
-  `retryParked` has one caller, the banner's button, and no shortcut. One clean trial
-  (the rejection turned off from the page, no reload, 120 s, through real visibility
-  changes and two clicks by Patryk on the strip header): 0 `saveBookings` calls, 0
-  `retryParked` calls, the booking unchanged. Editing `usePersistence.js` made Vite
-  reload the page 4 times of 4, which destroys a parked write, so a trial that removes
-  the switch by a file edit proves nothing unless the page is shown to have survived.
-  Patryk does click in the shared pane during a check and does not recall pressing Retry.
-  **The instrument is in place since v18.6.0, on DEV only** (`lib/write-trace.js`,
-  compiled out of every build): `window.__mgtTrace` holds the last 200 entries, in
-  memory, of every click (capture phase, `isTrusted`, the control's text, whether the
-  page was visible) and of each park, Retry, Discard and replay, and those four print
-  a `[trace]` console line; a Retry carries its call stack and the clicks of the 10 s
-  before it. A reload empties it, so **if it recurs, read `window.__mgtTrace` before
-  anything else**, and keep Vite's log line for any edit. Remove the module and its
-  six lines in `usePersistence.js` (the import and five guarded calls) once the fault is explained or a few months pass
-  without it.
-
 - **`check:style` does not see inside an `mkBtn(...)` / `mkDangerBtn(...)` argument.** A
   bare `minHeight: 32` there passes the gate (v18.10.0's review found five, now `H`
   tokens; Summary's Print and More still carry two). Teach the height rule to read the
