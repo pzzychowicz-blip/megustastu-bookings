@@ -37335,3 +37335,31 @@ deployments, so it waits for the sandbox once this version is on `main`.
 `HistoryPopup.jsx` · `SeatNoteModal.jsx` · `NotificationStrip.jsx` · `CountryPicker.jsx` ·
 `hooks/useAcRow.js` · `TagListEditor.jsx` · `SpecialDayModal.jsx` · `wa-connect.html` ·
 `src/wa-connect/main.jsx` · DESIGN.md.
+
+### /code-review fixes
+
+The review raised nine findings at high effort. Eight were confirmed and fixed, each in its own commit. One is left as it is (below).
+
+**A keystroke re-rendered the whole inbox (finding 1).** Phase 4 subscribed InboxPanel to the whole drafts store, and every key typed made a new store object. So the list, every row and the open thread's bubbles re-rendered per character, where before only the composer did. Nothing under `whatsapp/` is memoised. Now each row and the composer read their own conversation's text through `useReplyDraft(uid, key)` (`src/hooks/useReplyDraft.js`, which replaces `useReplyDrafts`), and the panel reads nothing. The snapshot is a string (`draftTextOf`), so a row whose draft did not change gets an equal snapshot and does not re-render. Checked in the dev server: the row shows "Draft:", the box gets the text back, and emptying it removes the store key. `tests/wa-reply-drafts.test.js` holds that a keystroke in one conversation leaves another's text as it was, and that the panel never subscribes.
+
+**The parse prompt's hours were the whole node (finding 2).** `hoursLine` was `JSON.stringify(settings/operatingHours)`, labelled "per weekday". Since phase 5 the node also carries `exceptions`, so a special day's hours could be read as a weekday's when the model placed a bare hour (phase 2's new rule). Every past special day and staff note also went into every parse. `hoursLineOf` (`api/_lib/gemini.js`), used by both prompts, drops `exceptions`. Whether a date is open stays the app's draft check, which reads the special days through `hoursFor`. Tested on both prompts.
+
+**A draft outlived a conversation removed elsewhere (finding 3).** A draft was forgotten only when the delete or Delete customer ran on this device. A conversation removed by another tablet, or by the nightly retention prune, left the text to that guest in this device's storage indefinitely. The conversations listener now keeps only the drafts to numbers it holds (`keepReplyDraftsFor`, `withOnlyKeys`). A delete made here is immediate through the local echo, and the three hand-written forgets are gone. Checked in the dev server: a stored draft to a number with no conversation was dropped on load, and the real one stayed.
+
+**A refused reply took its draft with it (finding 6).** Send cleared the kept draft at once. A reply the server refuses stores nothing (wa-send answers 502, so there is no failed bubble and no Retry), which lost exactly the text the drafts exist to keep. Before this version the text was lost the same way, but nothing claimed to keep it then. `handleSendReply`'s server path now resolves whether the message went. On `false` the composer puts the text back into that thread's box, unless something was typed there since. The mock path needed nothing: its failure is a bubble with Retry. Measured on DEV with the backend flag on and the harness down: the draft cleared on Send and was back 63 ms later.
+
+**The special-day editor's silent Save (finding 4).** `onSave` and `onRemove` answer false when nothing was written: the hours not loaded yet, or a missing permission, which App's refusal names on its own. The editor just stayed open. It now says "Not saved: …" where its other refusals appear.
+
+**A special day under way counted past bookings (finding 5).** `affectedBookings` counted from the run's first date, so editing a run that had begun could name a past booking that nobody marked completed. Save then read "Save, keep 1 booking" about a party that had already been. It takes `today`, and the editor passes it.
+
+**Two copies of the last-start rule (finding 8).** `affectedBookings` wrote `Math.min(close,24)*60-15` out again; it calls `lastStartMins` now. The file's header said it imported nothing that reads constants.js, which its own import of booking-logic.js contradicted. It now says why there is no cycle: constants.js never imports this file.
+
+**Bare heights (finding 9).** The buttons this version added took 32, 36 and 44 where `H.compact`, `H.chrome` and `H.touch` name them. `check:style` does not look inside an `mkBtn(...)` argument, which is how they got in; that gap is in ROADMAP. Print and More beside Hours for this day predate this version and are left as they are.
+
+**Left as it is: a delete the server refuses also drops the draft (finding 7).** The delete's local echo removes the conversation, the listener drops the draft, and a refusal brings the conversation back without it. Every staff account may delete, so a refusal is rare. Waiting for the server would also delay the prune that finding 3 needs.
+
+**One unexplained test failure.** One gate run during these fixes reported `1 failed | 3673 passed`. Three runs after it, including the full gate, passed (3674), and the failing test's name was not captured. It is recorded here because a failure nobody reproduced is the only thing that could explain a later one.
+
+**Gate after the fixes:** main entry 429.19 kB, 125.27 kB gz · 3677 tests · 0 errors and 63 warnings · style OK.
+
+**Still for Patryk's iPhone, on the sandbox after the merge:** long-press Save photo on a received photo. Nothing should get selected and no menu should open. Photos do not reach a localhost run.
