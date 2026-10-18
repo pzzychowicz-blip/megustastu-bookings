@@ -53,11 +53,8 @@ import {
   // v18.0.0 session 8 (C3): the seat that follows a clearing reads the same
   // completion. (v18.6.0: who is still seated there is `formSeatClash`, booking-save.js.)
   completedSeatedPatch,
-  // v18.0.0 session 8 (R5): one rule for "is there a phone here", both callers.
-  enteredPhone,
-  // v18.3.2 (ROADMAP #13): and one for "may this typed number be stored" —
-  // Save and Add to waitlist asked it in two copies.
-  phoneForSave,
+  // (v18.10.1: `enteredPhone` and `phoneForSave`, the phone rules, are asked by
+  // lib/booking-save.js alone now: the save and `waitlistEntry`.)
   // v18.0.0 session 8 (C8): what the save toast is allowed to claim.
   // (v18.3.4: its zone note, `offZoneNote`, is the saves' own, in booking-save.js.)
   savedToast,
@@ -81,7 +78,7 @@ import { undismissedClashes, clashByBooking, clashSpansByTable } from "./lib/cla
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
-import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal, draftForSave, draftRefusal, formSeatClash, kitchenAsk } from "./lib/booking-save";
+import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal, draftForSave, draftRefusal, formSeatClash, kitchenAsk, waitlistEntry } from "./lib/booking-save";
 import { normalizePhone, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { draftPrefill } from "./lib/draft-check";
@@ -1277,16 +1274,6 @@ function BookingApp({uid}){
   // OVERRIDES them once the account's node has loaded, and seeds the node from
   // the device when the user has never saved one.
   const { userPrefs, prefsLoaded, saveUserPrefs } = useUserPrefs(uid);
-  // A phone value that is empty, a bare "+", or exactly the untouched prefix
-  // seed counts as "no phone" (the prefix is a typing convenience, not data).
-  // v18.0.0 session 8 (R5): the rule moved to `enteredPhone` in booking-logic
-  // so `diffBooking` can apply the SAME one. This stays as the name the save
-  // path has used since v17.0.0, and supplies the setting the pure module
-  // cannot read.
-  // v18.2.0 phase 19: the form no longer SEEDS the prefix — it opens with an
-  // empty phone and an empty country-code picker — so the prefix clause is now
-  // only a guard for a value an older version put in the form.
-  function cleanPhoneOf(p){ return enteredPhone(p,generalSettings.phonePrefix); }
   const { autoOptimizer, setAutoOptimizer } = useAutoOptimizer({ nowMins, cutoffMins: optimizerSettings.cutoff*60, autoSwitch: optimizerSettings.autoSwitch });
   // ── Persistence hook ────────────────────────────────────────────────────────
   // Owns bookings/tableBlocks state, Firebase listeners, savers, and the
@@ -2449,10 +2436,9 @@ function BookingApp({uid}){
   // the card's button turns into "On the waitlist" once the entry is stored.
   function addDraftToWaitlist(conv){
     if(refused("waitlistManage"))return null;
-    const p=draftPrefill(conv,bookings,wa.contacts);
-    const phoneRule=phoneForSave(p.phone,generalSettings.pinnedCountries,generalSettings.phonePrefix,false);
-    if(phoneRule.refusal)return phoneRule.refusal;
-    addToWaitlist({name:p.name,phone:cleanPhoneOf(phoneRule.phone),size:p.size,date:p.date,prefTime:p.time,notes:p.notes,preference:p.preference});
+    const w=waitlistEntry(draftPrefill(conv,bookings,wa.contacts),{checkPhone:true,pinned:generalSettings.pinnedCountries,prefix:generalSettings.phonePrefix});
+    if(w.refusal)return w.refusal;
+    addToWaitlist(w.entry);
     return null;
   }
   // "Add to waitlist" from the booking form's no-tables banner: capture the
@@ -2467,23 +2453,13 @@ function BookingApp({uid}){
     // and the same guest with and without "+34" is two customers. The button is
     // offered on a NEW booking only, so Save's untouched-number exemption has
     // nothing to exempt here. v18.3.2: both halves are `phoneForSave`, the one
-    // copy Save asks too (ROADMAP #13).
-    const f0=formRef.current;
-    const phoneRule=phoneForSave(f0.phone,generalSettings.pinnedCountries,generalSettings.phonePrefix,false);
-    const f=phoneRule.phone!==f0.phone?Object.assign({},f0,{phone:phoneRule.phone}):f0;
-    const ph=cleanPhoneOf(f.phone);
-    if(phoneRule.refusal){setErrorField("phone");setError(phoneRule.refusal);return;}
-    addToWaitlist({
-      name:f.name||"",
-      phone:ph,
-      size:Number(f.size)||2,
-      date:f.date||viewDate,
-      prefTime:f.time||null,
-      notes:f.notes||"",
-      // v18.2.0 phase 68 (L-1): the zone the party was refused for, so the
-      // match offers only that zone and the row says it.
-      preference:f.preference
-    });
+    // copy Save asks too (ROADMAP #13). v18.10.1: the entry is `waitlistEntry`
+    // (lib/booking-save.js), with the other two doors; it carries the draft's
+    // `preference` (v18.2.0 phase 68, L-1), the zone the party was refused for,
+    // so the match offers only that zone and the row says it.
+    const w=waitlistEntry(formRef.current,{checkPhone:true,pinned:generalSettings.pinnedCountries,prefix:generalSettings.phonePrefix,date:viewDate});
+    if(w.refusal){setErrorField("phone");setError(w.refusal);return;}
+    addToWaitlist(w.entry);
     setShowForm(false);
     setWaitAddedShown(true);
     setTimeout(function(){setWaitAddedShown(false);},3000);
@@ -2491,15 +2467,9 @@ function BookingApp({uid}){
   // Same from the walk-in form (today, current draft time).
   function addWalkinToWaitlist(){
     if(refused("waitlistManage"))return;
-    const wf=walkinForm||{};
-    addToWaitlist({
-      name:wf.name||"",
-      phone:cleanPhoneOf(wf.phone),
-      size:Number(wf.size)||2,
-      date:todayStr(),
-      prefTime:wf.time||null,
-      notes:wf.notes||""
-    });
+    // v18.10.1: `waitlistEntry`, with no phone check (the form has no phone
+    // field) and no zone, which this door never passed.
+    addToWaitlist(waitlistEntry(Object.assign({},walkinForm,{date:todayStr(),preference:undefined}),{prefix:generalSettings.phonePrefix}).entry);
     setShowWalkin(false);
     setWaitAddedShown(true);
     setTimeout(function(){setWaitAddedShown(false);},3000);

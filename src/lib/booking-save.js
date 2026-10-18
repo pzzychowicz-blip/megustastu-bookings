@@ -936,3 +936,31 @@ export function kitchenAsk(f,orig,bookings,editId){
   const load=getKitchenLoad(bookings,f.date,f.time,f.customDur||getDur(size),editId);
   return kitchenRelevant(orig,f,size)&&load.starts+1>=KITCHEN_TABLE_LIMIT;
 }
+
+// ── v18.10.1 (#17): the entry an "Add to waitlist" door writes ──────────────
+// Three doors add a party to the waitlist: the booking form's no-tables banner,
+// the walk-in form, and a WhatsApp draft. Each wrote its own object literal,
+// renaming `time` to `prefTime` and cleaning the phone; this is that mapping,
+// once. `useWaitlist`'s `addToWaitlist` still applies the stored defaults and
+// keeps `preference` only when it is a zone, so nothing stored changes.
+//
+// `opts.checkPhone` runs the phone rule Save runs (`phoneForSave`, v18.2.0
+// phase 80): a code typed without its plus becomes the code, and a number that
+// still names no country is refused, since the entry becomes a booking and the
+// same guest with and without "+34" is two customers. The walk-in form has no
+// phone field, so its door does not ask. Returns `{refusal}` or `{entry}`; the
+// door decides where a refusal is shown.
+export function waitlistEntry(f,opts){
+  const o=opts||{};
+  const rule=o.checkPhone?phoneForSave(f.phone,o.pinned,o.prefix,false):{phone:f.phone,refusal:null};
+  if(rule.refusal) return {refusal:rule.refusal};
+  return {entry:{
+    name:f.name||"",
+    phone:enteredPhone(rule.phone,o.prefix),
+    size:Number(f.size)||2,
+    date:f.date||o.date,
+    prefTime:f.time||null,
+    notes:f.notes||"",
+    preference:f.preference
+  }};
+}

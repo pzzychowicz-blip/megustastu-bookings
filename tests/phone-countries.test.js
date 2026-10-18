@@ -435,39 +435,38 @@ describe("Add to waitlist takes the phone the way Save does (v18.2.0 phase 80)",
   const add = App.slice(App.indexOf("function addFormToWaitlist(){"), App.indexOf("function addWalkinToWaitlist(){"));
   it("finds a code typed without its plus, then refuses a number that still names no country", () => {
     // v18.3.2: through `phoneForSave`, and never with Save's exemption — the
-    // button is offered on a new booking only.
-    expect(add).toMatch(/const phoneRule=phoneForSave\(f0\.phone,generalSettings\.pinnedCountries,generalSettings\.phonePrefix,false\);/);
-    expect(add).toMatch(/const f=phoneRule\.phone!==f0\.phone\?Object\.assign\(\{\},f0,\{phone:phoneRule\.phone\}\):f0;/);
-    expect(add).toMatch(/if\(phoneRule\.refusal\)\{setErrorField\("phone"\);setError\(phoneRule\.refusal\);return;\}/);
-    // The refusal comes BEFORE the write, and the stored phone is the checked one.
+    // button is offered on a new booking only. v18.10.1: `waitlistEntry` asks
+    // it (`checkPhone`); what it rewrites and refuses is tested on the builder
+    // (tests/booking-save-waitlist.test.js), and this pins that the door asks.
+    expect(add).toMatch(/const w=waitlistEntry\(formRef\.current,\{checkPhone:true,pinned:generalSettings\.pinnedCountries,prefix:generalSettings\.phonePrefix,date:viewDate\}\);/);
+    expect(add).toMatch(/if\(w\.refusal\)\{setErrorField\("phone"\);setError\(w\.refusal\);return;\}/);
+    // The refusal comes BEFORE the write, and the entry written is the checked one.
     expect(add.indexOf("setErrorField(\"phone\")")).toBeLessThan(add.indexOf("addToWaitlist("));
-    expect(add).toMatch(/const ph=cleanPhoneOf\(f\.phone\);/);
-    expect(add).toMatch(/phone:ph,/);
+    expect(add).toMatch(/addToWaitlist\(w\.entry\);/);
   });
   // v18.3.2 (ROADMAP #13): this test asked that the two sentences MATCH, which
   // is what two copies of one rule need; one copy needs no such test. Neither
   // door spells the sentence or either half of the rule any more.
   it("Save and this one ask ONE helper, and App spells neither the rule nor its sentence", () => {
     const save = App.slice(App.indexOf("function doSave(){"));
-    // v18.6.0 (#17): Save reaches it through `draftForSave`, so App calls it
-    // once (Add to waitlist) and booking-save.js once.
+    // v18.6.0 (#17): Save reaches it through `draftForSave`. v18.10.1: the two
+    // waitlist doors through `waitlistEntry`, so App calls it nowhere and
+    // booking-save.js twice.
     expect(save).toMatch(/draftForSave\(/);
     expect(App).not.toMatch(/Choose the country code/);
     expect(App).not.toMatch(/withTypedCode|phoneHasCode/);
-    // v18.8.0 phase 8: twice — the WhatsApp draft's Add to waitlist is the
-    // second waitlist door, and asks the same helper (pinned below).
-    expect(App.match(/phoneForSave\(/g)).toHaveLength(2);
-    expect(read("src", "lib", "booking-save.js").match(/phoneForSave\(/g)).toHaveLength(1);
+    expect(App).not.toMatch(/phoneForSave\(/);
+    expect(read("src", "lib", "booking-save.js").match(/phoneForSave\(/g)).toHaveLength(2);
   });
   // v18.8.0 phase 8: the WhatsApp draft's door takes the phone the same way,
   // refusing BEFORE the write and storing the checked number.
   it("the WhatsApp draft's Add to waitlist asks the same helper, before it writes", () => {
     const wa = App.slice(App.indexOf("function addDraftToWaitlist(conv){"), App.indexOf("function addFormToWaitlist(){"));
-    expect(wa).toMatch(/const phoneRule=phoneForSave\(p\.phone,generalSettings\.pinnedCountries,generalSettings\.phonePrefix,false\);/);
-    expect(wa).toMatch(/if\(phoneRule\.refusal\)return phoneRule\.refusal;/);
-    expect(wa.indexOf("phoneRule.refusal")).toBeLessThan(wa.indexOf("addToWaitlist("));
-    expect(wa).toMatch(/phone:cleanPhoneOf\(phoneRule\.phone\)/);
-    expect(wa.indexOf('refused("waitlistManage")')).toBeLessThan(wa.indexOf("phoneForSave("));
+    expect(wa).toMatch(/const w=waitlistEntry\(draftPrefill\(conv,bookings,wa\.contacts\),\{checkPhone:true,pinned:generalSettings\.pinnedCountries,prefix:generalSettings\.phonePrefix\}\);/);
+    expect(wa).toMatch(/if\(w\.refusal\)return w\.refusal;/);
+    expect(wa.indexOf("w.refusal")).toBeLessThan(wa.indexOf("addToWaitlist("));
+    expect(wa).toMatch(/addToWaitlist\(w\.entry\);/);
+    expect(wa.indexOf('refused("waitlistManage")')).toBeLessThan(wa.indexOf("waitlistEntry("));
   });
 });
 

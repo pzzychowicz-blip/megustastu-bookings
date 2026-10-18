@@ -207,8 +207,9 @@ describe("draftPrefill — one rule for Accept and for the waitlist", () => {
     expect(accept).not.toMatch(/matchCustomerByPhone|charAt\(0\)/);
     const App = read("App.jsx");
     const wl = App.slice(App.indexOf("function addDraftToWaitlist(conv){"), App.indexOf("function addFormToWaitlist(){"));
-    expect(wl).toMatch(/const p=draftPrefill\(conv,bookings,wa\.contacts\);/);
-    expect(wl).toMatch(/addToWaitlist\(\{name:p\.name,phone:cleanPhoneOf\(phoneRule\.phone\),size:p\.size,date:p\.date,prefTime:p\.time,notes:p\.notes,preference:p\.preference\}\)/);
+    // v18.10.1: the entry is `waitlistEntry`'s, built from the prefill.
+    expect(wl).toMatch(/waitlistEntry\(draftPrefill\(conv,bookings,wa\.contacts\),/);
+    expect(wl).toMatch(/addToWaitlist\(w\.entry\);/);
   });
 });
 

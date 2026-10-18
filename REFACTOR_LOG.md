@@ -37396,3 +37396,29 @@ src/lib/write-trace.js` names the commit that removed them) and can be restored 
 **Files:** `src/hooks/usePersistence.js` · `src/lib/write-trace.js` (deleted) ·
 `tests/write-trace.test.js` (deleted) · `src/App.jsx` (version) · the docs above. No stored
 shape changed, no rules, no `SCHEMA` raise; no device needs a refresh.
+
+### Phase 2 — #17: one builder for the three Add to waitlist doors
+
+The booking form's no-tables banner, the walk-in form and a WhatsApp draft each added a
+party with an object literal of its own, the first and the last after the phone rule
+(`phoneForSave`) by hand. `waitlistEntry(f, opts)` (`lib/booking-save.js`) is the mapping
+once: `time` becomes `prefTime`, the phone goes through `enteredPhone`, and with
+`checkPhone` the phone rule runs first and answers `{refusal}` instead of an entry. Each
+door keeps its capability check, where it shows a refusal (the form's phone field, the
+draft card), and what it closes. App no longer calls `phoneForSave` or `enteredPhone`, so
+`cleanPhoneOf`, the save path's name for the second since v17.0.0, went with it.
+
+**Held to what it replaced.** `tests/booking-save-waitlist.test.js` copies v18.10.0's three
+literals verbatim and compares what `addToWaitlist` would STORE from each against the
+builder over 4,000 generated drafts (phones with and without a code, empty and junk sizes,
+missing dates and times, every zone). Its first run failed on the walk-in: that door never
+passed a zone, and the builder carried one. The walk-in form has no zone field, so no entry
+could differ, but the door now passes `preference: undefined` itself rather than rely on
+that. Five source pins on the old literals (`phone-countries`, `draft-check`, `waitlist-match`) now pin the
+calls, `waitlist-match`'s zone pin reads the builder, and `save-path`'s harness no longer
+lifts `cleanPhoneOf`.
+
+**Files:** `src/lib/booking-save.js` · `src/App.jsx` · `src/lib/booking-fields.js` (a
+comment naming `cleanPhoneOf`) · `src/lib/CLAUDE.md` · `tests/booking-save-waitlist.test.js`
+(new) · `tests/phone-countries.test.js` · `tests/draft-check.test.js` ·
+`tests/waitlist-match.test.js` · `tests/save-path.test.js`.
