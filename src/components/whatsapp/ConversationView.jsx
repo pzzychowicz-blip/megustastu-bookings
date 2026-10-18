@@ -60,6 +60,8 @@ export function ConversationView({
   draftOwner,
   // v18.9.0: the phone's synced contacts, and whether the first sync landed.
   contacts, contactsSynced = false,
+  // v18.11.0: the tag list, for the draft card's occasion labels.
+  tagList,
   // v18.8.0 phase 8: what the draft check needs, from App through InboxPanel.
   liveBookings, tableBlocks, autoOptimizer, waitlist, onAddToWaitlist,
 }) {
@@ -443,7 +445,7 @@ export function ConversationView({
         <div style={{ padding: "0 14px" }}>
           {/* key=phoneKey: the fade's `leaving` state must die with the conversation —
               without it, switching threads mid-fade leaves the next banner invisible */}
-          <IntentBanner key={conv.phoneKey} narrow={phone} intent={intent} linkedBooking={linkedBooking} phoneKey={conv.phoneKey} draftData={conv.draftData} onMarkHandled={() => { if (onMarkIntentHandled) onMarkIntentHandled(conv.phoneKey); }} onApplyChanges={() => { if (onApplyModify) onApplyModify(conv); }} />
+          <IntentBanner key={conv.phoneKey} narrow={phone} tagList={tagList} intent={intent} linkedBooking={linkedBooking} phoneKey={conv.phoneKey} draftData={conv.draftData} onMarkHandled={() => { if (onMarkIntentHandled) onMarkIntentHandled(conv.phoneKey); }} onApplyChanges={() => { if (onApplyModify) onApplyModify(conv); }} />
         </div>
       ) : null}
       </Reveal>
@@ -484,7 +486,7 @@ export function ConversationView({
           <DraftCard
             conv={conv} onAccept={onAccept} onDismiss={onDismiss} onDismissAcceptedBadge={onDismissAcceptedBadge} compact={compact}
             check={draftCheck} onTheWaitlist={onTheWaitlist} onAddToWaitlist={onAddToWaitlist}
-            onSuggest={disabled ? null : suggestReply}
+            onSuggest={disabled ? null : suggestReply} tagList={tagList}
           />
         </div>
       </Reveal>

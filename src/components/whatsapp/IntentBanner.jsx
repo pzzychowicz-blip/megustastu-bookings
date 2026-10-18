@@ -18,12 +18,14 @@ import { WarnIcon, PencilIcon } from "./WaIcons";
 import { CheckIcon, ChevronRightIcon } from "../Icons";
 import { formatDay } from "../../lib/day";
 import { guestsLabel } from "../../lib/booking-logic";
+import { tagLabels } from "../../lib/tags";
+import { requestedOccasions } from "../../lib/whatsapp";
 
 // v18.4.0 (Patryk) — `narrow`: a phone (under 600px, InboxPanel's `phone`). The banner starts
 // collapsed there and collapsed it is its title row alone, with the buttons in
 // the body (LinkedBookingCard has the measurement). So on a phone it is always
 // a toggle, body or not: the buttons are what it opens onto.
-export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMarkHandled, onApplyChanges, narrow }) {
+export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMarkHandled, onApplyChanges, narrow, tagList }) {
   const [collapsed, toggle] = useCollapseState(phoneKey, "intent", !!narrow);
   const [leaving, setLeaving] = useState(false); // fade-out in progress
   if (intent !== "cancel" && intent !== "modify") return null;
@@ -37,6 +39,9 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
     if (draftData.date) reqParts.push(formatDay(draftData.date));
     if (draftData.time) reqParts.push(draftData.time);
     if (draftData.preference === "indoor" || draftData.preference === "outdoor") reqParts.push(draftData.preference === "indoor" ? "Indoor" : "Outdoor");
+    // v18.11.0: an occasion the request names ("Birthday") that the booking
+    // does not have yet, which Apply changes adds; one alone is a change to apply.
+    tagLabels(tagList, "occasion", requestedOccasions(draftData, linkedBooking, tagList)).forEach(function (l) { reqParts.push(l); });
   }
   const showApply = isModify && linkedBooking && onApplyChanges && reqParts.length > 0;
   // Notifications are ONE surface: a soft semantic TINT at pane scale — not the

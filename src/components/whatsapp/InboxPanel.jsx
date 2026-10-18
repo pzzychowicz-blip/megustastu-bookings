@@ -109,6 +109,8 @@ export function InboxPanel({
   // v18.9.0: the phone's synced contacts (`waContacts`) and the Business-app
   // link (`waLink`), both from useWhatsApp.
   contacts, waLink,
+  // v18.11.0: the tag list (useTagSettings), for the draft card's occasions.
+  tagList,
   // v18.10.0: the signed-in account, whose reply drafts this device keeps
   // (lib/wa-reply-drafts.js): each row marks its own and the reply box edits
   // them. Handed down, never subscribed here: a subscription in this panel
@@ -472,7 +474,7 @@ export function InboxPanel({
       <ConversationView
         conv={activeConv} messages={activeMessages} onBack={() => setActiveKey(null)}
         onSend={(t) => onSend(activeConv.phoneKey, t)} onSendMedia={onSendMedia ? (blob, meta) => onSendMedia(activeConv.phoneKey, blob, meta) : null} onAccept={(over) => onAccept(activeConv, over)} onDismiss={() => onDismiss(activeConv.phoneKey)}
-        templates={templates} bookings={bookings} contacts={contacts} draftOwner={draftOwner}
+        templates={templates} bookings={bookings} contacts={contacts} draftOwner={draftOwner} tagList={tagList}
         contactsSynced={!!(waLink && waLink.contacts && waLink.contacts.firstAt)}
         showBack={!twoPane} phone={winW < 600} compact={compact}
         kbFold={kbFold} onUnfold={unfold}

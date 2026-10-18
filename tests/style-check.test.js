@@ -184,6 +184,29 @@ describe("check:style — height scale", () => {
     const r = run({ "a.jsx": "const x = <div style={{ height: 7, minHeight: 200 }} />;\n" });
     expect(r.code).toBe(0);
   });
+
+  // v18.11.0: a ROADMAP entry (from v18.10.0's /code-review) said the gate
+  // could not see inside a style builder's argument. It can: `styleValue`
+  // reads the key wherever it sits on the line. An on-scale literal passing
+  // there is the design (DESIGN.md: SP and H are LINTED, not tokenised), not
+  // a blind spot. Pinned so the claim is not made again.
+  it("reads a height inside an mkBtn / mkDangerBtn argument, on one line or several", () => {
+    const one = run({ "a.jsx": "const x = <button className=\"mgt-hover-scale\" style={mkBtn({ fontSize: T.body, minHeight: 33 })} />;\n" });
+    expect(one.code).toBe(1);
+    expect(one.out).toMatch(/height-scale/);
+    const danger = run({ "a.jsx": "const x = <button className=\"mgt-hover-scale\" style={mkDangerBtn({ minHeight: 30 })} />;\n" });
+    expect(danger.code).toBe(1);
+    expect(danger.out).toMatch(/height-scale/);
+    const several = run({ "a.jsx": "const x = <button className=\"mgt-hover-scale\" style={mkBtn({\n  fontSize: T.body,\n  minHeight: 34,\n})} />;\n" });
+    expect(several.code).toBe(1);
+    expect(several.out).toMatch(/height-scale/);
+    expect(run({ "a.jsx": "const x = <button className=\"mgt-hover-scale\" style={mkBtn({ padding: \"5px 11px\" })} />;\n" }).out).toMatch(/spacing-scale/);
+  });
+
+  it("passes an on-scale height inside a builder, as it does anywhere", () => {
+    const r = run({ "a.jsx": "const x = <button className=\"mgt-hover-scale\" style={mkBtn({ fontSize: T.body, minHeight: 32, padding: \"4px 12px\" })} />;\n" });
+    expect(r.code).toBe(0);
+  });
 });
 
 // The pre-existing rules must keep working — this file now guards the whole script.

@@ -351,6 +351,9 @@ import { formatPhone as _formatPhone, matchCustomerByPhone as _matchByPhone, nor
 // extension because api/_lib imports this module under Node ESM.
 import { isReadableTime, countLabel } from "./booking-logic.js";
 import { isReadableDate, formatDay, localDay, stepDate } from "./day.js";
+// v18.11.0: the occasion ids a parse may carry are a booking's tag ids, so they
+// are cleaned by the rule a booking's are (`cleanTagIds`). tags.js imports nothing.
+import { cleanTagIds, knownTagIds } from "./tags.js";
 
 // ── What a conversation is called (v18.9.0) ────────────────────────────────
 // conversationName(conv, bookings, contacts) → `{ title, phoneLine, source }`:
@@ -541,17 +544,51 @@ export function isUsableTime(v) { return typeof v === "string" && isReadableTime
 
 // sanitizeParse(parse) — the door every LLM answer walks through, on the server
 // (draftPatchFromParse) and in the client simulator (simulateInbound) alike.
-// Returns a NEW object; `null` in, `null` out. Only the three fields a booking
-// is actually built from are narrowed: `name`/`notes` are free text the app
-// only ever displays, and `intent`/`preference` are already gated by the
-// enum tests at their own call sites.
+// Returns a NEW object; `null` in, `null` out. Only the fields a booking is
+// actually built from are narrowed: `name`/`notes` are free text the app only
+// ever displays, and `intent`/`preference` are already gated by the enum tests
+// at their own call sites. v18.11.0: `occasions`, when the parse has the key,
+// becomes a clean list of tag ids (well-formed, each once, sorted), or null when
+// there are none; a parse without it is left without it. Which ids the
+// restaurant HAS is asked where the list is known: `parseMessage` on the
+// server, and `draftOccasions` when a draft opens the form.
 export function sanitizeParse(parse) {
   if (!parse || typeof parse !== "object") return parse;
-  return Object.assign({}, parse, {
+  const out = Object.assign({}, parse, {
     size: isUsableSize(parse.size) ? parse.size : null,
     date: isUsableDate(parse.date) ? parse.date : null,
     time: isUsableTime(parse.time) ? parse.time : null,
   });
+  if (parse.occasions !== undefined) {
+    const occ = cleanTagIds(parse.occasions);
+    out.occasions = occ.length ? occ : null;
+  }
+  return out;
+}
+
+// occasionIdsIn(ids, occasionTags) → the ids an occasion list `[{id, label}]`
+// still has, clean and sorted (v18.11.0): `knownTagIds` (tags.js) for a bare
+// occasion list, which is what the server holds. The server's answer
+// (`knownOccasions`, gemini.js) and Accept (`draftOccasions`) both ask it, so a
+// tag removed between the message and the Accept is left out everywhere.
+export function occasionIdsIn(ids, occasionTags) {
+  return knownTagIds({ occasion: occasionTags || [] }, "occasion", ids);
+}
+
+// draftOccasions(draft, tagList) → the occasion tag ids a draft names that the
+// restaurant's list (`settings/tags`) still has.
+export function draftOccasions(draft, tagList) {
+  return occasionIdsIn(draft && draft.occasions, tagList && tagList.occasion);
+}
+
+// requestedOccasions(draft, booking, tagList) → the occasions a change request
+// names that its booking does NOT already carry (v18.11.0, /code-review). Only
+// those are a change: the request banner lists them and Apply changes adds
+// them, so a tag already on the booking is neither offered as a request nor
+// counted as one.
+export function requestedOccasions(draft, booking, tagList) {
+  const has = cleanTagIds(booking && booking.tags);
+  return draftOccasions(draft, tagList).filter(function (id) { return has.indexOf(id) < 0; });
 }
 
 // clampConfidence(stated, draft) — the confidence ceiling rule (decided
@@ -594,7 +631,8 @@ export function clampConfidence(stated, draft) {
 //   · different intent → return the new parse unchanged (the request changed —
 //     e.g. a pending new_booking turns into a cancel; replace is correct).
 //   · same intent → non-null-overwrite: a field the new message states wins;
-//     a field it doesn't mention keeps the old value. notes: new if non-empty.
+//     a field it doesn't mention keeps the old value. notes and occasions:
+//     new if non-empty.
 //   · confidence recomputed from the MERGED fields: size+date+time all present
 //     → high · two of three → medium · else low.
 //   · ambiguity: the new parse's note if present; cleared when everything is
@@ -613,6 +651,11 @@ export function mergeDraft(oldDraft, newParse) {
     notes: pick(newParse.notes, oldDraft.notes) || "",
     language: pick(newParse.language, oldDraft.language),
   };
+  // v18.11.0: occasions as notes are: a message that names one replaces the
+  // draft's, and one that names none keeps them ("es un cumpleaños", then
+  // "somos 4" keeps the birthday).
+  const newOcc = cleanTagIds(newParse.occasions), oldOcc = cleanTagIds(oldDraft.occasions);
+  merged.occasions = newOcc.length ? newOcc : (oldOcc.length ? oldOcc : null);
   // preference: a stated area ("indoor"/"outdoor") wins; "auto" means the new
   // message didn't mention seating, so keep whatever the draft already had.
   merged.preference = (newParse.preference && newParse.preference !== "auto")
@@ -636,6 +679,20 @@ export function mergeDraft(oldDraft, newParse) {
 // an actionable message re-raises the alert. Conversations written before the
 // field existed read as 0: a handled banner stays hidden until the next
 // actionable inbound stamps it.
+// pendingDraftOf(conv) → the draft a new message is merged into, or null
+// (v18.11.0, /code-review). A PENDING draft only (`draftStatus` "parsed"), as
+// before, and not a cancel or modify request staff have already handled: that
+// request is done, so a later message starts a new one rather than carrying
+// its size, time and occasions forward (an occasion staff took off the
+// booking came back with the next, unrelated change). The server's two parse
+// paths, the re-check and the simulator all ask it.
+export function pendingDraftOf(conv) {
+  if (!conv || conv.draftStatus !== "parsed" || !conv.draftData) return null;
+  const intent = conv.draftData.intent;
+  if ((intent === "cancel" || intent === "modify") && !intentBannerVisible(conv)) return null;
+  return conv.draftData;
+}
+
 export function intentBannerVisible(conv) {
   if (!conv || !conv.draftData) return false;
   const intent = conv.draftData.intent;

@@ -65,6 +65,7 @@ import { S, BLOCK_BG, R, T, FW, IC, SP, ROW_FOLD } from "../lib/constants";
 import { formatPhone } from "../lib/customers";
 import { formatDay } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
+import { tagLabels } from "../lib/tags";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { useLeavingOrder } from "../hooks/useLeavingOrder";
 import { Overlay, ModalTitle, mkBtn, mkDangerBtn, AutoHeight, Reveal } from "./atoms";
@@ -91,7 +92,7 @@ function addedLabel(ts){
   return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
 }
 
-export function WaitlistPanel({ entries, availability, date, onBook, onRemove, onClose, catchingUp = false }){
+export function WaitlistPanel({ entries, availability, date, onBook, onRemove, onClose, catchingUp = false, tagList }){
   const [confirmId,setConfirmId]=useState(null);
   // v18.3.2 (O3): the rows drawn — the live ones, and any still folding away —
   // in the order they hold on screen (the header).
@@ -118,7 +119,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
           style={{fontSize: T.body,fontWeight: FW.bold,color:S.text,minWidth:20,textAlign:"center",opacity:0.6}}>{"#"+(i+1)}</span><div style={{flex:"1 1 160px",minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{who}</span><span style={{fontSize: T.body,fontWeight: FW.bold,color:S.text}}>{guestsLabel(w.size)}</span>{/* v18.2.0 phase 68 (L-1): the
             zone the party asked for, in the List card's flag look (mark +
             word, secondary ink) — the match now honours it, and the row says
-            so. Absent means no preference. */}{w.preference==="indoor"||w.preference==="outdoor"?<span style={ZONE_FLAG}>{w.preference==="indoor"?<IndoorIcon size={IC.control} />:<OutdoorIcon size={IC.control} />}{w.preference==="indoor"?"Indoor":"Outdoor"}</span>:null}{fitChip}</div><div style={{fontSize: T.body,color:S.muted,marginTop:2}}>{(w.phone?formatPhone(w.phone)+"  ·  ":"")+"added "+addedLabel(w.createdAt)+(w.prefTime?"  ·  wants "+w.prefTime:"")}</div>{w.notes?<div style={{fontSize: T.body,color:S.muted,marginTop:2,fontStyle:"italic"}}>{w.notes}</div>:null}</div><div style={{display:"flex",gap:6,flexShrink:0,marginLeft:"auto",justifyContent:"flex-end",minWidth:ACTIONS_W}}><button
+            so. Absent means no preference. */}{w.preference==="indoor"||w.preference==="outdoor"?<span style={ZONE_FLAG}>{w.preference==="indoor"?<IndoorIcon size={IC.control} />:<OutdoorIcon size={IC.control} />}{w.preference==="indoor"?"Indoor":"Outdoor"}</span>:null}{/* v18.11.0: the party's occasions ("Birthday"), in the same flag look, as the List card names them. */}{tagLabels(tagList,"occasion",w.tags).map(function(l){return <span key={l} style={ZONE_FLAG}>{l}</span>;})}{fitChip}</div><div style={{fontSize: T.body,color:S.muted,marginTop:2}}>{(w.phone?formatPhone(w.phone)+"  ·  ":"")+"added "+addedLabel(w.createdAt)+(w.prefTime?"  ·  wants "+w.prefTime:"")}</div>{w.notes?<div style={{fontSize: T.body,color:S.muted,marginTop:2,fontStyle:"italic"}}>{w.notes}</div>:null}</div><div style={{display:"flex",gap:6,flexShrink:0,marginLeft:"auto",justifyContent:"flex-end",minWidth:ACTIONS_W}}><button
             className="mgt-hover-scale"
             aria-label={"Book ("+party+")"}
             style={mkBtn({fontSize: T.body,background:"var(--app-success-solid)",minHeight:36})}

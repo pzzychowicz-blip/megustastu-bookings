@@ -3,8 +3,10 @@
 // WhatsApp backend — LLM intent classification (the real version of what the
 // sandbox simulator pre-baked as `parse`). Phase 1b design decisions:
 //   · Provider: Gemini 3 Flash on the Google AI Studio free tier (Q4).
-//   · Strict JSON out: {intent,name,size,date,time,notes,language,confidence,
-//     ambiguity} — intent enum new_booking|cancel|modify|question|other.
+//   · Strict JSON out: {intent,name,size,date,time,notes,preference,occasions,
+//     language,confidence,ambiguity} — intent enum
+//     new_booking|cancel|modify|question|other. `occasions` (v18.11.0) exists
+//     only when the restaurant has occasion tags: see responseSchemaFor.
 //   · NEVER invents data — missing fields are null, not guesses (prompt rule).
 //   · 5s timeout (AbortController). Timeout / malformed JSON / API error all
 //     return null → the message is saved WITHOUT a draft (Phase 1a failure
@@ -44,7 +46,8 @@ import { env, llmMode, simEnabled, geminiModel, geminiCalled } from "./env.js";
 function waContext() {
   return env("TENANT_WA_CONTEXT", "a small restaurant in the Canary Islands");
 }
-import { mergeDraft, WA_PARSE_TEXT_LEN } from "../../src/lib/whatsapp.js";
+import { mergeDraft, occasionIdsIn, WA_PARSE_TEXT_LEN } from "../../src/lib/whatsapp.js";
+import { cleanTagIds } from "../../src/lib/tags.js";
 
 // The default, 3.5-flash-lite, answered in a median of 853ms and at most
 // 3737ms over 17 live parses on the sandbox (2026-10-17, see DEFAULT_MODEL),
@@ -101,7 +104,76 @@ const RESPONSE_SCHEMA = {
   required: ["intent", "language", "confidence"],
 };
 
-function buildPrompt(text, { todayIso, weekday, hoursLine, existingDraft, threadMode }) {
+// ── Occasions (v18.11.0) ──────────────────────────────────────────────────────
+// The restaurant's occasion tags (`settings/tags.occasion`, read per parse by
+// `readOccasionTags`), so a message saying "es un cumpleaños" opens the booking
+// form with Birthday pressed. The ids are the schema's ENUM, the only answers
+// the model may give: a tag added in Settings is recognised from the next
+// message, and an answer naming anything else cannot be produced. With no
+// occasion tags the field is not in the schema at all (an empty enum is not a
+// schema Gemini accepts) and the prompt says nothing about occasions.
+//
+// occasionList(raw) → [{id, label}], the well-formed entries of what the
+// caller read. The label only ever reaches the prompt as JSON.
+export function occasionList(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((t) => t && typeof t.id === "string" && cleanTagIds([t.id]).length && typeof t.label === "string" && t.label.trim());
+}
+
+export function responseSchemaFor(occasions) {
+  const ids = occasionList(occasions).map((t) => t.id);
+  if (!ids.length) return RESPONSE_SCHEMA;
+  const properties = Object.assign({}, RESPONSE_SCHEMA.properties, {
+    occasions: { type: "ARRAY", nullable: true, items: { type: "STRING", enum: ids }, description: "Ids of the occasions the visit is for" },
+  });
+  return Object.assign({}, RESPONSE_SCHEMA, { properties });
+}
+
+// The answer's occasions, kept only where the restaurant has the id. The enum
+// already says so for a live answer; this is for the mock, for a key-less live
+// fallback, and for an existing draft merged in after a tag was removed.
+export function knownOccasions(ids, occasions) {
+  const out = occasionIdsIn(ids, occasionList(occasions));
+  return out.length ? out : null;
+}
+
+// What a parse keeps of its occasions (/code-review). `occasions` is the list
+// the caller read, or null when the read FAILED (readOccasionTags): with no
+// list there is nothing to check an answer against and the schema had no
+// field, so a pending draft keeps the occasions it had rather than losing them
+// to a blip. A list that is there, even empty, is the answer.
+function parseOccasions(parsed, occasions, existingDraft) {
+  if (Array.isArray(occasions)) return knownOccasions(parsed.occasions, occasions);
+  const kept = cleanTagIds(existingDraft && existingDraft.occasions);
+  return kept.length ? kept : null;
+}
+
+// The mock's words for the two seed ids, beside each tag's own label. A tag
+// added in Settings is matched by its label alone.
+//
+// WHOLE words (/code-review): the mock is the production default (WA_LLM_MODE
+// unset), and a substring read "se cumplen 2 años" as a birthday, and a tag
+// called "Cena" would have fired on "cenamos". The message and each word are
+// cut to runs of letters and digits and compared with a space either side, so
+// a two-word label ("Date night") still matches, and no RegExp is built from a
+// label staff typed (the free-text rule in lib/activity.js).
+const OCCASION_WORDS = {
+  "o-birthday": ["cumpleaños", "cumple", "birthday", "bday"],
+  "o-anniversary": ["aniversario", "anniversary"],
+};
+function wordsOf(s) {
+  return " " + String(s || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim() + " ";
+}
+export function mockOccasions(text, occasions) {
+  const t = wordsOf(text);
+  const hit = occasionList(occasions).filter((o) => [o.label].concat(OCCASION_WORDS[o.id] || []).some((w) => {
+    const word = wordsOf(w);
+    return word.trim() !== "" && t.includes(word);
+  }));
+  return hit.length ? cleanTagIds(hit.map((o) => o.id)) : null;
+}
+
+function buildPrompt(text, { todayIso, weekday, hoursLine, existingDraft, threadMode, occasions }) {
   // Draft-aware mode: when the conversation already has a PENDING draft from
   // earlier messages, the model receives it and returns the MERGED update —
   // follow-up details fill gaps, corrections overwrite, confidence re-assessed.
@@ -160,12 +232,22 @@ function buildPrompt(text, { todayIso, weekday, hoursLine, existingDraft, thread
     "- A hedged party size (\"4 maybe 5\", \"2 or 3\", \"somos 4 o 5\") -> the LARGER number, confidence low, and ambiguity names both numbers.",
     "- confidence: high = every extracted field was explicit; medium = one field inferred; low = multiple vague/unclear fields, or an approximate time or a hedged size (rules above).",
     "- ambiguity: one short sentence describing what is unclear, written in the SAME language as the customer's message (Spanish if they wrote Spanish), else null.",
-    "- name: only if the customer states their own name.",
+    "- name: the name the booking is under: the customer's own (\"soy Carlos\", \"this is Anna\") or the one they ask to book under (\"a nombre de Juan\", \"under Smith\"). Never the restaurant's or a staff member's name, and never a name you only infer. Else null.",
     "- notes: special requests verbatim-ish (allergy, birthday, wheelchair...), else null.",
+    ...occasionRules(occasions),
     "- preference: 'outdoor' if the customer asks to sit outside (terrace/terraza/fuera/afuera/patio/exterior), 'indoor' if they ask to sit inside (dentro/interior/adentro/inside). If they don't clearly state a seating area, use 'auto'. NEVER guess.",
     "- language: of the message itself.",
     ...closing,
   ].join("\n");
+}
+
+// The occasions rule, only when the restaurant has occasion tags (v18.11.0).
+function occasionRules(occasions) {
+  const list = occasionList(occasions);
+  if (!list.length) return [];
+  return [
+    "- occasions: the ids of the occasions the customer says the visit is for, from this list only (id: label): " + list.map((o) => o.id + ": " + JSON.stringify(o.label)).join(", ") + ". Match the meaning in any language (\"cumpleaños\" is a birthday). A celebration that is not in the list, or none -> null. The words still go in notes.",
+  ];
 }
 
 // inferPreference(text) → "outdoor" | "indoor" | null. Keyword detection of a
@@ -180,7 +262,7 @@ export function inferPreference(text) {
 }
 
 // ── Mock parser (deterministic, no network) ───────────────────────────────────
-export function mockParse(text) {
+export function mockParse(text, occasions) {
   const t = String(text || "").toLowerCase();
   // Language: Spanish-specific markers only (accents/inverted punctuation are
   // the strongest signal). Beware substrings shared with English — "reserv"
@@ -227,6 +309,7 @@ export function mockParse(text) {
     time: draftIntent ? time : null,
     notes: null,
     preference: draftIntent ? preference : "auto",
+    occasions: draftIntent ? mockOccasions(t, occasions) : null,
     language,
     confidence: sizeM && time && date ? "high" : "medium",
     ambiguity: null,
@@ -236,14 +319,14 @@ export function mockParse(text) {
 // ── Live parser ───────────────────────────────────────────────────────────────
 async function liveParse(text, ctx) {
   const key = env("GEMINI_API_KEY", null);
-  if (!key) { console.warn("[gemini] GEMINI_API_KEY missing — falling back to mock parse"); return mockParse(text); }
+  if (!key) { console.warn("[gemini] GEMINI_API_KEY missing — falling back to mock parse"); return mockParse(text, ctx && ctx.occasions); }
   const model = geminiModel();
   const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + key;
   const body = {
     contents: [{ parts: [{ text: buildPrompt(text, ctx) }] }],
     generationConfig: {
       responseMimeType: "application/json",
-      responseSchema: RESPONSE_SCHEMA,
+      responseSchema: responseSchemaFor(ctx && ctx.occasions),
       temperature: 0,
     },
   };
@@ -309,12 +392,13 @@ async function liveParse(text, ctx) {
 // guest's message the day a restaurant turned WhatsApp on in mock mode.
 // simEnabled() is fail-closed (only a sandbox deployment sets it).
 const LOG_PLAIN = ["intent", "language", "confidence", "preference"];
-const LOG_CONTENT = ["name", "size", "date", "time", "notes", "ambiguity"];
+const LOG_CONTENT = ["name", "size", "date", "time", "notes", "occasions", "ambiguity"];
 export function parseLogFields(parsed, full) {
   if (full || !parsed || typeof parsed !== "object") return parsed == null ? null : parsed;
   const out = {};
   LOG_PLAIN.forEach((k) => { if (parsed[k] != null) out[k] = parsed[k]; });
-  out.filled = LOG_CONTENT.filter((k) => parsed[k] != null && parsed[k] !== "");
+  // An empty list is not filled (v18.11.0, `occasions`).
+  out.filled = LOG_CONTENT.filter((k) => parsed[k] != null && parsed[k] !== "" && !(Array.isArray(parsed[k]) && !parsed[k].length));
   return out;
 }
 
@@ -332,12 +416,15 @@ export function hoursLineOf(hours) {
   return "Operating hours config (per weekday, 24h): " + JSON.stringify(weekly);
 }
 
-// parseMessage(text, {hours, existingDraft}) → parse object or null (= save
-// without draft). hours: the settings/operatingHours node or null.
+// parseMessage(text, {hours, existingDraft, occasions}) → parse object or null
+// (= save without draft). hours: the settings/operatingHours node or null.
+// occasions: the restaurant's occasion tags, `[{id, label}]` (readOccasionTags),
+// or null/absent when they could not be read, which leaves occasions out of the
+// request and keeps a pending draft's own (v18.11.0, parseOccasions).
 // existingDraft: the conversation's PENDING draftData (draftStatus "parsed") or
 // null — when present, live mode lets Gemini merge semantically (see
 // buildPrompt) and mock mode applies the shared mechanical mergeDraft rule.
-export async function parseMessage(text, { hours, existingDraft } = {}) {
+export async function parseMessage(text, { hours, existingDraft, occasions } = {}) {
   // Prompt-size guard: only the first WA_PARSE_TEXT_LEN chars reach the LLM —
   // a real booking request fits many times over; oversize input is quota abuse.
   text = String(text == null ? "" : text).slice(0, WA_PARSE_TEXT_LEN);
@@ -347,6 +434,7 @@ export async function parseMessage(text, { hours, existingDraft } = {}) {
     weekday: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][now.getUTCDay()],
     hoursLine: hoursLineOf(hours),
     existingDraft: existingDraft || null,
+    occasions: occasionList(occasions),
   };
   const mode = llmMode();
   // v18.9.2: how long the Gemini call took, on the log line. The parse runs
@@ -358,9 +446,10 @@ export async function parseMessage(text, { hours, existingDraft } = {}) {
   // very fast model. No call, no `ms`.
   const timed = geminiCalled();
   const t0 = Date.now();
-  let parsed = mode === "live" ? await liveParse(text, ctx) : mockParse(text);
+  let parsed = mode === "live" ? await liveParse(text, ctx) : mockParse(text, ctx.occasions);
   const took = timed ? { ms: Date.now() - t0 } : {};
   if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
+  if (parsed) parsed.occasions = parseOccasions(parsed, occasions, existingDraft);
   // Drift-review log: every parse, one line (content only in a sandbox, above).
   const full = simEnabled();
   console.log("[wa-parse:" + mode + "] " + JSON.stringify(full
@@ -369,7 +458,7 @@ export async function parseMessage(text, { hours, existingDraft } = {}) {
   return parsed;
 }
 
-// parseThread(history, {hours, existingDraft}) → parse object or null. The
+// parseThread(history, {hours, existingDraft, occasions}) → parse object or null. The
 // MANUAL re-check's parser (api/wa-recheck): same schema, same rules and the
 // same return contract as parseMessage — the caller feeds the result to the
 // very same applyParse — but the model sees the recent TRANSCRIPT (both
@@ -382,7 +471,7 @@ export async function parseMessage(text, { hours, existingDraft } = {}) {
 //
 // Mock mode has no notion of a thread, so it degrades to parsing the last
 // inbound message — which is what the automatic path already did.
-export async function parseThread(history, { hours, existingDraft } = {}) {
+export async function parseThread(history, { hours, existingDraft, occasions } = {}) {
   const list = Array.isArray(history) ? history.filter((m) => m && m.text) : [];
   if (!list.length) return null;
   const inbound = list.filter((m) => m.direction === "in");
@@ -436,6 +525,7 @@ export async function parseThread(history, { hours, existingDraft } = {}) {
     hoursLine: hoursLineOf(hours),
     existingDraft: existingDraft || null,
     threadMode: true,
+    occasions: occasionList(occasions),
     // ONLY the newest inbound, matching what the single-message path sees.
     // Joining every retained inbound would backfill a seating area the customer
     // mentioned on a previous visit onto a fresh request — and inferPreference
@@ -448,9 +538,10 @@ export async function parseThread(history, { hours, existingDraft } = {}) {
   // backend sends, so it is the parse most likely to near TIMEOUT_MS.
   const timed = geminiCalled();
   const t0 = Date.now();
-  let parsed = mode === "live" ? await liveParse(transcript, ctx) : mockParse(lastInbound);
+  let parsed = mode === "live" ? await liveParse(transcript, ctx) : mockParse(lastInbound, ctx.occasions);
   const took = timed ? { ms: Date.now() - t0 } : {};
   if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
+  if (parsed) parsed.occasions = parseOccasions(parsed, occasions, existingDraft);
   console.log("[wa-recheck:" + mode + "] " + JSON.stringify({ msgs: list.length, merged: !!existingDraft, ...took, parsed: parseLogFields(parsed, simEnabled()) }));
   return parsed;
 }

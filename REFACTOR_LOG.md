@@ -37363,3 +37363,344 @@ The review raised nine findings at high effort. Eight were confirmed and fixed, 
 **Gate after the fixes:** main entry 429.19 kB, 125.27 kB gz · 3677 tests · 0 errors and 63 warnings · style OK.
 
 **Still for Patryk's iPhone, on the sandbox after the merge:** long-press Save photo on a received photo. Nothing should get selected and no menu should open. Photos do not reach a localhost run.
+
+## v18.11.0 — clearing the roadmap, and WhatsApp drafts that read occasions
+
+**Date:** 2026-10-18 · **Branch:** `feat/v18.11.0-roadmap-and-wa-occasions` · Phases 1–6 were
+planned and committed as patch v18.10.1 (`fix/v18.10.1-roadmap-clearing`; their commit
+subjects still say so). Patryk then asked for WhatsApp drafts to recognise occasions and
+chose to fold that feature into this branch as v18.11.0 rather than ship the patch first,
+so the version was raised and the branch renamed in phase 7. Patryk asked for the
+roadmap to be cleared of everything that can be cleared. Each entry was put to him on
+2026-10-18. What could not be cleared waits on something outside the code: the WhatsApp
+rehearsal (a disposable number), the PROD key list (due about 2026-10-25), the archive's
+trigger (2,500 bookings) and two ideas.
+
+### Phase 1 — the DEV write trace is removed, the fault left unexplained
+
+v18.6.0 put `lib/write-trace.js` into DEV builds to explain one sighting (v18.4.9, DEV): a
+parked write stored with a write stamp 76 s after its edit's history stamp, 28 s after that
+session's turn ended, with no tool call running and no Retry anyone remembers pressing.
+`retryParked` has one caller, the banner's button. The clean 120 s trial on 2026-10-08 (no
+reload, real visibility changes, two clicks by Patryk on the strip header) made no
+`saveBookings` or `retryParked` call. In the ten days since the trace went in, nothing has
+recurred. The likeliest explanation is still a click in the shared Browser pane, which
+Patryk does use during checks; it was never shown. Patryk chose to remove the instrument
+now rather than keep it to January.
+
+Removed: `src/lib/write-trace.js`, `tests/write-trace.test.js`, and the import, the
+module-load `startClickTrace()` and the four `traceWrite` calls in `usePersistence.js`
+(park, Retry, Discard, replay). Every one was behind `import.meta.env.DEV`, so no build
+changes. **If the fault comes back**, the module and its test are in git (`git log --diff-filter=D --
+src/lib/write-trace.js` names the commit that removed them) and can be restored as they were.
+
+**Docs:** `src/hooks/CLAUDE.md` (usePersistence), `src/lib/CLAUDE.md` (the module's row),
+`ROADMAP.md` (the entry).
+
+**Files:** `src/hooks/usePersistence.js` · `src/lib/write-trace.js` (deleted) ·
+`tests/write-trace.test.js` (deleted) · `src/App.jsx` (version) · the docs above. No stored
+shape changed, no rules, no `SCHEMA` raise; no device needs a refresh.
+
+### Phase 2 — #17: one builder for the three Add to waitlist doors
+
+The booking form's no-tables banner, the walk-in form and a WhatsApp draft each added a
+party with an object literal of its own, the first and the last after the phone rule
+(`phoneForSave`) by hand. `waitlistEntry(f, opts)` (`lib/booking-save.js`) is the mapping
+once: `time` becomes `prefTime`, the phone goes through `enteredPhone`, and with
+`checkPhone` the phone rule runs first and answers `{refusal}` instead of an entry. Each
+door keeps its capability check, where it shows a refusal (the form's phone field, the
+draft card), and what it closes. App no longer calls `phoneForSave` or `enteredPhone`, so
+`cleanPhoneOf`, the save path's name for the second since v17.0.0, went with it.
+
+**Held to what it replaced.** `tests/booking-save-waitlist.test.js` copies v18.10.0's three
+literals verbatim and compares what `addToWaitlist` would STORE from each against the
+builder over 4,000 generated drafts (phones with and without a code, empty and junk sizes,
+missing dates and times, every zone). Its first run failed on the walk-in: that door never
+passed a zone, and the builder carried one. The walk-in form has no zone field, so no entry
+could differ, but the door now passes `preference: undefined` itself rather than rely on
+that. Five source pins on the old literals (`phone-countries`, `draft-check`, `waitlist-match`) now pin the
+calls, `waitlist-match`'s zone pin reads the builder, and `save-path`'s harness no longer
+lifts `cleanPhoneOf`.
+
+**Files:** `src/lib/booking-save.js` · `src/App.jsx` · `src/lib/booking-fields.js` (a
+comment naming `cleanPhoneOf`) · `src/lib/CLAUDE.md` · `tests/booking-save-waitlist.test.js`
+(new) · `tests/phone-countries.test.js` · `tests/draft-check.test.js` ·
+`tests/waitlist-match.test.js` · `tests/save-path.test.js`.
+
+### Phase 3 — #17: the activity clear's sentences
+
+`doClearActivity` decided which of five sentences an admin reads after Clear (refused
+after removing some, refused before any, a range cut short, cleared, nothing there) inline
+in a promise handler. They are `clearOutcome(res)` in `lib/activity.js` now, with the
+comment on why there are four outcomes and the `/code-review` note on the refusal's wording,
+plus `CLEAR_FAILED` for a clear that threw. App keeps the admin and range guards, the ref
+that stops a second press, and the two setters.
+
+**Test.** `tests/activity.test.js`: each outcome against the sentence copied from
+v18.10.0's App.jsx, and that a refusal wins over a cut-short range. Sabotaged to check
+truncation first, it fails.
+
+**`App.jsx`: 4,987 lines before this version, 4,937 after it** (phase 2 took 30, this
+phase 20).
+
+**Files:** `src/lib/activity.js` · `src/App.jsx` · `src/lib/CLAUDE.md` ·
+`tests/activity.test.js`.
+
+### Phase 4 — #17 closed
+
+The extraction of `BookingApp` by domain (the 2026-09-23 tech-debt scan's #17) is done.
+Every domain measured on 2026-10-08 left the file, one patch version each: the save path
+(v18.3.4), recurring generation (v18.4.4), backup and the timeline drop (v18.4.5), manual
+assignment (v18.4.7), status changes (v18.5.0), delete and undo (v18.5.1), the voucher
+settle, the clash derivations and the form's save decisions (v18.6.0), and this version's
+waitlist doors and activity clear. `App.jsx` was 5,393 lines at the scan's peak and is
+4,937.
+
+**What stays, and why.** `delBooking`'s decisions are `planDelete` already; what is left
+is its effects, in their order. The render's remaining bulk is prop wiring (`notifSections`,
+the Settings mount), which Patryk dropped on 2026-10-10: a wrapper saves a few lines for
+about forty values passed. It shrinks only if the state behind it moves into hooks by
+domain, which is a design of its own and was not started; it is not on the roadmap.
+
+### Phase 5 — the `check:style` entry withdrawn: the gate was never blind
+
+v18.10.0's `/code-review` moved five bare heights in `mkBtn(...)` arguments to `H` tokens
+and filed a ROADMAP entry saying `check:style` "does not see inside an `mkBtn(...)` /
+`mkDangerBtn(...)` argument", to be taught to. **Measured, it does**: `styleValue`
+(`scripts/check-style-invariants.mjs`) finds the key anywhere on the line, so
+`mkBtn({ minHeight: 33 })`, `mkDangerBtn({ minHeight: 30 })`, the same over several lines,
+and an off-scale `padding` inside the argument all fail the gate. What passed there was
+`minHeight: 32`, which is ON the scale, and on-scale literals pass everywhere by design:
+DESIGN.md's "`SP` and `H` are LINTED, not tokenised". The review's tokens were harmless (the
+same values, named), and Print and More stay at 32. The 149 on-scale literal heights in
+`src` are not a backlog.
+
+**Pinned** in `tests/style-check.test.js`: the four off-scale cases above each fail with
+their rule named (the fixtures carry `mgt-hover-scale`, or the hover-lift rule would fail
+them first and prove nothing), and an on-scale height inside a builder passes.
+
+**The wording that invited it.** Root `CLAUDE.md` said the gate fails on "a bare …
+padding / margin / gap / `height` / `minHeight` number", which reads as "every literal".
+It now says off-scale, and that on-scale literals pass inside a builder too.
+
+**Files:** `tests/style-check.test.js` · `CLAUDE.md` · `ROADMAP.md`.
+
+### Phase 6 — settled entries closed; the PROD key's step dated
+
+Decided with Patryk on 2026-10-18 and deleted from `ROADMAP.md`:
+
+- **The daily PROD backup (#5) is finished.** The private `mgt-backups` job has run daily
+  since 2026-10-09, and the restore was rehearsed on 2026-10-10 (15 of 15 nodes identical).
+  The last owed step is done: Patryk stored the `age` key in the password manager and on
+  paper, and `~/mgt-backup-key.txt` is gone (checked: no such file). That the read-only
+  service account is refused a write stays unproven on purpose, because the only test is
+  a write against PROD.
+- **Delete customer's paused rule is a won't-fix.** If the rule removal is refused four
+  times (300, 600 and 900 ms retries), or the page closes first, the standing rule stays
+  paused with the name and phone, and it is deleted by hand in Settings. Closing it would
+  need a mark any device sweeps, which raises `SCHEMA`. Patryk chose the retry without it
+  on 2026-10-10 and confirmed it as final.
+- **Find a booking's folded Done row was checked on the HONOR tablet** by Patryk: with the
+  keyboard up the Done row folds away and three result rows show, and closing the keyboard
+  brings Done back.
+
+**#12, the public repository's API keys, stays with a date.** The DEV key has been
+restricted since mid-October. SECURITY.md §4 still listed four entries and said
+`firebaseapp.com` was left out on purpose, but the key holds six:
+`megustastu-bookings-dev.firebaseapp.com/*` went in on 2026-10-14 (reset links failed
+without it) and `http://192.168.1.34:5179/*` on 2026-10-18 (Patryk's iPhone on a `--host`
+dev server). Probed 2026-10-18 with an unknown email and a hand-set `Referer`: the six pass,
+and `127.0.0.1:5173` and an outside origin are refused. §4 now lists what is applied, and
+the PROD proposal gains `megustastu-bookings.firebaseapp.com/*` for the same reason, as the
+go-live checklist already had it. The PROD step is due about 2026-10-25.
+
+**Ideas:** the voice note waits for go-live (Patryk). Names written back to the phone wait
+for Patryk to check what the restaurant iPhone's contacts sync to.
+
+**Files:** `ROADMAP.md` · `SECURITY.md`.
+
+### Phase 7 — the version becomes v18.11.0
+
+Patryk asked for WhatsApp drafts to recognise occasions while v18.10.1 was still
+unpushed, and chose to carry the feature here (2026-10-18). `__APP_SIGNATURE__` and every
+in-repo mention of v18.10.1 now read v18.11.0, and the branch is
+`feat/v18.11.0-roadmap-and-wa-occasions`.
+
+### Phase 8 — WhatsApp drafts read occasions, and the name a booking is made under
+
+**What Patryk asked.** A draft should recognise occasions, and the names should be
+checked: are they recognised and filled into the form?
+
+**The names, as found (verified on DEV with the simulator).** A name in the draft reaches
+the form: Accept's `draftPrefill` takes the message's name first, then the phone's
+contact, the past bookings and the WhatsApp profile, and a draft naming "Probe Nombre"
+opened the form with that name. Two gaps. The draft card never showed the name, so staff
+learned it only after Accept. And the prompt read a name "only if the customer states
+their own name", which does not clearly cover "a nombre de Juan". The mock parser reads
+no name at all, which stays that way: it exists to exercise the plumbing.
+
+**Decisions (Patryk, 2026-10-18).**
+- **The restaurant's own occasion tags**, not a fixed list. The three parse callers
+  (`wa-inbound`, `wa-recheck`, `inbound-core`'s simulator path) read `settings/tags`
+  beside the hours (`readOccasionTags`, `_lib/rtdb.js`, through the client's own
+  `sanitizeTagList`, so an absent node is the seed list). `gemini.js` puts the ids in the
+  schema as an ENUM (`responseSchemaFor`), the only answers the model can give, and the
+  labels in one prompt line. A tag added in Settings is recognised from the next
+  message. With no occasion tags the field is left out of the schema and the prompt,
+  since Gemini refuses an empty enum. What comes back is kept only where the list has the
+  id (`knownOccasions`), for the mock, a key-less fallback and a merged draft. The words
+  still go in notes.
+- **Occasions only.** Guest tags follow the person to every later booking, so one misread
+  message would tag them for good. Allergies stay in notes.
+- **Show the name and widen the rule.** The card's line leads with the name the message
+  gave and ends with the occasions ("Lucía · 6 guests · Sat 24.10 · 21:00 · Birthday").
+  The two shapes of the card now share one `summary`. The prompt reads "the name the booking
+  is under: the customer's own, or the one they ask to book under".
+
+**The draft.** `draftData.occasions` holds tag ids, or null (RTDB keeps no empty array).
+`sanitizeParse` cleans the list with `cleanTagIds` and leaves a parse without the key
+alone. `mergeDraft` keeps the draft's when a follow-up names none. Accept asks
+`draftOccasions` (the ids still in the list) through `draftPrefill`, and the form opens
+with them as its occasion `tags`. **No `SCHEMA` raise**, for `sanitizeMedia`'s reason:
+`sanitizeParse` cleans what the model answers before the server writes; no reader
+whitelists `draftData`, and a browser only `update()`s a conversation's status, so no
+build drops the key. `tests/schema.test.js` re-pins its fingerprint with that note.
+
+**App.** `useTagSettings` moved above `useWhatsApp`, which now reads `tagList`. Declared
+where it was, 100 lines below, it would have been the TDZ blank screen.
+
+**Simulator.** A new scenario, `new_occasion`: a birthday for six booked "a nombre de
+Lucía", so the live re-run on the sandbox (go-live A5-7) measures both rules.
+
+**Not done, on purpose.** A modify request that names an occasion does not add it to the
+booking. Add to waitlist carries no occasion, because a waitlist entry has no tags. What
+Gemini does with the enum, and with the wider name rule, is measured only live on the
+sandbox, since no local key exists. The prompt rules and the schema are held in
+`tests/wa-occasions.test.js` from the request body the real parse builds.
+
+**Tests:** `tests/wa-occasions.test.js` (new: the schema and prompt in both parse paths,
+what is kept of an answer, the mock, the prefill, the name rule, the scenario);
+`tests/api-handlers.test.js` (the re-check hands the model the occasion list, the seed
+list when none is stored, and `applyParse` stores clean ids). Four pins moved with the
+change and say why: `schema` (the fingerprint), `date-format` and `party-size` (one
+summary line where the card wrote it twice), `draft-check` (Accept passes the list and
+opens with `p.tags`).
+
+**Files:** `api/_lib/gemini.js` · `api/_lib/rtdb.js` · `api/_lib/inbound-core.js` ·
+`api/wa-inbound.js` · `api/wa-recheck.js` · `src/lib/whatsapp.js` ·
+`src/lib/draft-check.js` · `src/lib/wa-sim.js` · `src/lib/wa-sim-scenarios.js` ·
+`src/hooks/useWhatsApp.js` · `src/App.jsx` · `src/components/whatsapp/{InboxPanel,
+ConversationView,DraftCard}.jsx` · `GLOSSARY.md` · `api/CLAUDE.md` · `src/lib/CLAUDE.md` ·
+`src/hooks/CLAUDE.md`.
+
+### /code-review fixes (high effort, 2026-10-18)
+
+Seven findings. Five fixed, one needed no change, and one became phases 9 and 10:
+- **The occasions schema shape (no change).** An ARRAY of STRING enums, `nullable`, in
+  every live request. Gemini's API reference allows it: `items` is the element schema
+  of an ARRAY, `enum` is for STRING, and `nullable` applies to any type. It is
+  measured live on the sandbox after the merge (go-live A5-7), with the
+  `new_occasion` scenario.
+- **The mock matched substrings.** The mock is the production default, so "se cumplen 2
+  años" read as a birthday and a tag called "Cena" would fire on "cenamos". It now
+  matches whole words: the message and each word are cut to runs of letters and digits
+  and compared with spaces either side. A two-word label still matches, and no RegExp
+  is built from a label staff typed.
+- **A failed read of the tag list wiped a draft's occasions.** `readOccasionTags`
+  answered `[]` on an error, which reads as "the restaurant has none". It answers
+  `null` now, and `parseOccasions` keeps a pending draft's own occasions when the list
+  is unknown. A list that was read, even an empty one, is the answer.
+- **The compact bar's name** pushed the time and the occasion past the ellipsis. The
+  one-line bar shows `barSummary` (no name), and the name is a "Name:" line in the
+  detail its tap opens (Patryk). The full card keeps the name first.
+- **One rule for "the ids the list still has".** `occasionIdsIn` (`whatsapp.js`, through
+  `tagsOf`) is asked by `draftOccasions` and by the server's `knownOccasions`. There
+  were two hand-written copies.
+- **The tag list's path to the card is pinned** at each of its four links. A dropped
+  link was silent, because `tagLabels` of an undefined list is `[]`. The pin was
+  checked by removing one link: the test failed.
+- **The two gaps this version left** (a change request naming an occasion, and a
+  waitlist entry without one): Patryk asked for both in this version. They are phases 9
+  and 10.
+
+### Phase 9 — a waiting party keeps its occasion tags
+
+Patryk, after the review: a WhatsApp birthday sent to the waitlist was booked without
+its Birthday tag. The waitlist entry gains `tags`, the party's occasion tag ids. All
+three doors build it through `waitlistEntry`, which carries `tags: cleanTagIds(f.tags)`:
+- the booking form's door takes the chips tapped on the form,
+- the WhatsApp door takes the draft's occasions (`draftPrefill` is now passed the tag
+  list),
+- the walk-in form has none.
+
+`addToWaitlist` stores them only when there are some. Firebase throws on an undefined
+property and RTDB keeps no empty array. **Book from the waitlist** opens the form with
+the ones the list still has (`knownTagIds`, `lib/tags.js`: `tagsOf` as clean, sorted
+ids, a removed tag dropped). `occasionIdsIn` (`whatsapp.js`) is now built on it, so
+Accept, the server's answer and Book share one rule. The waitlist row names the
+occasions in the zone flag's look.
+
+**No `SCHEMA` raise.** The waitlist is not read through a whitelist: the listener keeps
+each entry as stored, and every write is the mirror plus one change. A device on an
+older build therefore carries `tags` through. The node's rules validate no fields, so
+there is no console step.
+
+**Tests:** `tests/booking-save-waitlist.test.js` (the builder carries clean tags from the
+form and a draft and none from the walk-in, the hook stores only a non-empty list, and
+Book, the panel and `knownTagIds`). Three source pins moved with the new arguments and
+say so: `draft-check`, `phone-countries`, `waitlist-match`.
+
+**Files:** `src/lib/tags.js` · `src/lib/whatsapp.js` · `src/lib/booking-save.js` ·
+`src/hooks/useWaitlist.js` · `src/App.jsx` · `src/components/WaitlistPanel.jsx` ·
+`GLOSSARY.md` · `src/hooks/CLAUDE.md`.
+
+### Phase 10 — a change request's occasion reaches the booking
+
+Patryk, after the review: a customer who writes "it's our anniversary" about a booking
+they already have gets a modify draft. The parse already reads its occasions, since
+the prompt rule and the mock apply to every booking intent. Two things used them:
+- **The request banner** (`IntentBanner`) lists them among the requested changes
+  ("Anniversary"). An occasion alone is a change, so it offers Apply changes.
+- **Apply changes** (`handleApplyModify`) ADDS them to the booking's occasion tags
+  (`unionTagIds`), and never puts them in place of the booking's own: a change
+  request says what is new, and a tag already on the booking was put there by
+  somebody. Taking a tag off stays a tap in the form, and the edit's history line
+  names the change, as it does for any occasion tap.
+
+A simulator scenario, `modify_occasion` (Sofía, linked to `wasimS1`), covers it for the
+live run.
+
+**Tests:** `tests/wa-occasions.test.js` (Apply adds to the booking's tags, the banner
+names them, the mock reads one on a modify, the scenario).
+
+**Files:** `src/hooks/useWhatsApp.js` · `src/components/whatsapp/{IntentBanner,
+ConversationView}.jsx` · `src/lib/wa-sim-scenarios.js` · `GLOSSARY.md` ·
+`src/hooks/CLAUDE.md`.
+
+### /code-review fixes, round 2 (phases 9–10)
+
+Five findings; four fixed, one left on purpose.
+- **The request banner listed occasions the booking already had.** After an
+  Apply that added Anniversary, the next request ("make it 21:00") still read
+  "Requested: 21:00 · Anniversary", and an occasion-only message for a tag already
+  on the booking offered Apply for nothing. `requestedOccasions(draft, booking,
+  tagList)` (`lib/whatsapp.js`) is the ones the booking does not have yet; the
+  banner lists those and Apply changes adds those.
+- **Apply changes put back an occasion staff had removed.** A handled request's
+  draft was still `parsed`, so the next message merged into it and carried its
+  size, time and occasions forward. `pendingDraftOf(conv)` leaves out a cancel or
+  modify request already handled (`intentBannerVisible` false), and all four
+  merge sites ask it (`api/wa-inbound.js`, `api/wa-recheck.js`,
+  `api/_lib/inbound-core.js`, `lib/wa-sim.js`), where each had restated the
+  `draftStatus === "parsed"` test. This changes the carry-over for every field,
+  not only occasions: a handled request is done, and repeating its size or time
+  as a request again was the same fault.
+- **Phase 10 was pinned by source text only.** Both rules now run in
+  `tests/wa-occasions.test.js`, and each test was seen to fail with its rule
+  sabotaged.
+- **`src/components/CLAUDE.md` had no v18.11.0 note.** WaitlistPanel, DraftCard
+  and IntentBanner have one; `src/lib/CLAUDE.md`'s line saying "the waitlist
+  takes none" (stale since phase 9) is corrected.
+- **Left: `addToWaitlist` cleans tags the builder already cleaned.** The hook is
+  the storage boundary and its header says it takes raw fields, so it keeps its
+  own clean.

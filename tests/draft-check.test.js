@@ -202,13 +202,17 @@ describe("draftPrefill — one rule for Accept and for the waitlist", () => {
   it("is what Accept and the waitlist read: neither spells the rule again", () => {
     const hook = read("hooks", "useWhatsApp.js");
     const accept = hook.slice(hook.indexOf("function handleAcceptDraft("), hook.indexOf("function takeDraftSource("));
-    expect(accept).toMatch(/const p = draftPrefill\(conv, bookings, contactsRef\.current\);/);
+    expect(accept).toMatch(/const p = draftPrefill\(conv, bookings, contactsRef\.current, tagList\);/);
+    // v18.11.0: the form opens with the occasions the prefill kept.
+    expect(accept).toMatch(/tags: p\.tags,/);
     expect(accept).toMatch(/const time = \(over && over\.time\) \|\| p\.time;/);
     expect(accept).not.toMatch(/matchCustomerByPhone|charAt\(0\)/);
     const App = read("App.jsx");
     const wl = App.slice(App.indexOf("function addDraftToWaitlist(conv){"), App.indexOf("function addFormToWaitlist(){"));
-    expect(wl).toMatch(/const p=draftPrefill\(conv,bookings,wa\.contacts\);/);
-    expect(wl).toMatch(/addToWaitlist\(\{name:p\.name,phone:cleanPhoneOf\(phoneRule\.phone\),size:p\.size,date:p\.date,prefTime:p\.time,notes:p\.notes,preference:p\.preference\}\)/);
+    // v18.11.0: the entry is `waitlistEntry`'s, built from the prefill.
+    // v18.11.0: with the tag list, so the entry keeps the draft's occasions.
+    expect(wl).toMatch(/waitlistEntry\(draftPrefill\(conv,bookings,wa\.contacts,tagList\),/);
+    expect(wl).toMatch(/addToWaitlist\(w\.entry\);/);
   });
 });
 

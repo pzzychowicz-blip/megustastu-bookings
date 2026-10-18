@@ -16,7 +16,10 @@ every staff endpoint shares: a handler that writes either out again fails the te
 three `wa-sim-*.js` endpoints are the simulator's and must return 404 unless
 `WA_SIM_ENABLED === "1"`. Node ESM resolves these imports, so anything under `src/lib`
 they reach must carry explicit `.js` extensions — the chain is `api/* → whatsapp.js →
-customers.js → booking-logic.js → booking-fields/constants/day/phone-countries`, and
+customers.js → booking-logic.js → booking-fields/constants/day/phone-countries`, plus
+`whatsapp.js → tags.js` and `_lib/rtdb.js → tags.js` (v18.11.0, `readOccasionTags`, which
+the three parse callers read beside the hours and `gemini.js` turns into the schema's
+enum and one prompt line; `tags.js` imports nothing), and
 `booking-fields.js → constants/vouchers` (v18.3.4). **v18.0.0 phase 5b gates the
 three sim handlers on `simEnabled()`** (`WA_SIM_ENABLED === "1"`), as each handler's
 FIRST statement — before the method check and before staff auth, so the answer is

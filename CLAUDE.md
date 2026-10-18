@@ -100,10 +100,11 @@ motion value comes from a role-named scale in `src/lib/constants.js`
 each scale.** The part you cannot skip:
 
 - **No new literal.** `npm run check:style` is a CI gate and fails on a bare
-  `borderRadius` / `fontSize` / `fontWeight` / padding / margin / gap /
-  `height` / `minHeight` number, a white-inset shadow over a theme-flipping
-  fill, a drop-shadow literal, a **colour** literal, a numeric icon `size`, or
-  a hand-written duration/curve.
+  `borderRadius` / `fontSize` / `fontWeight` number, an OFF-SCALE padding /
+  margin / gap / `height` / `minHeight` (on-scale literals pass, inside a
+  `mkBtn(...)` too: `SP` and `H` are linted, not tokenised), a white-inset
+  shadow over a theme-flipping fill, a drop-shadow literal, a **colour**
+  literal, a numeric icon `size`, or a hand-written duration/curve.
 - **SIX exemption markers, in two placements.** Four go inline in the STYLE
   OBJECT — `/* @canvas */` (geometry and type one-offs), `/* @fixed-fill */`
   (the surface under this does not flip with the theme), `/* @shadow */` (a

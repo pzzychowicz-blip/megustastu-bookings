@@ -185,7 +185,7 @@ function compile(fileSrc, lifted, env) {
 // v18.3.4: `memoByPrev` moved to lib/booking-save.js, so it is bound as an
 // import now rather than lifted.
 const APP_SAVE_NAMES = [
-  "cleanPhoneOf", "withClearedSeats", "undoDelta",
+  "withClearedSeats", "undoDelta",
   "doSaveEdit", "doSaveNew", "doSave", "openEdit",
 ];
 const APP_SAVE = APP_SAVE_NAMES.map((n) => liftFunction(APP, n));

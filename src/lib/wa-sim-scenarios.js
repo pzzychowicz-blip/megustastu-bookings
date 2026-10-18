@@ -31,6 +31,7 @@ const PH = {
   largeGroup: "+34644556677",
   cancelNoLink: "+34788999000",
   expired: "+34699888777",
+  occasion: "+34677123456", // v18.11.0: a birthday booked under another name
   // Link targets for the extra linked cancel/modify/late scenarios below.
   liam: "+447900111222",    // upcoming wasimL1 (today dinner) — UK tourist (EN)
   greta: "+34655443322",    // upcoming wasimG1 (today lunch)
@@ -180,6 +181,13 @@ export const SCENARIOS = [
     id: "new_large", group: "New bookings", label: "New booking · large group (12)",
     run: (ctx) => simulateInbound({ phone: PH.largeGroup, language: "es", text: "Buenas, somos 12 personas el viernes a las 20:30, ¿es posible?", parse: { intent: "new_booking", size: 12, date: nextDow(5), time: "20:30", confidence: "high" } }, ctx),
   },
+  {
+    // v18.11.0: an occasion and a name the booking is made UNDER, the two
+    // things a WhatsApp draft gained. Live, Gemini reads both from the text.
+    id: "new_occasion", group: "New bookings", label: "New booking · birthday, booked under another name (Lucía)",
+    note: "Accept opens the form with Birthday pressed and the name Lucía.",
+    run: (ctx) => simulateInbound({ phone: PH.occasion, language: "es", text: "Hola! Queríamos mesa para 6 el sábado a las 21:00 a nombre de Lucía, es para celebrar un cumpleaños 🎂", parse: { intent: "new_booking", name: "Lucía", size: 6, date: nextDow(6), time: "21:00", notes: "Cumpleaños", occasions: ["o-birthday"], confidence: "high" } }, ctx),
+  },
   // Cancel / Modify
   {
     id: "cancel_linked", group: "Cancel / Modify", label: "Cancel · linked booking (Tom)",
@@ -190,6 +198,13 @@ export const SCENARIOS = [
     id: "modify_linked", group: "Cancel / Modify", label: "Modify · linked booking (Sofía)",
     note: "Needs sample bookings seeded (links to wasimS1).",
     run: (ctx) => simulateInbound({ phone: PH.sofia, language: "es", text: "Hola, ¿podríamos cambiar a 6 personas en vez de 4?", parse: { intent: "modify", name: "Sofía García", size: 6, confidence: "high" }, acceptedBookingId: "wasimS1" }, ctx),
+  },
+  {
+    // v18.11.0: a change request that is only an occasion. Apply changes adds
+    // it to the booking's occasion tags.
+    id: "modify_occasion", group: "Cancel / Modify", label: "Modify · now an anniversary (Sofía)",
+    note: "Needs sample bookings seeded (links to wasimS1). Apply changes opens it with Anniversary pressed.",
+    run: (ctx) => simulateInbound({ phone: PH.sofia, language: "es", text: "Hola! Por cierto, la cena de nuestra reserva es para celebrar nuestro aniversario", parse: { intent: "modify", name: "Sofía García", occasions: ["o-anniversary"], confidence: "high" }, acceptedBookingId: "wasimS1" }, ctx),
   },
   {
     id: "cancel_nolink", group: "Cancel / Modify", label: "Cancel · NO linked booking (manual)",

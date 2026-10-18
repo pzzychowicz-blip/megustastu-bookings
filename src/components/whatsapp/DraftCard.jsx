@@ -13,6 +13,7 @@ import { clampConfidence, availabilityReply } from "../../lib/whatsapp";
 import { draftCheckLine } from "../../lib/draft-check";
 import { formatDay } from "../../lib/day";
 import { guestsLabel } from "../../lib/booking-logic";
+import { tagLabels } from "../../lib/tags";
 import { R, T, FW, IC, M, H, SP, RIM_SOLID } from "../../lib/constants";
 import { DraftIcon, WarnIcon } from "./WaIcons";
 import { CloseIcon, CheckIcon, ChevronRightIcon, AlertIcon, WaitIcon } from "../Icons";
@@ -115,7 +116,7 @@ function DraftCheck({ conv, check, onAcceptAt, onTheWaitlist, onAddToWaitlist, o
   );
 }
 
-export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, compact, check, onAddToWaitlist, onTheWaitlist, onSuggest }) {
+export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, compact, check, onAddToWaitlist, onTheWaitlist, onSuggest, tagList }) {
   // Compact-mode disclosure for the new_booking bar (notes / warning / confidence).
   // Declared before the early returns so the hook order stays stable.
   const [expanded, setExpanded] = useState(false);
@@ -221,10 +222,20 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
   const prefSuffix = (d.preference === "indoor" || d.preference === "outdoor")
     ? " · " + (d.preference === "indoor" ? "Indoor" : "Outdoor")
     : "";
-  const summary = (d.size != null ? guestsLabel(d.size) : "? guests") + " · " + (formatDay(d.date) || "? date") + " · " + (d.time || "? time") + prefSuffix;
+  // v18.11.0: the name the message gave leads the full card's line, and the
+  // occasions it named (`tagList`, the restaurant's labels) end it, so staff
+  // see before Accept what the form will open with. A name the message did not
+  // give is the conversation's own, already in the header above. The compact
+  // bar is one line cut with an ellipsis, so there the name would push the time
+  // and the occasion out of sight (/code-review): it takes `barSummary`, and
+  // the name goes in the detail its tap opens (Patryk, 2026-10-18).
+  const draftName = typeof d.name === "string" ? d.name.trim() : "";
+  const occSuffix = tagLabels(tagList, "occasion", d.occasions).map(function (l) { return " · " + l; }).join("");
+  const barSummary = (d.size != null ? guestsLabel(d.size) : "? guests") + " · " + (formatDay(d.date) || "? date") + " · " + (d.time || "? time") + prefSuffix + occSuffix;
+  const summary = (draftName ? draftName + " · " : "") + barSummary;
   // Confidence is shown inline in the compact bar (always), so only notes /
-  // ambiguity are "revealable" content behind the toggle.
-  const hasDetail = !!(d.notes || d.ambiguity);
+  // ambiguity (and, since v18.11.0, the name) are "revealable" behind the toggle.
+  const hasDetail = !!(d.notes || d.ambiguity || draftName);
   // The check block, the same in both shapes of the card. A time chip accepts
   // the request at that time; Accept itself opens the form at the time asked.
   // Keyed to the conversation: opening another thread REPLACES the card (its
@@ -272,7 +283,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
             style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 0 auto", maxWidth: "100%", minWidth: 0, cursor: hasDetail ? "pointer" : "default" }}
           >
             <span style={{ color: "var(--wa-draft-text)", display: "inline-flex", flexShrink: 0 }}><DraftIcon size={IC.control} /></span>
-            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{barSummary}</span>
             {hasDetail ? <span style={{ color: "var(--wa-draft-text)", flexShrink: 0, display: "inline-flex", transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.inline} /></span> : null}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", flexShrink: 0 }}>
@@ -297,6 +308,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
         {hasDetail ? (
           <Reveal show={expanded} style={{ padding: "0 10px" }}>
             <div style={{ paddingBottom: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+              {draftName ? <div style={{ fontSize: T.body, color: "var(--wa-draft-text-dim)" }}>{"Name: " + draftName}</div> : null}
               {d.notes ? <div style={{ fontSize: T.body, color: "var(--wa-draft-text-dim)" }}>{"Notes: " + d.notes}</div> : null}
               {d.ambiguity ? <InlineAlert icon={WarnIcon}>{d.ambiguity}</InlineAlert> : null}
             </div>
@@ -325,7 +337,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
         <OutlineChip title={confTitle} tone={confTone} size="small">{confSays}</OutlineChip>
       </div>
       <div style={{ fontSize: T.lead, color: "var(--wa-draft-text-dim)", lineHeight: 1.6, marginBottom: d.ambiguity ? 8 : 12 }}>
-        <span style={{ fontWeight: FW.semi }}>{(d.size != null ? guestsLabel(d.size) : "? guests") + " · " + (formatDay(d.date) || "? date") + " · " + (d.time || "? time") + prefSuffix}</span>
+        <span style={{ fontWeight: FW.semi }}>{summary}</span>
         {d.notes ? <div style={{ fontSize: T.body, marginTop: 4 }}>{"Notes: " + d.notes}</div> : null}
       </div>
       {/* v17.15.3: --danger-bg + a MATCHING --danger-border + --danger-text was

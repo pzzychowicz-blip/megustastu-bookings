@@ -118,7 +118,8 @@ describe("no surface says pax", () => {
   }
 
   it("the draft card says '? guests' for a size it has not got", () => {
-    expect((read("components/whatsapp/DraftCard.jsx").match(/\(d\.size != null \? guestsLabel\(d\.size\) : "\? guests"\)/g) || []).length).toBe(2);
+    // v18.11.0: one summary line serves both shapes of the card.
+    expect((read("components/whatsapp/DraftCard.jsx").match(/\(d\.size != null \? guestsLabel\(d\.size\) : "\? guests"\)/g) || []).length).toBe(1);
   });
 
   // A tier covering parties of one printed "1 guests → 60 min".

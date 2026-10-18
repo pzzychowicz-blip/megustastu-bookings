@@ -53,11 +53,11 @@ import { env } from "./_lib/env.js";
 import { verifySignature } from "./_lib/meta.js";
 import { parseMessage, mockParse } from "./_lib/gemini.js";
 import { processInbound, applyParse, inboundContent } from "./_lib/inbound-core.js";
-import { updateMessageStatusByWamid, readOperatingHours, getConversation } from "./_lib/rtdb.js";
+import { updateMessageStatusByWamid, readOperatingHours, readOccasionTags, getConversation } from "./_lib/rtdb.js";
 import {
   makeNumberGuard, COEXIST_HANDLERS, applyMessageChange, freshResults, newMeasure, noteChange, recordBegun, reportDelivery,
 } from "./_lib/coexist-core.js";
-import { normalizePhone, isPhoneKey } from "../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey, pendingDraftOf } from "../src/lib/whatsapp.js";
 import { secondsTs, webhookPhoneKey, editedMessage } from "../src/lib/wa-coexist.js";
 
 export const config = { api: { bodyParser: false } };
@@ -164,7 +164,7 @@ async function handleMessagesChange(value, results, parseJobs) {
       // instead of replacing it blind. Accepted/dismissed drafts are not
       // draft context. The same conv object is handed to processInbound.
       const conv = await getConversation(normalizePhone(phone));
-      const existingDraft = conv && conv.draftStatus === "parsed" ? conv.draftData : null;
+      const existingDraft = pendingDraftOf(conv);
       const r = await processInbound({
         phone, text: content.text, ts,
         media: content.media,
@@ -324,10 +324,11 @@ export default async function handler(req, res) {
   // — a payload virtually never carries >1 text message from the same webhook.
   if (parseJobs.length > 0) {
     scheduleAfterResponse((async () => {
-      const hours = await readOperatingHours();
+      // v18.11.0: and the occasion tags, read with the hours, once per payload.
+      const [hours, occasions] = await Promise.all([readOperatingHours(), readOccasionTags()]);
       for (const job of parseJobs) {
         try {
-          const parse = await parseMessage(job.text, { hours, existingDraft: job.existingDraft });
+          const parse = await parseMessage(job.text, { hours, existingDraft: job.existingDraft, occasions });
           await applyParse(job.phoneKey, parse, job.ts);
         } catch (e) {
           // Parse failure = message stays draft-less (the designed failure

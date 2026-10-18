@@ -41,7 +41,8 @@ import { EMPTY_FORM } from "../lib/constants";
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
-import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch, contactDeletePatch, replyUnarchives } from "../lib/whatsapp";
+import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch, contactDeletePatch, replyUnarchives, requestedOccasions } from "../lib/whatsapp";
+import { unionTagIds } from "../lib/tags";
 import { sendsViaServer, sendViaBackend, sendMediaViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
@@ -65,6 +66,9 @@ export function useWhatsApp({
   formOpen,
   // settings/whatsapp (useWaSettings) — currently just autoArchiveOnComplete.
   waSettings,
+  // v18.11.0: the tag list (useTagSettings), so Accept opens the form with the
+  // occasions the message named.
+  tagList,
   // The booking form's two doors (BookingApp-owned). v18.3.5: every form-open
   // below goes through one of them, never `openForm`/`setEditId` directly, so
   // it asks the capability the same action asks everywhere else, clears a
@@ -495,14 +499,14 @@ export function useWhatsApp({
   // its "+", the seating indoor/outdoor or "auto".
   function handleAcceptDraft(conv, over) {
     if (!conv || !conv.draftData) return;
-    const p = draftPrefill(conv, bookings, contactsRef.current);
+    const p = draftPrefill(conv, bookings, contactsRef.current, tagList);
     const date = p.date;
     const time = (over && over.time) || p.time;
     // v18.3.5: through App's `openNew`, which asks `bookingCreate` and clears a
     // waitlist entry left pending by a form closed unsaved (Save would have
     // taken that entry off the waitlist for this booking). Refused: nothing
     // below runs, and the inbox stays open under the refusal.
-    if (!openNew(Object.assign({}, EMPTY_FORM, { name: p.name, phone: p.phone, date, time, size: p.size, preference: p.preference, notes: p.notes, status: "confirmed", customDur: null, manualTables: [], preferredTables: [], returnOf: null }))) return;
+    if (!openNew(Object.assign({}, EMPTY_FORM, { name: p.name, phone: p.phone, date, time, size: p.size, preference: p.preference, notes: p.notes, tags: p.tags, status: "confirmed", customDur: null, manualTables: [], preferredTables: [], returnOf: null }))) return;
     draftSourceRef.current = conv.phoneKey;
     setReturnToInboxKey(conv.phoneKey);
     setShowInbox(false); setViewDate(date);
@@ -738,7 +742,15 @@ export function useWhatsApp({
     const preference = (d.preference === "indoor" || d.preference === "outdoor") ? d.preference : (booking.preference || "auto");
     // The booking's own draft with the requested changes on top (`openEdit`),
     // so a field the request does not mention keeps its value.
-    if (!openEdit(booking, { date, time, size, preference })) return;
+    const changes = { date, time, size, preference };
+    // v18.11.0: an occasion the request names ("it's for a birthday now") is
+    // ADDED to the booking's occasion tags, never in place of them: a change
+    // request says what is new, and a tag already on the booking was put there
+    // by somebody. Removing one stays a tap in the form. Only the ones the
+    // booking does not have yet (`requestedOccasions`), the banner's list.
+    const occ = requestedOccasions(d, booking, tagList);
+    if (occ.length) changes.tags = unionTagIds(booking.tags, occ);
+    if (!openEdit(booking, changes)) return;
     modifyApplyRef.current = { phoneKey: conv.phoneKey, bookingId: booking.id };
     setReturnToInboxKey(conv.phoneKey);
     setShowInbox(false); setViewDate(date);

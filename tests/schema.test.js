@@ -196,7 +196,11 @@ const PINNED = {
       // `media`), never a reader's whitelist: messages are read whole and the
       // client only update()s a status, so no build can drop the key.
       "lib/whatsapp.js:sanitizeMedia": "a8c7408304",
-      "lib/whatsapp.js:sanitizeParse": "b8f1f1273a",
+      // v18.11.0: re-pinned WITHOUT a SCHEMA raise, for sanitizeMedia's reason.
+      // It cleans what the model ANSWERS (now `occasions` too) before the server
+      // writes a draft; no reader whitelists `draftData` through it. A browser
+      // only update()s a conversation's status fields, so no build drops the key.
+      "lib/whatsapp.js:sanitizeParse": "7dbe9a2ce5",
       "BOOKING_FIELDS": "id,name,phone,date,time,scheduledTime,size,duration,originalDuration,preference,notes,status,tables,customDur,_manual,_locked,_conflict,preferredTables,returnOf,history,noShow,deposit,voucherCode,recurringId,recurringDate,anonymized,guestId,stayedMin,updatedAt,tags,guestTags,guestTagsAt"
   },
 };

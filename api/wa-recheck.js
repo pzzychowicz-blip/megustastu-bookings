@@ -22,11 +22,11 @@
 // It never appends a message and never sends anything to the customer — the
 // thread is read-only input.
 
-import { verifyStaffToken, staffAuthError, getConversation, readMessages, readOperatingHours } from "./_lib/rtdb.js";
+import { verifyStaffToken, staffAuthError, getConversation, readMessages, readOperatingHours, readOccasionTags } from "./_lib/rtdb.js";
 import { readJsonBody, bearerToken } from "./_lib/request.js";
 import { parseThread } from "./_lib/gemini.js";
 import { applyParse } from "./_lib/inbound-core.js";
-import { WA_RECHECK_HISTORY, normalizePhone, isPhoneKey } from "../src/lib/whatsapp.js";
+import { WA_RECHECK_HISTORY, normalizePhone, isPhoneKey, pendingDraftOf } from "../src/lib/whatsapp.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") { res.status(405).json({ error: "method not allowed" }); return; }
@@ -65,8 +65,8 @@ export default async function handler(req, res) {
 
     // Same draft-awareness as the inbound path: a PENDING draft is context the
     // model merges into, an accepted/dismissed one is not.
-    const existingDraft = conv.draftStatus === "parsed" ? conv.draftData : null;
-    const hours = await readOperatingHours();
+    const existingDraft = pendingDraftOf(conv);
+    const [hours, occasions] = await Promise.all([readOperatingHours(), readOccasionTags()]);
     // isAutoAck is dropped, not passed through: the one-time "Thanks for your
     // message! We'll get back to you shortly." is a bot line, and handing it to
     // the model as a STAFF turn — under a prompt that says to ignore whatever
@@ -74,7 +74,7 @@ export default async function handler(req, res) {
     // exactly the short threads this button exists to re-examine.
     const parse = await parseThread(
       history.filter((m) => !m.isAutoAck).map((m) => ({ direction: m.direction, text: m.text })),
-      { hours, existingDraft }
+      { hours, existingDraft, occasions }
     );
 
     // Stamp with NOW, not the last message's ts: this check happened now, and

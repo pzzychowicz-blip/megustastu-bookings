@@ -200,6 +200,14 @@ export function tagsOf(list, kind, ids) {
   return ((list && list[kind]) || []).filter(function (t) { return ids.indexOf(t.id) >= 0; });
 }
 
+// v18.11.0: the same, as clean sorted IDS (`cleanTagIds`), for what is about to
+// be stored: a removed tag is dropped rather than carried onto a booking.
+// Accept (through `occasionIdsIn`, whatsapp.js), the server's answer and Book
+// from the waitlist all ask it.
+export function knownTagIds(list, kind, ids) {
+  return cleanTagIds(tagsOf(list, kind, cleanTagIds(ids)).map(function (t) { return t.id; }));
+}
+
 // The same, as labels.
 export function tagLabels(list, kind, ids) {
   return tagsOf(list, kind, ids).map(function (t) { return t.label; });

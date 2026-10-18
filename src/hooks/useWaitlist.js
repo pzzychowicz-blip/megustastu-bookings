@@ -12,6 +12,11 @@
 // party asked for — is kept when one was stated and OMITTED otherwise (Firebase
 // throws on an undefined property; an absent key reads as "auto"), so the match
 // can honour it (`placeWaitlist`) and the row can say it.
+// v18.11.0: `tags` — the party's OCCASION tag ids (a birthday), kept when there
+// are any and OMITTED otherwise, for the same two reasons. Book from the
+// waitlist opens the form with them. No SCHEMA raise: nothing reads this node
+// through a whitelist (the listener stores entries as they are and every write
+// is the mirror plus a change), so an older build carries the key through.
 // Ordering is first-come-first-served (createdAt asc) — the panel sorts.
 // `available` (does a table fit right now?) is DERIVED in BookingApp via
 // trialFits, never persisted.
@@ -39,6 +44,7 @@ import { settingsWriteEntry } from "../lib/activity";
 import { emitActivity } from "../lib/activitySink";
 import { todayStr } from "../lib/day";
 import { withoutHeld } from "../lib/waitlist-match";
+import { cleanTagIds } from "../lib/tags";
 
 export function useWaitlist({ setWriteWarning }){
   const waitlistLoaded=useRef(false);
@@ -95,7 +101,7 @@ export function useWaitlist({ setWriteWarning }){
   // ── CRUD ────────────────────────────────────────────────────────────────────
   // addToWaitlist accepts the raw fields (typically the booking/walk-in form's
   // current draft) and stamps id/createdAt/status.
-  function addToWaitlist({name,phone,size,date,prefTime,notes,preference}){
+  function addToWaitlist({name,phone,size,date,prefTime,notes,preference,tags}){
     const entry={
       id:genId(),
       name:name||"",
@@ -108,6 +114,8 @@ export function useWaitlist({ setWriteWarning }){
       status:"waiting"
     };
     if(preference==="indoor"||preference==="outdoor") entry.preference=preference;
+    const occ=cleanTagIds(tags);
+    if(occ.length) entry.tags=occ;
     saveWaitlist(function(prev){return prev.concat([entry]);});
     return entry;
   }

@@ -53,11 +53,8 @@ import {
   // v18.0.0 session 8 (C3): the seat that follows a clearing reads the same
   // completion. (v18.6.0: who is still seated there is `formSeatClash`, booking-save.js.)
   completedSeatedPatch,
-  // v18.0.0 session 8 (R5): one rule for "is there a phone here", both callers.
-  enteredPhone,
-  // v18.3.2 (ROADMAP #13): and one for "may this typed number be stored" —
-  // Save and Add to waitlist asked it in two copies.
-  phoneForSave,
+  // (v18.11.0: `enteredPhone` and `phoneForSave`, the phone rules, are asked by
+  // lib/booking-save.js alone now: the save and `waitlistEntry`.)
   // v18.0.0 session 8 (C8): what the save toast is allowed to claim.
   // (v18.3.4: its zone note, `offZoneNote`, is the saves' own, in booking-save.js.)
   savedToast,
@@ -81,7 +78,7 @@ import { undismissedClashes, clashByBooking, clashSpansByTable } from "./lib/cla
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
-import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal, draftForSave, draftRefusal, formSeatClash, kitchenAsk } from "./lib/booking-save";
+import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal, draftForSave, draftRefusal, formSeatClash, kitchenAsk, waitlistEntry } from "./lib/booking-save";
 import { normalizePhone, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { draftPrefill } from "./lib/draft-check";
@@ -338,6 +335,8 @@ import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
 // v18.5.0: the tag list (settings/tags), the 10th settings node — the guest and
 // occasion tags a booking can carry. Its decisions are lib/tags.js.
 import { useTagSettings } from "./hooks/useTagSettings";
+// v18.11.0: Book from the waitlist keeps the occasion tags the list still has.
+import { knownTagIds } from "./lib/tags";
 // v18.0.0 session 8: the activity log. `useActivityLog` installs the module-level
 // sink every writer emits into; `useActivityFeed` is the app's first Firebase
 // QUERY, and is attached only while the log is open.
@@ -376,7 +375,7 @@ import { todayStr, stepDate, formatDay } from "./lib/day";
 import { onPrintEnd, printOrReport, PRINT_IGNORED_TEXT } from "./lib/print-end";
 // v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
 // stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
-import { activityWindow, retentionMs, retentionLabel } from "./lib/activity";
+import { activityWindow, retentionMs, retentionLabel, clearOutcome, CLEAR_FAILED } from "./lib/activity";
 
 // ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
 // `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
@@ -426,7 +425,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.10.0"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.11.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1277,16 +1276,6 @@ function BookingApp({uid}){
   // OVERRIDES them once the account's node has loaded, and seeds the node from
   // the device when the user has never saved one.
   const { userPrefs, prefsLoaded, saveUserPrefs } = useUserPrefs(uid);
-  // A phone value that is empty, a bare "+", or exactly the untouched prefix
-  // seed counts as "no phone" (the prefix is a typing convenience, not data).
-  // v18.0.0 session 8 (R5): the rule moved to `enteredPhone` in booking-logic
-  // so `diffBooking` can apply the SAME one. This stays as the name the save
-  // path has used since v17.0.0, and supplies the setting the pure module
-  // cannot read.
-  // v18.2.0 phase 19: the form no longer SEEDS the prefix — it opens with an
-  // empty phone and an empty country-code picker — so the prefix clause is now
-  // only a guard for a value an older version put in the form.
-  function cleanPhoneOf(p){ return enteredPhone(p,generalSettings.phonePrefix); }
   const { autoOptimizer, setAutoOptimizer } = useAutoOptimizer({ nowMins, cutoffMins: optimizerSettings.cutoff*60, autoSwitch: optimizerSettings.autoSwitch });
   // ── Persistence hook ────────────────────────────────────────────────────────
   // Owns bookings/tableBlocks state, Firebase listeners, savers, and the
@@ -1424,9 +1413,13 @@ function BookingApp({uid}){
   // draft / open linked / apply modify) are openers, so they ask the capability
   // the same action asks everywhere else, clear a pending waitlist entry and
   // seed formBaseline, as every other open does.
+  // v18.11.0: declared here, above useWhatsApp, which reads `tagList` (Accept
+  // opens the form with the occasions a message named); a `const` read above its
+  // declaration is the TDZ blank screen (src/CLAUDE.md).
+  const { tagList, saveTagList, tagError, clearTagError } = useTagSettings();
   const wa = useWhatsApp({
     enabled: whatsappOn,
-    bookings, setWriteWarning, waSettings,
+    bookings, setWriteWarning, waSettings, tagList,
     // v18.4.9: the hook drops an accepted draft's source when the form closes.
     formOpen: showForm,
     openNew: openNewWith, openEdit, setViewDate, setConfirmCancel,
@@ -1523,7 +1516,6 @@ function BookingApp({uid}){
     currency: generalSettings.currency,
   });
   const { voucherDefaults, saveVoucherDefaults } = useVoucherDefaults();
-  const { tagList, saveTagList, tagError, clearTagError } = useTagSettings();
   // ── v18.0.0 phase 4: what a module is about to hide ─────────────────────────
   // The Admin tab asks this on the way OFF, and only this file can answer it:
   // `lib/modules.js` knows what modules EXIST, not what they hold, and keeping
@@ -1683,30 +1675,10 @@ function BookingApp({uid}){
     setActivityClearing(true);
     setActivityClearMsg("");
     clearActivityAndLog(activityFrom,activityTo,activityFromDay,activityToDay)
-      .then(function(res){
-        // FOUR outcomes and four sentences. Any two of them sharing a sentence
-        // is how one situation gets mistaken for another — which is the whole
-        // reason `refused` and `truncated` are separate flags rather than a
-        // count of zero and a count that looks complete.
-        const n=res?res.removed:0;
-        const said=countLabel(n,"entry","entries");
-        if(res&&res.refused){
-          // /code-review: this used to name ONE cause — "only once the updated
-          // database rules are deployed" — which was true of DEV on the day it
-          // was written and is now historical, since the rules are deployed and
-          // the clear works. A refusal today means something else: a capability
-          // taken away, a role changed, a write that failed. Saying the old
-          // sentence would send an admin to redo a deploy they have already
-          // done, which is worse than saying less.
-          setActivityClearMsg(n>0
-            ?"Cleared "+said+", then the server refused the rest — check you still have permission to administer the app."
-            :"The server refused that clear — check you still have permission to administer the app.");
-        }
-        else if(res&&res.truncated) setActivityClearMsg("Cleared "+said+" — there are more in that range. Press again to continue.");
-        else if(n>0) setActivityClearMsg("Cleared "+said+".");
-        else setActivityClearMsg("There was nothing to clear in that range.");
-      })
-      .catch(function(){setActivityClearMsg("Couldn't clear that range.");})
+      // v18.11.0 (#17): the sentence for each outcome is `clearOutcome`
+      // (lib/activity.js), with why there are four.
+      .then(function(res){setActivityClearMsg(clearOutcome(res));})
+      .catch(function(){setActivityClearMsg(CLEAR_FAILED);})
       .then(function(){activityClearingRef.current=false;setActivityClearing(false);});
   }
   // v18.0.0 session 11: the CSV. Gated on `dataExport` and NOT on `isAdmin`,
@@ -2434,7 +2406,9 @@ function BookingApp({uid}){
       size:w.size||2,
       notes:w.notes||"",
       // v18.2.0 phase 68: the party's zone comes back with it.
-      preference:w.preference==="indoor"||w.preference==="outdoor"?w.preference:"auto"
+      preference:w.preference==="indoor"||w.preference==="outdoor"?w.preference:"auto",
+      // v18.11.0: and its occasion tags, those the list still has.
+      tags:knownTagIds(tagList,"occasion",w.tags)
     }));
     setEditId(null);setError("");setSwapAffected(null);
     pendingWaitlistRef.current=w.id;
@@ -2449,10 +2423,9 @@ function BookingApp({uid}){
   // the card's button turns into "On the waitlist" once the entry is stored.
   function addDraftToWaitlist(conv){
     if(refused("waitlistManage"))return null;
-    const p=draftPrefill(conv,bookings,wa.contacts);
-    const phoneRule=phoneForSave(p.phone,generalSettings.pinnedCountries,generalSettings.phonePrefix,false);
-    if(phoneRule.refusal)return phoneRule.refusal;
-    addToWaitlist({name:p.name,phone:cleanPhoneOf(phoneRule.phone),size:p.size,date:p.date,prefTime:p.time,notes:p.notes,preference:p.preference});
+    const w=waitlistEntry(draftPrefill(conv,bookings,wa.contacts,tagList),{checkPhone:true,pinned:generalSettings.pinnedCountries,prefix:generalSettings.phonePrefix});
+    if(w.refusal)return w.refusal;
+    addToWaitlist(w.entry);
     return null;
   }
   // "Add to waitlist" from the booking form's no-tables banner: capture the
@@ -2467,23 +2440,13 @@ function BookingApp({uid}){
     // and the same guest with and without "+34" is two customers. The button is
     // offered on a NEW booking only, so Save's untouched-number exemption has
     // nothing to exempt here. v18.3.2: both halves are `phoneForSave`, the one
-    // copy Save asks too (ROADMAP #13).
-    const f0=formRef.current;
-    const phoneRule=phoneForSave(f0.phone,generalSettings.pinnedCountries,generalSettings.phonePrefix,false);
-    const f=phoneRule.phone!==f0.phone?Object.assign({},f0,{phone:phoneRule.phone}):f0;
-    const ph=cleanPhoneOf(f.phone);
-    if(phoneRule.refusal){setErrorField("phone");setError(phoneRule.refusal);return;}
-    addToWaitlist({
-      name:f.name||"",
-      phone:ph,
-      size:Number(f.size)||2,
-      date:f.date||viewDate,
-      prefTime:f.time||null,
-      notes:f.notes||"",
-      // v18.2.0 phase 68 (L-1): the zone the party was refused for, so the
-      // match offers only that zone and the row says it.
-      preference:f.preference
-    });
+    // copy Save asks too (ROADMAP #13). v18.11.0: the entry is `waitlistEntry`
+    // (lib/booking-save.js), with the other two doors; it carries the draft's
+    // `preference` (v18.2.0 phase 68, L-1), the zone the party was refused for,
+    // so the match offers only that zone and the row says it.
+    const w=waitlistEntry(formRef.current,{checkPhone:true,pinned:generalSettings.pinnedCountries,prefix:generalSettings.phonePrefix,date:viewDate});
+    if(w.refusal){setErrorField("phone");setError(w.refusal);return;}
+    addToWaitlist(w.entry);
     setShowForm(false);
     setWaitAddedShown(true);
     setTimeout(function(){setWaitAddedShown(false);},3000);
@@ -2491,15 +2454,9 @@ function BookingApp({uid}){
   // Same from the walk-in form (today, current draft time).
   function addWalkinToWaitlist(){
     if(refused("waitlistManage"))return;
-    const wf=walkinForm||{};
-    addToWaitlist({
-      name:wf.name||"",
-      phone:cleanPhoneOf(wf.phone),
-      size:Number(wf.size)||2,
-      date:todayStr(),
-      prefTime:wf.time||null,
-      notes:wf.notes||""
-    });
+    // v18.11.0: `waitlistEntry`, with no phone check (the form has no phone
+    // field) and no zone, which this door never passed.
+    addToWaitlist(waitlistEntry(Object.assign({},walkinForm,{date:todayStr(),preference:undefined}),{prefix:generalSettings.phonePrefix}).entry);
     setShowWalkin(false);
     setWaitAddedShown(true);
     setTimeout(function(){setWaitAddedShown(false);},3000);
@@ -3975,6 +3932,7 @@ function BookingApp({uid}){
     availability={waitAvail}
     date={viewDate}
     onBook={bookFromWaitlist}
+    tagList={tagList}
     onRemove={function(w){if(refused("waitlistManage"))return;removeFromWaitlist(w);}}
     onClose={function(){setShowWaitlist(false);}} />:null}</ModalPresence>;
 
@@ -4859,6 +4817,7 @@ function BookingApp({uid}){
           conversations={wa.conversations}
           contacts={wa.contacts}
           waLink={wa.waLink}
+          tagList={tagList}
           draftOwner={uid}
           messages={wa.messagesMap}
           watchMessages={wa.watchMessages}
