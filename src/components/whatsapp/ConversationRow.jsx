@@ -2,6 +2,8 @@
 // One row in the conversation list: unread dot, customer display name (resolved
 // from bookings by phone, else the number), an intent/draft/accepted tag, the
 // relative time, and the last-message snippet. Archived rows render dimmed.
+// v18.10.0: a reply typed and not sent replaces the snippet with "Draft: …"
+// (`draft`, this device's, lib/wa-reply-drafts.js), as a messenger shows it.
 
 import { useRef, useEffect } from "react";
 import { conversationName, formatRelativeTime, isParsing, describeConversation } from "../../lib/whatsapp";
@@ -10,7 +12,7 @@ import { OutlineChip } from "../atoms";
 import { WarnIcon, PencilIcon, DraftIcon, ArchiveIcon, MuteIcon } from "./WaIcons";
 import { CheckIcon } from "../Icons";
 
-export function ConversationRow({ conv, active, onClick, bookings, contacts, flipId, selectMode, checked, roving = false, departing = false }) {
+export function ConversationRow({ conv, active, onClick, bookings, contacts, flipId, selectMode, checked, roving = false, departing = false, draft = "" }) {
   // v18.2.0 (the design critique, W4): an unknown sender is named by the
   // FORMATTED number — this row showed the raw key ("+447811223344") while the
   // open conversation added "+44 7811223344" beside the same raw key. And a
@@ -21,6 +23,9 @@ export function ConversationRow({ conv, active, onClick, bookings, contacts, fli
   const hasDraft = conv.draftStatus === "parsed" && conv.draftData;
   const hasAccepted = conv.draftStatus === "accepted";
   const intent = (conv.draftData && conv.draftData.intent) || null;
+  // Not on the OPEN conversation: its box is right there, and the row would
+  // change with every key. One line, so a draft's line breaks read as spaces.
+  const draftLine = draft && !(active && !selectMode) ? draft.replace(/\s+/g, " ").trim() : "";
 
   // Parsing/typing tag (sandbox inbound path) takes visual priority — the
   // message is mid-parse, so the intent/draft tag isn't known yet.
@@ -79,7 +84,7 @@ export function ConversationRow({ conv, active, onClick, bookings, contacts, fli
          also firing the row — the keyboard twin of the pointer-events guard. */
       role="listitem"
       tabIndex={departing ? -1 : (roving ? 0 : -1)}
-      aria-label={describeConversation(conv, { bookings, contacts })}
+      aria-label={describeConversation(conv, { bookings, contacts }) + (draftLine ? ", unsent draft" : "")}
       aria-current={active && !selectMode ? "true" : undefined}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return;
@@ -142,7 +147,13 @@ export function ConversationRow({ conv, active, onClick, bookings, contacts, fli
         <span style={{ fontSize: T.small, color: "var(--text-muted)", flexShrink: 0, fontWeight: FW.regular }}>{formatRelativeTime(conv.lastMessageAt)}</span>
       </div>
       {phoneLine ? <div style={{ fontSize: T.small, color: "var(--text-muted)", marginBottom: 2, marginLeft: 14 }}>{phoneLine}</div> : null}
-      <div style={{ fontSize: T.body, color: conv.unread ? "var(--text-primary)" : "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginLeft: 14, fontWeight: conv.unread ? FW.medium : FW.regular }}>{conv.lastMessageSnippet || ""}</div>
+      <div style={{ fontSize: T.body, color: conv.unread ? "var(--text-primary)" : "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginLeft: 14, fontWeight: conv.unread ? FW.medium : FW.regular }}>{draftLine
+        /* "Draft:" in --success-text, not --accent: accent on this row
+           measures under 4.5:1 at this size (see the parsing tag above), and
+           green is the messenger's own word for it. Registered on the row's
+           fills in tests/contrast.test.js. */
+        ? <><span style={{ color: "var(--success-text)", fontWeight: FW.semi }}>Draft:</span> {draftLine}</>
+        : (conv.lastMessageSnippet || "")}</div>
       </div>
     </div>
   );

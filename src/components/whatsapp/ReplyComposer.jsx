@@ -25,6 +25,8 @@ import { TemplatesIcon, PaperclipIcon, FileIcon } from "./WaIcons";
 import { R, T, FW, M, H, IC, SP, REVEAL_EXIT_MS } from "../../lib/constants";
 import { fileSizeLabel, WA_CAPTION_MAX } from "../../lib/whatsapp";
 import { attachKind, attachRefusal, shrinkPhoto } from "../../lib/wa-attach";
+import { draftsOf, setReplyDraft } from "../../lib/wa-reply-drafts";
+import { useReplyDrafts } from "../../hooks/useReplyDrafts";
 
 // TemplateChips — private to the composer. Tapping a chip inserts its text.
 // scrollLang (compact mode): the language switch joins the chips inside ONE
@@ -131,22 +133,25 @@ function AttachChip({ att, busy, onRemove }) {
   );
 }
 
-export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMedia, threadKey, ref }) {
+export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMedia, threadKey, draftOwner, ref }) {
   // The text is kept PER THREAD, like the attachment below: this component is
   // not remounted when the conversation changes, so one string followed you to
   // the next customer, and since v18.8.0 that string can be a photo's caption.
   // Each thread keeps its own draft, as WhatsApp does.
-  const [drafts, setDrafts] = useState({});
-  const txt = drafts[threadKey] || "";
-  // `next` is a string or an updater; `key` defaults to the open thread.
+  // v18.10.0: and the drafts outlive the composer — kept on this device for the
+  // signed-in account (`draftOwner`) as they are typed, so closing the inbox,
+  // Back on a phone or a reload loses nothing, and the conversation's row says
+  // "Draft:" (lib/wa-reply-drafts.js). The file is still not kept.
+  const drafts = useReplyDrafts(draftOwner);
+  const txt = (drafts[threadKey] && drafts[threadKey].text) || "";
+  // `next` is a string or an updater; `key` defaults to the open thread. The
+  // updater reads the store, not this render's `drafts`, so a caption trimmed
+  // after an upload (send) sees what was typed while it went.
   function setTxt(next, key) {
     const k = key === undefined ? threadKey : key;
-    setDrafts((d) => {
-      const v = typeof next === "function" ? next(d[k] || "") : next;
-      const out = Object.assign({}, d);
-      if (v) out[k] = v; else delete out[k];
-      return out;
-    });
+    const cur = draftsOf(draftOwner)[k];
+    const v = typeof next === "function" ? next((cur && cur.text) || "") : next;
+    setReplyDraft(draftOwner, k, v);
   }
   const [tplOpen, setTplOpen] = useState(false);
   // Attachment state, each piece keyed to the thread it belongs to.

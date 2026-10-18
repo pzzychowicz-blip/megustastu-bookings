@@ -4814,6 +4814,7 @@ function BookingApp({uid}){
           conversations={wa.conversations}
           contacts={wa.contacts}
           waLink={wa.waLink}
+          draftOwner={uid}
           messages={wa.messagesMap}
           watchMessages={wa.watchMessages}
           templates={wa.templates}

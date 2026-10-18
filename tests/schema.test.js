@@ -184,6 +184,10 @@ const PINNED = {
       "lib/tags.js:sanitizeTagList": "5efb78d18b",
       "lib/vouchers.js:sanitizeVoucher": "ef3e67ad4b",
       "lib/vouchers.js:sanitizeVouchers": "371d5b2c85",
+      // v18.10.0: added WITHOUT a SCHEMA raise. It reads this device's
+      // localStorage (WhatsApp reply drafts), never the database, so no other
+      // build reads or writes what it keeps.
+      "lib/wa-reply-drafts.js:sanitizeDrafts": "56405e9795",
       // v18.8.0: added WITHOUT a SCHEMA raise, the one case the note above does
       // not cover. It is the server's check on what it WRITES (a message's
       // `media`), never a reader's whitelist: messages are read whole and the

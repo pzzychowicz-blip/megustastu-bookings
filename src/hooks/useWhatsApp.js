@@ -47,6 +47,7 @@ import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
 import { WA_SANDBOX } from "../lib/waSandbox";
 import { draftPrefill } from "../lib/draft-check";
+import { forgetReplyDrafts } from "../lib/wa-reply-drafts";
 
 // A key `ref()` can take as ONE path segment. A conversation's key comes out of
 // a row's body (see conversationKeysRef), and `ref()` throws on . # $ [ ] and
@@ -683,6 +684,8 @@ export function useWhatsApp({
       setMessagesMap(nextMap);
     }
     update(ref(db), patch).catch(function (err) { console.error("[wa] delete failed", err); });
+    // v18.10.0: and this device's unsent replies to them, every account's.
+    forgetReplyDrafts(keys);
   }
   function bulkDeleteConversations(keys) { deleteConversations(keys); }
   function doDeleteConversation(phoneKey) {
@@ -827,6 +830,7 @@ export function useWhatsApp({
     const patch = conversationDeletePatch([...keys]);
     if (!Object.keys(patch).length) return;
     update(ref(db), patch).catch(function () {});
+    forgetReplyDrafts([...keys]);
   }
 
   // eraseConversation(phoneKey) — v18.3.1: the WhatsApp half of "Delete
@@ -866,6 +870,9 @@ export function useWhatsApp({
       setContacts(nextContacts);
     }
     update(ref(db), conversationDeletePatch([phoneKey])).catch(function (err) { console.error("[wa] erase failed for one guest", err); });
+    // v18.10.0: an unsent reply to an erased guest is their data too. Only
+    // this device's: a draft never leaves the device it was typed on.
+    forgetReplyDrafts([phoneKey]);
     update(ref(db), contactDeletePatch([phoneKey])).catch(function (err) { console.error("[wa] contact erase failed for one guest", err); });
   }
 

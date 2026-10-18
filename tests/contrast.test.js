@@ -458,6 +458,11 @@ const FILLS = [
   { fill: "--wa-row-bg", alpha: null, ink: "--text-primary", role: "label", what: "conversation row" },
   { fill: "--wa-row-bg-hover", alpha: null, ink: "--text-primary", role: "label", what: "conversation row (hover)" },
   { fill: "--wa-row-active-bg", alpha: null, ink: "--text-primary", role: "label", what: "conversation row (selected)" },
+  // v18.10.0: a row's "Draft:" label (ConversationRow), on the row's resting
+  // and hover fills, and the selected fill a row in select mode wears.
+  { fill: "--wa-row-bg", alpha: null, ink: "--success-text", role: "label", what: "conversation row: Draft:" },
+  { fill: "--wa-row-bg-hover", alpha: null, ink: "--success-text", role: "label", what: "conversation row (hover): Draft:" },
+  { fill: "--wa-row-active-bg", alpha: null, ink: "--success-text", role: "label", what: "conversation row (selected): Draft:" },
   { fill: "--wa-list-bg", alpha: null, ink: "--text-primary", role: "label", what: "conversation-list pane" },
   // v18.9.0: the thread's day separators ("Today", "Sun 06.09") stand on the
   // thread's own surface, which is this token, with no fill of their own.

@@ -37149,3 +37149,54 @@ R-14, all done 17 October) and asked for the rules to be published to PROD first
 17 October). It now says the rehearsal waits only for the disposable number's week of
 history, then runs from R-5, and keeps the findings the rehearsal owns and where its answers
 are recorded.
+
+### Phase 4 — WhatsApp reply drafts kept as you type
+
+Patryk, 2026-10-18: "message draft should be stored when typing", as messengers do. Decided
+in two rounds of questions: kept on this device, per conversation and per signed-in
+account; the conversation's row says "Draft:" until it is sent or emptied; removed when the
+conversation is deleted or Delete customer runs here; a picked file is not kept.
+
+**Where it lives.** `src/lib/wa-reply-drafts.js`, a module store over one localStorage key
+(`mgt-wa-drafts`: `{uid: {phoneKey: {text, at}}}`), read through `useReplyDrafts(uid)`
+(`useSyncExternalStore`). A store rather than component state because two components that
+never share a render need it: `ReplyComposer` writes it on each keystroke, and InboxPanel
+reads it for the list. Another tab on the device follows through the `storage` event. Every
+storage access is in a try, so a private window or a full quota keeps the drafts in memory
+for the session. Not the database, on purpose: a draft is half a sentence, and synced it
+would put one person's unfinished words on every screen. So nothing is stored there, and
+there is no rules change and no `SCHEMA` raise.
+
+**The composer.** `ReplyComposer`'s per-thread `useState` map became the store, keyed by
+`draftOwner` (App's `uid`, through InboxPanel and ConversationView). `setTxt` keeps its
+shape; its updater form reads the STORE rather than the render's map, so a caption trimmed
+after an upload still sees what was typed while it went. Send and an emptied box remove the
+draft (an empty text deletes the entry, and the key when it was the last).
+
+**The row.** `ConversationRow` takes `draft` and shows "**Draft:** <text>" (line breaks as
+spaces) in the snippet's place, and ", unsent draft" in its spoken name. Not on the open
+conversation, whose box is right there and whose row would change with every key. "Draft:"
+is `--success-text`, not `--accent`: accent on this row measures under 4.5:1 at that size
+(the row's own comment on the parsing tag), and green is the messenger's own word for it.
+Registered on the row's three fills in `tests/contrast.test.js`.
+
+**Forgetting.** `deleteConversations`, `clearAllWaData` (the simulator) and
+`eraseConversation` (Delete customer) call `forgetReplyDrafts(keys)`, which removes the
+drafts to those numbers for every account on this device: an erased guest's conversation
+must not survive as somebody's draft to them. Only this device's; a draft never leaves it.
+
+**Verified on DEV** (the Browser pane): typed two lines into Carlos's box, opened another
+conversation: Carlos's row read "Draft: Hola Carlos, te confirmo" and the other box was
+empty; after a reload the row still read it and the box refilled; emptying the box put the
+last message back and removed the key. Send was not pressed (it would message the
+simulator's guest); it calls the same `setTxt("")`.
+
+**Test.** `tests/wa-reply-drafts.test.js`: the sanitiser, set / replace / empty, identity
+kept when nothing changes, forgetting across accounts, a reload through a stubbed
+localStorage, a throwing storage, a corrupt value, and the three callers of
+`forgetReplyDrafts` plus the owner reaching both readers.
+
+**Files:** `src/lib/wa-reply-drafts.js` (new) · `src/hooks/useReplyDrafts.js` (new) ·
+`ReplyComposer.jsx` · `ConversationRow.jsx` · `ConversationList.jsx` · `ConversationView.jsx`
+· `InboxPanel.jsx` · `useWhatsApp.js` · `App.jsx` · `tests/wa-reply-drafts.test.js` (new) ·
+`tests/contrast.test.js` · GLOSSARY.
