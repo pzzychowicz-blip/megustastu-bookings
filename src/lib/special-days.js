@@ -20,12 +20,13 @@
 // Saving one over bookings already made keeps them (Patryk): the editor names
 // them and asks first (`affectedBookings`), and nothing moves or is cancelled.
 //
-// Imports nothing that imports constants.js, so constants.js can stay free of
-// it: the hook builds the index and hands it to `setHourExceptions`.
+// constants.js never imports this file (booking-logic.js, which this file
+// does import, reads constants.js): the hook builds the index and hands it to
+// `setHourExceptions`, so there is no cycle.
 
 import { addDays, formatDay, isReadableDate } from "./day.js";
 import { hourLabel } from "./time-grid.js";
-import { countLabel } from "./booking-logic.js";
+import { countLabel, lastStartMins } from "./booking-logic.js";
 
 // The opening-hours bounds every day obeys (v14.5.0): open 06–22, close an hour
 // after opening at the earliest and 01:00 (25) at the latest. sanitizeDay in
@@ -162,7 +163,7 @@ function startMins(t) {
 // time. They are KEPT; this is what the editor names before saving.
 export function affectedBookings(bookings, ex) {
   if (!ex || !Array.isArray(bookings)) return [];
-  const lastStart = Math.min(ex.close, 24) * 60 - 15;
+  const lastStart = lastStartMins(ex.close);
   return bookings
     .filter((b) => b && b.date >= ex.from && b.date <= ex.to && b.status !== "cancelled" && b.status !== "completed")
     .filter((b) => {
