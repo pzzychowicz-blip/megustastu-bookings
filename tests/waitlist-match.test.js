@@ -303,7 +303,8 @@ describe("phase 68 — the entry carries the zone, and the row says it", () => {
     // v18.11.0: through `waitlistEntry`, which carries the draft's zone, and the
     // form's door hands it the draft as it is (the walk-in's passes none).
     expect(App).toMatch(/const w=waitlistEntry\(formRef\.current,\{checkPhone:true,/);
-    expect(read("lib/booking-save.js")).toMatch(/notes:f\.notes\|\|"",\s*preference:f\.preference\s*\}\};/);
+    // v18.11.0: the occasion tags ride after it.
+    expect(read("lib/booking-save.js")).toMatch(/notes:f\.notes\|\|"",\s*preference:f\.preference,\s*tags:cleanTagIds\(f\.tags\)\s*\}\};/);
     expect(App).toMatch(/preference:w\.preference==="indoor"\|\|w\.preference==="outdoor"\?w\.preference:"auto"/);
   });
   it("the waitlist row and the Day sheet say it", () => {

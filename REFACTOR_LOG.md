@@ -37622,3 +37622,34 @@ Seven findings. Five fixed, one needed no change, and one became phases 9 and 10
 - **The two gaps this version left** (a change request naming an occasion, and a
   waitlist entry without one): Patryk asked for both in this version. They are phases 9
   and 10.
+
+### Phase 9 — a waiting party keeps its occasion tags
+
+Patryk, after the review: a WhatsApp birthday sent to the waitlist was booked without
+its Birthday tag. The waitlist entry gains `tags`, the party's occasion tag ids. All
+three doors build it through `waitlistEntry`, which carries `tags: cleanTagIds(f.tags)`:
+- the booking form's door takes the chips tapped on the form,
+- the WhatsApp door takes the draft's occasions (`draftPrefill` is now passed the tag
+  list),
+- the walk-in form has none.
+
+`addToWaitlist` stores them only when there are some. Firebase throws on an undefined
+property and RTDB keeps no empty array. **Book from the waitlist** opens the form with
+the ones the list still has (`knownTagIds`, `lib/tags.js`: `tagsOf` as clean, sorted
+ids, a removed tag dropped). `occasionIdsIn` (`whatsapp.js`) is now built on it, so
+Accept, the server's answer and Book share one rule. The waitlist row names the
+occasions in the zone flag's look.
+
+**No `SCHEMA` raise.** The waitlist is not read through a whitelist: the listener keeps
+each entry as stored, and every write is the mirror plus one change. A device on an
+older build therefore carries `tags` through. The node's rules validate no fields, so
+there is no console step.
+
+**Tests:** `tests/booking-save-waitlist.test.js` (the builder carries clean tags from the
+form and a draft and none from the walk-in, the hook stores only a non-empty list, and
+Book, the panel and `knownTagIds`). Three source pins moved with the new arguments and
+say so: `draft-check`, `phone-countries`, `waitlist-match`.
+
+**Files:** `src/lib/tags.js` · `src/lib/whatsapp.js` · `src/lib/booking-save.js` ·
+`src/hooks/useWaitlist.js` · `src/App.jsx` · `src/components/WaitlistPanel.jsx` ·
+`GLOSSARY.md` · `src/hooks/CLAUDE.md`.

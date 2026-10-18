@@ -210,7 +210,8 @@ describe("draftPrefill — one rule for Accept and for the waitlist", () => {
     const App = read("App.jsx");
     const wl = App.slice(App.indexOf("function addDraftToWaitlist(conv){"), App.indexOf("function addFormToWaitlist(){"));
     // v18.11.0: the entry is `waitlistEntry`'s, built from the prefill.
-    expect(wl).toMatch(/waitlistEntry\(draftPrefill\(conv,bookings,wa\.contacts\),/);
+    // v18.11.0: with the tag list, so the entry keeps the draft's occasions.
+    expect(wl).toMatch(/waitlistEntry\(draftPrefill\(conv,bookings,wa\.contacts,tagList\),/);
     expect(wl).toMatch(/addToWaitlist\(w\.entry\);/);
   });
 });

@@ -462,7 +462,7 @@ describe("Add to waitlist takes the phone the way Save does (v18.2.0 phase 80)",
   // refusing BEFORE the write and storing the checked number.
   it("the WhatsApp draft's Add to waitlist asks the same helper, before it writes", () => {
     const wa = App.slice(App.indexOf("function addDraftToWaitlist(conv){"), App.indexOf("function addFormToWaitlist(){"));
-    expect(wa).toMatch(/const w=waitlistEntry\(draftPrefill\(conv,bookings,wa\.contacts\),\{checkPhone:true,pinned:generalSettings\.pinnedCountries,prefix:generalSettings\.phonePrefix\}\);/);
+    expect(wa).toMatch(/const w=waitlistEntry\(draftPrefill\(conv,bookings,wa\.contacts,tagList\),\{checkPhone:true,pinned:generalSettings\.pinnedCountries,prefix:generalSettings\.phonePrefix\}\);/);
     expect(wa).toMatch(/if\(w\.refusal\)return w\.refusal;/);
     expect(wa.indexOf("w.refusal")).toBeLessThan(wa.indexOf("addToWaitlist("));
     expect(wa).toMatch(/addToWaitlist\(w\.entry\);/);

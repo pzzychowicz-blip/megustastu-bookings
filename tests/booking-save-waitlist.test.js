@@ -12,6 +12,9 @@
 import { describe, it, expect } from "vitest";
 import { waitlistEntry } from "../src/lib/booking-save.js";
 import { phoneForSave, enteredPhone, NO_CODE_REFUSAL } from "../src/lib/booking-logic";
+import { readFileSync } from "node:fs";
+import { stripComments } from "../scripts/strip-comments.mjs";
+import { knownTagIds, DEFAULT_TAG_LIST } from "../src/lib/tags.js";
 
 const P = ["ES", "GB"];
 const PREFIX = "+34";
@@ -124,5 +127,33 @@ describe("waitlistEntry's phone rule (v18.2.0 phase 80, moved in v18.11.0)", () 
   it("carries the draft's date, else the door's", () => {
     expect(newFormDoor({ date: "2026-10-25" }).entry.date).toBe("2026-10-25");
     expect(newFormDoor({}).entry.date).toBe(VIEW);
+  });
+});
+
+// ── v18.11.0: a waiting party keeps its occasion tags ───────────────────────
+// Patryk, 2026-10-18: a WhatsApp birthday that went to the waitlist was booked
+// without its Birthday tag. The builder carries `tags`, the hook stores them
+// only when there are any (Firebase throws on undefined, and RTDB keeps no
+// empty array), and Book from the waitlist opens the form with those the list
+// still has.
+
+describe("the waitlist keeps a party's occasion tags (v18.11.0)", () => {
+  const src = (f) => stripComments(readFileSync(new URL("../src/" + f, import.meta.url), "utf8")).join("\n");
+  it("the builder carries them, clean, from the form and from a draft", () => {
+    expect(newFormDoor({ phone: "+34 600 111 333", tags: ["o-birthday", "o-birthday", "bad id"] }).entry.tags).toEqual(["o-birthday"]);
+    expect(newDraftDoor({ phone: "+34 600 111 333", tags: ["o-anniversary"] }).entry.tags).toEqual(["o-anniversary"]);
+    expect(newWalkinDoor({ name: "Ana" }).entry.tags).toEqual([]);
+  });
+  it("the hook stores them only when there are some", () => {
+    const hook = src("hooks/useWaitlist.js");
+    expect(hook).toMatch(/function addToWaitlist\(\{name,phone,size,date,prefTime,notes,preference,tags\}\)/);
+    expect(hook).toMatch(/const occ=cleanTagIds\(tags\);\s*if\(occ\.length\) entry\.tags=occ;/);
+  });
+  it("Book opens the form with those the list still has, and the panel names them", () => {
+    expect(src("App.jsx")).toMatch(/tags:knownTagIds\(tagList,"occasion",w\.tags\)/);
+    expect(src("App.jsx")).toMatch(/onBook=\{bookFromWaitlist\}\s*tagList=\{tagList\}/);
+    expect(src("components/WaitlistPanel.jsx")).toMatch(/tagLabels\(tagList,"occasion",w\.tags\)/);
+    expect(knownTagIds(DEFAULT_TAG_LIST, "occasion", ["o-birthday", "o-gone", "g-vip"])).toEqual(["o-birthday"]);
+    expect(knownTagIds(DEFAULT_TAG_LIST, "occasion", undefined)).toEqual([]);
   });
 });

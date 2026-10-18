@@ -335,6 +335,8 @@ import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
 // v18.5.0: the tag list (settings/tags), the 10th settings node — the guest and
 // occasion tags a booking can carry. Its decisions are lib/tags.js.
 import { useTagSettings } from "./hooks/useTagSettings";
+// v18.11.0: Book from the waitlist keeps the occasion tags the list still has.
+import { knownTagIds } from "./lib/tags";
 // v18.0.0 session 8: the activity log. `useActivityLog` installs the module-level
 // sink every writer emits into; `useActivityFeed` is the app's first Firebase
 // QUERY, and is attached only while the log is open.
@@ -2404,7 +2406,9 @@ function BookingApp({uid}){
       size:w.size||2,
       notes:w.notes||"",
       // v18.2.0 phase 68: the party's zone comes back with it.
-      preference:w.preference==="indoor"||w.preference==="outdoor"?w.preference:"auto"
+      preference:w.preference==="indoor"||w.preference==="outdoor"?w.preference:"auto",
+      // v18.11.0: and its occasion tags, those the list still has.
+      tags:knownTagIds(tagList,"occasion",w.tags)
     }));
     setEditId(null);setError("");setSwapAffected(null);
     pendingWaitlistRef.current=w.id;
@@ -2419,7 +2423,7 @@ function BookingApp({uid}){
   // the card's button turns into "On the waitlist" once the entry is stored.
   function addDraftToWaitlist(conv){
     if(refused("waitlistManage"))return null;
-    const w=waitlistEntry(draftPrefill(conv,bookings,wa.contacts),{checkPhone:true,pinned:generalSettings.pinnedCountries,prefix:generalSettings.phonePrefix});
+    const w=waitlistEntry(draftPrefill(conv,bookings,wa.contacts,tagList),{checkPhone:true,pinned:generalSettings.pinnedCountries,prefix:generalSettings.phonePrefix});
     if(w.refusal)return w.refusal;
     addToWaitlist(w.entry);
     return null;
@@ -3928,6 +3932,7 @@ function BookingApp({uid}){
     availability={waitAvail}
     date={viewDate}
     onBook={bookFromWaitlist}
+    tagList={tagList}
     onRemove={function(w){if(refused("waitlistManage"))return;removeFromWaitlist(w);}}
     onClose={function(){setShowWaitlist(false);}} />:null}</ModalPresence>;
 

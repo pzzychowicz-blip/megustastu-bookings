@@ -950,6 +950,10 @@ export function kitchenAsk(f,orig,bookings,editId){
 // same guest with and without "+34" is two customers. The walk-in form has no
 // phone field, so its door does not ask. Returns `{refusal}` or `{entry}`; the
 // door decides where a refusal is shown.
+//
+// v18.11.0: and the party's OCCASION tags (`f.tags`, ids), so a birthday that
+// waits is still a birthday when it is booked: the booking form's chips and a
+// WhatsApp draft's occasions (`draftPrefill`). The walk-in form has none.
 export function waitlistEntry(f,opts){
   const o=opts||{};
   const rule=o.checkPhone?phoneForSave(f.phone,o.pinned,o.prefix,false):{phone:f.phone,refusal:null};
@@ -961,6 +965,7 @@ export function waitlistEntry(f,opts){
     date:f.date||o.date,
     prefTime:f.time||null,
     notes:f.notes||"",
-    preference:f.preference
+    preference:f.preference,
+    tags:cleanTagIds(f.tags)
   }};
 }

@@ -353,7 +353,7 @@ import { isReadableTime, countLabel } from "./booking-logic.js";
 import { isReadableDate, formatDay, localDay, stepDate } from "./day.js";
 // v18.11.0: the occasion ids a parse may carry are a booking's tag ids, so they
 // are cleaned by the rule a booking's are (`cleanTagIds`). tags.js imports nothing.
-import { cleanTagIds, tagsOf } from "./tags.js";
+import { cleanTagIds, knownTagIds } from "./tags.js";
 
 // ── What a conversation is called (v18.9.0) ────────────────────────────────
 // conversationName(conv, bookings, contacts) → `{ title, phoneLine, source }`:
@@ -567,12 +567,12 @@ export function sanitizeParse(parse) {
 }
 
 // occasionIdsIn(ids, occasionTags) → the ids an occasion list `[{id, label}]`
-// still has, clean and sorted (v18.11.0). THE one rule for it: the server's
-// answer (`knownOccasions`, gemini.js) and Accept (`draftOccasions`) both ask
-// it, through `tagsOf`, the rule a booking's tags are shown by, so a tag
-// removed between the message and the Accept is left out everywhere.
+// still has, clean and sorted (v18.11.0): `knownTagIds` (tags.js) for a bare
+// occasion list, which is what the server holds. The server's answer
+// (`knownOccasions`, gemini.js) and Accept (`draftOccasions`) both ask it, so a
+// tag removed between the message and the Accept is left out everywhere.
 export function occasionIdsIn(ids, occasionTags) {
-  return cleanTagIds(tagsOf({ occasion: occasionTags || [] }, "occasion", cleanTagIds(ids)).map(function (t) { return t.id; }));
+  return knownTagIds({ occasion: occasionTags || [] }, "occasion", ids);
 }
 
 // draftOccasions(draft, tagList) → the occasion tag ids a draft names that the
