@@ -88,6 +88,18 @@ describe("the store", () => {
     expect(seen).toHaveLength(2);
     off();
   });
+  it("reads one conversation's text, unchanged by a keystroke in another", async () => {
+    const m = await import("../src/lib/wa-reply-drafts.js");
+    m.setReplyDraft("u1", "a", "Hola");
+    const other = m.draftTextOf("u1", "a");
+    m.setReplyDraft("u1", "b", "x");
+    m.setReplyDraft("u1", "b", "xy");
+    // A string compares equal, so useSyncExternalStore keeps row "a" as it was.
+    expect(m.draftTextOf("u1", "a")).toBe(other);
+    expect(m.draftTextOf("u1", "b")).toBe("xy");
+    expect(m.draftTextOf("u1", "none")).toBe("");
+    expect(m.draftTextOf("u2", "a")).toBe("");
+  });
   it("removes the key once the last draft is sent or emptied", async () => {
     const m = await import("../src/lib/wa-reply-drafts.js");
     m.setReplyDraft("u1", "k", "a");
@@ -124,9 +136,12 @@ describe("deleting a conversation forgets its drafts", () => {
     expect(body("clearAllWaData")).toMatch(/forgetReplyDrafts\(/);
     expect(body("eraseConversation")).toMatch(/forgetReplyDrafts\(\[phoneKey\]\)/);
   });
-  it("the reply box and the list read the same store, for the signed-in account", () => {
-    expect(read("src/components/whatsapp/ReplyComposer.jsx")).toMatch(/useReplyDrafts\(draftOwner\)/);
-    expect(read("src/components/whatsapp/InboxPanel.jsx")).toMatch(/useReplyDrafts\(draftOwner\)/);
+  it("the reply box and each row read the same store, for the signed-in account", () => {
+    expect(read("src/components/whatsapp/ReplyComposer.jsx")).toMatch(/useReplyDraft\(draftOwner, threadKey\)/);
+    expect(read("src/components/whatsapp/ConversationRow.jsx")).toMatch(/useReplyDraft\(draftOwner, conv\.phoneKey\)/);
+    // /code-review: never the whole store in the panel, which re-rendered the
+    // list and the open thread's bubbles on every keystroke.
+    expect(read("src/components/whatsapp/InboxPanel.jsx")).not.toMatch(/useReplyDraft/);
     expect(read("src/App.jsx")).toMatch(/draftOwner=\{uid\}/);
   });
 });

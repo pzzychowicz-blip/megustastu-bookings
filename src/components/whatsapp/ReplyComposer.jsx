@@ -25,8 +25,8 @@ import { TemplatesIcon, PaperclipIcon, FileIcon } from "./WaIcons";
 import { R, T, FW, M, H, IC, SP, REVEAL_EXIT_MS } from "../../lib/constants";
 import { fileSizeLabel, WA_CAPTION_MAX } from "../../lib/whatsapp";
 import { attachKind, attachRefusal, shrinkPhoto } from "../../lib/wa-attach";
-import { draftsOf, setReplyDraft } from "../../lib/wa-reply-drafts";
-import { useReplyDrafts } from "../../hooks/useReplyDrafts";
+import { draftTextOf, setReplyDraft } from "../../lib/wa-reply-drafts";
+import { useReplyDraft } from "../../hooks/useReplyDraft";
 
 // TemplateChips — private to the composer. Tapping a chip inserts its text.
 // scrollLang (compact mode): the language switch joins the chips inside ONE
@@ -142,15 +142,13 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
   // signed-in account (`draftOwner`) as they are typed, so closing the inbox,
   // Back on a phone or a reload loses nothing, and the conversation's row says
   // "Draft:" (lib/wa-reply-drafts.js). The file is still not kept.
-  const drafts = useReplyDrafts(draftOwner);
-  const txt = (drafts[threadKey] && drafts[threadKey].text) || "";
+  const txt = useReplyDraft(draftOwner, threadKey);
   // `next` is a string or an updater; `key` defaults to the open thread. The
-  // updater reads the store, not this render's `drafts`, so a caption trimmed
+  // updater reads the store, not this render's `txt`, so a caption trimmed
   // after an upload (send) sees what was typed while it went.
   function setTxt(next, key) {
     const k = key === undefined ? threadKey : key;
-    const cur = draftsOf(draftOwner)[k];
-    const v = typeof next === "function" ? next((cur && cur.text) || "") : next;
+    const v = typeof next === "function" ? next(draftTextOf(draftOwner, k)) : next;
     setReplyDraft(draftOwner, k, v);
   }
   const [tplOpen, setTplOpen] = useState(false);

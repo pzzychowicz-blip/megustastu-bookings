@@ -14,9 +14,12 @@
 // tablet do not finish each other's messages. A picked photo or PDF is not kept
 // (a file cannot go into localStorage); its caption is, because it is the text.
 //
-// A module store read through `useSyncExternalStore` (`useReplyDrafts`), because
+// A module store read through `useSyncExternalStore` (`useReplyDraft`), because
 // two components that never share a render need it: the reply box writes it and
-// the conversation list reads it. A second tab on this device follows through
+// each conversation row reads its own. Per conversation, as a string, so a
+// keystroke re-renders the box and that one row, never the whole inbox
+// (/code-review: a whole-store subscription in InboxPanel re-rendered the list
+// and the open thread's every bubble on every key). A second tab on this device follows through
 // the `storage` event. Every storage access is in a try: a private window, a
 // full quota or blocked site data leave the drafts in memory for this session.
 //
@@ -126,6 +129,14 @@ export function subscribeDrafts(fn) {
 // change, which `useSyncExternalStore` requires of a snapshot.
 export function draftsOf(uid) {
   return load()[uid || ""] || EMPTY;
+}
+
+// One conversation's draft text, or "". A string, so a subscriber whose draft
+// did not change gets the same snapshot and does not re-render: every
+// keystroke commits the store, and only the row typed into should follow it.
+export function draftTextOf(uid, key) {
+  const d = draftsOf(uid)[key];
+  return d ? d.text : "";
 }
 
 export function setReplyDraft(uid, key, text) {

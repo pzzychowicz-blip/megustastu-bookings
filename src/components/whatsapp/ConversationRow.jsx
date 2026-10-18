@@ -3,7 +3,8 @@
 // from bookings by phone, else the number), an intent/draft/accepted tag, the
 // relative time, and the last-message snippet. Archived rows render dimmed.
 // v18.10.0: a reply typed and not sent replaces the snippet with "Draft: …"
-// (`draft`, this device's, lib/wa-reply-drafts.js), as a messenger shows it.
+// (this device's, for `draftOwner`, lib/wa-reply-drafts.js), as a messenger
+// shows it.
 
 import { useRef, useEffect } from "react";
 import { conversationName, formatRelativeTime, isParsing, describeConversation } from "../../lib/whatsapp";
@@ -11,8 +12,9 @@ import { R, T, FW, IC } from "../../lib/constants";
 import { OutlineChip } from "../atoms";
 import { WarnIcon, PencilIcon, DraftIcon, ArchiveIcon, MuteIcon } from "./WaIcons";
 import { CheckIcon } from "../Icons";
+import { useReplyDraft } from "../../hooks/useReplyDraft";
 
-export function ConversationRow({ conv, active, onClick, bookings, contacts, flipId, selectMode, checked, roving = false, departing = false, draft = "" }) {
+export function ConversationRow({ conv, active, onClick, bookings, contacts, flipId, selectMode, checked, roving = false, departing = false, draftOwner }) {
   // v18.2.0 (the design critique, W4): an unknown sender is named by the
   // FORMATTED number — this row showed the raw key ("+447811223344") while the
   // open conversation added "+44 7811223344" beside the same raw key. And a
@@ -25,6 +27,8 @@ export function ConversationRow({ conv, active, onClick, bookings, contacts, fli
   const intent = (conv.draftData && conv.draftData.intent) || null;
   // Not on the OPEN conversation: its box is right there, and the row would
   // change with every key. One line, so a draft's line breaks read as spaces.
+  // Read here, per row, so a keystroke re-renders this row and not the list.
+  const draft = useReplyDraft(draftOwner, conv.phoneKey);
   const draftLine = draft && !(active && !selectMode) ? draft.replace(/\s+/g, " ").trim() : "";
 
   // Parsing/typing tag (sandbox inbound path) takes visual priority — the

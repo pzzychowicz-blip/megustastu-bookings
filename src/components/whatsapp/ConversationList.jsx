@@ -16,7 +16,7 @@ import { T, ROW_FOLD } from "../../lib/constants";
 // at a time; `shift` (385ms) is that fold to the eye, and the honest token for
 // a Reveal, which changes geometry. The full note is at the constant.
 
-export function ConversationList({ conversations, drafts, activeKey, onSelect, bookings, contacts, archivedView, emptyLabel, selectMode, selected, onToggleSelect }) {
+export function ConversationList({ conversations, draftOwner, activeKey, onSelect, bookings, contacts, archivedView, emptyLabel, selectMode, selected, onToggleSelect }) {
   // Shared with InboxPanel's keyboard-nav so the rendered order and the ↑/↓
   // order are guaranteed identical (see lib/whatsapp.js → sortConversations).
   const sorted = sortConversations(conversations, archivedView);
@@ -145,7 +145,7 @@ export function ConversationList({ conversations, drafts, activeKey, onSelect, b
             onClick={() => (selectMode ? onToggleSelect(c.phoneKey) : onSelect(c.phoneKey))}
             bookings={bookings}
             contacts={contacts}
-            draft={drafts && drafts[c.phoneKey] ? drafts[c.phoneKey].text : ""}
+            draftOwner={draftOwner}
             selectMode={selectMode}
             checked={!!(selected && selected.has(c.phoneKey))}
           />

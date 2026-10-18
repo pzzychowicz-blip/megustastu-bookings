@@ -155,7 +155,7 @@ describe("the reply composer keeps its text and its file with their thread", () 
   it("the text is a draft per thread, never one string", () => {
     // v18.10.0: kept on this device for the signed-in account, so it also
     // outlives the composer (tests/wa-reply-drafts.test.js).
-    expect(Composer).toMatch(/const drafts = useReplyDrafts\(draftOwner\);\s*const txt = \(drafts\[threadKey\] && drafts\[threadKey\]\.text\) \|\| "";/);
+    expect(Composer).toMatch(/const txt = useReplyDraft\(draftOwner, threadKey\);/);
     expect(Composer).not.toMatch(/const \[txt, setTxt\] = useState/);
   });
   it("the file, its sentence, a send in flight and a photo being prepared each name their thread", () => {

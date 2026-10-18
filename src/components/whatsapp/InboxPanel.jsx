@@ -25,7 +25,6 @@ import { useState, useEffect, useRef } from "react";
 import { useWinW } from "../../hooks/useWinW";
 import { useWinH } from "../../hooks/useWinH";
 import { useShortViewport } from "../../hooks/useShortViewport";
-import { useReplyDrafts } from "../../hooks/useReplyDrafts";
 import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, conversationSearchNames, intentBannerVisible } from "../../lib/whatsapp";
 import { ConversationList } from "./ConversationList";
 import { ConversationView } from "./ConversationView";
@@ -111,7 +110,9 @@ export function InboxPanel({
   // link (`waLink`), both from useWhatsApp.
   contacts, waLink,
   // v18.10.0: the signed-in account, whose reply drafts this device keeps
-  // (lib/wa-reply-drafts.js): the list marks them and the reply box edits them.
+  // (lib/wa-reply-drafts.js): each row marks its own and the reply box edits
+  // them. Handed down, never subscribed here: a subscription in this panel
+  // re-rendered the list and the open thread on every keystroke.
   draftOwner,
   // v18.8.0: `watchMessages(phoneKey)` from useWhatsApp — the open thread's
   // listener. `messages` holds only the watched conversations.
@@ -135,7 +136,6 @@ export function InboxPanel({
 }) {
   const winW = useWinW();
   const twoPane = winW >= INBOX_TWO_PANE_BREAKPOINT;
-  const replyDrafts = useReplyDrafts(draftOwner);
   // Short screens (tablet): collapse the draft card to a one-line bar + the
   // composer template chips behind a button so the message thread stays readable.
   const winH = useWinH();
@@ -463,7 +463,7 @@ export function InboxPanel({
     <div inert={twoPane && kbFold} style={{ width: twoPane ? (kbFold ? 0 : LIST_W) : "100%", flexShrink: 0, borderRight: twoPane && !kbFold ? "1px solid var(--wa-divider)" : "none", background: "var(--wa-list-bg)", height: "100%", overflow: "hidden", display: twoPane || !activeKey ? "flex" : "none", flexDirection: "column", transition: twoPane ? "width " + M.shift : undefined }}>
       {/* keyed by tab → Inbox⇄Archived switch crossfades the list */}
       <div key={tab} className="mgt-fade-in" style={{ flex: 1, minHeight: 0, minWidth: twoPane ? LIST_W : 0, display: "flex", flexDirection: "column" }}>
-        <ConversationList conversations={filteredConvs} drafts={replyDrafts} activeKey={activeKey} onSelect={setActiveKey} bookings={bookings} contacts={contacts} archivedView={tab === "archived"} emptyLabel={filtersActive ? "No matches." : undefined} selectMode={selectMode} selected={selected} onToggleSelect={toggleSelect} />
+        <ConversationList conversations={filteredConvs} draftOwner={draftOwner} activeKey={activeKey} onSelect={setActiveKey} bookings={bookings} contacts={contacts} archivedView={tab === "archived"} emptyLabel={filtersActive ? "No matches." : undefined} selectMode={selectMode} selected={selected} onToggleSelect={toggleSelect} />
       </div>
     </div>
   );
