@@ -37518,3 +37518,77 @@ go-live checklist already had it. The PROD step is due about 2026-10-25.
 for Patryk to check what the restaurant iPhone's contacts sync to.
 
 **Files:** `ROADMAP.md` · `SECURITY.md`.
+
+### Phase 7 — the version becomes v18.11.0
+
+Patryk asked for WhatsApp drafts to recognise occasions while v18.10.1 was still
+unpushed, and chose to carry the feature here (2026-10-18). `__APP_SIGNATURE__` and every
+in-repo mention of v18.10.1 now read v18.11.0, and the branch is
+`feat/v18.11.0-roadmap-and-wa-occasions`.
+
+### Phase 8 — WhatsApp drafts read occasions, and the name a booking is made under
+
+**What Patryk asked.** A draft should recognise occasions, and the names should be
+checked: are they recognised and filled into the form?
+
+**The names, as found (verified on DEV with the simulator).** A name in the draft reaches
+the form: Accept's `draftPrefill` takes the message's name first, then the phone's
+contact, the past bookings and the WhatsApp profile, and a draft naming "Probe Nombre"
+opened the form with that name. Two gaps. The draft card never showed the name, so staff
+learned it only after Accept. And the prompt read a name "only if the customer states
+their own name", which does not clearly cover "a nombre de Juan". The mock parser reads
+no name at all, which stays that way: it exists to exercise the plumbing.
+
+**Decisions (Patryk, 2026-10-18).**
+- **The restaurant's own occasion tags**, not a fixed list. The three parse callers
+  (`wa-inbound`, `wa-recheck`, `inbound-core`'s simulator path) read `settings/tags`
+  beside the hours (`readOccasionTags`, `_lib/rtdb.js`, through the client's own
+  `sanitizeTagList`, so an absent node is the seed list). `gemini.js` puts the ids in the
+  schema as an ENUM (`responseSchemaFor`), the only answers the model can give, and the
+  labels in one prompt line. A tag added in Settings is recognised from the next
+  message. With no occasion tags the field is left out of the schema and the prompt,
+  since Gemini refuses an empty enum. What comes back is kept only where the list has the
+  id (`knownOccasions`), for the mock, a key-less fallback and a merged draft. The words
+  still go in notes.
+- **Occasions only.** Guest tags follow the person to every later booking, so one misread
+  message would tag them for good. Allergies stay in notes.
+- **Show the name and widen the rule.** The card's line leads with the name the message
+  gave and ends with the occasions ("Lucía · 6 guests · Sat 24.10 · 21:00 · Birthday").
+  The two shapes of the card now share one `summary`. The prompt reads "the name the booking
+  is under: the customer's own, or the one they ask to book under".
+
+**The draft.** `draftData.occasions` holds tag ids, or null (RTDB keeps no empty array).
+`sanitizeParse` cleans the list with `cleanTagIds` and leaves a parse without the key
+alone. `mergeDraft` keeps the draft's when a follow-up names none. Accept asks
+`draftOccasions` (the ids still in the list) through `draftPrefill`, and the form opens
+with them as its occasion `tags`. **No `SCHEMA` raise**, for `sanitizeMedia`'s reason:
+`sanitizeParse` cleans what the model answers before the server writes; no reader
+whitelists `draftData`, and a browser only `update()`s a conversation's status, so no
+build drops the key. `tests/schema.test.js` re-pins its fingerprint with that note.
+
+**App.** `useTagSettings` moved above `useWhatsApp`, which now reads `tagList`. Declared
+where it was, 100 lines below, it would have been the TDZ blank screen.
+
+**Simulator.** A new scenario, `new_occasion`: a birthday for six booked "a nombre de
+Lucía", so the live re-run on the sandbox (go-live A5-7) measures both rules.
+
+**Not done, on purpose.** A modify request that names an occasion does not add it to the
+booking. Add to waitlist carries no occasion, because a waitlist entry has no tags. What
+Gemini does with the enum, and with the wider name rule, is measured only live on the
+sandbox, since no local key exists. The prompt rules and the schema are held in
+`tests/wa-occasions.test.js` from the request body the real parse builds.
+
+**Tests:** `tests/wa-occasions.test.js` (new: the schema and prompt in both parse paths,
+what is kept of an answer, the mock, the prefill, the name rule, the scenario);
+`tests/api-handlers.test.js` (the re-check hands the model the occasion list, the seed
+list when none is stored, and `applyParse` stores clean ids). Four pins moved with the
+change and say why: `schema` (the fingerprint), `date-format` and `party-size` (one
+summary line where the card wrote it twice), `draft-check` (Accept passes the list and
+opens with `p.tags`).
+
+**Files:** `api/_lib/gemini.js` · `api/_lib/rtdb.js` · `api/_lib/inbound-core.js` ·
+`api/wa-inbound.js` · `api/wa-recheck.js` · `src/lib/whatsapp.js` ·
+`src/lib/draft-check.js` · `src/lib/wa-sim.js` · `src/lib/wa-sim-scenarios.js` ·
+`src/hooks/useWhatsApp.js` · `src/App.jsx` · `src/components/whatsapp/{InboxPanel,
+ConversationView,DraftCard}.jsx` · `GLOSSARY.md` · `api/CLAUDE.md` · `src/lib/CLAUDE.md` ·
+`src/hooks/CLAUDE.md`.

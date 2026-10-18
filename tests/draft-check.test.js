@@ -202,7 +202,9 @@ describe("draftPrefill — one rule for Accept and for the waitlist", () => {
   it("is what Accept and the waitlist read: neither spells the rule again", () => {
     const hook = read("hooks", "useWhatsApp.js");
     const accept = hook.slice(hook.indexOf("function handleAcceptDraft("), hook.indexOf("function takeDraftSource("));
-    expect(accept).toMatch(/const p = draftPrefill\(conv, bookings, contactsRef\.current\);/);
+    expect(accept).toMatch(/const p = draftPrefill\(conv, bookings, contactsRef\.current, tagList\);/);
+    // v18.11.0: the form opens with the occasions the prefill kept.
+    expect(accept).toMatch(/tags: p\.tags,/);
     expect(accept).toMatch(/const time = \(over && over\.time\) \|\| p\.time;/);
     expect(accept).not.toMatch(/matchCustomerByPhone|charAt\(0\)/);
     const App = read("App.jsx");

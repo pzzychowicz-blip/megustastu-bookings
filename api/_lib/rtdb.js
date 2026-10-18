@@ -44,6 +44,7 @@ import { getAuth } from "firebase-admin/auth";
 import { dbUrl, serviceAccount, staffEmails, requireStaffAllowList } from "./env.js";
 import { statusWins } from "../../src/lib/whatsapp.js";
 import { isAdminEntry, sanitizeRole, can } from "../../src/lib/roles.js";
+import { sanitizeTagList } from "../../src/lib/tags.js";
 
 let cachedApp = null;
 let cachedDb = null;
@@ -335,6 +336,20 @@ export async function readOperatingHours() {
     return snap.exists() ? snap.val() : null;
   } catch {
     return null; // prompt falls back to the default hours line
+  }
+}
+
+// v18.11.0: the restaurant's occasion tags, `[{id, label}]`, for the parse's
+// occasions (gemini.js, responseSchemaFor). Read through the client's own
+// `sanitizeTagList`, so an absent node is the seed list exactly as the booking
+// form sees it, and a stored one is cleaned the same way. A failed read is no
+// occasions: the parse still runs, and the message keeps its draft.
+export async function readOccasionTags() {
+  try {
+    const snap = await getDb().ref("settings/tags").get();
+    return sanitizeTagList(snap.exists() ? snap.val() : null).occasion;
+  } catch {
+    return [];
   }
 }
 

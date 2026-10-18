@@ -129,6 +129,7 @@ import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
 import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE, replyUnarchives } from "../src/lib/whatsapp.js";
 import { simMediaMessage } from "../src/lib/wa-mock-media.js";
+import { DEFAULT_TAG_LIST } from "../src/lib/tags.js";
 import { simHistoryValue, simEchoValue, simContent, SIM_HISTORY_RECENT, SIM_HISTORY_OLD, SIM_HISTORY_PHOTO_ID, SIM_WABA_ID, SIM_PHONE_NUMBER_ID } from "../src/lib/wa-sim-coexist.js";
 
 // A request as Vercel hands it over (the body already parsed) and a response
@@ -320,10 +321,10 @@ describe("wa-recheck", () => {
     expect(parseThread).not.toHaveBeenCalled();
   });
 
-  it("hands the model the thread without the auto-ack, the pending draft and the hours", async () => {
+  it("hands the model the thread without the auto-ack, the pending draft, the hours and the occasion tags", async () => {
     const hours = { days: { 1: { open: 13, close: 22 } } };
     fake.state.tree = {
-      settings: { operatingHours: hours },
+      settings: { operatingHours: hours, tags: { v: 1, occasion: [{ id: "o-grad", label: "Graduation" }] } },
       conversations: { [KEY]: openConv({ draftStatus: "parsed", draftData: { size: 2 } }) },
       messages: { [KEY]: thread([
         { direction: "in", text: "Hola" },
@@ -336,8 +337,19 @@ describe("wa-recheck", () => {
     await recheck({ phoneKey: KEY });
     expect(parseThread).toHaveBeenCalledWith(
       [{ direction: "in", text: "Hola" }, { direction: "out", text: "Buenas" }, { direction: "in", text: "Mesa para 4" }],
-      { hours, existingDraft: { size: 2 } }
+      { hours, existingDraft: { size: 2 }, occasions: [{ id: "o-grad", label: "Graduation" }] }
     );
+  });
+
+  // v18.11.0: no stored tag list is the seed list, as the booking form reads it.
+  it("hands the model the seed occasions when no tag list is stored", async () => {
+    fake.state.tree = {
+      conversations: { [KEY]: openConv({}) },
+      messages: { [KEY]: thread([{ direction: "in", text: "Mesa para 4, es un cumpleaños" }]) },
+    };
+    parseThread.mockResolvedValue({ intent: "question", language: "es" });
+    await recheck({ phoneKey: KEY });
+    expect(parseThread.mock.calls.at(-1)[1].occasions).toEqual(DEFAULT_TAG_LIST.occasion);
   });
 
   it("an accepted or dismissed draft is not context, and only the last messages are read", async () => {
@@ -989,6 +1001,14 @@ describe("applyParse", () => {
   it("does nothing without a key", async () => {
     await applyParse("", { intent: "cancel" }, 10);
     expect(fake.state.writes).toEqual([]);
+  });
+  // v18.11.0: the draft keeps the occasions, cleaned, and none is stored as none.
+  it("stores a draft's occasions as clean tag ids, and none as nothing", async () => {
+    fake.state.tree = { conversations: { [KEY]: { phoneKey: KEY } } };
+    await applyParse(KEY, { intent: "new_booking", language: "es", occasions: ["o-birthday", "o-birthday", "bad id!", 7] }, 10);
+    expect(convAt(KEY).draftData.occasions).toEqual(["o-birthday"]);
+    await applyParse(KEY, { intent: "new_booking", language: "es", occasions: [] }, 11);
+    expect(convAt(KEY).draftData.occasions ?? null).toBe(null); // RTDB drops a null; the fake keeps it
   });
 });
 

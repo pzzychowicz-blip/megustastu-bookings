@@ -65,6 +65,9 @@ export function useWhatsApp({
   formOpen,
   // settings/whatsapp (useWaSettings) — currently just autoArchiveOnComplete.
   waSettings,
+  // v18.11.0: the tag list (useTagSettings), so Accept opens the form with the
+  // occasions the message named.
+  tagList,
   // The booking form's two doors (BookingApp-owned). v18.3.5: every form-open
   // below goes through one of them, never `openForm`/`setEditId` directly, so
   // it asks the capability the same action asks everywhere else, clears a
@@ -495,14 +498,14 @@ export function useWhatsApp({
   // its "+", the seating indoor/outdoor or "auto".
   function handleAcceptDraft(conv, over) {
     if (!conv || !conv.draftData) return;
-    const p = draftPrefill(conv, bookings, contactsRef.current);
+    const p = draftPrefill(conv, bookings, contactsRef.current, tagList);
     const date = p.date;
     const time = (over && over.time) || p.time;
     // v18.3.5: through App's `openNew`, which asks `bookingCreate` and clears a
     // waitlist entry left pending by a form closed unsaved (Save would have
     // taken that entry off the waitlist for this booking). Refused: nothing
     // below runs, and the inbox stays open under the refusal.
-    if (!openNew(Object.assign({}, EMPTY_FORM, { name: p.name, phone: p.phone, date, time, size: p.size, preference: p.preference, notes: p.notes, status: "confirmed", customDur: null, manualTables: [], preferredTables: [], returnOf: null }))) return;
+    if (!openNew(Object.assign({}, EMPTY_FORM, { name: p.name, phone: p.phone, date, time, size: p.size, preference: p.preference, notes: p.notes, tags: p.tags, status: "confirmed", customDur: null, manualTables: [], preferredTables: [], returnOf: null }))) return;
     draftSourceRef.current = conv.phoneKey;
     setReturnToInboxKey(conv.phoneKey);
     setShowInbox(false); setViewDate(date);

@@ -104,6 +104,7 @@ export function simulateInbound(params, ctx) {
       time: parse.time || null,
       notes: parse.notes || "",
       preference: parse.preference || "auto",
+      occasions: parse.occasions || null,
       intent,
       confidence: parse.confidence || "high",
       ambiguity: parse.ambiguity || null,

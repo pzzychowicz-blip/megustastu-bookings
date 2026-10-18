@@ -29,7 +29,7 @@
 
 import { normalizePhone, isPhoneKey, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet } from "../../src/lib/whatsapp.js";
 import { simMediaMessage } from "../../src/lib/wa-mock-media.js";
-import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours } from "./rtdb.js";
+import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours, readOccasionTags } from "./rtdb.js";
 import { sendText } from "./meta.js";
 import { parseMessage, mockParse } from "./gemini.js";
 
@@ -54,6 +54,8 @@ function draftPatchFromParse(parse, ts) {
     time: parse.time || null,
     notes: parse.notes || "",
     preference: parse.preference || "auto",
+    // v18.11.0: occasion tag ids, or null (RTDB has no empty array to store).
+    occasions: parse.occasions || null,
     intent: parse.intent,
     confidence: parse.confidence || "high",
     ambiguity: parse.ambiguity || null,
@@ -313,8 +315,8 @@ export async function injectSimInbound({ phone, text, name, agoMs = 0, media }, 
   if (r.skipped || !r.phoneKey || !parseText || r.muted) return r;
   afterResponse((async () => {
     try {
-      const hours = await readOperatingHours();
-      const parse = await parseMessage(parseText, { hours, existingDraft });
+      const [hours, occasions] = await Promise.all([readOperatingHours(), readOccasionTags()]);
+      const parse = await parseMessage(parseText, { hours, existingDraft, occasions });
       await applyParse(r.phoneKey, parse, ts);
     } catch (e) {
       console.warn("[wa-sim] parse failed: " + e.message);

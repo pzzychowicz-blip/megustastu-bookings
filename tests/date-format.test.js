@@ -234,7 +234,8 @@ describe("every date on screen goes through formatDay", () => {
   });
 
   it("the WhatsApp cards, both lines of each", () => {
-    expect((read("components/whatsapp/DraftCard.jsx").match(/\(formatDay\(d\.date\) \|\| "\? date"\)/g) || []).length).toBe(2);
+    // v18.11.0: one summary line (with the name and occasions) serves both shapes.
+    expect((read("components/whatsapp/DraftCard.jsx").match(/\(formatDay\(d\.date\) \|\| "\? date"\)/g) || []).length).toBe(1);
     expect((read("components/whatsapp/LinkedBookingCard.jsx").match(/\(formatDay\(booking\.date\) \|\| "\?"\)/g) || []).length).toBe(2);
   });
 

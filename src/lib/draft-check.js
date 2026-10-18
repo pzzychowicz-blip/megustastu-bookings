@@ -22,7 +22,7 @@ import { getDur } from "./booking-fields.js";
 import { KITCHEN_TABLE_LIMIT, hoursFor } from "./constants.js";
 import { todayStr } from "./day.js";
 import { matchCustomerByPhone, normalizePhone } from "./customers.js";
-import { isUsableSize, isUsableDate, isUsableTime } from "./whatsapp.js";
+import { isUsableSize, isUsableDate, isUsableTime, draftOccasions } from "./whatsapp.js";
 
 // How many other times the card offers. Four fit one row of the card on a
 // tablet and two on a phone, and a reply listing more reads as a timetable.
@@ -141,7 +141,10 @@ export function draftCheckLine(draft, r) {
 // under comes second, after the typed one and before the bookings': staff
 // chose it, on the phone that is the master of names (`contacts` is
 // `waContacts`, keyed by phone; absent reads as none).
-export function draftPrefill(conv, bookings, contacts) {
+//
+// v18.11.0: and the occasions the message named, as the form's occasion tags
+// (`tags`), kept only where `tagList` still has them. The waitlist takes none.
+export function draftPrefill(conv, bookings, contacts, tagList) {
   const d = conv.draftData || {};
   const match = matchCustomerByPhone(conv.phoneKey, bookings);
   let phone = conv.phone || conv.phoneKey || "+";
@@ -157,6 +160,7 @@ export function draftPrefill(conv, bookings, contacts) {
     time: d.time || "13:00",
     preference: prefOf(d),
     notes: d.notes || "",
+    tags: draftOccasions(d, tagList),
   };
 }
 

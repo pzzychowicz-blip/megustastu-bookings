@@ -1411,9 +1411,13 @@ function BookingApp({uid}){
   // draft / open linked / apply modify) are openers, so they ask the capability
   // the same action asks everywhere else, clear a pending waitlist entry and
   // seed formBaseline, as every other open does.
+  // v18.11.0: declared here, above useWhatsApp, which reads `tagList` (Accept
+  // opens the form with the occasions a message named); a `const` read above its
+  // declaration is the TDZ blank screen (src/CLAUDE.md).
+  const { tagList, saveTagList, tagError, clearTagError } = useTagSettings();
   const wa = useWhatsApp({
     enabled: whatsappOn,
-    bookings, setWriteWarning, waSettings,
+    bookings, setWriteWarning, waSettings, tagList,
     // v18.4.9: the hook drops an accepted draft's source when the form closes.
     formOpen: showForm,
     openNew: openNewWith, openEdit, setViewDate, setConfirmCancel,
@@ -1510,7 +1514,6 @@ function BookingApp({uid}){
     currency: generalSettings.currency,
   });
   const { voucherDefaults, saveVoucherDefaults } = useVoucherDefaults();
-  const { tagList, saveTagList, tagError, clearTagError } = useTagSettings();
   // ── v18.0.0 phase 4: what a module is about to hide ─────────────────────────
   // The Admin tab asks this on the way OFF, and only this file can answer it:
   // `lib/modules.js` knows what modules EXIST, not what they hold, and keeping
@@ -4809,6 +4812,7 @@ function BookingApp({uid}){
           conversations={wa.conversations}
           contacts={wa.contacts}
           waLink={wa.waLink}
+          tagList={tagList}
           draftOwner={uid}
           messages={wa.messagesMap}
           watchMessages={wa.watchMessages}
