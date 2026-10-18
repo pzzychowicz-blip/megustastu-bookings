@@ -37321,11 +37321,13 @@ CDP's `Page.captureScreenshot` on the tablet draws the large viewport (594px), s
 page's own background shows under a dialog that fits the 507px Chrome leaves. That
 strip is the capture, not the layout.
 
-**Not measured, and only a real iPhone can settle it:** whether iOS zooms into the
-reply box or the inbox search now (the simulator's home-screen clips were signed out,
-and the DEV password is never typed); the long press on Save photo (no selection, no
-callout); a scroll that reaches the end of the reply thread or a modal (the page behind
-must not move); and the status bar colour on `/wa-connect` in both themes.
+**Checked by Patryk on his iPhone (2026-10-18)**, against this branch's dev server over the
+Wi-Fi (`192.168.1.34:5179`, the address added to the DEV key's referrers for it): the reply
+box and the inbox search focus without zooming the page; a scroll that reaches the end of
+the reply thread or of a modal leaves the page behind still; and `/wa-connect`'s status bar
+matches the page in both themes. **Still open: the long press on Save photo** (no
+selection, no callout). Photos are not delivered to a localhost run, only to the Vercel
+deployments, so it waits for the sandbox once this version is on `main`.
 
 **Files:** `src/index.css` · `src/components/atoms.jsx` · `whatsapp/InboxPanel.jsx` ·
 `whatsapp/ReplyComposer.jsx` · `whatsapp/ConversationList.jsx` ·
