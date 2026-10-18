@@ -21,7 +21,7 @@
 
 import { useMemo, memo } from "react";
 import { daySummary, countLabel, depositSummary, depositParts } from "../lib/booking-logic";
-import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC, SP } from "../lib/constants";
+import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC, SP, H } from "../lib/constants";
 import { mkBtn, Reveal, TBadge } from "./atoms";
 // v17.9.0: the local `hh` was one of six copies of this label — see lib/time-grid.js.
 import { hourLabel as hh } from "../lib/time-grid";
@@ -60,7 +60,7 @@ function FreeingEntry({ f }) {
 // so it used to re-render on every BookingApp render. Function props are App's
 // stable VA wrappers; hoursSig/layoutSig are identity-only props that bust the
 // memo on an hours/layout edit (hoursFor + TOTAL_SEATS are live bindings).
-export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, unplacedCount = 0, currency, onToggle, onOpenWeek, onPrint }) {
+export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, unplacedCount = 0, currency, onToggle, onOpenWeek, onPrint, onSpecialHours }) {
   // v17.1.0 perf: Summary lives in the always-visible date-nav row, so this
   // used to walk all bookings on EVERY BookingApp render; memoized.
   const s = useMemo(() => daySummary(bookings, date, splitHour), [bookings, date, splitHour]);
@@ -275,8 +275,18 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
               shape rather than the 36px/T.small one it wore in the header —
               two buttons sharing a row that disagree on height and type size
               read as one control and one afterthought. */}
-          {onPrint || onOpenWeek ? (
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+          {onPrint || onOpenWeek || onSpecialHours ? (
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              {/* v18.10.0: this date's own hours — a special day (closed, or
+                  other hours) through SpecialDayModal. Only for `hoursEdit`
+                  (App passes null otherwise). First, so Print and More keep
+                  their places at the right. */}
+              {onSpecialHours ? (
+                <button
+                  onClick={onSpecialHours}
+                  className="mgt-hover-scale mgt-press"
+                  style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.nav })}>Hours for this day</button>
+              ) : null}
               {onPrint ? (
                 <button
                   onClick={onPrint}

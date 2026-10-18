@@ -119,6 +119,7 @@ import simGenerateHandler from "../api/wa-sim-generate.js";
 import mediaHandler, { MEDIA_VIEW_MAX, servedType, sniffType, isStoredMsgKey } from "../api/wa-media.js";
 import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "../api/wa-prune.js";
 import onboardHandler from "../api/wa-onboard.js";
+import usageHandler from "../api/wa-usage.js";
 import { removeConversationIf, sanitizeKey } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { numberIsOurs, makeNumberGuard, freshResults, measuredAfter, beganAfter, chunkKeys } from "../api/_lib/coexist-core.js";
@@ -151,7 +152,7 @@ beforeEach(() => {
   vi.stubEnv("FIREBASE_SERVICE_ACCOUNT", '{"project_id":"test"}');
   ["WA_STAFF_EMAILS", "WA_SEND_MODE", "WA_LLM_MODE", "WA_DB_URL", "WA_ALLOW_UNSIGNED", "WA_SIM_ENABLED",
     "META_APP_SECRET", "META_WA_TOKEN", "META_PHONE_NUMBER_ID", "META_VERIFY_TOKEN", "GEMINI_API_KEY", "GEMINI_MODEL", "TENANT_WA_CONTEXT",
-    "CRON_SECRET", "META_APP_ID", "META_ES_CONFIG_ID",
+    "CRON_SECRET", "META_APP_ID", "META_ES_CONFIG_ID", "META_WABA_ID",
   ].forEach((k) => vi.stubEnv(k, ""));
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "info").mockImplementation(() => {});
@@ -170,6 +171,7 @@ describe.each([
   ["wa-media (send)", mediaHandler, "POST", "PUT"],
   ["wa-onboard", onboardHandler, "GET", "PUT"],
   ["wa-onboard (connect)", onboardHandler, "POST", "PUT"],
+  ["wa-usage", usageHandler, "GET", "POST"],
 ])("%s — method and staff auth", (name, handler, method, wrong) => {
   it("answers 405 to the wrong method, before anything else", async () => {
     const res = await call(handler, { method: wrong, token: "staff" });
@@ -457,6 +459,144 @@ describe("wa-config", () => {
     const res = await config();
     expect(res.body.phoneNumberIdMatches).toBe(false);
     expect(JSON.stringify(res.body)).not.toMatch(/555000111|999888777/);
+  });
+});
+
+// ── api/wa-usage.js (v18.10.0) ──────────────────────────────────────────────
+describe("wa-usage", () => {
+  const WABA = "1003233032795372";
+  const get = (token = "staff") => call(usageHandler, { method: "GET", token });
+  const MANAGER = { roles: { u1: { role: "manager" } } };
+  // Meta's Pricing Analytics, as far as the counter meets it: one GET, which
+  // records what was asked and answers this month and last.
+  function meta({ status = 200, answer } = {}) {
+    const f = vi.fn(async (url, init = {}) => {
+      f.asked.push({ url: String(url), method: init.method || "GET", auth: (init.headers || {}).Authorization || null });
+      if (status !== 200) return { ok: false, status, json: async () => ({ error: { message: "Unsupported get request" } }) };
+      const oct = Date.parse("2026-10-02T00:00:00Z") / 1000;
+      const sep = Date.parse("2026-09-15T00:00:00Z") / 1000;
+      return { ok: true, status: 200, json: async () => answer || {
+        id: WABA, currency: "EUR",
+        pricing_analytics: { data: [{ data_points: [
+          { start: oct, end: oct + 86400, pricing_category: "SERVICE", pricing_type: "FREE_CUSTOMER_SERVICE", volume: 12, cost: 0 },
+          { start: oct, end: oct + 86400, pricing_category: "UTILITY", pricing_type: "REGULAR", volume: 1, cost: 0.0166 },
+          { start: sep, end: sep + 86400, pricing_category: "SERVICE", pricing_type: "FREE_CUSTOMER_SERVICE", volume: 40, cost: 0 },
+        ] }] },
+      } };
+    });
+    f.asked = [];
+    return f;
+  }
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-18T09:30:00Z"));
+    vi.stubEnv("WA_SEND_MODE", "live");
+    vi.stubEnv("WA_STAFF_EMAILS", "ana@example.com");
+    vi.stubEnv("META_WA_TOKEN", "sys-token");
+    vi.stubEnv("META_WABA_ID", WABA);
+    fake.state.tree = JSON.parse(JSON.stringify(MANAGER));
+  });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("answers this month and last month as Meta counted them, in the account's currency", async () => {
+    const f = meta(); vi.stubGlobal("fetch", f);
+    const res = await get();
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      configured: true, mock: false, source: "env", currency: "EUR",
+      months: { thisStart: Date.parse("2026-10-01T00:00:00Z") / 1000, lastStart: Date.parse("2026-09-01T00:00:00Z") / 1000 },
+      this: { delivered: 13, free: 12, entryPoint: 0, billed: 1, cost: 0.0166 },
+      last: { delivered: 40, free: 40, entryPoint: 0, billed: 0, cost: 0 },
+    });
+    expect(f.asked).toHaveLength(1);
+    const u = f.asked[0];
+    expect(u.method).toBe("GET");
+    expect(u.auth).toBe("Bearer sys-token");
+    expect(u.url).toContain("/v26.0/" + WABA + "?fields=currency,pricing_analytics.start(" + (Date.parse("2026-08-31T00:00:00Z") / 1000) + ").end(" + (Date.parse("2026-10-18T09:30:00Z") / 1000) + ")");
+    expect(u.url).toContain(".granularity(DAILY).dimensions(PRICING_CATEGORY,PRICING_TYPE)");
+    expect(JSON.stringify(res.body)).not.toContain("sys-token");
+  });
+  it("writes nothing, ever: the figures are asked for, not kept", async () => {
+    vi.stubGlobal("fetch", meta());
+    await get();
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("asks about the connected account first, and the variable only when nothing is connected", async () => {
+    const f = meta(); vi.stubGlobal("fetch", f);
+    fake.state.tree.waLink = { status: "connected", wabaId: "555666777888", phoneNumberId: "111222333" };
+    expect((await get()).body.source).toBe("link");
+    expect(f.asked[0].url).toContain("/v26.0/555666777888?");
+    // The sandbox simulator's connection names no account at Meta.
+    fake.state.tree.waLink = { status: "connected", wabaId: "555666777888", sim: true };
+    expect((await get()).body.source).toBe("env");
+    expect(f.asked[1].url).toContain("/v26.0/" + WABA + "?");
+  });
+  it("is not configured without an account id that is a Meta id, and calls nobody", async () => {
+    const f = meta(); vi.stubGlobal("fetch", f);
+    for (const id of ["", "12ab", "1/../2", " "]) {
+      vi.stubEnv("META_WABA_ID", id);
+      const res = await get();
+      expect([res.statusCode, res.body]).toEqual([200, { configured: false, mock: false }]);
+    }
+    expect(f).not.toHaveBeenCalled();
+  });
+  it("in mock sending there is no Meta to ask: { mock: true }, and no call", async () => {
+    vi.stubEnv("WA_SEND_MODE", "mock");
+    const f = meta(); vi.stubGlobal("fetch", f);
+    const res = await get();
+    expect([res.statusCode, res.body]).toEqual([200, { configured: false, mock: true }]);
+    expect(f).not.toHaveBeenCalled();
+  });
+  it("503 without META_WA_TOKEN, before any call", async () => {
+    vi.stubEnv("META_WA_TOKEN", "");
+    const f = meta(); vi.stubGlobal("fetch", f);
+    const res = await get();
+    expect(res.statusCode).toBe(503);
+    expect(res.body.error).toMatch(/META_WA_TOKEN/);
+    expect(f).not.toHaveBeenCalled();
+  });
+  it("Meta's refusal is a 502 carrying Meta's own message", async () => {
+    vi.stubGlobal("fetch", meta({ status: 400 }));
+    const res = await get();
+    expect(res.statusCode).toBe(502);
+    expect(res.body.error).toMatch(/Unsupported get request/);
+  });
+
+  describe("the capability", () => {
+    const REFUSED = [403, "Not authorised: you do not have permission to see WhatsApp costs."];
+    it("refuses staff with roles enforced, and calls nobody", async () => {
+      const f = meta(); vi.stubGlobal("fetch", f);
+      for (const roles of [{}, { u1: { role: "staff" } }, { u1: { role: "manager", denies: { waCostView: true } } }]) {
+        fake.state.tree = { roles, settings: { admin: { enforceRoles: true } } };
+        const res = await get();
+        expect([res.statusCode, res.body.error]).toEqual(REFUSED);
+      }
+      expect(f).not.toHaveBeenCalled();
+    });
+    it("lets a manager, an admin and staff with the extra through, with roles enforced", async () => {
+      vi.stubGlobal("fetch", meta());
+      for (const roles of [{ u1: { role: "manager" } }, { u1: { role: "admin" } }, { u1: { role: "staff", extras: { waCostView: true } } }]) {
+        fake.state.tree = { roles, settings: { admin: { enforceRoles: true } } };
+        expect((await get()).statusCode).toBe(200);
+      }
+    });
+    it("with roles not enforced, asks as the app does: everyone may (only settingsAdmin is always enforced)", async () => {
+      vi.stubGlobal("fetch", meta());
+      for (const flag of [undefined, false, "true", 1]) {
+        fake.state.tree = { roles: { u1: { role: "staff" } }, settings: { admin: flag === undefined ? {} : { enforceRoles: flag } } };
+        expect((await get()).statusCode).toBe(200);
+      }
+    });
+    it("a role that cannot be read is a 503 saying to try again", async () => {
+      const f = meta(); vi.stubGlobal("fetch", f);
+      const realRef = fake.db.ref;
+      fake.db.ref = (path) => (path === "roles/u1" ? { get: async () => { throw new Error("database unreachable"); } } : realRef(path));
+      try {
+        const res = await get();
+        expect([res.statusCode, res.body.error]).toEqual([503, "Could not check your role just now: try again in a moment."]);
+      } finally { fake.db.ref = realRef; }
+      expect(f).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -2747,6 +2887,7 @@ describe("readJsonBody / bearerToken (api/_lib/request.js)", () => {
       expect(src, f).not.toMatch(/startsWith\("Bearer "\)/);
       if (/bearerToken\(req\)/.test(src)) users++;
     }
-    expect(users).toBe(8);
+    // v18.10.0: wa-usage, the cost counter, is the ninth.
+    expect(users).toBe(9);
   });
 });

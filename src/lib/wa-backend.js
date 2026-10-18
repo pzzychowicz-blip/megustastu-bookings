@@ -160,6 +160,26 @@ export async function recheckViaBackend(phoneKey) {
   return data;
 }
 
+// ── The WhatsApp cost counter (v18.10.0) ────────────────────────────────────
+// `GET /api/wa-usage`: this month's and last month's messages as Meta counted
+// them. Resolves the server's answer; rejects with the server's sentence, or
+// with "could not reach the server" (the dev server's answer without the
+// harness running, which says how to start it).
+export async function usageViaBackend() {
+  const user = auth.currentUser;
+  if (!user) throw new Error("not signed in");
+  const idToken = await user.getIdToken();
+  let res;
+  try {
+    res = await fetch(WA_BACKEND_URL + "/api/wa-usage", { headers: { Authorization: "Bearer " + idToken } });
+  } catch {
+    throw new Error(import.meta.env.DEV ? "backend not running (npm run wa:backend)" : "could not reach the server");
+  }
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data || typeof data !== "object") throw new Error((data && data.error) || ("HTTP " + res.status));
+  return data;
+}
+
 // ── A message's photo, voice note or document (v18.8.0) ─────────────────────
 // `GET /api/wa-media` streams the file Meta holds; it needs the staff token, so
 // an <img src> cannot ask for it. `fetchMedia` fetches it once, turns it into a

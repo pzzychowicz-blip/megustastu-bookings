@@ -169,6 +169,9 @@ const INTEGRATION_KEYS = [
   { group: "Nightly message cleanup", keys: ["CRON_SECRET"] },
   // v18.9.0: the /wa-connect page's two ids (Embedded Signup).
   { group: "Connecting the WhatsApp Business app", keys: ["META_APP_ID", "META_ES_CONFIG_ID"] },
+  // v18.10.0: the account the cost counter asks Meta about when no signup
+  // recorded one (optional: a connected Business app's own account wins).
+  { group: "WhatsApp cost counter", keys: ["META_WABA_ID"] },
 ];
 
 // set → "Set", not set → "Not set", unknown → nothing but the key name. The

@@ -24,8 +24,8 @@ indistinguishable from "no such endpoint": a 405 or a 401 would both confirm the
 is there. Fail-closed, and measured across five env values — absent, empty, `"0"`,
 `"true"` and `"1"` — where only the last opens it. **Since the phase-5 review those
 three are also excluded from a deployment by `.vercelignore`**, so PRODUCTION routes
-SEVEN functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config` · `wa-media` ·
-`wa-prune`, those two since v18.8.0 · `wa-onboard`, since v18.9.0; Hobby allows 12) and the `sandbox`
+EIGHT functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config` · `wa-media` ·
+`wa-prune`, those two since v18.8.0 · `wa-onboard`, since v18.9.0 · `wa-usage`, since v18.10.0; Hobby allows 12) and the `sandbox`
 branch gets its three back through one appended `!api/wa-sim-*.js`. Since v18.4.3 that
 branch is GENERATED from main by `.github/workflows/sandbox.yml`, which writes the line;
 it is never written on main and never by hand. The runtime gate stays: two independent answers, and
@@ -137,6 +137,26 @@ Four rules:
 It answers the counts and logs one line; an error in any thread makes it 500. Its tests are their own
 block in `tests/api-handlers.test.js`, outside the staff-gate `describe.each`, since its gate is the
 cron secret.
+
+**`wa-usage.js` — the cost counter (v18.10.0).** GET only. Meta's Pricing Analytics for the
+restaurant's WhatsApp Business account, this month and last, summed by `src/lib/wa-usage.js`
+(pure, on the Node ESM chain). Nothing is stored, so no node, rule or `SCHEMA` raise. Four rules:
+- **A capability, checked here too.** `assertCapability(decoded, "waCostView", …)` (`_lib/rtdb.js`)
+  reads `roles/<uid>` and `settings/admin/enforceRoles` and asks the client's own `can()`; a
+  refusal is `NOT_ALLOWED` → 403, a read that fails `ROLES_UNREADABLE` → 503. A new endpoint gated
+  on a capability uses it rather than re-stating `can`.
+- **Which account.** `waLink.wabaId` unless the link is the simulator's (`sim: true`), else
+  `META_WABA_ID`; either must be a Meta id (`/^[0-9]{5,25}$/`) before it becomes a Graph path with
+  the token on it. Neither → 200 `{configured: false}`. Mock send mode → 200 `{mock: true}` and no
+  call. No `META_WA_TOKEN` → 503; Meta's refusal → 502 with Meta's message.
+- **Daily buckets, filed by their middle.** Meta cuts a DAILY bucket at the account's own
+  midnight, so a bucket is filed under the month its midpoint falls in (`monthOf`) and the range
+  starts a day before last month (`monthBounds().askFrom`); the extra day is dropped.
+- **Categories (Meta, from 1 Oct 2026).** `FREE_CUSTOMER_SERVICE` counts against the 1,000
+  free (`FREE_TIER_MONTHLY`), `REGULAR` is billed, `FREE_ENTRY_POINT` is free and outside the
+  1,000; a type Meta adds later counts only as delivered.
+The harness routes it (`/api/wa-usage`). Tests: its own block in `tests/api-handlers.test.js`
+(fake timers, a stubbed Graph) and `tests/wa-usage.test.js` (the arithmetic).
 
 **Coexistence (v18.9.0) — the Business app and MGT on one number.** Six things, each
 a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:

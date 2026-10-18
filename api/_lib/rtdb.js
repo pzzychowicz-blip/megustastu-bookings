@@ -43,7 +43,7 @@ import { getDatabase } from "firebase-admin/database";
 import { getAuth } from "firebase-admin/auth";
 import { dbUrl, serviceAccount, staffEmails, requireStaffAllowList } from "./env.js";
 import { statusWins } from "../../src/lib/whatsapp.js";
-import { isAdminEntry, sanitizeRole } from "../../src/lib/roles.js";
+import { isAdminEntry, sanitizeRole, can } from "../../src/lib/roles.js";
 
 let cachedApp = null;
 let cachedDb = null;
@@ -168,6 +168,39 @@ export async function assertWaAdmin(decoded) {
   return decoded;
 }
 
+// v18.10.0: may this account use a capability the server serves itself, such
+// as `waCostView` (the WhatsApp cost counter, api/wa-usage.js)? The client's
+// own question, `can(entry, cap, enforceRoles)`, asked of the same two stored
+// facts: the account's `/roles` row and `settings/admin.enforceRoles`, which
+// the rules read as on only when it is exactly `true`. With it off, `can`
+// grants every capability but `settingsAdmin`, here as in the app. A read that
+// fails is `ROLES_UNREADABLE`, as in assertWaAdmin; a refusal is `NOT_ALLOWED`
+// with `refusal` as its sentence. Asked AFTER verifyStaffToken.
+export async function assertCapability(decoded, cap, refusal) {
+  const uid = decoded && typeof decoded.uid === "string" ? decoded.uid : "";
+  let snaps;
+  try {
+    snaps = await Promise.all([
+      uid ? getDb().ref("roles/" + sanitizeKey(uid)).get() : Promise.resolve(null),
+      getDb().ref("settings/admin/enforceRoles").get(),
+    ]);
+  } catch (e) {
+    console.error("[wa] the account's role could not be read:", e && e.message);
+    const err = new Error("Could not check your role just now: try again in a moment.");
+    err.code = "ROLES_UNREADABLE";
+    throw err;
+  }
+  const [roleSnap, flagSnap] = snaps;
+  const entry = roleSnap && roleSnap.exists() ? sanitizeRole(roleSnap.val(), uid) : null;
+  const enforce = !!(flagSnap && flagSnap.exists() && flagSnap.val() === true);
+  if (!can(entry, cap, enforce)) {
+    const err = new Error(refusal);
+    err.code = "NOT_ALLOWED";
+    throw err;
+  }
+  return decoded;
+}
+
 // The HTTP mapping for what verifyStaffToken can throw, in ONE place. It was
 // five verbatim catch blocks across the five gated endpoints, which is the
 // condition that produces the next disagreement — and it had already produced
@@ -185,14 +218,15 @@ export async function assertWaAdmin(decoded) {
 //         401 because re-authenticating can never fix either one; the two carry
 //         different MESSAGES because they need opposite fixes. v18.9.0: or
 //         because the endpoint is an admin's and the account is not one
-//         (assertWaAdmin).
+//         (assertWaAdmin). v18.10.0: or the account lacks the capability an
+//         endpoint serves (assertCapability, `NOT_ALLOWED`).
 //   401 — everything else: absent, expired or malformed token.
 export function staffAuthError(e) {
   const code = e && e.code;
   if (code === "NO_SERVICE_ACCOUNT" || code === "NO_STAFF_ALLOWLIST" || code === "ROLES_UNREADABLE") {
     return { status: 503, error: e.message };
   }
-  if (code === "NOT_STAFF" || code === "EMAIL_UNVERIFIED" || code === "NOT_ADMIN") return { status: 403, error: e.message };
+  if (code === "NOT_STAFF" || code === "EMAIL_UNVERIFIED" || code === "NOT_ADMIN" || code === "NOT_ALLOWED") return { status: 403, error: e.message };
   return { status: 401, error: "invalid token" };
 }
 

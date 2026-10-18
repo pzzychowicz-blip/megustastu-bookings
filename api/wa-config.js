@@ -47,6 +47,9 @@ const KEYS = [
   // v18.9.0: the /wa-connect page's two ids (api/wa-onboard.js). Not secrets,
   // but without both the Business app cannot be connected.
   "META_APP_ID", "META_ES_CONFIG_ID",
+  // v18.10.0: the WhatsApp Business account the cost counter asks about when
+  // no Embedded Signup recorded one (api/wa-usage.js). Not a secret.
+  "META_WABA_ID",
 ];
 
 // v18.9.0: does META_PHONE_NUMBER_ID name the number Embedded Signup connected

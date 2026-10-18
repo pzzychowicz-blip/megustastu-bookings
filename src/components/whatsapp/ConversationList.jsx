@@ -16,7 +16,7 @@ import { T, ROW_FOLD } from "../../lib/constants";
 // at a time; `shift` (385ms) is that fold to the eye, and the honest token for
 // a Reveal, which changes geometry. The full note is at the constant.
 
-export function ConversationList({ conversations, activeKey, onSelect, bookings, contacts, archivedView, emptyLabel, selectMode, selected, onToggleSelect }) {
+export function ConversationList({ conversations, draftOwner, activeKey, onSelect, bookings, contacts, archivedView, emptyLabel, selectMode, selected, onToggleSelect }) {
   // Shared with InboxPanel's keyboard-nav so the rendered order and the ↑/↓
   // order are guaranteed identical (see lib/whatsapp.js → sortConversations).
   const sorted = sortConversations(conversations, archivedView);
@@ -119,7 +119,7 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
          which render through this same component. */
       role="list"
       aria-label={archivedView ? "Archived conversations" : "Conversations"}
-      style={{ padding: "10px 10px 18px", height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
+      style={{ padding: "10px 10px 18px", height: "100%", overflowY: "auto", overscrollBehavior: "contain", boxSizing: "border-box" }}>
       {/* A collapsing row stays mounted for the whole prune window, so it is
           made inert: without this you can click a row on its way out and select
           a conversation no longer in this tab, which the leaves-the-tab effect
@@ -145,6 +145,7 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
             onClick={() => (selectMode ? onToggleSelect(c.phoneKey) : onSelect(c.phoneKey))}
             bookings={bookings}
             contacts={contacts}
+            draftOwner={draftOwner}
             selectMode={selectMode}
             checked={!!(selected && selected.has(c.phoneKey))}
           />

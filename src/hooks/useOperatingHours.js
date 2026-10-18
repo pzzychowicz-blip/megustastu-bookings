@@ -21,29 +21,36 @@
 //
 // Write-guard mirrors usePersistence: a `loaded` ref refuses writes until the
 // initial read completes. The empty-array guard doesn't apply (small object).
+//
+// v18.10.0: SPECIAL DAYS ride in the same node, `exceptions` beside `days`
+// (lib/special-days.js): one date or a run of dates, closed or with its own
+// hours. Every write carries both halves, so a weekday edit never drops a
+// special day and a special day never resets a weekday; and every write drops
+// the special days that ended more than 30 days ago (`pruneExceptions`). The
+// snapshot hands the date index to constants.js (`setHourExceptions`), which is
+// how `hoursFor(date)` follows them. SCHEMA 3 → 4 for this: an older build's
+// whitelist has no `exceptions` and its next weekday edit would write them away.
 
 import { useState, useRef, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
-import { DEFAULT_WEEK_HOURS, setWeekHours, setActiveDayHours } from "../lib/constants";
+import { DEFAULT_WEEK_HOURS, setWeekHours, setActiveDayHours, setHourExceptions } from "../lib/constants";
 import { dbError } from "../lib/dbError";
 // v18.0.0 session 8: the activity log.
-import { settingsWriteEntry } from "../lib/activity";
+import { settingsWriteEntry, specialDayEntry } from "../lib/activity";
 import { emitActivity } from "../lib/activitySink";
 import { todayStr } from "../lib/day";
+import { genId } from "../lib/booking-fields";
+import { clampHours, sanitizeException, sanitizeExceptions, exceptionIndex, pruneExceptions } from "../lib/special-days";
 
 // Clamp ONE day. Bounds mirror the v14.5.0 single-pair editor: open 6–22,
 // close (open+1)–25 (close may run past midnight). `closed` coerced to boolean.
+// v18.10.0: the bounds are `clampHours`, which a special day obeys too.
 function sanitizeDay(raw){
   const src = raw && typeof raw === "object" ? raw : {};
-  let o = Math.round(Number(src.open));
-  let c = Math.round(Number(src.close));
-  if(!Number.isFinite(o)) o = 13;
-  if(!Number.isFinite(c)) c = 22;
-  o = Math.max(6, Math.min(22, o));
-  c = Math.max(o + 1, Math.min(25, c));
-  return { open: o, close: c, closed: src.closed === true };
+  const h = clampHours(src.open, src.close);
+  return { open: h.open, close: h.close, closed: src.closed === true };
 }
 
 // Accept BOTH the new {days:{0..6}} shape AND the legacy flat {open,close}
@@ -62,9 +69,25 @@ function sanitizeWeek(val){
   return week;
 }
 
+// Make `next` the hours everywhere: the ref the savers read, the module schedule
+// and special-day index that hoursFor reads, and the state that repaints.
+// Module scope (it reads only what it is handed), so the listener's effect can
+// call it with no dependency to list.
+function applyHours(next, hoursRef, setHours){
+  hoursRef.current = next;
+  setWeekHours(next.week);
+  setHourExceptions(exceptionIndex(next.exceptions));
+  setHours(next);
+}
+
 export function useOperatingHours(viewDate){
   // Seed from the defaults (all days 13/22, open) until Firebase responds.
-  const [weekHours, setWH] = useState(() => sanitizeWeek(null));
+  // v18.10.0: the week and the special days are ONE state, so a change to
+  // either is one new object — App hands it to the memoised views as `hoursSig`.
+  const [hours, setHours] = useState(() => ({ week: sanitizeWeek(null), exceptions: {} }));
+  // The latest of both, read by the savers: two edits in one render must build
+  // on each other, not on the same stale state.
+  const hoursRef = useRef(hours);
   const loaded = useRef(false);
   // v16.0.0: revision-CAS ref (lib/revGuard.js) — a stale device's overwrite is
   // rejected server-side; the rollback echo restores state via onValue.
@@ -75,9 +98,7 @@ export function useOperatingHours(viewDate){
     const unsub = onValue(ref(db, "settings/operatingHours"), function(snap){
       const val = snap.val();
       if(val && typeof val === "object"){
-        const wk = sanitizeWeek(val);
-        setWeekHours(wk); // update the module schedule (drives hoursFor/weekRange)
-        setWH(wk);        // trigger a React repaint
+        applyHours({ week: sanitizeWeek(val), exceptions: sanitizeExceptions(val.exceptions) }, hoursRef, setHours);
       }
       // Node absent (first run): keep the default week already applied at import.
       loaded.current = true;
@@ -90,48 +111,66 @@ export function useOperatingHours(viewDate){
   // changes. Module-side-effect only — no setState — so it's safe in render.
   setActiveDayHours(viewDate || todayStr());
 
-  // Persist one day (partial patch merged onto the current day). Writes the whole
-  // {days} object so the node always carries the new shape.
-  function saveDayHours(weekdayKey, patch){
+  // The one writer. `entry` builds the activity line from the state before and
+  // after; the default is the key diff of the weekdays.
+  function persist(nextWeek, nextEx, entry){
     if(!loaded.current){
       console.warn("[SAFE] Refused to write operatingHours — initial read has not completed yet.");
-      return;
+      return false;
     }
-    const k = Number(weekdayKey);
-    const next = { ...weekHours };
-    next[k] = sanitizeDay({ ...weekHours[k], ...(patch || {}) });
-    setWeekHours(next);
-    setWH(next);
+    const prev = hoursRef.current;
+    const exceptions = pruneExceptions(nextEx, todayStr());
+    applyHours({ week: nextWeek, exceptions }, hoursRef, setHours);
     setActiveDayHours(viewDate || todayStr());
     // `prev` is wrapped to match the SHAPE that is written (`{ days }`), not the
     // state it comes from. Diffing `weekHours` against `{ days: next }` would
     // report every one of the seven day keys as changed on every edit, which is
     // a log entry that is technically produced and tells you nothing.
-    const prev = { days: weekHours };
-    writeWithRev("settings/operatingHours", { days: next }, revRef, undefined, function () {
-      const entry = settingsWriteEntry("settings/operatingHours", prev, { days: next });
-      if (entry) emitActivity([entry]);
+    writeWithRev("settings/operatingHours", { days: nextWeek, exceptions }, revRef, undefined, function () {
+      const e = entry ? entry(prev) : settingsWriteEntry("settings/operatingHours", { days: prev.week }, { days: nextWeek });
+      if (e) emitActivity([e]);
     });
+    return true;
+  }
+
+  // Persist one day (partial patch merged onto the current day). Writes the whole
+  // {days} object so the node always carries the new shape.
+  function saveDayHours(weekdayKey, patch){
+    const cur = hoursRef.current;
+    const k = Number(weekdayKey);
+    const next = { ...cur.week };
+    next[k] = sanitizeDay({ ...cur.week[k], ...(patch || {}) });
+    persist(next, cur.exceptions);
   }
 
   // "Copy to all days" — set every weekday to one day's full config.
   function saveAllDays(dayConfig){
-    if(!loaded.current){
-      console.warn("[SAFE] Refused to write operatingHours — initial read has not completed yet.");
-      return;
-    }
     const clean = sanitizeDay(dayConfig);
     const next = {};
     for(let i = 0; i < 7; i++) next[i] = { ...clean };
-    const prev = { days: weekHours };
-    setWeekHours(next);
-    setWH(next);
-    setActiveDayHours(viewDate || todayStr());
-    writeWithRev("settings/operatingHours", { days: next }, revRef, undefined, function () {
-      const entry = settingsWriteEntry("settings/operatingHours", prev, { days: next });
-      if (entry) emitActivity([entry]);
-    });
+    persist(next, hoursRef.current.exceptions);
   }
 
-  return { weekHours, saveDayHours, saveAllDays };
+  // v18.10.0: add (id null) or replace one special day. The caller has asked
+  // `specialDayRefusal` and the person has seen the bookings it leaves outside
+  // the hours. Returns whether the write was dispatched.
+  function saveException(id, draft){
+    const ex = sanitizeException(draft);
+    if(!ex) return false;
+    const cur = hoursRef.current;
+    const key = id || genId();
+    const had = cur.exceptions[key];
+    return persist(cur.week, { ...cur.exceptions, [key]: ex }, function () { return specialDayEntry(had ? "changed" : "added", ex); });
+  }
+
+  function removeException(id){
+    const cur = hoursRef.current;
+    const had = cur.exceptions[id];
+    if(!had) return false;
+    const next = { ...cur.exceptions };
+    delete next[id];
+    return persist(cur.week, next, function () { return specialDayEntry("removed", had); });
+  }
+
+  return { weekHours: hours.week, exceptions: hours.exceptions, hoursSig: hours, saveDayHours, saveAllDays, saveException, removeException };
 }

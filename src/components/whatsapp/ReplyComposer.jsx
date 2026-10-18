@@ -25,6 +25,8 @@ import { TemplatesIcon, PaperclipIcon, FileIcon } from "./WaIcons";
 import { R, T, FW, M, H, IC, SP, REVEAL_EXIT_MS } from "../../lib/constants";
 import { fileSizeLabel, WA_CAPTION_MAX } from "../../lib/whatsapp";
 import { attachKind, attachRefusal, shrinkPhoto } from "../../lib/wa-attach";
+import { draftTextOf, setReplyDraft } from "../../lib/wa-reply-drafts";
+import { useReplyDraft } from "../../hooks/useReplyDraft";
 
 // TemplateChips — private to the composer. Tapping a chip inserts its text.
 // scrollLang (compact mode): the language switch joins the chips inside ONE
@@ -131,22 +133,23 @@ function AttachChip({ att, busy, onRemove }) {
   );
 }
 
-export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMedia, threadKey, ref }) {
+export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMedia, threadKey, draftOwner, ref }) {
   // The text is kept PER THREAD, like the attachment below: this component is
   // not remounted when the conversation changes, so one string followed you to
   // the next customer, and since v18.8.0 that string can be a photo's caption.
   // Each thread keeps its own draft, as WhatsApp does.
-  const [drafts, setDrafts] = useState({});
-  const txt = drafts[threadKey] || "";
-  // `next` is a string or an updater; `key` defaults to the open thread.
+  // v18.10.0: and the drafts outlive the composer — kept on this device for the
+  // signed-in account (`draftOwner`) as they are typed, so closing the inbox,
+  // Back on a phone or a reload loses nothing, and the conversation's row says
+  // "Draft:" (lib/wa-reply-drafts.js). The file is still not kept.
+  const txt = useReplyDraft(draftOwner, threadKey);
+  // `next` is a string or an updater; `key` defaults to the open thread. The
+  // updater reads the store, not this render's `txt`, so a caption trimmed
+  // after an upload (send) sees what was typed while it went.
   function setTxt(next, key) {
     const k = key === undefined ? threadKey : key;
-    setDrafts((d) => {
-      const v = typeof next === "function" ? next(d[k] || "") : next;
-      const out = Object.assign({}, d);
-      if (v) out[k] = v; else delete out[k];
-      return out;
-    });
+    const v = typeof next === "function" ? next(draftTextOf(draftOwner, k)) : next;
+    setReplyDraft(draftOwner, k, v);
   }
   const [tplOpen, setTplOpen] = useState(false);
   // Attachment state, each piece keyed to the thread it belongs to.
@@ -217,8 +220,16 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
     }
     const t = txt.trim();
     if (!t) return;
-    onSend(t);
+    const key = threadKey;
+    const typed = txt;
+    const went = onSend(t);
     setTxt("");
+    // v18.10.0 (/code-review): a send the server refused stored nothing, so
+    // the kept draft must not have been the casualty. `false` puts the text
+    // back, into that thread's box, unless something was typed there since.
+    if (went && typeof went.then === "function") {
+      went.then((ok) => { if (ok === false) setTxt((cur) => cur || typed, key); });
+    }
   }
   function onKey(e) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
@@ -346,6 +357,11 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
           // does in a form: it is about what you did, and you are moving on.
           onChange={(e) => { setTxt(e.target.value); if (note) setNoteState(null); }}
           onKeyDown={onKey}
+          // v18.10.0 (the mobile-native audit): 16px under a finger
+          // (.mgt-touch-16, index.css; it is 14px for the desk), and the
+          // phone keyboard's return key says Send, which is what Enter does.
+          className="mgt-touch-16"
+          enterKeyHint="send"
           // v18.2.0 (W5): the Enter / Shift+Enter hint only where there is a
           // keyboard to press them on — on a touch screen it spent two lines of
           // a phone's composer on keys the on-screen keyboard does not have.

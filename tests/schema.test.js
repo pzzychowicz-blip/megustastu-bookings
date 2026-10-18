@@ -153,7 +153,8 @@ function sanitisers() {
 
 const PINNED = {
   // 3: v18.8.0, `settings/admin.waRetentionDays` (sanitizeAdminSettings).
-  schema: 3,
+  // 4: v18.10.0, `settings/operatingHours.exceptions` (sanitizeExceptions).
+  schema: 4,
   prints: {
       "hooks/useBookingDefaults.js:sanitizeTiers": "8d1b9808c9",
       "hooks/useBookingDefaults.js:sanitizeBookingDefaults": "7a6d45c5c4",
@@ -161,7 +162,7 @@ const PINNED = {
       "hooks/useGeneralSettings.js:sanitizeGeneral": "9497dee0b6",
       "hooks/useLayout.js:sanitizeFloorPlan": "1c43f674f3",
       "hooks/useLayout.js:sanitizeLayout": "317b68da39",
-      "hooks/useOperatingHours.js:sanitizeDay": "ad45829200",
+      "hooks/useOperatingHours.js:sanitizeDay": "a3106dec44",
       "hooks/useOperatingHours.js:sanitizeWeek": "626f2ee9fb",
       "hooks/useOptimizerSettings.js:sanitizeOptimizer": "74794693a2",
       "hooks/useRecurring.js:sanitizeRule": "b047ce1ebe",
@@ -176,6 +177,8 @@ const PINNED = {
       "lib/booking-logic.js:sanitizeBlock": "d816dc8acd",
       "lib/booking-logic.js:sanitizeBlocks": "e99a88e569",
       "lib/modules.js:sanitizeModules": "fda6f20b7d",
+      "lib/special-days.js:sanitizeException": "d8b74f8542",
+      "lib/special-days.js:sanitizeExceptions": "87e01f6ccd",
       "lib/roles.js:sanitizeRole": "fda2bcc13d",
       "lib/roles.js:sanitizeCaps": "ffd5f289a4",
       "lib/roles.js:sanitizeRoles": "30d2d04752",
@@ -184,6 +187,10 @@ const PINNED = {
       "lib/tags.js:sanitizeTagList": "5efb78d18b",
       "lib/vouchers.js:sanitizeVoucher": "ef3e67ad4b",
       "lib/vouchers.js:sanitizeVouchers": "371d5b2c85",
+      // v18.10.0: added WITHOUT a SCHEMA raise. It reads this device's
+      // localStorage (WhatsApp reply drafts), never the database, so no other
+      // build reads or writes what it keeps.
+      "lib/wa-reply-drafts.js:sanitizeDrafts": "56405e9795",
       // v18.8.0: added WITHOUT a SCHEMA raise, the one case the note above does
       // not cover. It is the server's check on what it WRITES (a message's
       // `media`), never a reader's whitelist: messages are read whole and the

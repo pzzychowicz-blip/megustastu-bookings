@@ -35,6 +35,9 @@
 //                                       check (v18.9.0). Its POST answers 503
 //                                       here: Embedded Signup needs Meta's
 //                                       popup on an https deployment
+//              GET  /api/wa-usage       the WhatsApp cost counter (v18.10.0):
+//                                       Meta's Pricing Analytics, live sends
+//                                       only; answers { mock: true } otherwise
 //
 // This file is dev-tooling only: it is NOT deployed, and the api/ handlers do
 // not know it exists (they run identically under Vercel's runtime at ship).
@@ -81,6 +84,7 @@ const { default: waRecheck } = await import("../api/wa-recheck.js");
 const { default: waMedia } = await import("../api/wa-media.js");
 const { default: waPrune } = await import("../api/wa-prune.js");
 const { default: waOnboard } = await import("../api/wa-onboard.js");
+const { default: waUsage } = await import("../api/wa-usage.js");
 const { llmMode, sendMode, env } = await import("../api/_lib/env.js");
 // ✨ Suggest generator is shared with api/wa-sim-suggest.js (one source of truth).
 const { generateCustomerReply } = await import("../api/_lib/gemini.js");
@@ -176,7 +180,8 @@ const server = http.createServer(async (req, res) => {
       await waOnboard(req, res);
       return;
     }
-    res.status(404).json({ error: "not found", routes: ["/health", "/dev/models", "/dev/customer-reply", "/api/wa-inbound", "/api/wa-send", "/api/wa-sim-inbound", "/api/wa-sim-suggest", "/api/wa-sim-generate", "/api/wa-recheck", "/api/wa-media", "/api/wa-prune", "/api/wa-onboard"] });
+    if (pathname === "/api/wa-usage") { await waUsage(req, res); return; }
+    res.status(404).json({ error: "not found", routes: ["/health", "/dev/models", "/dev/customer-reply", "/api/wa-inbound", "/api/wa-send", "/api/wa-sim-inbound", "/api/wa-sim-suggest", "/api/wa-sim-generate", "/api/wa-recheck", "/api/wa-media", "/api/wa-prune", "/api/wa-onboard", "/api/wa-usage"] });
   } catch (e) {
     console.error("[wa-backend] handler error:", e);
     if (!res.headersSent) res.status(500).json({ error: e.code === "NO_SERVICE_ACCOUNT" ? e.message : "internal error: " + e.message });

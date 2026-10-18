@@ -109,6 +109,11 @@ export function InboxPanel({
   // v18.9.0: the phone's synced contacts (`waContacts`) and the Business-app
   // link (`waLink`), both from useWhatsApp.
   contacts, waLink,
+  // v18.10.0: the signed-in account, whose reply drafts this device keeps
+  // (lib/wa-reply-drafts.js): each row marks its own and the reply box edits
+  // them. Handed down, never subscribed here: a subscription in this panel
+  // re-rendered the list and the open thread on every keystroke.
+  draftOwner,
   // v18.8.0: `watchMessages(phoneKey)` from useWhatsApp — the open thread's
   // listener. `messages` holds only the watched conversations.
   watchMessages,
@@ -458,7 +463,7 @@ export function InboxPanel({
     <div inert={twoPane && kbFold} style={{ width: twoPane ? (kbFold ? 0 : LIST_W) : "100%", flexShrink: 0, borderRight: twoPane && !kbFold ? "1px solid var(--wa-divider)" : "none", background: "var(--wa-list-bg)", height: "100%", overflow: "hidden", display: twoPane || !activeKey ? "flex" : "none", flexDirection: "column", transition: twoPane ? "width " + M.shift : undefined }}>
       {/* keyed by tab → Inbox⇄Archived switch crossfades the list */}
       <div key={tab} className="mgt-fade-in" style={{ flex: 1, minHeight: 0, minWidth: twoPane ? LIST_W : 0, display: "flex", flexDirection: "column" }}>
-        <ConversationList conversations={filteredConvs} activeKey={activeKey} onSelect={setActiveKey} bookings={bookings} contacts={contacts} archivedView={tab === "archived"} emptyLabel={filtersActive ? "No matches." : undefined} selectMode={selectMode} selected={selected} onToggleSelect={toggleSelect} />
+        <ConversationList conversations={filteredConvs} draftOwner={draftOwner} activeKey={activeKey} onSelect={setActiveKey} bookings={bookings} contacts={contacts} archivedView={tab === "archived"} emptyLabel={filtersActive ? "No matches." : undefined} selectMode={selectMode} selected={selected} onToggleSelect={toggleSelect} />
       </div>
     </div>
   );
@@ -467,7 +472,7 @@ export function InboxPanel({
       <ConversationView
         conv={activeConv} messages={activeMessages} onBack={() => setActiveKey(null)}
         onSend={(t) => onSend(activeConv.phoneKey, t)} onSendMedia={onSendMedia ? (blob, meta) => onSendMedia(activeConv.phoneKey, blob, meta) : null} onAccept={(over) => onAccept(activeConv, over)} onDismiss={() => onDismiss(activeConv.phoneKey)}
-        templates={templates} bookings={bookings} contacts={contacts}
+        templates={templates} bookings={bookings} contacts={contacts} draftOwner={draftOwner}
         contactsSynced={!!(waLink && waLink.contacts && waLink.contacts.firstAt)}
         showBack={!twoPane} phone={winW < 600} compact={compact}
         kbFold={kbFold} onUnfold={unfold}
@@ -619,6 +624,10 @@ export function InboxPanel({
               // v18.2.0 (W5): a phone cut the long one to "Search name, number
               // or". The field is named either way (aria-label above).
               placeholder={twoPane ? "Search name, number or message…" : "Search…"}
+              // v18.10.0: 16px under a finger (.mgt-touch-16, index.css), and a
+              // Search key on the phone's keyboard.
+              className="mgt-touch-16"
+              enterKeyHint="search"
               style={Object.assign({}, mkInp(), { fontSize: T.body, padding: "8px 12px", paddingRight: query ? 30 : 12 })}
             />
             {query ? <button /* @no-lift transparent, radius-less and absolutely positioned INSIDE the input: the class supplies an opaque --bg-hover-card and no radius (v17.7.0), which is the hard-edged rectangle ConnectionStatus's dot hit — and its scale would be out-specified by this element's own inline translateY(-50%) anyway */ onClick={() => setQuery("")} title="Clear search" className="mgt-press" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "var(--text-muted)", padding: "2px 6px", lineHeight: 1 }}><CloseIcon size={IC.inline} /></button> : null}

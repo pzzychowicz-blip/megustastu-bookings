@@ -50,7 +50,9 @@
 // saves the layout with the rules gone, and they read back as the default's).
 // 3: v18.8.0, `settings/admin.waRetentionDays` (a build without it saves the
 // admin node with the setting gone, and the nightly prune reads the default).
-export const SCHEMA = 3;
+// 4: v18.10.0, `settings/operatingHours.exceptions`, the special days (a build
+// without it saves a weekday's hours with every special day gone).
+export const SCHEMA = 4;
 
 export const SCHEMA_ENFORCE_KEY = "mgt.schemaEnforce";
 

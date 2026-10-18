@@ -611,7 +611,7 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor, fo
     if (footer) {
       return wrap(
         <div ref={dialogRef} {...dialogProps} {...typingProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, paddingBottom: kb.bottom, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
-          <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingLeft: "max(18px, env(safe-area-inset-left))", paddingRight: "max(18px, env(safe-area-inset-right))", boxSizing: "border-box" }}>
+          <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "scroll", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingLeft: "max(18px, env(safe-area-inset-left))", paddingRight: "max(18px, env(safe-area-inset-right))", boxSizing: "border-box" }}>
             {children}
           </div>
           <div style={{ flexShrink: 0, padding: "12px 18px", paddingTop: tight ? SP.snug : SP.wide, paddingLeft: "max(18px, env(safe-area-inset-left))", paddingRight: "max(18px, env(safe-area-inset-right))", paddingBottom: kb.bottom ? SP.wide : (tight ? SP.snug : "max(12px, env(safe-area-inset-bottom))"), transition: "padding " + M.shift, borderTop: "1px solid var(--border-sheet)", background: "var(--bg-sheet-mobile)", boxSizing: "border-box" }}>
@@ -625,7 +625,7 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor, fo
     // background under it (covered edge to edge, so nothing changes at rest).
     return wrap(
       <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var(--bg-sheet-mobile)" }}>
-        <div ref={scrollRef} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: kb.bottom, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
+        <div ref={scrollRef} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: kb.bottom, background: "var(--bg-sheet-mobile)", overflowY: "scroll", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}>
           <div style={{ minHeight: "100%", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingLeft: "max(18px, env(safe-area-inset-left))", paddingRight: "max(18px, env(safe-area-inset-right))", paddingBottom: "max(80px, calc(40px + env(safe-area-inset-bottom)))",   /* @canvas */ boxSizing: "border-box" }}>
             {children}
           </div>
@@ -660,13 +660,13 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor, fo
     >
       {footer ? (
         <div ref={dialogRef} {...dialogProps} {...typingProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: maxWidth || 580, maxHeight: cardMaxH, marginTop: top ? TOP_ANCHOR : 0, display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
-          <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
+          <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", padding: "24px", boxSizing: "border-box" }}>
             {children}
           </div>
           {footerYields ? <Reveal show={!tight} speed="shift" style={{ flexShrink: 0 }}>{cardFoot}</Reveal> : cardFoot}
         </div>
       ) : (
-        <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: maxWidth || 580, maxHeight: cardMaxH, marginTop: top ? TOP_ANCHOR : 0, overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: maxWidth || 580, maxHeight: cardMaxH, marginTop: top ? TOP_ANCHOR : 0, overflowY: "auto", overscrollBehavior: "contain", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           {children}
         </div>
       )}

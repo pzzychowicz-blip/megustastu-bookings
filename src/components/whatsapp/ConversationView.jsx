@@ -56,6 +56,8 @@ export function ConversationView({
   onRecheck, regularMin, kbFold = false, onUnfold, onOpenPhoto,
   // v18.9.0: "Not a customer" (useWhatsApp.handleMute).
   onMute,
+  // v18.10.0: whose reply drafts the box keeps (ReplyComposer).
+  draftOwner,
   // v18.9.0: the phone's synced contacts, and whether the first sync landed.
   contacts, contactsSynced = false,
   // v18.8.0 phase 8: what the draft check needs, from App through InboxPanel.
@@ -445,7 +447,7 @@ export function ConversationView({
         </div>
       ) : null}
       </Reveal>
-      <div ref={threadRef} onScroll={onThreadScroll} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "14px" }}>
+      <div ref={threadRef} onScroll={onThreadScroll} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", padding: "14px" }}>
         {threadItems(msgsForConv, today).map((it) => (it.msg
           ? <MessageBubble key={it.msg.id} msg={it.msg} isLast={it.msg.id === animateId} onRetry={onResend} phoneKey={conv.phoneKey} onOpenPhoto={onOpenPhoto} />
           : <DaySeparator key={"day-" + it.day} label={it.label} enter={it.firstId === animateId} />))}
@@ -486,7 +488,7 @@ export function ConversationView({
           />
         </div>
       </Reveal>
-      <ReplyComposer ref={composerRef} onSend={onSend} onSendMedia={onSendMedia} threadKey={conv.phoneKey} disabled={disabled} templates={templates} convLang={conv.language} />
+      <ReplyComposer ref={composerRef} draftOwner={draftOwner} onSend={onSend} onSendMedia={onSendMedia} threadKey={conv.phoneKey} disabled={disabled} templates={templates} convLang={conv.language} />
     </div>
   );
 }

@@ -81,7 +81,7 @@ function TablePopover({ id, queue, canWalkin, popRef, onClose, onPick, onWalkinH
     <PopupShell
       onScrimClick={() => { if (!leaving) onClose(); }}
       cardRef={popRef}
-      cardStyle={{ background: "var(--tl-popup-bg)", borderRadius: R.sheet, border: "1px solid " + S.border, boxShadow: "var(--shadow-popover)", padding: "18px 18px", minWidth: 260, maxWidth: 360, maxHeight: "70vh", overflowY: "auto", zIndex: 301 }}
+      cardStyle={{ background: "var(--tl-popup-bg)", borderRadius: R.sheet, border: "1px solid " + S.border, boxShadow: "var(--shadow-popover)", padding: "18px 18px", minWidth: 260, maxWidth: 360, maxHeight: "70dvh", overflowY: "auto", overscrollBehavior: "contain", zIndex: 301 }}
     >
       <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, marginBottom: 12 }}>{"Table " + id}</div>
       {queue.length === 0 ? (

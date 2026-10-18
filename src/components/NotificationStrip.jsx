@@ -430,7 +430,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null, s
             is actually on screen, loosest on exactly the devices this exists to
             protect. Matching the shell's unit is what makes "40% of the
             viewport" true rather than approximately true. */}
-        <div ref={bodyRef} className="mgt-notif" style={{ maxHeight: "40dvh", overflowY: "auto" }}>
+        <div ref={bodyRef} className="mgt-notif" style={{ maxHeight: "40dvh", overflowY: "auto", overscrollBehavior: "contain" }}>
           {orderedIds.map(function (id) {
             const s = byId[id];
             return (

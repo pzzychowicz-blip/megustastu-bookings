@@ -37014,3 +37014,352 @@ from `/api/wa-config` is checked first (`KeyChip`'s `typeof state === "boolean"`
 straight into a `<strong>`, where an object (a future `{id, version}` shape, a harness) would throw
 "Objects are not valid as a React child" and take the Admin tab down. It renders only as a
 non-empty string; anything else reads as an older backend's sentence.
+
+## v18.10.0 — WhatsApp go-live: the cost counter, the prompt rules, the docs in step
+
+**Date:** 2026-10-18 · **Branch:** `feat/v18.10.0-wa-cost-counter` · The work ROADMAP's
+Deferred section had for the WhatsApp go-live that could move before the rehearsal's SIM,
+chosen by Patryk over three rounds of questions: the cost counter (built now, so the
+rehearsal's R-9, "an app-sent message is free", is read off it on a real coexistence
+number before the restaurant's), the two A5-7 prompt rules, and ROADMAP and the go-live
+page brought in line with what is done.
+
+### Phase 1 — Settings › WhatsApp › Messages and cost
+
+**What it shows.** Meta's own count for the restaurant's WhatsApp Business account: this
+month so far, "43 messages delivered · 37 of 1,000 free · 2 billed · €0.03", and last
+month's totals on one line; a note for messages sent inside a free entry point's window
+(free, and outside the 1,000); and a faint line that these are Meta's figures for
+DELIVERED messages, approximate, possibly hours behind and not the invoice. The summary
+beside the closed section says "€x this month" once anything is billed, else "N of 1,000
+free". Mock send mode and "no account to ask about yet" are said in words; a failure is a
+warning under the figures already on screen, which stay.
+
+**Nothing is stored (Patryk).** The section asks Meta when it OPENS and on Refresh, never
+on mount, so there is no node, no rules change, no `SCHEMA` raise and no PROD console
+step. `GET /api/wa-usage` (production's eighth function) calls Pricing Analytics on the
+WABA (`pricingAnalytics`, `api/_lib/meta.js`):
+`fields=currency,pricing_analytics.start(…).end(…).granularity(DAILY).dimensions(PRICING_CATEGORY,PRICING_TYPE)`.
+`summariseUsage` (`src/lib/wa-usage.js`) adds the points up per month:
+`FREE_CUSTOMER_SERVICE` is free inside the 1,000 (Meta's pricing from 1 Oct 2026),
+`REGULAR` billed, `FREE_ENTRY_POINT` free and outside it, an unknown type delivered only.
+
+**Two choices worth knowing.** DAILY buckets, not the MONTHLY granularity the plan named:
+Meta cuts a bucket at the ACCOUNT's midnight, so a month asked in UTC would split one
+day across two months; a daily bucket is filed by its midpoint (`monthOf`) and the range
+starts a day before last month, the extra day dropped (tested with a Madrid and a
+Pacific account). And the WABA's `currency` rides in the same call; when Meta names no
+ISO code the cost shows without a symbol. Whether the field comes back is read on the
+sandbox after merge, not here.
+
+**Which account (Patryk).** `waLink.wabaId`, the one Embedded Signup connected, unless the
+link is the simulator's; else `META_WABA_ID`, a new optional deployment variable (in
+`wa-config`'s KEYS and the Integrations panel, "WhatsApp cost counter"), for Meta's test
+account on the sandbox before the rehearsal or the API-only fallback. Either is checked
+as a Meta id before it becomes a Graph path with the token on it.
+
+**Who sees it (Patryk): `waCostView`**, a new capability in the Money group, "See WhatsApp
+costs": managers and admins by default, grantable to staff. **The server asks it too**:
+`assertCapability` (`api/_lib/rtdb.js`) reads `/roles/<uid>` and
+`settings/admin/enforceRoles` and asks the client's own `can()`, so with roles enforced a
+member of staff without it gets 403 and a failed roles read 503 (`ROLES_UNREADABLE`, the
+wa-onboard rule). Not marked enforced: no database rule carries it, since nothing is
+written. The WhatsApp tab's caps became `["settingsWrite", "waCostView"]` (ANY), so a
+member of staff granted only this sees the tab, and each section asks its own: the Inbox
+setting still needs `settingsWrite`.
+
+**Tests.** `tests/wa-usage.test.js` (the bounds across a year turn and at a month's first
+and last second, the midpoint filing, the sums with junk input, the helpers, the grants,
+and that the section asks on open and never on mount). `tests/api-handlers.test.js`: the
+shared method and staff gate, then its own block on fake timers at 2026-10-18 with a
+stubbed Graph (the figures and the URL asked, no write, the link over the env, a sim link
+ignored, a bad id refused, mock mode, no token 503, Meta's 400 → 502, and the capability:
+staff refused when enforced, an extra or a manager allowed, a flag that is not exactly
+`true` read as not enforced, a roles read that fails 503). Replacing `assertCapability`
+with a no-op fails two of them (checked). Four pinned counts moved, each with its reason:
+eight → nine bearer users, eighteen → nineteen capabilities, the tab caps set, the tab's
+mount string.
+
+**Verified in the dev server**, with `/api/wa-usage` stubbed in the page (the dev server
+runs no functions): the figures, the mock and not-connected sentences, the error under
+kept figures, "Asking…" while loading, one call per open and none on close, both themes,
+and 375px with no sideways scroll; the Capabilities grid shows the new row. **Not checked
+live:** the section hidden for a staff account with roles enforced (the tests read the
+gates instead), and Meta's real answer, which waits for `META_WABA_ID` on the sandbox
+after merge.
+
+**Docs:** `GLOSSARY.md` (the section, `waCostView`, the WhatsApp tab, the capability
+counts) · `api/CLAUDE.md` (wa-usage, eight functions) · `src/hooks/CLAUDE.md`
+(useWaUsage, nineteen capabilities) · `src/lib/CLAUDE.md` (wa-usage.js).
+
+**Files:** `api/wa-usage.js` (new) · `api/_lib/meta.js` · `api/_lib/rtdb.js` ·
+`api/wa-config.js` · `scripts/wa-backend-dev.mjs` · `src/lib/wa-usage.js` (new) ·
+`src/lib/wa-backend.js` · `src/lib/roles.js` · `src/hooks/useWaUsage.js` (new) ·
+`src/components/Settings.jsx` · `src/components/SettingsChrome.jsx` ·
+`src/components/AdminSettings.jsx` · `src/App.jsx` (version) · the tests above.
+No stored shape changed and no device needs a refresh.
+
+### Phase 2 — the prompt rules for hedged times and sizes (A5-7)
+
+The live run of 3.5 Flash-Lite on the sandbox (2026-10-17) invented nothing, and its
+misses were all one shape: a field the customer gave with a hedge was left empty ("4 of
+us maybe 5", "around 8"), or marked medium where low was expected. Patryk's rules, in the
+rules block every prompt shares (one message, and a staff Re-check's transcript):
+
+- **An approximate time with a number gets that hour**, confidence low, and the
+  ambiguity note says it is approximate: "around 8" → 20:00, "sobre las 9" → 21:00. A
+  time with no number ("evening", "por la noche") stays null, as before. To make "around
+  8" mean 20:00, the time rule also says to read a bare hour against the restaurant's
+  hours, which the scenarios already assumed ("Friday at 9" → 21:00).
+- **A hedged party size gets the larger number**, confidence low, and the note names both:
+  "4 maybe 5" → 5, "2 or 3" → 3.
+- **The ambiguity note is written in the language of the customer's message.**
+
+The never-invent rule stays and now says why these are not inventions: the customer wrote
+the number. The model's measurement comment in `gemini.js` records the change.
+
+**The simulator's canned parses follow the rules** (they stand in for the model in mock
+mode): "2 or 3" → 3 and "4 maybe 5" → 5, low; "sobre las nueve" → 21:00 and "sobre las
+20:30" → 20:30, both low with a Spanish note; and "el sábado por la noche", whose canned
+parse had filled 20:00 with high confidence (a time with no number, which the rule
+already said stays null), is now null and medium. The regex mock parser
+(`mockParse`) is unchanged: it fills only what its patterns find.
+
+**Test.** `tests/wa-prompt-rules.test.js` reads the prompt out of the request body the
+real `parseMessage` and `parseThread` build (live mode, a stubbed Gemini), so a rule
+written but never sent fails; and holds the five changed scenarios to the rules. With
+"the LARGER number" changed in gemini.js, two of its five fail (checked).
+
+**Not measured here.** What the model does with the rules is A5-7's re-run of the 17
+scenarios on the sandbox after merge: "4 maybe 5" should fill 5, "around 8" 20:00, both
+low, and "sobre las nueve" 21:00 low with a Spanish note; nothing else may change.
+
+**Files:** `api/_lib/gemini.js` · `src/lib/wa-sim-scenarios.js` ·
+`tests/wa-prompt-rules.test.js` (new).
+
+### Phase 3 — ROADMAP in step with the go-live page
+
+Three of the Deferred section's WhatsApp entries described work that is done. **Deleted:**
+the cost counter (phase 1 ships it) and "set the Meta app's webhook version to v26.0" (the
+sandbox's fields already read v26.0, recorded on the go-live page at R-4 on 17 October;
+production's is checked at a6-2 on the page, which now says so). **Trimmed:** the
+coexistence entry listed the rig's setup as still to do (the four webhook fields, Facebook
+Login for Business and its configuration, `META_APP_ID` + `META_ES_CONFIG_ID`: R-4, R-13 and
+R-14, all done 17 October) and asked for the rules to be published to PROD first (R-12, done
+17 October). It now says the rehearsal waits only for the disposable number's week of
+history, then runs from R-5, and keeps the findings the rehearsal owns and where its answers
+are recorded.
+
+### Phase 4 — WhatsApp reply drafts kept as you type
+
+Patryk, 2026-10-18: "message draft should be stored when typing", as messengers do. Decided
+in two rounds of questions: kept on this device, per conversation and per signed-in
+account; the conversation's row says "Draft:" until it is sent or emptied; removed when the
+conversation is deleted or Delete customer runs here; a picked file is not kept.
+
+**Where it lives.** `src/lib/wa-reply-drafts.js`, a module store over one localStorage key
+(`mgt-wa-drafts`: `{uid: {phoneKey: {text, at}}}`), read through `useReplyDrafts(uid)`
+(`useSyncExternalStore`). A store rather than component state because two components that
+never share a render need it: `ReplyComposer` writes it on each keystroke, and InboxPanel
+reads it for the list. Another tab on the device follows through the `storage` event. Every
+storage access is in a try, so a private window or a full quota keeps the drafts in memory
+for the session. Not the database, on purpose: a draft is half a sentence, and synced it
+would put one person's unfinished words on every screen. So nothing is stored there, and
+there is no rules change and no `SCHEMA` raise.
+
+**The composer.** `ReplyComposer`'s per-thread `useState` map became the store, keyed by
+`draftOwner` (App's `uid`, through InboxPanel and ConversationView). `setTxt` keeps its
+shape; its updater form reads the STORE rather than the render's map, so a caption trimmed
+after an upload still sees what was typed while it went. Send and an emptied box remove the
+draft (an empty text deletes the entry, and the key when it was the last).
+
+**The row.** `ConversationRow` takes `draft` and shows "**Draft:** <text>" (line breaks as
+spaces) in the snippet's place, and ", unsent draft" in its spoken name. Not on the open
+conversation, whose box is right there and whose row would change with every key. "Draft:"
+is `--success-text`, not `--accent`: accent on this row measures under 4.5:1 at that size
+(the row's own comment on the parsing tag), and green is the messenger's own word for it.
+Registered on the row's three fills in `tests/contrast.test.js`.
+
+**Forgetting.** `deleteConversations`, `clearAllWaData` (the simulator) and
+`eraseConversation` (Delete customer) call `forgetReplyDrafts(keys)`, which removes the
+drafts to those numbers for every account on this device: an erased guest's conversation
+must not survive as somebody's draft to them. Only this device's; a draft never leaves it.
+
+**Verified on DEV** (the Browser pane): typed two lines into Carlos's box, opened another
+conversation: Carlos's row read "Draft: Hola Carlos, te confirmo" and the other box was
+empty; after a reload the row still read it and the box refilled; emptying the box put the
+last message back and removed the key. Send was not pressed (it would message the
+simulator's guest); it calls the same `setTxt("")`.
+
+**Test.** `tests/wa-reply-drafts.test.js`: the sanitiser, set / replace / empty, identity
+kept when nothing changes, forgetting across accounts, a reload through a stubbed
+localStorage, a throwing storage, a corrupt value, and the three callers of
+`forgetReplyDrafts` plus the owner reaching both readers.
+
+**Files:** `src/lib/wa-reply-drafts.js` (new) · `src/hooks/useReplyDrafts.js` (new) ·
+`ReplyComposer.jsx` · `ConversationRow.jsx` · `ConversationList.jsx` · `ConversationView.jsx`
+· `InboxPanel.jsx` · `useWhatsApp.js` · `App.jsx` · `tests/wa-reply-drafts.test.js` (new) ·
+`tests/contrast.test.js` · GLOSSARY.
+
+### Phase 5 — special days: closed dates and other hours
+
+Patryk, 2026-10-18: "adding closing dates on a single day or different opening hours on a
+given day or days which are different from the normal opening hours". Decided in two rounds
+of questions: one date or a range; closed or with its own hours, plus a short note; stored
+in the opening-hours node; bookings already made are named and KEPT; past ones listed
+greyed for 30 days, then dropped; edited in Settings and from the viewed date.
+
+**Stored** inside `settings/operatingHours` as `exceptions: {<id>: {from, to, closed, open,
+close, note}}` beside `days`, so the node's rev pair and its `hoursEdit` rule cover it with
+no rules deploy (the node has no `.validate`). **SCHEMA 3 → 4**: an older build's
+`sanitizeWeek` has no `exceptions`, and its next weekday edit writes `{days}` back without
+them. Every write now carries both halves and prunes special days whose last date is more
+than 30 days ago (`pruneExceptions`), so the list never grows. The server's WhatsApp prompt
+already sends the whole node to Gemini, so the model sees the special days with their dates
+and needed no change.
+
+**Read** by `hoursFor(date)` before the weekday (`HOUR_EXCEPTIONS`, a date index the hook
+builds with `exceptionIndex` and hands to `setHourExceptions`; constants.js imports nothing
+new). It answers `special` and `note` as well, so every reader follows a special day with
+no edit of its own: new bookings (`findTimes`, `getBlockSlots`), walk-ins, standing weeks
+(`dueOccurrences` skips a closed one), the waitlist, the WhatsApp draft check, the
+timeline's Closed notice and the header. Overlaps are refused by the editor; two devices
+that each save one resolve the same way everywhere (earlier start, then id). The memoised
+views' repaint key `hoursSig` is now the hook's `{week, exceptions}` state, not `weekHours`,
+or a special day saved for the viewed date would not repaint the timeline.
+
+**The editor** (`SpecialDayModal`, lazy, 2.1 kB gz): From / To, Closed · Open with Opens /
+Closes, a note. Save asks `specialDayRefusal` (a missing date, the last before the first,
+over 92 days, already past, hours out of bounds, an overlap named). `affectedBookings` names
+the bookings already made that fall outside the new hours (all of them on a closed run;
+otherwise a start before opening or after closing less 15 minutes, the form's own last
+start) and the button reads "Save, keep 3 bookings": the bookings are kept, nothing is moved
+or cancelled. Remove is two taps. A drafting surface with the discard guard (modal id
+`specialday`, above Settings at z=250 like the reminder editor). Two doors, both through
+App's `openSpecialDay`, which asks `hoursEdit`: Settings › General › Opening hours ›
+**Special days** (upcoming with Change, past faded, Add a special day; the section's summary
+counts the ones to come) and the Summary's **Hours for this day** (the special day covering
+the viewed date, else a new Closed one on it). The Closed notice on a special day reads
+"Closed: Staff party. …" and says where to change it; the header reads "Closed · Staff
+party" or the day's own hours and its note. The activity log says what happened ("added a
+special day · Sun 25.10 · Closed · Staff party"), where the key diff would have said
+"exceptions".
+
+**Verified on DEV** (the Browser pane): Sun 25.10 saved Closed with a note; the strip and the
+header named it and Mon 26.10 kept 13:00–22:00; Settings listed it and counted it; today
+opened at 18:00 named the three bookings at 13:30–14:30 and offered "Save, keep 3
+bookings" (cancelled, not saved); an untouched editor closed without the discard prompt; the
+25.10 test day was removed through the editor. A second special day (22–23.10, 17:00–00:00)
+appeared on DEV during the run, made in the pane by someone else at the same time, and was
+left as it is.
+
+**Deploy note: refresh every device.** The SCHEMA raise is the point: once a refreshed
+device announces 4, a device still on the previous build stops writing until reloaded,
+instead of saving a weekday's hours with the special days gone.
+
+**Test.** `tests/special-days.test.js` (18): the reader, the cap, the index and its overlap
+order, `hoursFor` on and off a run and over a closed weekday, `findTimes` refusing a closed
+special day and offering only its own hours, a standing week skipping one, every refusal,
+the bookings named, pruning, the list split, the labels and the activity line, and the hook
+writing both halves pruned. `tests/schema.test.js` pins 4 and the new sanitisers.
+
+**Files:** `src/lib/special-days.js` (new) · `src/components/SpecialDayModal.jsx` (new) ·
+`src/lib/constants.js` · `src/hooks/useOperatingHours.js` · `src/lib/activity.js` ·
+`src/lib/schema.js` · `src/App.jsx` · `Settings.jsx` · `Summary.jsx` · `AppBanners.jsx` ·
+`useModalStack.js` · `useKeyboardShortcuts.js` · `tests/special-days.test.js` (new) ·
+`tests/schema.test.js` · GLOSSARY · the CLAUDE.md notes.
+
+### Phase 6 — the mobile-native audit (the first since v18.3.0)
+
+Patryk asked for the `/mobile-native` check over everything since the last one (v18.3.0,
+2026-09-27), the new UI included, with every clear defect fixed. The code was swept item
+by item against the skill's table. Then the changes were measured in the Browser pane's
+phone emulation, where touch and a coarse pointer are both reported, and on the
+restaurant tablet (Chrome 155, a DEV tab over `adb reverse`, read through CDP).
+
+**What was wrong, and what changed:**
+- **Two text fields under 16px**, which iOS zooms the page into on focus: the inbox
+  search (12px) and the reply box (14px). A new rule in `index.css`, `.mgt-touch-16`,
+  gives them 16px under `(hover: none), (pointer: coarse)`. They keep their size for a
+  mouse (measured 14px in the pane at desktop size). The search box got
+  `enterKeyHint="search"` and the reply box `"send"`. DESIGN.md's zoom-lock note now
+  says a new field under 16px takes the class.
+- **Scroll that ran out of an inner list moved what was behind it.** `overscroll-behavior:
+  contain` went on `Overlay`'s four scrollers, the inbox's list and thread, the Plan
+  table popover, the connected-devices list, the history popup, the seat note, the
+  notification strip's body, the country list and the name / phone suggestions
+  (`useAcRow`). The page and the Split View panes are top-level scrollers and stay as
+  they were. The body was already `overscroll-behavior: none` (`App.jsx`), so there is
+  no pull-to-refresh.
+- **Link-buttons could be selected by a long press.** The control rule
+  (`user-select: none`, `-webkit-touch-callout: none`) covered `button` and
+  `[role="button"]`, not a link drawn as a button: Save photo, Settings' Connect, and the
+  connect page's two links back to the app. It now covers `a.mgt-press`. A link in
+  running text (the Vercel link in Admin) has no `mgt-press` and stays selectable.
+- **The Plan table popover's cap was `70vh`.** On the tablet, `vh` is the viewport
+  without Chrome's toolbar (594px) while 507px is visible, so the cap was 416px of 507.
+  It is `70dvh` now, measured at 355px.
+- **The `/wa-connect` page had one `theme-color`.** It has one per scheme now, and
+  `applyTheme` sets both to the resolved `--bg-app`, as `useThemeMode` does for the app.
+- **The tag editor's name boxes** got `enterKeyHint="done"`.
+- **The special-day editor's Closed / Open buttons were 26px tall**, the only segmented
+  control in the app without a height from `H`. They are `H.chrome` (36px) now, like the
+  print chooser's (measured on the tablet).
+
+**Checked and left alone:** every `:hover` in `index.css` is behind the hover query, and
+the one JS hover (the timeline's group lift) is a mouse event. `theme-color` per scheme
+and the safe areas were done in v18.3.0. The tap highlight is off globally. No
+`touch-action: manipulation` outside the view switcher, which DESIGN.md records with the
+zoom lock (Patryk's decision, unchanged). The privacy page is not app UI. The header's
+date field (14px) is still covered only by the zoom lock, as DESIGN.md says.
+
+**Measured on the tablet:** search 16px with a Search key (44px tall), reply box 16px
+with a Send key, the inbox list and thread `contain`, the special-day editor's fields at
+17px with its body `contain`, Settings' special-days list (Change 32px, the compact row
+button, and Add 36px), and the Plan popover at 355px and `contain`. **Measurement trap:**
+CDP's `Page.captureScreenshot` on the tablet draws the large viewport (594px), so the
+page's own background shows under a dialog that fits the 507px Chrome leaves. That
+strip is the capture, not the layout.
+
+**Checked by Patryk on his iPhone (2026-10-18)**, against this branch's dev server over the
+Wi-Fi (`192.168.1.34:5179`, the address added to the DEV key's referrers for it): the reply
+box and the inbox search focus without zooming the page; a scroll that reaches the end of
+the reply thread or of a modal leaves the page behind still; and `/wa-connect`'s status bar
+matches the page in both themes. **Still open: the long press on Save photo** (no
+selection, no callout). Photos are not delivered to a localhost run, only to the Vercel
+deployments, so it waits for the sandbox once this version is on `main`.
+
+**Files:** `src/index.css` · `src/components/atoms.jsx` · `whatsapp/InboxPanel.jsx` ·
+`whatsapp/ReplyComposer.jsx` · `whatsapp/ConversationList.jsx` ·
+`whatsapp/ConversationView.jsx` · `PlanView.jsx` · `ConnectionStatus.jsx` ·
+`HistoryPopup.jsx` · `SeatNoteModal.jsx` · `NotificationStrip.jsx` · `CountryPicker.jsx` ·
+`hooks/useAcRow.js` · `TagListEditor.jsx` · `SpecialDayModal.jsx` · `wa-connect.html` ·
+`src/wa-connect/main.jsx` · DESIGN.md.
+
+### /code-review fixes
+
+The review raised nine findings at high effort. Eight were confirmed and fixed, each in its own commit. One is left as it is (below).
+
+**A keystroke re-rendered the whole inbox (finding 1).** Phase 4 subscribed InboxPanel to the whole drafts store, and every key typed made a new store object. So the list, every row and the open thread's bubbles re-rendered per character, where before only the composer did. Nothing under `whatsapp/` is memoised. Now each row and the composer read their own conversation's text through `useReplyDraft(uid, key)` (`src/hooks/useReplyDraft.js`, which replaces `useReplyDrafts`), and the panel reads nothing. The snapshot is a string (`draftTextOf`), so a row whose draft did not change gets an equal snapshot and does not re-render. Checked in the dev server: the row shows "Draft:", the box gets the text back, and emptying it removes the store key. `tests/wa-reply-drafts.test.js` holds that a keystroke in one conversation leaves another's text as it was, and that the panel never subscribes.
+
+**The parse prompt's hours were the whole node (finding 2).** `hoursLine` was `JSON.stringify(settings/operatingHours)`, labelled "per weekday". Since phase 5 the node also carries `exceptions`, so a special day's hours could be read as a weekday's when the model placed a bare hour (phase 2's new rule). Every past special day and staff note also went into every parse. `hoursLineOf` (`api/_lib/gemini.js`), used by both prompts, drops `exceptions`. Whether a date is open stays the app's draft check, which reads the special days through `hoursFor`. Tested on both prompts.
+
+**A draft outlived a conversation removed elsewhere (finding 3).** A draft was forgotten only when the delete or Delete customer ran on this device. A conversation removed by another tablet, or by the nightly retention prune, left the text to that guest in this device's storage indefinitely. The conversations listener now keeps only the drafts to numbers it holds (`keepReplyDraftsFor`, `withOnlyKeys`). A delete made here is immediate through the local echo, and the three hand-written forgets are gone. Checked in the dev server: a stored draft to a number with no conversation was dropped on load, and the real one stayed.
+
+**A refused reply took its draft with it (finding 6).** Send cleared the kept draft at once. A reply the server refuses stores nothing (wa-send answers 502, so there is no failed bubble and no Retry), which lost exactly the text the drafts exist to keep. Before this version the text was lost the same way, but nothing claimed to keep it then. `handleSendReply`'s server path now resolves whether the message went. On `false` the composer puts the text back into that thread's box, unless something was typed there since. The mock path needed nothing: its failure is a bubble with Retry. Measured on DEV with the backend flag on and the harness down: the draft cleared on Send and was back 63 ms later.
+
+**The special-day editor's silent Save (finding 4).** `onSave` and `onRemove` answer false when nothing was written: the hours not loaded yet, or a missing permission, which App's refusal names on its own. The editor just stayed open. It now says "Not saved: …" where its other refusals appear.
+
+**A special day under way counted past bookings (finding 5).** `affectedBookings` counted from the run's first date, so editing a run that had begun could name a past booking that nobody marked completed. Save then read "Save, keep 1 booking" about a party that had already been. It takes `today`, and the editor passes it.
+
+**Two copies of the last-start rule (finding 8).** `affectedBookings` wrote `Math.min(close,24)*60-15` out again; it calls `lastStartMins` now. The file's header said it imported nothing that reads constants.js, which its own import of booking-logic.js contradicted. It now says why there is no cycle: constants.js never imports this file.
+
+**Bare heights (finding 9).** The buttons this version added took 32, 36 and 44 where `H.compact`, `H.chrome` and `H.touch` name them. `check:style` does not look inside an `mkBtn(...)` argument, which is how they got in; that gap is in ROADMAP. Print and More beside Hours for this day predate this version and are left as they are.
+
+**Left as it is: a delete the server refuses also drops the draft (finding 7).** The delete's local echo removes the conversation, the listener drops the draft, and a refusal brings the conversation back without it. Every staff account may delete, so a refusal is rare. Waiting for the server would also delay the prune that finding 3 needs.
+
+**One unexplained test failure.** One gate run during these fixes reported `1 failed | 3673 passed`. Three runs after it, including the full gate, passed (3674), and the failing test's name was not captured. It is recorded here because a failure nobody reproduced is the only thing that could explain a later one.
+
+**Gate after the fixes:** main entry 429.19 kB, 125.27 kB gz · 3677 tests · 0 errors and 63 warnings · style OK.
+
+**Still for Patryk's iPhone, on the sandbox after the merge:** long-press Save photo on a received photo. Nothing should get selected and no menu should open. Photos do not reach a localhost run.

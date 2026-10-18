@@ -982,8 +982,13 @@ input, textarea, select, button {
    it to ring a party, which is why v17.10.0 taught that card's click
    handler to stand down mid-selection. Do not widen this to a container.
    TimelineView's blocks and ViewSwitcher's buttons already did this
-   inline; this generalises their answer instead of adding a fourth copy. */
-button, [role="button"] {
+   inline; this generalises their answer instead of adding a fourth copy.
+   v18.10.0 (the mobile-native audit): and a LINK drawn as a button
+   (`a.mgt-press`: Save photo, Connect, the connect page's two links back),
+   which the rule did not reach, so a long press selected its label and
+   raised iOS's link callout. A link in running text carries no
+   `mgt-press` and keeps both. */
+button, [role="button"], a.mgt-press {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
@@ -1425,6 +1430,19 @@ button:active:not(:disabled):not(.mgt-nopress),
 .mgt-split-hit { display: none; }
 @media (hover: none), (pointer: coarse) {
   .mgt-split-hit { display: block; }
+}
+
+/* v18.10.0 (the mobile-native audit): a text field drawn smaller than 16px
+   for a compact desktop row takes 16px under a finger. iOS zooms the page
+   into a field under 16px on focus. The zoom lock (DESIGN.md, "The zoom
+   lock is a decision") stops that too, but whether iOS honours it is not
+   measured, so a field should not need it. Two fields had come in under
+   16px since v18.3.0: the inbox search (12px) and the WhatsApp reply box
+   (14px). A new field drawn under 16px takes this class. `!important`
+   because their size is set inline, and an inline value beats any class.
+   Same touch query as the two rules above. */
+@media (hover: none), (pointer: coarse) {
+  .mgt-touch-16 { font-size: 16px !important; }
 }
 
 /* ── v17.14.0: the skip link ────────────────────────────────────────────

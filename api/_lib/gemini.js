@@ -67,7 +67,11 @@ const TIMEOUT_MS = 15000;
 // simulator's canned scenarios and one staff Re-check. Intent 17/17, every
 // date, size and time it filled matched the message, and it invented
 // nothing; the misses left a field empty ("4 of us maybe 5", "around 8") or
-// said medium where low was expected. Time per parse: median 853ms, slowest
+// said medium where low was expected. v18.10.0 answers both with rules
+// (Patryk): a hedged time with a number gets that hour and a hedged size the
+// larger number, both low, and the ambiguity note is written in the message's
+// language; the 17 scenarios are re-run live after that merge (A5-7's last
+// line on the go-live page). Time per parse: median 853ms, slowest
 // 3737ms, Re-check 803ms. Free tier on the sandbox's key: 15 requests a
 // minute, 500 a day, 250K tokens a minute, the same as 3.1-flash-lite.
 // Measured on 2026-06-05, the model it replaces: 3.1-flash-lite
@@ -150,10 +154,12 @@ function buildPrompt(text, { todayIso, weekday, hoursLine, existingDraft, thread
     "",
     "Rules:",
     "- intent: new_booking (wants a table), cancel (cancel an existing booking), modify (change an existing booking: size/time/date/notes, including running late), question (asks something, no booking change), other (anything else: wrong number, spam, emojis, thanks).",
-    "- NEVER invent or guess a value the customer did not state. Missing -> null. Do not default the party size or time.",
-    "- time is 24h HH:MM. \"8pm\"/\"a las 9 de la noche\" -> 20:00/21:00. A vague time (\"evening\", \"sobre las 9\") -> null time + describe in ambiguity.",
-    "- confidence: high = every extracted field was explicit; medium = one field inferred; low = multiple vague/unclear fields.",
-    "- ambiguity: one short sentence describing what is unclear, else null.",
+    "- NEVER invent or guess a value the customer did not state. Missing -> null. Do not default the party size or time. A number the customer wrote with a hedge (\"around 8\", \"4 maybe 5\") IS stated: the two rules below say what to do with it.",
+    "- time is 24h HH:MM. \"8pm\"/\"a las 9 de la noche\" -> 20:00/21:00. Read a bare hour against the restaurant's hours (\"at 9\" for dinner -> 21:00).",
+    "- An approximate time WITH a number (\"around 8\", \"8ish\", \"sobre las 9\", \"a eso de las nueve\") -> that hour (20:00, 21:00), confidence low, and ambiguity says the time is approximate. A time with NO number (\"evening\", \"por la noche\", \"lunch\") -> null time + describe in ambiguity.",
+    "- A hedged party size (\"4 maybe 5\", \"2 or 3\", \"somos 4 o 5\") -> the LARGER number, confidence low, and ambiguity names both numbers.",
+    "- confidence: high = every extracted field was explicit; medium = one field inferred; low = multiple vague/unclear fields, or an approximate time or a hedged size (rules above).",
+    "- ambiguity: one short sentence describing what is unclear, written in the SAME language as the customer's message (Spanish if they wrote Spanish), else null.",
     "- name: only if the customer states their own name.",
     "- notes: special requests verbatim-ish (allergy, birthday, wheelchair...), else null.",
     "- preference: 'outdoor' if the customer asks to sit outside (terrace/terraza/fuera/afuera/patio/exterior), 'indoor' if they ask to sit inside (dentro/interior/adentro/inside). If they don't clearly state a seating area, use 'auto'. NEVER guess.",
@@ -312,6 +318,20 @@ export function parseLogFields(parsed, full) {
   return out;
 }
 
+// The prompt's hours line: the WEEKDAY hours only. v18.10.0 put the special
+// days (`exceptions`, src/lib/special-days.js) in the same node, and the line
+// says "per weekday", so a special day's hours could be read as a weekday's
+// when the model places a bare hour ("at 9"), and every past special day and
+// staff note would ride along in every parse (/code-review). The parse only
+// extracts what the customer wrote; whether that date is open is the draft
+// check's question in the app, which reads the special days through hoursFor.
+export function hoursLineOf(hours) {
+  if (!hours || typeof hours !== "object") return null;
+  const weekly = Object.assign({}, hours);
+  delete weekly.exceptions;
+  return "Operating hours config (per weekday, 24h): " + JSON.stringify(weekly);
+}
+
 // parseMessage(text, {hours, existingDraft}) → parse object or null (= save
 // without draft). hours: the settings/operatingHours node or null.
 // existingDraft: the conversation's PENDING draftData (draftStatus "parsed") or
@@ -325,7 +345,7 @@ export async function parseMessage(text, { hours, existingDraft } = {}) {
   const ctx = {
     todayIso: now.toISOString().slice(0, 10),
     weekday: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][now.getUTCDay()],
-    hoursLine: hours ? "Operating hours config (per weekday, 24h): " + JSON.stringify(hours) : null,
+    hoursLine: hoursLineOf(hours),
     existingDraft: existingDraft || null,
   };
   const mode = llmMode();
@@ -413,7 +433,7 @@ export async function parseThread(history, { hours, existingDraft } = {}) {
   const ctx = {
     todayIso: now.toISOString().slice(0, 10),
     weekday: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][now.getUTCDay()],
-    hoursLine: hours ? "Operating hours config (per weekday, 24h): " + JSON.stringify(hours) : null,
+    hoursLine: hoursLineOf(hours),
     existingDraft: existingDraft || null,
     threadMode: true,
     // ONLY the newest inbound, matching what the single-message path sees.

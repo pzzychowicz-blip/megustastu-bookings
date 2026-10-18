@@ -85,6 +85,14 @@ export const CAPABILITIES = [
   { id: "voucherRedeem",  group: "money",   label: "Redeem vouchers",      blurb: "Use a voucher against a booking." },
   { id: "voucherIssue",   group: "money",   label: "Issue vouchers",       blurb: "Create a new gift voucher." },
   { id: "voucherVoid",    group: "money",   label: "Void vouchers",        blurb: "Take a voucher out of use." },
+  // v18.10.0: the WhatsApp cost counter (Settings → WhatsApp → Messages and
+  // cost), its own row as decided on 2026-09-21 rather than part of
+  // `settingsWrite`: seeing what WhatsApp costs is not changing a setting.
+  // Not `enforced`: no database rule carries it. The figures come only through
+  // `/api/wa-usage`, which asks this same `can` of the stored role before it
+  // calls Meta (`assertCapability`, api/_lib/rtdb.js), so it is refused by the
+  // server all the same — by the endpoint, not by the rules this flag names.
+  { id: "waCostView",     group: "money",   label: "See WhatsApp costs",   blurb: "Messages sent this month and what Meta charges for them." },
 
   // ── Configuration — what the restaurant IS ────────────────────────────────
   // v18.0.0 phase 3, Patryk's call: `settingsWrite` was ONE capability covering
@@ -150,7 +158,7 @@ const STAFF = [
 // the level they already had inside it, which is what makes the split a
 // REFACTOR of the permission model rather than a change to anybody's access.
 const MANAGER = STAFF.concat([
-  "bookingDelete", "voucherIssue", "voucherVoid",
+  "bookingDelete", "voucherIssue", "voucherVoid", "waCostView",
   "reminderManage", "recurringManage", "hoursEdit", "layoutEdit",
   "settingsWrite", "dataExport",
 ]);

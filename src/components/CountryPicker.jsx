@@ -155,7 +155,7 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
               style={mkInp()}
             />
           </div>
-          <div ref={listRef} id={listId} role="listbox" aria-label="Countries" style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
+          <div ref={listRef} id={listId} role="listbox" aria-label="Countries" style={{ overflowY: "auto", overscrollBehavior: "contain", flex: 1, minHeight: 0 }}>
             {rows.length === 0 ? (
               <div style={{ padding: "10px 12px", fontSize: T.body, color: S.muted }}>No country matches</div>
             ) : null}

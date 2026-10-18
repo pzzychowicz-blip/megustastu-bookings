@@ -19,18 +19,14 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **At WhatsApp go-live, set the Meta app's WEBHOOK version to v26.0** in the dashboard.
-  The Graph calls moved to v26.0 in v18.3.1, and the code cannot change the webhook's.
-
 - **WhatsApp coexistence: the rehearsal, then the restaurant's number.** The code
   shipped in v18.9.0 (Embedded Signup at `/wa-connect`, the four coexistence webhooks,
   contact sync, phone replies, history import, the disconnect banner, Not a customer).
-  What is left needs Meta and a phone, and runs on the sandbox after merge, in the go-live
-  plan's order (§3b, the runbook in the plan for v18.9.0): subscribe `account_update` ·
-  `history` · `smb_app_state_sync` · `smb_message_echoes`; Facebook Login for Business and
-  an Embedded Signup configuration; `META_APP_ID` + `META_ES_CONFIG_ID` on the sandbox;
-  then connect a disposable number that has run the Business app for a week. **Findings
-  the rehearsal owns:** the `extras` shape FB.login takes (Embedded Signup Builder,
+  What is left needs Meta and a phone. The sandbox's rig is ready (the four coexistence
+  webhook fields, Facebook Login for Business and its Embedded Signup configuration,
+  `META_APP_ID` + `META_ES_CONFIG_ID`, all done 17 October), so the rehearsal waits only for
+  a disposable number that has run the Business app for a week, then follows the go-live
+  page from R-5 (the gate) on. **Findings the rehearsal owns:** the `extras` shape FB.login takes (Embedded Signup Builder,
   "Check a launch config"); whether `META_WA_TOKEN` may send and retry the syncs on the
   converted account; history chunk sizes against Vercel's 4.5 MB request cap; whether the
   direct route works without Tech Provider status; whether an echo ever names a message
@@ -46,18 +42,8 @@ session and keeping it in sync.
   time limit ended; `historyChunks`, the chunks that landed per phase, where a gap is one the
   4.5 MB cap refused before MGT saw it; `mgtEchoes`, absent for as long as no echo has named a
   message MGT sent), and one `[wa-inbound] coexistence delivery` line per delivery in
-  Vercel's logs, which a Hobby project keeps for an hour. **Before any of it, publish
-  `database.rules.json` to PROD** (the `waContacts` grant; DEV has it since 2026-10-16,
-  checked: a per-key `waContacts` delete is allowed and a `waLink` write refused). If the rehearsal
-  passes, the restaurant's number, with the Business app's greeting message turned off.
-
-- **A WhatsApp cost counter in Settings → WhatsApp**, after go-live. Meta charges for
-  every message a business sends from **1 October 2026**, replies included, so the panel
-  shows messages sent this month and their cost, read from Meta's Pricing Analytics API
-  (`pricing_category: SERVICE`) rather than counted locally — that way it matches the
-  invoice even for anything sent outside MGT. Its own visibility capability: **manager
-  and admin** by default, grantable to staff by an admin, like `hoursEdit` / `layoutEdit`.
-  Decided 2026-09-21; the pricing analysis is § 4a of the go-live plan.
+  Vercel's logs, which a Hobby project keeps for an hour. If the rehearsal passes, the
+  restaurant's number, with the Business app's greeting message turned off.
 
 The entries marked `#N` come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
 in its register, and the report
@@ -184,6 +170,11 @@ evidence for each.
   anything else**, and keep Vite's log line for any edit. Remove the module and its
   six lines in `usePersistence.js` (the import and five guarded calls) once the fault is explained or a few months pass
   without it.
+
+- **`check:style` does not see inside an `mkBtn(...)` / `mkDangerBtn(...)` argument.** A
+  bare `minHeight: 32` there passes the gate (v18.10.0's review found five, now `H`
+  tokens; Summary's Print and More still carry two). Teach the height rule to read the
+  object passed to the style builders, then move the remaining literals.
 
 ## Designed, not implemented
 

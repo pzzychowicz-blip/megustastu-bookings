@@ -19,6 +19,10 @@ import { ConnectPage } from "./ConnectPage";
   try { saved = localStorage.getItem("mgt-theme"); } catch { /* storage blocked: follow the OS */ }
   const dark = saved === "dark" || (saved !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
+  // v18.10.0: the browser bar follows it, as useThemeMode makes the app's do
+  // (v18.3.0, N5): both scheme metas carry the resolved --bg-app.
+  const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg-app").trim();
+  if (bg) document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.setAttribute("content", bg); });
 })();
 
 // "Reduce animations" (Settings → App), the per-device flag, stamped the way

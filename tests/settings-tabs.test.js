@@ -86,6 +86,8 @@ describe("visibleTabs — the one filter", () => {
     expect(new Set(asked)).toEqual(new Set([
       "settingsWrite", "hoursEdit", "recurringManage", "dataExport",
       "layoutEdit", "reminderManage", "settingsAdmin",
+      // v18.10.0: the WhatsApp tab opens for the cost counter's capability too.
+      "waCostView",
     ]));
   });
 
