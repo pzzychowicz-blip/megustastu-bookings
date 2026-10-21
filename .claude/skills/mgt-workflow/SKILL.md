@@ -501,8 +501,11 @@ session whatever the task, Claude Code warns past that line, and
 the way the test counts (a JS string length):
 
 ```bash
-node -e 'console.log(require("fs").readFileSync("CLAUDE.md","utf8").length)'
+node -e 'console.log(require("fs").readFileSync(process.argv[1],"utf8").length)' "$(git rev-parse --show-toplevel)/CLAUDE.md"
 ```
+
+(Anchored to the repo root on purpose: a bare `CLAUDE.md` run from `src/` measured
+`src/CLAUDE.md`, 142,127, and the root file's check would pass on that number.)
 
 Not `wc -c`, which counts bytes, and not `wc -m`, which also counts bytes in Claude's
 shell (its locale is `C`): both said 38,824 where the test counted 38,525 on
