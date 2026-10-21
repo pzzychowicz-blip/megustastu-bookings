@@ -2,7 +2,7 @@
 name: mgt-workflow
 version: 6
 description: >-
-  The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings). Load this at the START of every session in this repo — even before any coding task is clear — and AGAIN the moment PLAN MODE opens: the effort level gets checked before the research starts, and every plan ends with an effort recommendation for executing it and for the ship run. ALSO load it before any edit under src/, before any commit, push, branch, PR or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and which docs need updating are all decided before the first edit and at task close, not at commit time. Also triggers on "/code-review and ship" (the one-run ship gate — review, verify, fix, build, commit, push, PR and thread summary in a single turn; the older "/code-review, fix all findings, push and sum up the thread" and "/code-review and push" name the same run), "hand off" / "handoff" (pass the work in flight to a new session that continues on the SAME branch), "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or any reference to prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, DESIGN.md, GLOSSARY.md or ROADMAP.md. Two rules govern everything here: Claude never settles a judgement call alone (anything with a defensible alternative goes to AskUserQuestion with a recommendation attached), and Claude never asserts what it has not measured. It covers session bootstrapping (dev server + Preview bridge up first), plan-mode effort calibration, git/branching/versioning (one version per branch, but one commit per feature — never bundle changes into a single commit; commits land as work lands, pushes never do), the full local gate that matches CI (build · test · lint · check:style, plus test:rules when the rules move), the mandatory pre-push review gate, and keeping the four living docs (CLAUDE.md · DESIGN.md · GLOSSARY.md · ROADMAP.md) current. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
+  The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings). Load this at the START of every session in this repo — even before any coding task is clear — and AGAIN the moment PLAN MODE opens: the effort level gets checked before the research starts, and every plan ends with an effort recommendation for executing it and for the ship run. ALSO load it before any edit under src/, before any commit, push, branch, PR or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and which docs need updating are all decided before the first edit and at task close, not at commit time. Also triggers on "/code-review and ship" (the one-run ship gate — review, verify, fix, build, commit, push, PR and thread summary in a single turn; the older "/code-review, fix all findings, push and sum up the thread" and "/code-review and push" name the same run), "hand off" / "handoff" (pass the work in flight to a new session that continues on the SAME branch), "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or any reference to prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, DESIGN.md, GLOSSARY.md or ROADMAP.md. Two rules govern everything here: Claude never settles a judgement call alone (anything with a defensible alternative goes to AskUserQuestion with a recommendation attached, in as many rounds as it takes), and Claude never asserts what it has not measured. It covers session bootstrapping (dev server + Preview bridge up first), plan-mode effort calibration, git/branching/versioning (one version per branch, but one commit per feature — never bundle changes into a single commit; commits land as work lands, pushes never do), the full local gate that matches CI (build · test · lint · check:style, plus test:rules when the rules move), the mandatory pre-push review gate, and keeping the four living docs (CLAUDE.md · DESIGN.md · GLOSSARY.md · ROADMAP.md) current. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
 ---
 
 # MGT Bookings — workflow contract (v6)
@@ -16,7 +16,9 @@ here conflicts with CLAUDE.md, CLAUDE.md wins — this is a distillation of its
 
 **Ask, don't decide** (§8). Any fork with a defensible alternative is his call, offered
 as an `AskUserQuestion` with your recommendation attached — never a decision announced
-after the fact.
+after the fact. **And there is no budget on questions:** ask as many rounds as it takes
+until nothing is left to guess. Four questions a call is the tool's limit, not a target,
+and one round is not a quota; an answer that opens a new fork gets a new round.
 
 **Verify, don't assume** (§8). Every claim you make and every finding you act on is
 backed by something you ran, read or measured, and the report names it. This repo's
@@ -420,7 +422,7 @@ nothing. Each finding lands in one of three buckets, and **all three are reporte
 
 **No `AskUserQuestion` inside this run.** The phrase is the authorisation for the whole
 chain: review, fixes, gate, commits, push, PR and summary. This is §8's one carve-out
-from ask-first, and the third bucket is what bounds it — the run can fix what's broken,
+from ask-first, unlimited rounds included, and the third bucket is what bounds it — the run can fix what's broken,
 never decide what the app should do. §8 governs everything outside it, unchanged.
 
 Then, in order:
@@ -539,8 +541,12 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
   belongs in, what to do about an ambiguous instruction — goes to `AskUserQuestion`
   **with your recommendation marked**, before you act, not as a decision reported
   afterwards. Proposing a solution is welcome and expected; choosing it for him is
-  not. The line: mechanical steps *inside* a decision he has already made proceed
-  without asking. The only carve-out is the ship run (§5), where the phrase he typed
+  not. **The number of rounds and questions is unlimited**: keep asking, round after
+  round, until everything is clear. Never stop at one round to save his time, and
+  never fill a remaining gap with a guess because you already asked once. A wrong
+  assumption costs more than another question. The line: mechanical steps *inside* a
+  decision he has already made proceed without asking, and a question the code,
+  a command or a doc can answer gets checked, not asked. The only carve-out is the ship run (§5), where the phrase he typed
   *is* the decision — and even there, a finding that would change shipped behaviour
   goes to ROADMAP rather than getting built.
 - **Verify, don't assume.** Don't report a state you inferred, a fix you didn't run, a
