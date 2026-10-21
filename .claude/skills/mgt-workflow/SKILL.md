@@ -555,6 +555,13 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
   a plausible story, the measurement wins — and check the instrument before the app,
   because more than once here the thing that was wrong was the tool doing the
   measuring. If you can't verify something, say that instead of rounding it to a claim.
+- **Never use subagents on your own — do the work yourself.** No `Agent` call unless
+  he has said yes to that one, fresh. Another skill's instructions don't count as a
+  yes: skill-creator's parallel eval runs, deep-research's fan-out and any "spawn an
+  agent for each part" step get done inline, one after another. A subagent starts cold,
+  re-derives what this session already holds and burns his usage fast (memory:
+  `never-use-subagents.md`). If a task truly looks like it needs one, suggest it
+  through `AskUserQuestion` with your recommendation, and wait for the answer.
 - **A transition added or edited works both ways — never one direction only.** Verify
   in *and* out; DESIGN.md holds the rule and the reasoning.
 - **DEV Firebase is a scratch database — leave your mess in it.** Test bookings,
