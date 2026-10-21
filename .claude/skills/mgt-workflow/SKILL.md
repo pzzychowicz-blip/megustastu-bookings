@@ -597,7 +597,10 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
   Firebase (the sandbox, per `src/firebase.js`'s `import.meta.env.DEV` split), and the
   split is never bypassed. Production-build verification is his job.
 
-## 9. Known trigger phrases (defined elsewhere — don't redefine)
+## 9. Trigger phrases
+
+The first two are defined elsewhere, so don't redefine them here; the rest are defined
+in full below.
 
 - **"give me the deployment version"** — a production-ready file with Firebase
   integration, auth, cleanup logic, logout.
