@@ -672,8 +672,12 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
      without a push; a session in another clone or in the cloud cannot see it, and
      the push that would fix that is his call, asked fresh (§8).
   5. **Give him the opening prompt** in a fenced block, ready to paste, naming the
-     branch and the note's absolute path, for example:
-     `Continue on branch feat/v18.12.0-foo. Hand-off note: /Users/…/MGT_Bookings_foo_Handoff.md`.
+     branch and the note's absolute path, written out in full, for example:
+
+     ```
+     Continue on branch feat/v18.12.0-foo. Hand-off note: /Users/patrykzychowicz/Desktop/megustastu-bookings context/MGT_Bookings_foo_Handoff.md
+     ```
+
      The new session's side is §0. Then stop: no more work here.
 
 ## When this skill doesn't apply
