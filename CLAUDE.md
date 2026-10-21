@@ -272,7 +272,7 @@ Four rules stay here, because each one ships a bug from code that is not visual:
 - The version there reads `<version>-sandbox`, derived at build time (`SANDBOX_DEPLOY`, `src/lib/waSandbox.js`). `tests/sandbox-branch.test.js` holds the workflow, `.vercelignore` and the version line together.
 
 ### Trigger phrases — see the `mgt-workflow` skill
-Already lazy-loaded and covers the exact same phrases ("give me the deployment version", "give me changelog", "sum up this thread") with the same file-naming rules. A thread summary goes to `/Users/patrykzychowicz/Desktop/megustastu-bookings context`, which holds summaries and design docs ONLY: no copy of this file, `REFACTOR_LOG.md` or `ROADMAP.md` belongs there — one copy of each, in the repo.
+Already lazy-loaded and covers the exact same phrases ("give me the deployment version", "give me changelog", "sum up this thread", "hand off") with the same file-naming rules. A thread summary or hand-off note goes to `/Users/patrykzychowicz/Desktop/megustastu-bookings context`, which holds summaries, hand-off notes and design docs ONLY: no copy of this file, `REFACTOR_LOG.md` or `ROADMAP.md` belongs there — one copy of each, in the repo.
 
 ## Common operations
 

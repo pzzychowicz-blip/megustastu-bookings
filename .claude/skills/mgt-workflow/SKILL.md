@@ -1,11 +1,11 @@
 ---
 name: mgt-workflow
-version: 5
+version: 6
 description: >-
-  The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings). Load this at the START of every session in this repo — even before any coding task is clear — and AGAIN the moment PLAN MODE opens: the effort level gets checked before the research starts, and every plan ends with an effort recommendation for executing it and for the ship run. ALSO load it before any edit under src/, before any commit, push, branch, PR or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and which docs need updating are all decided before the first edit and at task close, not at commit time. Also triggers on "/code-review and ship" (the one-run ship gate — review, verify, fix, build, commit, push, PR and thread summary in a single turn; the older "/code-review, fix all findings, push and sum up the thread" and "/code-review and push" name the same run), "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or any reference to prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, DESIGN.md, GLOSSARY.md or ROADMAP.md. Two rules govern everything here: Claude never settles a judgement call alone (anything with a defensible alternative goes to AskUserQuestion with a recommendation attached), and Claude never asserts what it has not measured. It covers session bootstrapping (dev server + Preview bridge up first), plan-mode effort calibration, git/branching/versioning (one version per branch, but one commit per feature — never bundle changes into a single commit; commits land as work lands, pushes never do), the full local gate that matches CI (build · test · lint · check:style, plus test:rules when the rules move), the mandatory pre-push review gate, and keeping the four living docs (CLAUDE.md · DESIGN.md · GLOSSARY.md · ROADMAP.md) current. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
+  The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings). Load this at the START of every session in this repo — even before any coding task is clear — and AGAIN the moment PLAN MODE opens: the effort level gets checked before the research starts, and every plan ends with an effort recommendation for executing it and for the ship run. ALSO load it before any edit under src/, before any commit, push, branch, PR or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and which docs need updating are all decided before the first edit and at task close, not at commit time. Also triggers on "/code-review and ship" (the one-run ship gate — review, verify, fix, build, commit, push, PR and thread summary in a single turn; the older "/code-review, fix all findings, push and sum up the thread" and "/code-review and push" name the same run), "hand off" / "handoff" (pass the work in flight to a new session that continues on the SAME branch), "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or any reference to prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, DESIGN.md, GLOSSARY.md or ROADMAP.md. Two rules govern everything here: Claude never settles a judgement call alone (anything with a defensible alternative goes to AskUserQuestion with a recommendation attached), and Claude never asserts what it has not measured. It covers session bootstrapping (dev server + Preview bridge up first), plan-mode effort calibration, git/branching/versioning (one version per branch, but one commit per feature — never bundle changes into a single commit; commits land as work lands, pushes never do), the full local gate that matches CI (build · test · lint · check:style, plus test:rules when the rules move), the mandatory pre-push review gate, and keeping the four living docs (CLAUDE.md · DESIGN.md · GLOSSARY.md · ROADMAP.md) current. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
 ---
 
-# MGT Bookings — workflow contract (v5)
+# MGT Bookings — workflow contract (v6)
 
 Patryk is the sole developer and sole merger of this repo. This skill exists so its
 conventions get *applied* consistently, not re-explained every session. If anything
@@ -68,6 +68,13 @@ but it can be **silent about unfinished business**: a decision made, a plan agre
 bug half-diagnosed in a previous conversation that ended before it reached
 CLAUDE.md/REFACTOR_LOG. That is what a thread summary carries forward. Reading one
 costs real tokens, so do it only on a signal.
+
+**Opened with a hand-off prompt?** (§9's "hand off": it names a branch and a
+`…_Handoff.md` note.) Then the search below is already done for you: read that note —
+it is the one file that matters — run `git checkout <branch>`, and confirm
+`git log -1 --format=%h` matches the hash the note gives. If git refuses the checkout
+(`already used by worktree`), the old session never released the branch: tell him, and
+don't work around it on a second branch, which is two copies of one version.
 
 **Cheap check, start of every session:**
 
@@ -599,6 +606,36 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
   Then write it as `MGT_Bookings_<topic>_Thread_Summary.md` in
   `/Users/patrykzychowicz/Desktop/megustastu-bookings context` — **the summary only,
   never a copy of `CLAUDE.md` / `REFACTOR_LOG.md` / `ROADMAP.md`** (§5 step 4).
+- **"hand off"** (or "handoff") — pass the work in flight to a **new session that
+  continues on the same branch**. It is the opposite of a standalone "sum up this
+  thread": that one assumes the branch merged, this one says it is live and someone is
+  about to pick it up. Nothing is pushed, no PR is opened, nothing merges — those stay
+  the ship run's (§5). In one pass:
+  1. **Commit what is finished**, one change per commit, gated, as §5 always asks.
+  2. **A half-finished change becomes a WIP commit, named as one** —
+     `v18.12.0 wip: <what> (unfinished, see hand-off note)` (`chore wip: …` on a chore
+     branch). Uncommitted, it would stay behind in this worktree, where the next session
+     cannot see it. Run the gate anyway and put its numbers in the note: a red gate on
+     a WIP commit is allowed, an unreported one is not. The next session finishes it in
+     a NEW commit; never amend (§8).
+  3. **Write the note** as `MGT_Bookings_<topic>_Handoff.md` in
+     `/Users/patrykzychowicz/Desktop/megustastu-bookings context` (absolute path). It
+     holds what the repo does not: the branch and its last commit hash; the version and
+     PR status (normally no PR yet); what is done, as commit subjects; what is left, in
+     order; the WIP commit and exactly what it lacks; decisions he made in this thread
+     that no doc records yet; open questions; the gate's last numbers; anything about the
+     dev server or Preview bridge the next session would otherwise rediscover. Skip what
+     CLAUDE.md, REFACTOR_LOG.md and this skill already say: they load fresh anyway.
+  4. **Release the branch.** Git refuses to check out one branch in two worktrees, so
+     with `git status` clean, run `git checkout --detach`. That moves no commit and
+     deletes nothing; it only frees the name. `git worktree list` should then show this
+     worktree as `(detached HEAD)`. The branch exists in every worktree of this clone
+     without a push; a session in another clone or in the cloud cannot see it, and
+     the push that would fix that is his call, asked fresh (§8).
+  5. **Give him the opening prompt** in a fenced block, ready to paste, naming the
+     branch and the note's absolute path, for example:
+     `Continue on branch feat/v18.12.0-foo. Hand-off note: /Users/…/MGT_Bookings_foo_Handoff.md`.
+     The new session's side is §0. Then stop: no more work here.
 
 ## When this skill doesn't apply
 
