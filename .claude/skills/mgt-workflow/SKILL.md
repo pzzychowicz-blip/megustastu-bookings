@@ -653,8 +653,10 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
      cannot see it. If it is the branch's first commit, it still carries the version
      bump and creates the REFACTOR_LOG entry (§4, §6), like any first commit. Run the
      gate anyway and put its numbers in the note: a red gate on a WIP commit is
-     allowed, an unreported one is not. The next session finishes it in a NEW commit;
-     never amend (§8).
+     allowed, an unreported one is not. It is the one commit allowed to break §5's
+     "a `git bisect` should never land on a broken one", and the `wip:` in its subject
+     is what lets a bisect `git bisect skip` it. The next session finishes it in a NEW
+     commit; never amend (§8).
   3. **Write the note** as `MGT_Bookings_<topic>_Handoff.md` in
      `/Users/patrykzychowicz/Desktop/megustastu-bookings context` (absolute path). It
      holds what the repo does not: the branch and its last commit hash; the version and
