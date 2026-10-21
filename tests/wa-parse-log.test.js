@@ -53,9 +53,15 @@ describe("the parse log", () => {
   // Gemini was really called (/code-review). The fetch is held for DELAY ms, so
   // a timer that does not wrap the call (started after it, or read before it)
   // logs less than DELAY and fails.
+  //
+  // The hold is DELAY + 5, not DELAY: the timer runs on libuv's whole-millisecond
+  // monotonic clock and gemini.js times with Date.now(), the wall clock, whose
+  // millisecond boundaries fall elsewhere. A true 60 ms hold logged 59 once in CI
+  // (PR #152), so a bare DELAY hold could fail with the timer correctly placed. A
+  // timer that does not wrap the call logs ~0, so the slack hides nothing.
   const DELAY = 60;
   const slowGemini = () => vi.stubGlobal("fetch", async () => {
-    await new Promise((r) => setTimeout(r, DELAY));
+    await new Promise((r) => setTimeout(r, DELAY + 5));
     return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: "{}" }] } }] }) };
   });
   const msOf = (line) => { const m = line.match(/"ms":(\d+)/); return m ? Number(m[1]) : null; };

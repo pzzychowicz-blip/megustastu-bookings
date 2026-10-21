@@ -272,7 +272,7 @@ Four rules stay here, because each one ships a bug from code that is not visual:
 - The version there reads `<version>-sandbox`, derived at build time (`SANDBOX_DEPLOY`, `src/lib/waSandbox.js`). `tests/sandbox-branch.test.js` holds the workflow, `.vercelignore` and the version line together.
 
 ### Trigger phrases — see the `mgt-workflow` skill
-Already lazy-loaded and covers the exact same phrases ("give me the deployment version", "give me changelog", "sum up this thread") with the same file-naming rules. A thread summary goes to `/Users/patrykzychowicz/Desktop/megustastu-bookings context`, which holds summaries and design docs ONLY: no copy of this file, `REFACTOR_LOG.md` or `ROADMAP.md` belongs there — one copy of each, in the repo.
+Already lazy-loaded and covers the exact same phrases ("give me the deployment version", "give me changelog", "sum up this thread", "hand off") with the same file-naming rules. A thread summary or hand-off note goes to `/Users/patrykzychowicz/Desktop/megustastu-bookings context`, which holds summaries, hand-off notes and design docs ONLY: no copy of this file, `REFACTOR_LOG.md` or `ROADMAP.md` belongs there — one copy of each, in the repo.
 
 ## Common operations
 
@@ -319,7 +319,7 @@ repo-wide: data writes, the service worker, CSP, database rules, the build, secr
 
 - **Worktree path anchoring.** In a worktree, Edit/Read absolute paths **must** include `.claude/worktrees/<name>/…`. Worktree cleanup is batched — sweep stale worktrees in one pass at a milestone, not per-version.
 - **Don't revert user-confirmed behaviour.** If Patryk approved a behaviour, don't quietly undo it later chasing an unrelated fix — ask first.
-- **Don't spawn subagents unless asked** — re-deriving context cold is the expensive path; handle multi-part tasks inline.
+- **Never use subagents on your own** — re-deriving context cold is the expensive path; handle multi-part tasks inline, even when another skill says to spawn agents. Suggest one only through `AskUserQuestion`, and run it only on a yes (the `mgt-workflow` skill, §8).
 - **Push back on bad architecture.** If a request leads to instability or bad structure, say so and propose a better approach. Patryk is self-taught and explicitly wants this.
 - **Conversation budget:** after ~25 messages, suggest a fresh thread; carry context with a "sum up this thread" summary + attach `CLAUDE.md`.
 - **Measuring through the Browser pane.** Load the `mgt-measurement-traps` skill before trusting a reading taken through automation — synthetic presses, automation-tree names, drags, DEV StrictMode timing and a truncated lint summary have each produced a confident wrong answer here.
