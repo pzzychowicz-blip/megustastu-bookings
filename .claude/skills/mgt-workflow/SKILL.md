@@ -650,9 +650,11 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
   2. **A half-finished change becomes a WIP commit, named as one** —
      `v18.12.0 wip: <what> (unfinished, see hand-off note)` (`chore wip: …` on a chore
      branch). Uncommitted, it would stay behind in this worktree, where the next session
-     cannot see it. Run the gate anyway and put its numbers in the note: a red gate on
-     a WIP commit is allowed, an unreported one is not. The next session finishes it in
-     a NEW commit; never amend (§8).
+     cannot see it. If it is the branch's first commit, it still carries the version
+     bump and creates the REFACTOR_LOG entry (§4, §6), like any first commit. Run the
+     gate anyway and put its numbers in the note: a red gate on a WIP commit is
+     allowed, an unreported one is not. The next session finishes it in a NEW commit;
+     never amend (§8).
   3. **Write the note** as `MGT_Bookings_<topic>_Handoff.md` in
      `/Users/patrykzychowicz/Desktop/megustastu-bookings context` (absolute path). It
      holds what the repo does not: the branch and its last commit hash; the version and
