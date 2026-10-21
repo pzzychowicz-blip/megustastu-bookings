@@ -246,6 +246,7 @@ doesn't, don't assume.
    commit **extends that same entry** (§6). Never a second entry for one version.
 6. [ ] The other three living docs — CLAUDE.md · DESIGN.md · GLOSSARY.md — updated if
    *this* change made one of them stale (§7). Most commits touch one; some touch none.
+   Touched CLAUDE.md? Measure it against the 40,000-character ceiling (§7).
 7. [ ] **Run the whole gate and report its numbers** — see "The gate" below.
 8. [ ] **Commit this one change** (subject format below), as it lands. Commits do not
    wait for permission (§8); pushes always do.
@@ -491,6 +492,24 @@ Each owns one thing, and where they overlap the owner wins:
   gets its row, with the code identifier so the row stays greppable.
 - **ROADMAP.md** — **pending work only**: deferred features, follow-ups, ideas.
   Nothing shipped, no design rationale.
+
+**The root CLAUDE.md stays at or under 40,000 characters.** It loads into every
+session whatever the task, Claude Code warns past that line, and
+`tests/doc-size.test.js` fails the suite above it. Measure after **every** edit to it,
+the way the test counts (a JS string length):
+
+```bash
+node -e 'console.log(require("fs").readFileSync("CLAUDE.md","utf8").length)'
+```
+
+Not `wc -c`, which counts bytes, and not `wc -m`, which also counts bytes in Claude's
+shell (its locale is `C`): both said 38,824 where the test counted 38,525 on
+2026-10-21, a ~300-character error right where it matters. **Over
+40,000?** Don't shorten sentences until it fits. List the passages about app code, the
+API or the tests, each with the CLAUDE.md it would move to word for word (`src/`,
+`src/lib/`, `src/hooks/`, `src/components/`, `api/`, `tests/`), and let him pick through
+`AskUserQuestion`; the moved passage leaves its rule behind in a sentence or two with a
+pointer. Report the count before and after.
 
 **Don't answer one question in two files.** All three of the first three say the same
 thing in their own headers — a duplicated rule is the defect they warn about. If a rule
