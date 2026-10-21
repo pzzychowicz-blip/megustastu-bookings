@@ -644,6 +644,9 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
   about to pick it up. Nothing is pushed, no PR is opened, nothing merges — those stay
   the ship run's (§5). In one pass:
   1. **Commit what is finished**, one change per commit, gated, as §5 always asks.
+     Still on a harness `claude/…` branch? Cut the proper `feat/…`/`fix/…`/`chore/…`
+     branch first ("Worktree sessions", below): the branch you hand on is the one the
+     version ships from.
   2. **A half-finished change becomes a WIP commit, named as one** —
      `v18.12.0 wip: <what> (unfinished, see hand-off note)` (`chore wip: …` on a chore
      branch). Uncommitted, it would stay behind in this worktree, where the next session
