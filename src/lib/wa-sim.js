@@ -29,7 +29,7 @@
 // phoneKeyOverride params are ignored on that path — the server decides, like
 // production will (see src/lib/wa-backend.js).
 
-import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, mergeDraft, pendingDraftOf, clampConfidence, WA_MAX_TEXT_LEN, sanitizeParse, snippet } from "./whatsapp";
+import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, mergeDraft, pendingDraftOf, clampConfidence, WA_MAX_TEXT_LEN, sanitizeParse, snippet, waAutoReplyOn } from "./whatsapp";
 import { backendEnabled } from "./wa-backend";
 import { countLabel } from "./booking-logic";
 import { backendInbound, postSimEvent } from "./wa-backend-sim";
@@ -91,7 +91,10 @@ export function simulateInbound(params, ctx) {
   const firstEver = !muted && (!existing || !existing.autoAckSent);
 
   const inboundMsg = { id: genMsgId(), direction: "in", text, ts, status: "delivered", isAutoAck: false, channel: "whatsapp" };
-  const autoAckMsg = firstEver
+  // v18.12.0 /code-review: the auto-reply's switch, as the server asks it
+  // (processInbound): off, no reply, and the claim (`autoAckSent`) is kept all
+  // the same, so the number never gets one. `ctx.waSettings` is App's.
+  const autoAckMsg = firstEver && waAutoReplyOn(ctx.waSettings)
     ? { id: genMsgId(), direction: "out", text: AUTO_ACK_TEXT[lang] || AUTO_ACK_TEXT.es, ts: ts + 1500, status: "delivered", isAutoAck: true, channel: "whatsapp" }
     : null;
 
@@ -120,7 +123,10 @@ export function simulateInbound(params, ctx) {
   const base = ex || {
     phoneKey, phone: params.phone || phoneKey, channel: "whatsapp", language: lang,
     acceptedBookingId: null, autoAckSent: false, createdAt: ts,
-    archived: false, archivedAt: null, draftStatus: null, draftData: null, _waSim: true,
+    // v18.12.0: `sim` marks a conversation the simulator CREATED (isSimConversation,
+    // lib/whatsapp.js), so nothing sent to it reaches Meta. Here only, never in the
+    // patch below: an inbound simulated into an existing real chat leaves it real.
+    archived: false, archivedAt: null, draftStatus: null, draftData: null, sim: true,
   };
   const patch = {
     lastMessageAt: ts,
@@ -130,7 +136,6 @@ export function simulateInbound(params, ctx) {
     language: lang,
     acceptedBadgeDismissedAt: null, // inbound re-shows the "confirmed" banner
     autoAckSent: true,
-    _waSim: true,
   };
   if (!muted) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on inbound
   if (params.acceptedBookingId !== undefined) patch.acceptedBookingId = params.acceptedBookingId;
@@ -227,7 +232,7 @@ function clientCoexist(event, p, ctx) {
       if (convOf(ctx, key)) { skipped++; return; }
       const plan = threadPlan(thread, [], simContent, function (id) { return id; }, now);
       if (!plan || plan.newest === -Infinity) return;
-      writeConv(ctx, plan.phoneKey, null, historyConvPatch(null, { phoneKey: plan.phoneKey, oldest: plan.oldest, newest: plan.newest, snippet: snippet(plan.line), now }));
+      writeConv(ctx, plan.phoneKey, null, historyConvPatch(null, { phoneKey: plan.phoneKey, oldest: plan.oldest, newest: plan.newest, snippet: snippet(plan.line), now, sim: true }));
       plan.records.forEach(function (r) { ctx.appendMessage(plan.phoneKey, r); });
       stored += plan.records.length;
       chats++;
@@ -251,7 +256,7 @@ function clientCoexist(event, p, ctx) {
     if (!text) throw new Error("Type the reply first.");
     const m = simEchoValue({ phone: phoneKey, text, now }).message_echoes[0];
     const content = simContent(m);
-    writeConv(ctx, phoneKey, conv, echoConvPatch(conv, { phoneKey, phone: phoneKey, ts: now, snippet: snippet(content.snippet) }));
+    writeConv(ctx, phoneKey, conv, echoConvPatch(conv, { phoneKey, phone: phoneKey, ts: now, snippet: snippet(content.snippet), sim: true }));
     ctx.appendMessage(phoneKey, echoRecord(m.id, m.id, content, now));
     return {};
   }

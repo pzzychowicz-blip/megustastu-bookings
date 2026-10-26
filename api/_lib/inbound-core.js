@@ -27,9 +27,9 @@
 // message id is the sanitized wamid, so a redelivery targets the same RTDB
 // path; we additionally skip the whole upsert when the message already exists.
 
-import { normalizePhone, isPhoneKey, pendingDraftOf, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet } from "../../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey, pendingDraftOf, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet, simMarkPatch } from "../../src/lib/whatsapp.js";
 import { simMediaMessage } from "../../src/lib/wa-mock-media.js";
-import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours, readOccasionTags } from "./rtdb.js";
+import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours, readOccasionTags, readWaAutoReply } from "./rtdb.js";
 import { sendText } from "./meta.js";
 import { parseMessage, mockParse } from "./gemini.js";
 
@@ -108,10 +108,15 @@ export async function applyParse(phoneKey, parse, ts) {
 //                  stored on the message, re-checked here.
 //   snippetText  — the conversation list's line when it is not `text` itself
 //                  (a media message's "Photo · caption").
+//   sim          — v18.12.0: the sandbox simulator's message. A conversation
+//                  it CREATES is stamped `sim: true`, and every send to a sim
+//                  conversation stays mock (`simulated`, meta.js): its phone is
+//                  made up, and once the sandbox sends from a real number
+//                  (the rehearsal) it would reach whoever owns it.
 // Returns { phoneKey, skipped, muted } — skipped=true when the wamid was seen
 // before; muted=true when the conversation is "Not a customer" (v18.9.0), so
 // the caller must not parse it.
-export async function processInbound({ phone, text, ts, wamid, profileName, parse, langHint, preloadedConv, willParse, media, snippetText }) {
+export async function processInbound({ phone, text, ts, wamid, profileName, parse, langHint, preloadedConv, willParse, media, snippetText, sim }) {
   const phoneKey = normalizePhone(phone);
   // v18.0.0 phase 6 (CT-WA-04): `!phoneKey` is not the question — "+" is truthy,
   // is a legal RTDB key and is nobody. api/wa-recheck.js had already refused it
@@ -151,6 +156,10 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
     autoAckSent: true,
   };
   if (!muted) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on inbound
+  // v18.12.0: the simulator's mark, in this same write (simMarkPatch): set on a
+  // conversation the simulator creates, cleared when a real message arrives in
+  // one it marked. A real chat never becomes a simulated one.
+  Object.assign(patch, simMarkPatch(existing, sim));
   if (!existing) {
     patch.createdAt = ts;
     patch.acceptedBookingId = null;
@@ -192,11 +201,23 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
   // flag said it had been sent. A send that succeeded keeps the claim even if
   // storing the ack's bubble then fails: the customer has the message, and a
   // second one would be the duplicate the claim exists to prevent.
+  //
+  // v18.12.0: the switch (Settings → WhatsApp, `readWaAutoReply`). OFF keeps
+  // the claim and sends nothing, so this number never gets one, even after the
+  // switch goes back on: a "thanks for your message" days into a conversation
+  // is worse than none (Patryk, 2026-10-26). A read that FAILS sends nothing
+  // and hands the claim back, like a failed send. Read only here, for a first
+  // message, so an ordinary inbound costs no extra read.
   if (firstEver) {
     const ackText = AUTO_ACK_TEXT[lang] || AUTO_ACK_TEXT.es;
+    // Who is WRITING decides, not the conversation's mark: a real message into a
+    // chat the simulator marked clears the mark above, so its reply is real too.
+    const simulated = sim === true;
     let sent = null;
     try {
-      sent = await sendText(phoneKey, ackText);
+      const on = await readWaAutoReply();
+      if (on === null) throw new Error("could not read the auto-reply setting");
+      if (on) sent = await sendText(phoneKey, ackText, { simulated });
     } catch (e) {
       // Auto-ack failure must never fail the inbound — log, release, move on.
       console.warn("[wa-inbound] auto-ack send failed: " + e.message);
@@ -304,6 +325,7 @@ export async function injectSimInbound({ phone, text, name, agoMs = 0, media }, 
     media: content.media,
     snippetText: content.snippet,
     willParse: !!parseText, // flags "analyzing…" until applyParse lands the draft
+    sim: true, // v18.12.0: a conversation this creates is the simulator's; nothing it sends leaves
   });
   // /code-review v18.0.0 phase 6: nothing was stored, so there is nothing to
   // parse. `api/wa-inbound.js` has always guarded this — `parseJobs.push` sits

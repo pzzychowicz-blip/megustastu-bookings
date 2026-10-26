@@ -120,3 +120,54 @@ describe("simulateInbound in client mode — a muted conversation", () => {
     expect(writes.conv[0].parsing).toBeUndefined();
   });
 });
+
+// v18.12.0 /code-review — the `sim` mark (isSimConversation) is written only
+// when the client-mode simulator CREATES a conversation. It used to write
+// `_waSim` on every inbound it simulated, so simulating into an existing real
+// chat turned it into one whose replies are never sent.
+describe("simulateInbound in client mode — the sim mark", () => {
+  beforeEach(() => { state.on = false; });
+  const run = (conversations) => {
+    const conv = [];
+    const ctx = { conversations, upsertConversation: (k, c) => conv.push(c), appendMessage: () => {} };
+    simulateInbound({ phone: "+34600111222", text: "hola" }, ctx);
+    return conv[0];
+  };
+  it("a conversation it creates is marked sim", () => {
+    expect(run([])).toMatchObject({ phoneKey: "+34600111222", sim: true });
+  });
+  it("an existing real conversation stays real, and no `_waSim` is written", () => {
+    const c = run([{ phoneKey: "+34600111222", autoAckSent: true, createdAt: 5 }]);
+    expect(c.sim).toBeUndefined();
+    expect(c._waSim).toBeUndefined();
+  });
+});
+
+describe("simMarkPatch — the one rule for the `sim` mark", async () => {
+  const { simMarkPatch } = await import("../src/lib/whatsapp.js");
+  it("creates with the mark only for the simulator, clears it only for a real writer, else nothing", () => {
+    expect(simMarkPatch(null, true)).toEqual({ sim: true });
+    expect(simMarkPatch(null, false)).toEqual({});
+    expect(simMarkPatch({ sim: true }, false)).toEqual({ sim: null });
+    expect(simMarkPatch({ sim: true }, true)).toEqual({});
+    expect(simMarkPatch({}, true)).toEqual({});
+    expect(simMarkPatch({}, false)).toEqual({});
+  });
+});
+
+// v18.12.0 /code-review: client mode asks the auto-reply's switch, as the server does.
+describe("simulateInbound in client mode — the auto-reply switch", () => {
+  beforeEach(() => { state.on = false; });
+  const run = (waSettings) => {
+    const conv = [], msgs = [];
+    simulateInbound({ phone: "+34600111222", text: "hola" }, { conversations: [], waSettings, upsertConversation: (k, c) => conv.push(c), appendMessage: (k, m) => msgs.push(m) });
+    return { conv: conv[0], acks: msgs.filter((m) => m.isAutoAck).length };
+  };
+  it("on (and absent, the default) adds the reply; off adds none and still keeps the claim", () => {
+    expect(run(undefined).acks).toBe(1);
+    expect(run({ autoReply: true }).acks).toBe(1);
+    const off = run({ autoReply: false });
+    expect(off.acks).toBe(0);
+    expect(off.conv.autoAckSent).toBe(true);
+  });
+});

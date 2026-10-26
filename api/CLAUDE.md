@@ -92,7 +92,8 @@ Guards in order: 405 → the staff gate (`staffAuthError`) → 400 → 404 → 4
 `WA_SEND_MODE` is mock, an id starting `MOCK.` is answered with a bundled sample of its
 kind (`_lib/mock-media/`: `photo.jpg`, `voice.ogg`, `menu.pdf`, a few kB each), read
 through static `new URL(…, import.meta.url)`s so the deployment's file tracing includes
-them. On a live deployment a MOCK id is 410. The harness routes it (`/api/wa-media`).
+them. On a live deployment a MOCK id is 410, unless its conversation is the simulator's
+(`isSimConversation`, v18.12.0), whose files are mock there too. The harness routes it (`/api/wa-media`).
 **Phase 6: the simulator's customer sends one too.** Its id has ONE spelling,
 `mockMediaId` in `src/lib/wa-mock-media.js` (pure, shared with the server, imported in
 `src/` by the simulator's stubbed client alone), which `uploadMedia`'s mock calls as well.
@@ -229,6 +230,26 @@ a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
   stored as Meta's would be. "Connect (simulated)" writes a `waLink` marked `sim: true`,
   and **a real `waLink` (ids, no `sim`) is never touched**: 409, because the sandbox's
   DEV database is where the rehearsal's real connection lives.
+- **A simulator conversation never reaches Meta (v18.12.0).** Its phone is made up, and
+  once the sandbox sends from a real number (the rehearsal) a reply to it would reach
+  whoever owns that number. A conversation the simulator CREATES is marked `sim: true` IN
+  THE WRITE THAT CREATES IT (`simMarkPatch`, `src/lib/whatsapp.js`, asked by
+  `processInbound` and by `echoConvPatch` / `historyConvPatch`; `injectSimInbound` passes
+  `sim`, and the sim events pass `{ sim: true }` to `handleEchoes` / `handleHistory`), and a
+  REAL webhook message into a marked chat clears it, since somebody really writes from that
+  number. The client-mode simulator writes the same `sim` when it
+  creates one (`isSimConversation`, `src/lib/whatsapp.js`, reads `sim` alone: the client
+  simulator's `_waSim` was written on every simulated inbound, a real chat included). The auto-reply, `wa-send` and
+  `wa-media`'s POST pass `{ simulated }` to `_lib/meta.js`, whose `postMessage` and
+  `uploadMedia` then act as mock mode does, whatever `WA_SEND_MODE` says. The flag is
+  REQUIRED (`simulatedOf`): a send or upload without a boolean `simulated` is refused, so a
+  new send path cannot forget it. An existing
+  conversation is never marked, so a real chat never becomes a simulated one.
+- **The auto-reply has a switch (v18.12.0)**, Settings → WhatsApp → Auto-reply
+  (`settings/whatsapp.autoReply`, default on). `processInbound` asks `readWaAutoReply`
+  (`_lib/rtdb.js`, through the client's own `waAutoReplyOn`) only for a first message.
+  Off keeps the `autoAckSent` claim and sends nothing, so that number never gets one; a
+  read that fails sends nothing and hands the claim back, like a failed send.
 
 **Tests (v18.4.5).** `tests/api-handlers.test.js` RUNS `wa-send`, `wa-recheck`, `wa-config`,
 `_lib/inbound-core.js` and `_lib/meta.js`: it replaces the three `firebase-admin` modules

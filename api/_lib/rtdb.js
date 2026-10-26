@@ -42,7 +42,7 @@ import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getDatabase } from "firebase-admin/database";
 import { getAuth } from "firebase-admin/auth";
 import { dbUrl, serviceAccount, staffEmails, requireStaffAllowList } from "./env.js";
-import { statusWins } from "../../src/lib/whatsapp.js";
+import { statusWins, waAutoReplyOn } from "../../src/lib/whatsapp.js";
 import { isAdminEntry, sanitizeRole, can } from "../../src/lib/roles.js";
 import { sanitizeTagList } from "../../src/lib/tags.js";
 
@@ -350,6 +350,20 @@ export async function readOccasionTags() {
   try {
     const snap = await getDb().ref("settings/tags").get();
     return sanitizeTagList(snap.exists() ? snap.val() : null).occasion;
+  } catch {
+    return null;
+  }
+}
+
+// v18.12.0: is the auto-reply on (`settings/whatsapp.autoReply`, Settings →
+// WhatsApp)? Read through the client's own `waAutoReplyOn`, so an absent node
+// is ON. A failed read is NULL, not a guess: the caller sends nothing and hands
+// the auto-reply claim back, so the next message asks again. A switch that
+// exists to stop messages must not send one on a blip.
+export async function readWaAutoReply() {
+  try {
+    const snap = await getDb().ref("settings/whatsapp").get();
+    return waAutoReplyOn(snap.exists() ? snap.val() : null);
   } catch {
     return null;
   }

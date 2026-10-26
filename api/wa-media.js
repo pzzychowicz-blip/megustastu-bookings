@@ -72,7 +72,7 @@ import { bearerToken } from "./_lib/request.js";
 import { mediaInfo, downloadMedia, uploadMedia, sendMedia } from "./_lib/meta.js";
 import {
   isPhoneKey, sanitizeMedia, sendKindOf, mediaLabel, mediaSnippet, snippet, replyUnarchives,
-  WA_SEND_MAX_BYTES, WA_CAPTION_MAX,
+  WA_SEND_MAX_BYTES, WA_CAPTION_MAX, isSimConversation,
 } from "../src/lib/whatsapp.js";
 
 export const config = { api: { bodyParser: false } };
@@ -159,7 +159,15 @@ async function view(req, res) {
   const filename = media.filename || "";
 
   if (media.mediaId.startsWith("MOCK.")) {
-    if (sendMode() !== "mock") { res.status(410).json({ error: "a simulator file — not available on this deployment" }); return; }
+    // v18.12.0 /code-review: a simulator conversation's files are MOCK on a
+    // live deployment too (a staff photo to one is never uploaded, `simulated`),
+    // so the sample is served for one of those whatever the send mode. The
+    // conversation is read only on this path; a production deployment has no
+    // simulator conversations, so it still answers 410 there.
+    if (sendMode() !== "mock" && !isSimConversation(await getConversation(phoneKey))) {
+      res.status(410).json({ error: "a simulator file — not available on this deployment" });
+      return;
+    }
     const sample = SAMPLES[media.kind];
     const bytes = await readFile(sample.url);
     head(res, sample.type, { "Content-Disposition": disposition("inline", filename) });
@@ -281,8 +289,11 @@ async function send(req, res) {
   let mediaId;
   let sent;
   try {
-    mediaId = await uploadMedia(bytes, mime, filename, kind);
-    sent = await sendMedia(conv.phone || phoneKey, { kind, mediaId, caption: text, filename });
+    // v18.12.0: a simulator conversation's phone is made up, so nothing leaves
+    // for it, whatever the send mode (`simulated`, `_lib/meta.js`).
+    const simulated = isSimConversation(conv);
+    mediaId = await uploadMedia(bytes, mime, filename, kind, { simulated });
+    sent = await sendMedia(conv.phone || phoneKey, { kind, mediaId, caption: text, filename }, { simulated });
   } catch (e) {
     console.error("[wa-media] provider send failed:", e.message);
     res.status(502).json({ error: "send failed: " + e.message });

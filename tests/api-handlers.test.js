@@ -125,7 +125,7 @@ import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inboun
 import { numberIsOurs, makeNumberGuard, freshResults, measuredAfter, beganAfter, chunkKeys } from "../api/_lib/coexist-core.js";
 import { readJsonBody, bearerToken } from "../api/_lib/request.js";
 import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyRequested, historyStatus, WA_IMPORT_ARCHIVE_MS, disconnectSentence } from "../src/lib/wa-coexist.js";
-import { verifySignature, sendText } from "../api/_lib/meta.js";
+import { verifySignature, sendText, sendMedia, uploadMedia } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
 import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE, replyUnarchives } from "../src/lib/whatsapp.js";
 import { simMediaMessage } from "../src/lib/wa-mock-media.js";
@@ -1058,18 +1058,19 @@ describe("verifySignature", () => {
   });
 });
 
+const REAL = { simulated: false };
 describe("sendText", () => {
   it("mock mode touches no network and reports delivered", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const r = await sendText(KEY, "hi");
+    const r = await sendText(KEY, "hi", REAL);
     expect(r.status).toBe("delivered");
     expect(r.wamid).toMatch(/^wamid\.MOCK\./);
     expect(fetchMock).not.toHaveBeenCalled();
   });
   it("live mode without its two settings throws rather than pretending", async () => {
     vi.stubEnv("WA_SEND_MODE", "live");
-    await expect(sendText(KEY, "hi")).rejects.toThrow(/META_WA_TOKEN/);
+    await expect(sendText(KEY, "hi", REAL)).rejects.toThrow(/META_WA_TOKEN/);
   });
   it("live mode posts a text message to the number's endpoint, the recipient without its plus", async () => {
     vi.stubEnv("WA_SEND_MODE", "live");
@@ -1077,7 +1078,7 @@ describe("sendText", () => {
     vi.stubEnv("META_PHONE_NUMBER_ID", "555");
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ messages: [{ id: "wamid.X" }] }) }));
     vi.stubGlobal("fetch", fetchMock);
-    expect(await sendText(KEY, "hola")).toEqual({ wamid: "wamid.X", status: "sent" });
+    expect(await sendText(KEY, "hola", REAL)).toEqual({ wamid: "wamid.X", status: "sent" });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toMatch(/^https:\/\/graph\.facebook\.com\/v\d+\.\d+\/555\/messages$/);
     expect(init.headers.Authorization).toBe("Bearer tok");
@@ -1088,9 +1089,21 @@ describe("sendText", () => {
     vi.stubEnv("META_WA_TOKEN", "tok");
     vi.stubEnv("META_PHONE_NUMBER_ID", "555");
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 401, json: async () => ({ error: { message: "Invalid OAuth access token" } }) })));
-    await expect(sendText(KEY, "hi")).rejects.toThrow("Invalid OAuth access token");
+    await expect(sendText(KEY, "hi", REAL)).rejects.toThrow("Invalid OAuth access token");
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500, json: async () => { throw new Error("not json"); } })));
-    await expect(sendText(KEY, "hi")).rejects.toThrow("Graph API error 500");
+    await expect(sendText(KEY, "hi", REAL)).rejects.toThrow("Graph API error 500");
+  });
+  // v18.12.0 /code-review: a send that does not say whether its conversation is
+  // the simulator's is refused, so a new send path cannot forget it silently.
+  it("refuses a send or an upload that does not say whether the chat is the simulator's, before any network", async () => {
+    vi.stubEnv("WA_SEND_MODE", "live");
+    const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+    for (const opts of [undefined, {}, { simulated: "yes" }, { simulated: 1 }]) {
+      await expect(sendText(KEY, "hi", opts)).rejects.toThrow(TypeError);
+      await expect(sendMedia(KEY, { kind: "image", mediaId: "123" }, opts)).rejects.toThrow(TypeError);
+      await expect(uploadMedia(Buffer.from("x"), "image/jpeg", "a.jpg", "image", opts)).rejects.toThrow(TypeError);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
@@ -2909,5 +2922,182 @@ describe("readJsonBody / bearerToken (api/_lib/request.js)", () => {
     }
     // v18.10.0: wa-usage, the cost counter, is the ninth.
     expect(users).toBe(9);
+  });
+});
+
+// ── v18.12.0: the rehearsal's two safety nets ───────────────────────────────
+// The rehearsal connects a REAL number to the sandbox (Patryk's own Business
+// number, 2026-10-26). Two things then reach real people unless stopped: the
+// auto-reply, sent to anyone who writes to that number for the first time, and
+// any reply to a simulator conversation, whose made-up phone may be somebody's.
+describe("v18.12.0 — the auto-reply switch (settings/whatsapp.autoReply)", () => {
+  const TS = 1_800_000_000_000;
+  const acks = () => msgsAt(KEY).filter((m) => m.isAutoAck);
+
+  it("absent node, absent key and true all send it: the default is on", async () => {
+    for (const whatsapp of [undefined, {}, { autoReply: true }]) {
+      fake.state.tree = whatsapp === undefined ? {} : { settings: { whatsapp } };
+      await processInbound({ phone: KEY, text: "Hola", ts: TS, wamid: "wamid.ON" });
+      expect(acks().length).toBe(1);
+    }
+  });
+
+  it("off: no reply, no Graph call, and the claim is KEPT, so the number never gets one, even after the switch goes back on", async () => {
+    goLive();
+    const f = graphFetch(); vi.stubGlobal("fetch", f);
+    fake.state.tree = { settings: { whatsapp: { autoReply: false } } };
+    await processInbound({ phone: KEY, text: "Hola", ts: TS, wamid: "wamid.OFF1" });
+    expect(f).not.toHaveBeenCalled();
+    expect(msgsAt(KEY).map((m) => m.direction)).toEqual(["in"]);
+    expect(convAt(KEY).autoAckSent).toBe(true);
+    fake.state.tree.settings.whatsapp.autoReply = true;
+    await processInbound({ phone: KEY, text: "¿Hola?", ts: TS + 60000, wamid: "wamid.OFF2" });
+    expect(f).not.toHaveBeenCalled();
+    expect(acks()).toEqual([]);
+  });
+
+  it("a setting that cannot be read sends nothing and hands the claim back, like a failed send", async () => {
+    goLive();
+    const f = graphFetch(); vi.stubGlobal("fetch", f);
+    const realRef = fake.db.ref;
+    fake.db.ref = (path) => {
+      const r = realRef(path);
+      if (path === "settings/whatsapp") r.get = async () => { throw new Error("read refused"); };
+      return r;
+    };
+    try {
+      await processInbound({ phone: KEY, text: "Hola", ts: TS, wamid: "wamid.ERR" });
+    } finally {
+      fake.db.ref = realRef;
+    }
+    expect(f).not.toHaveBeenCalled();
+    expect(msgsAt(KEY).map((m) => m.direction)).toEqual(["in"]);
+    expect(convAt(KEY).autoAckSent).toBe(false);
+  });
+
+  it("is read only for a first message: a later one costs no extra read", async () => {
+    fake.state.tree = { conversations: { [KEY]: { phoneKey: KEY, autoAckSent: true } } };
+    const realRef = fake.db.ref;
+    const paths = [];
+    fake.db.ref = (path) => { paths.push(path); return realRef(path); };
+    try {
+      await processInbound({ phone: KEY, text: "gracias", ts: TS, wamid: "wamid.LATER" });
+    } finally {
+      fake.db.ref = realRef;
+    }
+    expect(paths).not.toContain("settings/whatsapp");
+  });
+});
+
+describe("v18.12.0 — a simulator conversation never reaches Meta, whatever WA_SEND_MODE says", () => {
+  beforeEach(() => vi.stubEnv("WA_SIM_ENABLED", "1"));
+
+  it("the simulator's first message stamps the conversation `sim`, and its auto-reply stays mock on a live deployment", async () => {
+    goLive();
+    const f = graphFetch(); vi.stubGlobal("fetch", f);
+    await injectSimInbound({ phone: KEY, text: "hola" }, () => {});
+    expect(convAt(KEY).sim).toBe(true);
+    expect(f).not.toHaveBeenCalled();
+    const ack = msgsAt(KEY).find((m) => m.isAutoAck);
+    expect(ack).toMatchObject({ status: "delivered" });
+    expect(ack.providerMsgId).toMatch(/^wamid\.MOCK\./);
+  });
+
+  it("a real conversation is never stamped, and the simulator writing into one does not stamp it either", async () => {
+    await processInbound({ phone: KEY, text: "Hola", ts: Date.now(), wamid: "wamid.REAL1" });
+    expect("sim" in convAt(KEY)).toBe(false);
+    await injectSimInbound({ phone: KEY, text: "otra" }, () => {});
+    expect("sim" in convAt(KEY)).toBe(false);
+  });
+
+  it("wa-send: a reply to a sim conversation is stored as mock-delivered and calls nothing; a real one sends", async () => {
+    goLive();
+    const f = graphFetch(); vi.stubGlobal("fetch", f);
+    fake.state.tree = { conversations: { [KEY]: openConv({ sim: true }) } };
+    const res = await call(sendHandler, { token: "staff", body: { phoneKey: KEY, text: "Mesa confirmada" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.status).toBe("delivered");
+    expect(res.body.wamid).toMatch(/^wamid\.MOCK\./);
+    expect(f).not.toHaveBeenCalled();
+    // A real one, and one carrying only the client simulator's old `_waSim`
+    // (written on every simulated inbound, a real chat included): both send.
+    for (const extra of [{}, { _waSim: true }]) {
+      fake.state.tree = { conversations: { [KEY]: openConv(extra) } };
+      expect((await call(sendHandler, { token: "staff", body: { phoneKey: KEY, text: "hi" } })).body.status).toBe("sent");
+    }
+    expect(messageCalls(f).length).toBe(2);
+  });
+
+  it("wa-media POST: a photo to a sim conversation uploads nothing and sends nothing", async () => {
+    goLive();
+    const f = graphFetch(); vi.stubGlobal("fetch", f);
+    fake.state.tree = { conversations: { [KEY]: openConv({ sim: true }) } };
+    const res = await sendFile({ caption: "La terraza" });
+    expect(res.statusCode).toBe(200);
+    expect(f).not.toHaveBeenCalled();
+    const [m] = msgsAt(KEY);
+    expect(m.media.mediaId).toMatch(/^MOCK\.image\./);
+  });
+
+  // /code-review: decided inside the write that creates the conversation, so
+  // there is no unmarked moment and no second write that could fail.
+  it("the mark is in the write that creates the conversation, never a write after it", async () => {
+    await injectSimInbound({ phone: KEY, text: "hola" }, () => {});
+    const created = fake.state.writes.find((w) => w.op === "update" && w.value && w.value.createdAt !== undefined);
+    expect(created.value.sim).toBe(true);
+    const ev = (event, extra) => call(simInboundHandler, { token: "staff", body: Object.assign({ event }, extra || {}) });
+    fake.state.writes = [];
+    await ev("echo", { phone: "+34600999777", text: "Hola" });
+    const echoConv = fake.state.writes.find((w) => w.op === "update" && w.value && w.value.createdAt !== undefined);
+    expect(echoConv.value.sim).toBe(true);
+    expect(fake.state.writes.filter((w) => w.value && w.value.sim === true).length).toBe(1);
+  });
+
+  it("a real message clears the mark: a chat simulated from a real phone that person then writes to", async () => {
+    goLive();
+    const f = graphFetch(); vi.stubGlobal("fetch", f);
+    fake.state.tree = { conversations: { [KEY]: openConv({ sim: true, autoAckSent: true }) } };
+    await processInbound({ phone: KEY, text: "Hola, soy yo", ts: Date.now(), wamid: "wamid.REALIN" });
+    expect("sim" in convAt(KEY)).toBe(false);
+    // A real first message into a marked chat gets a real auto-reply, too.
+    // `preloadedConv` is the webhook's own read: a copy, as Firebase hands one
+    // back (the fake's read returns the stored object, which the clear mutates).
+    fake.state.tree.conversations["+34600222333"] = { phoneKey: "+34600222333", sim: true };
+    await processInbound({ phone: "+34600222333", text: "Hola", ts: Date.now(), wamid: "wamid.REALIN2",
+      preloadedConv: { phoneKey: "+34600222333", sim: true } });
+    expect(messageCalls(f).length).toBe(1);
+    expect("sim" in convAt("+34600222333")).toBe(false);
+    expect((await call(sendHandler, { token: "staff", body: { phoneKey: KEY, text: "hi" } })).body.status).toBe("sent");
+    // And a reply typed on the phone (a real echo) clears it too.
+    fake.state.tree.conversations[KEY].sim = true;
+    const { handleEchoes } = await import("../api/_lib/coexist-core.js");
+    await handleEchoes(simEchoValue({ phone: KEY, text: "from the phone", now: Date.now() }), freshResults());
+    expect("sim" in convAt(KEY)).toBe(false);
+  });
+
+  // /code-review: the GET decided on the send mode alone, so on a live
+  // deployment every MOCK file of a sim conversation answered 410.
+  it("wa-media GET: a sim conversation's MOCK file opens on a live deployment; a real one's stays 410", async () => {
+    goLive();
+    vi.stubGlobal("fetch", vi.fn());
+    const msg = { id: "m1", direction: "out", text: "Photo", ts: Date.now(), media: { kind: "image", mediaId: "MOCK.image.ab1", mime: "image/jpeg" } };
+    fake.state.tree = { conversations: { [KEY]: openConv({ sim: true }) }, messages: { [KEY]: { m1: msg } } };
+    const ok = await mediaCall({ query: { phoneKey: KEY, msgId: "m1" } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.bytes.length).toBeGreaterThan(0);
+    fake.state.tree.conversations[KEY] = openConv();
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "m1" } })).statusCode).toBe(410);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("the simulator's events stamp what they CREATE (the history's two chats, an echo's new chat) and leave an existing chat alone", async () => {
+    const ev = (event, extra) => call(simInboundHandler, { token: "staff", body: Object.assign({ event }, extra || {}) });
+    expect((await ev("history")).statusCode).toBe(200);
+    for (const digits of [SIM_HISTORY_RECENT, SIM_HISTORY_OLD]) expect(convAt("+" + digits).sim).toBe(true);
+    expect((await ev("echo", { phone: "+34600999777", text: "Hola" })).statusCode).toBe(200);
+    expect(convAt("+34600999777").sim).toBe(true);
+    await processInbound({ phone: KEY, text: "Hola", ts: Date.now(), wamid: "wamid.REAL2" });
+    await ev("echo", { phone: KEY, text: "Hola" });
+    expect("sim" in convAt(KEY)).toBe(false);
   });
 });

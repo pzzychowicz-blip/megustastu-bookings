@@ -13,7 +13,7 @@
 // inbox (the disconnection banner's sentence), which is a lazy chunk, so it
 // never reaches the startup bundle.
 
-import { normalizePhone, isPhoneKey, mediaLabel, mediaSnippet, replyUnarchives, WA_MAX_TEXT_LEN } from "./whatsapp.js";
+import { normalizePhone, isPhoneKey, mediaLabel, mediaSnippet, replyUnarchives, simMarkPatch, WA_MAX_TEXT_LEN } from "./whatsapp.js";
 import { formatDay, localDay } from "./day.js";
 
 // secondsTs(raw, now) — a Meta timestamp (seconds since the epoch, usually as a
@@ -139,8 +139,10 @@ export function echoRecord(msgId, wamid, content, ts) {
 //     older reply the conversation's last line
 // A conversation the phone started is created here, with the shape
 // `processInbound` creates one with, minus the window.
+//
+// v18.12.0: `o.sim` — the simulator is the writer (`simMarkPatch`).
 export function echoConvPatch(existing, o) {
-  const patch = { unread: false, autoAckSent: true };
+  const patch = Object.assign({ unread: false, autoAckSent: true }, simMarkPatch(existing, o.sim));
   if (!existing) {
     return Object.assign(patch, {
       phoneKey: o.phoneKey, phone: o.phone || o.phoneKey, channel: "whatsapp",
@@ -284,8 +286,9 @@ export function historyRecord(msgId, wamid, content, ts, incoming, status) {
 // (api/_lib/coexist-core.js), comes back out. One archived while its last
 // message was inside the week was archived by a person, and a muted one by the
 // mute; both stay where they are.
+// v18.12.0: `o.sim` — the simulator is the writer (`simMarkPatch`).
 export function historyConvPatch(existing, o) {
-  const patch = { autoAckSent: true };
+  const patch = Object.assign({ autoAckSent: true }, simMarkPatch(existing, o.sim));
   const cut = o.now - WA_IMPORT_ARCHIVE_MS;
   if (!existing) {
     const old = o.newest < cut;

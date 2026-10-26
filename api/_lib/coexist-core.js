@@ -336,7 +336,9 @@ export async function applyMessageChange(phoneKey, m, now = Date.now()) {
 // One echo's failure does not stop the next: each is counted on its own, and
 // only a delivery where everything failed is answered 500 for Meta to send
 // again, which rewrites the same records.
-export async function handleEchoes(value, results, now = Date.now()) {
+// v18.12.0: `ctx.sim` — the simulator's echo event (`_lib/sim-events.js`), so a
+// conversation it creates is marked in the same write (`simMarkPatch`).
+export async function handleEchoes(value, results, now = Date.now(), ctx = {}) {
   const echoes = Array.isArray(value.message_echoes) ? value.message_echoes : [];
   if (!echoes.length) { results.ignored++; return; }
   for (const raw of echoes) {
@@ -374,7 +376,7 @@ export async function handleEchoes(value, results, now = Date.now()) {
       const conv = await getConversation(phoneKey);
       // The conversation first, as processInbound does: a redelivery after a
       // failed message write still finds no message and writes both again.
-      await upsertConversation(phoneKey, echoConvPatch(conv, { phoneKey, phone: phoneKey, ts, snippet: snippet(content.snippet) }));
+      await upsertConversation(phoneKey, echoConvPatch(conv, { phoneKey, phone: phoneKey, ts, snippet: snippet(content.snippet), sim: ctx.sim === true }));
       await appendMessage(phoneKey, echoRecord(sanitizeKey(wamid), wamid, content, ts));
       results.echoes++;
     } catch (e) {
@@ -390,7 +392,8 @@ export async function handleEchoes(value, results, now = Date.now()) {
 // rewrites nothing), one of its conversation, and ONE root update of both
 // (`writeImportedThread`). What the thread stores is `threadPlan`
 // (src/lib/wa-coexist.js), which the simulator's client mode asks too.
-export async function importThread(thread, now = Date.now()) {
+// `sim`: the simulator's history event (v18.12.0, `simMarkPatch`).
+export async function importThread(thread, now = Date.now(), sim = false) {
   if (!webhookPhoneKey(thread && thread.id)) return 0;
   const node = await readMessageNode(webhookPhoneKey(thread.id));
   const have = new Set();
@@ -402,7 +405,7 @@ export async function importThread(thread, now = Date.now()) {
   const plan = threadPlan(thread, have, inboundContent, sanitizeKey, now);
   if (!plan || plan.newest === -Infinity) return 0;
   const conv = await getConversation(plan.phoneKey);
-  await writeImportedThread(plan.phoneKey, plan.records, historyConvPatch(conv, { phoneKey: plan.phoneKey, oldest: plan.oldest, newest: plan.newest, snippet: snippet(plan.line), now }));
+  await writeImportedThread(plan.phoneKey, plan.records, historyConvPatch(conv, { phoneKey: plan.phoneKey, oldest: plan.oldest, newest: plan.newest, snippet: snippet(plan.line), now, sim: sim === true }));
   return plan.records.length;
 }
 
@@ -413,7 +416,7 @@ export async function importThread(thread, now = Date.now()) {
 // placeholder takes the media and its caption or label; not found (it came
 // before its thread) → stored whole, and the thread's import, finding it
 // stored, leaves it. Answers "applied", "stored", "skipped" or "ignored".
-export async function attachHistoryMedia(value, m, now = Date.now()) {
+export async function attachHistoryMedia(value, m, now = Date.now(), sim = false) {
   const wamid = m && typeof m.id === "string" && m.id ? m.id : null;
   if (!wamid) return "ignored";
   const content = inboundContent(m);
@@ -436,7 +439,7 @@ export async function attachHistoryMedia(value, m, now = Date.now()) {
   // never came left it there for good. Written as the thread's import would
   // write it; the import, when it comes, moves it on (`historyConvPatch`).
   const conv = await getConversation(phoneKey);
-  await upsertConversation(phoneKey, historyConvPatch(conv, { phoneKey, oldest: ts, newest: ts, snippet: snippet(content.snippet), now }));
+  await upsertConversation(phoneKey, historyConvPatch(conv, { phoneKey, oldest: ts, newest: ts, snippet: snippet(content.snippet), now, sim: sim === true }));
   await appendMessage(phoneKey, historyRecord(sanitizeKey(wamid), wamid, content, ts, incoming, historyStatus(m, incoming)));
   return "stored";
 }
@@ -455,7 +458,10 @@ export async function attachHistoryMedia(value, m, now = Date.now()) {
 // share), and it no longer ends the change (/code-review): thrown, it skipped
 // every chunk after it, and with the threads before it counted the delivery
 // was a 200, so Meta never sent those chunks again.
-export async function handleHistory(value, results, now = Date.now()) {
+//
+// v18.12.0: `ctx.sim` — the simulator's history event; passed to each write.
+export async function handleHistory(value, results, now = Date.now(), ctx = {}) {
+  const sim = ctx.sim === true;
   const items = Array.isArray(value.history) ? value.history : [];
   const follow = Array.isArray(value.messages) ? value.messages : [];
   if (!items.length && !follow.length && !historyDeclined(value)) { results.ignored++; return undefined; }
@@ -482,7 +488,7 @@ export async function handleHistory(value, results, now = Date.now()) {
     let failed = false;
     for (const thread of Array.isArray(item.threads) ? item.threads : []) {
       try {
-        results.history += await importThread(thread, now);
+        results.history += await importThread(thread, now, sim);
       } catch (e) {
         failed = true;
         results.errors++;
@@ -496,7 +502,7 @@ export async function handleHistory(value, results, now = Date.now()) {
   }
   for (const m of follow) {
     try {
-      const r = await attachHistoryMedia(value, m, now);
+      const r = await attachHistoryMedia(value, m, now, sim);
       if (r === "applied" || r === "stored") results.history++;
       else if (r === "skipped") results.skipped++;
       else results.ignored++;

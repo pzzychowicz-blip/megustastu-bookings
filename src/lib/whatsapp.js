@@ -261,6 +261,45 @@ export const AUTO_ACK_TEXT = {
   es: "¡Gracias por su mensaje! Le contestaremos en breve.",
 };
 
+// v18.12.0: the auto-reply's switch, `settings/whatsapp.autoReply` (Settings →
+// WhatsApp). Default ON, by the default-on idiom: only an explicit `false`
+// turns it off, so an absent node or key reads as on and a deployment that
+// never opened the setting behaves as before. One question, asked by the
+// settings hook and by the webhook (`readWaAutoReply`, api/_lib/rtdb.js).
+export function waAutoReplyOn(settings) {
+  return !(settings && typeof settings === "object" && settings.autoReply === false);
+}
+
+// v18.12.0: is this conversation the sandbox simulator's? Its phone is made up,
+// so nothing sent to it may reach Meta, whatever WA_SEND_MODE says (`simulated`,
+// api/_lib/meta.js). ONE mark, `sim`, written only where the simulator CREATES
+// a conversation, server or client mode. Not `_waSim` (/code-review): the
+// client-mode simulator wrote that on every inbound it simulated, an existing
+// real chat included, so reading it turned a real customer's thread into one
+// whose replies were stored as delivered and never sent.
+export function isSimConversation(conv) {
+  return !!(conv && conv.sim === true);
+}
+
+// simMarkPatch(existing, sim) — the `sim` field a write to a conversation
+// carries (v18.12.0 /code-review), asked by every writer that creates or
+// touches one from a webhook or the simulator: `processInbound`, and the
+// phone-echo and history patches (`echoConvPatch`, `historyConvPatch`,
+// lib/wa-coexist.js). It is decided INSIDE the write, so no conversation the
+// simulator creates is ever stored without it (a stamp written afterwards
+// could fail and leave it unmarked for good). `sim` is true when the
+// simulator is the writer. Two answers, else nothing:
+//   · the simulator creates a conversation → `{ sim: true }`;
+//   · a REAL webhook touches one marked `sim` → `{ sim: null }`, which deletes
+//     the mark: somebody really is writing from that number (a chat simulated
+//     from a real phone, which that person then writes to), so replies to it
+//     must reach them again.
+export function simMarkPatch(existing, sim) {
+  if (!existing) return sim === true ? { sim: true } : {};
+  if (existing.sim === true && sim !== true) return { sim: null };
+  return {};
+}
+
 // ── v18.8.0 phase 8: "Suggest these" ────────────────────────────────────────
 // The reply the draft card offers when a request does not fit (or lands on the
 // kitchen's busiest quarter): written in code, put into the reply box and

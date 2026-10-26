@@ -52,7 +52,9 @@
 // admin node with the setting gone, and the nightly prune reads the default).
 // 4: v18.10.0, `settings/operatingHours.exceptions`, the special days (a build
 // without it saves a weekday's hours with every special day gone).
-export const SCHEMA = 4;
+// 5: v18.12.0, `settings/whatsapp.autoReply` (a build without it saves the
+// WhatsApp settings with the switch gone, and the auto-reply reads as on).
+export const SCHEMA = 5;
 
 export const SCHEMA_ENFORCE_KEY = "mgt.schemaEnforce";
 

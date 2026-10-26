@@ -425,7 +425,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.11.0"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.12.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1449,6 +1449,8 @@ function BookingApp({uid}){
     appendMessage:wa.simAppendMessage, saveBookings:saveBookings, clearAllWaData:wa.clearAllWaData,
     // v18.9.0: the coexistence events (simulateCoexist) read and write these too.
     patchConversation:wa.patchConversation, patchMessage:wa.patchMessage, contacts:wa.contacts, waLink:wa.waLink, simSetContacts:wa.simSetContacts,
+    // v18.12.0: the auto-reply's switch, which the client-mode simulator asks too.
+    waSettings:waSettings,
   };
   useEffect(function(){
     if(!WA_SANDBOX) return;
@@ -4867,7 +4869,7 @@ function BookingApp({uid}){
               onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
               className="mgt-hover-scale"
               style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
-          ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,watchMessages:wa.watchMessages,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.simAppendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend,patchMessage:wa.patchMessage,contacts:wa.contacts,waLink:wa.waLink,simSetContacts:wa.simSetContacts}}
+          ctx={{waSettings:waSettings,conversations:wa.conversations,messagesMap:wa.messagesMap,watchMessages:wa.watchMessages,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.simAppendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend,patchMessage:wa.patchMessage,contacts:wa.contacts,waLink:wa.waLink,simSetContacts:wa.simSetContacts}}
           onClose={function(){setShowSim(false);}} /></Suspense>:null):null}{/* v18.8.0: the photo viewer, after the simulator so it paints above it (MODAL_Z ranks it so) */}<ModalPresence show={!!waPhoto}>{waPhoto?<Suspense fallback={null}><PhotoViewer photo={waPhoto} onClose={function(){setWaPhoto(null);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
         // must sit above the Settings overlay. Same idiom as ReminderEditor:
         // `position` + `z-index` makes a stacking context and the subtree

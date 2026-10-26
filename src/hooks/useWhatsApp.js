@@ -64,7 +64,7 @@ export function useWhatsApp({
   setWriteWarning,
   // v18.4.9: whether the booking form is open (see the draftSourceRef effect).
   formOpen,
-  // settings/whatsapp (useWaSettings) — currently just autoArchiveOnComplete.
+  // settings/whatsapp (useWaSettings) — autoArchiveOnComplete here; autoReply (v18.12.0) is the server's.
   waSettings,
   // v18.11.0: the tag list (useTagSettings), so Accept opens the form with the
   // occasions the message named.

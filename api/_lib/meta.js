@@ -54,8 +54,29 @@ function liveConfig() {
 // The ONE call that puts a message in front of a customer: POST /messages.
 // A text and a photo with its caption each make exactly one (checklist A4-5,
 // pinned in tests/api-handlers.test.js); an upload is not a message.
-async function postMessage(phoneE164, payload) {
-  if (sendMode() === "mock") {
+//
+// v18.12.0: `simulated` — the conversation is the sandbox simulator's (`sim`
+// on the conversation, stamped where the simulator creates one), so its phone
+// is made up and may belong to a real person. It sends as mock mode does,
+// whatever WA_SEND_MODE says: once the sandbox sends from a real number (the
+// rehearsal, R-15), a reply to a simulator chat would otherwise reach whoever
+// owns that number. One flag, at the one function that sends.
+//
+// **The flag is REQUIRED (/code-review).** Every caller passes
+// `{ simulated: isSimConversation(conv) }`, and a call that does not say is
+// refused (`simulatedOf`) rather than read as "not simulated": a new send path
+// that forgot it would otherwise send a simulator chat to Meta with no test
+// failing. The refusal rejects, so it reaches the caller's own send-failed path.
+export function simulatedOf(opts) {
+  const v = opts && opts.simulated;
+  if (typeof v !== "boolean") {
+    throw new TypeError("a send must say whether the conversation is the simulator's: pass { simulated: isSimConversation(conv) }");
+  }
+  return v;
+}
+async function postMessage(phoneE164, payload, opts) {
+  const simulated = simulatedOf(opts);
+  if (sendMode() === "mock" || simulated) {
     const wamid = "wamid.MOCK." + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     return { wamid, status: "delivered" };
   }
@@ -80,8 +101,9 @@ async function postMessage(phoneE164, payload) {
 
 // sendText(phoneE164, text) → { wamid, status }
 // phoneE164: "+34600..." (Cloud API wants digits without "+", handled here).
-export function sendText(phoneE164, text) {
-  return postMessage(phoneE164, { type: "text", text: { body: text } });
+// opts.simulated — required, see postMessage.
+export function sendText(phoneE164, text, opts) {
+  return postMessage(phoneE164, { type: "text", text: { body: text } }, opts);
 }
 
 // ── Media the restaurant sends (v18.8.0) ─────────────────────────────────────
@@ -93,8 +115,10 @@ export function sendText(phoneE164, text) {
 // In mock mode nothing leaves: the id is `MOCK.<kind>.<random>` (`mockMediaId`,
 // shared with the simulator), which api/wa-media.js answers with its bundled
 // sample while the mode is mock.
-export async function uploadMedia(bytes, mime, filename, kind) {
-  if (sendMode() === "mock") return mockMediaId(kind);
+// v18.12.0: `opts.simulated` (required, see postMessage) uploads nothing, as mock mode.
+export async function uploadMedia(bytes, mime, filename, kind, opts) {
+  const simulated = simulatedOf(opts);
+  if (sendMode() === "mock" || simulated) return mockMediaId(kind);
   const { token, phoneNumberId } = liveConfig();
   const form = new FormData();
   form.append("messaging_product", "whatsapp");
@@ -111,11 +135,11 @@ export async function uploadMedia(bytes, mime, filename, kind) {
 }
 
 // sendMedia(phoneE164, {kind, mediaId, caption, filename}) → { wamid, status }
-export function sendMedia(phoneE164, { kind, mediaId, caption, filename }) {
+export function sendMedia(phoneE164, { kind, mediaId, caption, filename }, opts) {
   const body = { id: mediaId };
   if (caption) body.caption = caption;
   if (kind === "document" && filename) body.filename = filename;
-  return postMessage(phoneE164, { type: kind, [kind]: body });
+  return postMessage(phoneE164, { type: kind, [kind]: body }, opts);
 }
 
 // ── Media a customer sent (v18.8.0) ──────────────────────────────────────────

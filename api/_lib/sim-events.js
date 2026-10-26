@@ -35,6 +35,12 @@ import {
 
 const NEEDS_PHONE = ["contact", "echo", "edit", "revoke"];
 
+// v18.12.0: the history and echo events pass `{ sim: true }`, so a conversation
+// they CREATE is marked `sim` in the same write (`simMarkPatch`,
+// src/lib/whatsapp.js) and nothing sent to it reaches Meta. The history's two
+// chats are made-up numbers. An existing conversation is left as it was.
+const SIM = { sim: true };
+
 // runSimEvent(body, decoded, now) → { status, data }: what the endpoint
 // answers. `decoded` is the staff token (its email names who connected).
 export async function runSimEvent(body, decoded, now = Date.now()) {
@@ -57,7 +63,7 @@ export async function runSimEvent(body, decoded, now = Date.now()) {
   if (event === "echo") {
     const text = typeof body.text === "string" ? body.text.trim() : "";
     if (!text) return { status: 400, data: { error: "text is required for echo" } };
-    await handleEchoes(simEchoValue({ phone: phoneKey, text, now }), results, now);
+    await handleEchoes(simEchoValue({ phone: phoneKey, text, now }), results, now, SIM);
     return ok();
   }
   if (event === "edit" || event === "revoke") {
@@ -73,11 +79,11 @@ export async function runSimEvent(body, decoded, now = Date.now()) {
     return ok({ outcome: r });
   }
   if (event === "history") {
-    await handleHistory(simHistoryValue(now), results, now);
+    await handleHistory(simHistoryValue(now), results, now, SIM);
     return ok();
   }
   if (event === "history-media") {
-    await handleHistory(simHistoryMediaValue(now), results, now);
+    await handleHistory(simHistoryMediaValue(now), results, now, SIM);
     return ok();
   }
   if (event === "connect") {

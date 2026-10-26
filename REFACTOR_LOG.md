@@ -37704,3 +37704,136 @@ Five findings; four fixed, one left on purpose.
 - **Left: `addToWaitlist` cleans tags the builder already cleaned.** The hook is
   the storage boundary and its header says it takes raw fields, so it keeps its
   own clean.
+
+## v18.12.0 — the WhatsApp rehearsal on Patryk's own number: two safety nets
+
+**Date:** 2026-10-26 · **Branch:** `feat/v18.12.0-wa-rehearsal-safety` · **Behaviour change:**
+yes, see each phase.
+
+Patryk decided to run the coexistence rehearsal (the go-live plan's R1–R2) on his own
+Spanish number, already on the WhatsApp Business app, rather than a disposable SIM
+(the plan's R-1 had decided the opposite on 17 October). Connected to the sandbox, that
+number brings real people into reach of two things the sandbox was built not to care
+about. Decided on 2026-10-26: build a guard for each before the number is connected,
+run the rehearsal with `WA_LLM_MODE=mock` on the sandbox (so his contacts' messages never
+reach Gemini), and wipe the imported WhatsApp data from DEV after the verdict (R-11).
+
+### Phase 1 — a simulator conversation never reaches Meta
+
+The plan's R-15 warned that once the sandbox sends from a real number, a reply or an
+auto-reply to a simulator chat goes out for real, to whoever owns the made-up number.
+The fix it named (`fix/v18.10.1-sim-sends-stay-simulated`, `d584dde4`) was committed on
+2026-10-18 in a local session on Patryk's Mac and never pushed, so nothing in `api/` on
+`main` told a simulator chat apart. This phase builds it; on 2026-10-26 Patryk chose to
+keep this version and delete the v18.10.1 branch, which `main` has since passed
+(Patryk's pick of three: mark the chats, rather than an ops-only wipe or refusing the
+simulator in live mode).
+
+- **The mark.** A conversation the simulator CREATES is stamped `sim: true`: by
+  `processInbound`'s new `sim` flag (`injectSimInbound` passes it), and by `stampCreated`
+  in `api/_lib/sim-events.js` for the history's two chats (`SIM_HISTORY_RECENT` /
+  `SIM_HISTORY_OLD`, made-up numbers) and an echo to a phone with no conversation. A
+  conversation that already existed is never stamped. `isSimConversation`
+  (`lib/whatsapp.js`) also accepts the client-mode simulator's `_waSim`.
+- **The guard.** `postMessage` and `uploadMedia` (`api/_lib/meta.js`, the one function
+  that sends and the one that uploads) take `simulated` and then act as mock mode,
+  whatever `WA_SEND_MODE` says. The auto-reply, `wa-send` and `wa-media`'s POST pass it.
+- **What it does not cover.** A sim photo sent this way gets a `MOCK.` id, which a live
+  deployment answers 410 (as it already did for the simulator's customer photos). And
+  **a simulator chat created before this version carries no mark**, so it still sends
+  live: the go-live page's R-17 makes the simulator's Clear conversations a REQUIRED
+  step before the gate (Patryk, 2026-10-26, over a code check that would read a thread's
+  messages before every send).
+
+**Tests:** five in `tests/api-handlers.test.js` ("a simulator conversation never reaches
+Meta"); `tests/wa-media.test.js`'s pin on `uploadMedia`'s mock line follows the new
+condition. Mutation-checked: dropping `simulated` from `postMessage` fails three.
+
+**Files:** `api/_lib/{meta,inbound-core,sim-events}.js` · `api/{wa-send,wa-media}.js` ·
+`src/lib/whatsapp.js` · `api/CLAUDE.md`.
+
+### Phase 2 — the auto-reply switch
+
+With Patryk's own number connected, anyone who writes to it for the first time would
+get the restaurant's "Thanks for your message!". Decided on 2026-10-26: a switch in
+Settings → WhatsApp, on every deployment, default ON, with the auto-archive toggle's
+permission (`settingsWrite`); and OFF means that number never gets one, even after the
+switch goes back on (a "thanks for your message" days into a conversation is worse than
+none).
+
+- **Stored:** `settings/whatsapp.autoReply`, read through `waAutoReplyOn`
+  (`lib/whatsapp.js`, the default-on idiom: only `false` is off) by `useWaSettings`'
+  `sanitizeWa` and by the server's `readWaAutoReply` (`api/_lib/rtdb.js`). A new
+  whitelist key, so **`SCHEMA` 4 → 5**: a device on v18.11.0 saving the WhatsApp settings
+  would drop the key and turn the auto-reply back on.
+- **The server:** `processInbound` reads it only for a first message (an ordinary
+  inbound costs no extra read). Off: the `autoAckSent` claim stays, nothing is sent. A
+  read that fails sends nothing and releases the claim, so the next message asks again.
+- **The screen:** a second `Collapsible`, "Auto-reply", under "Inbox" in Settings →
+  WhatsApp, with one `Toggle` named by its heading ("Reply to a new customer's first
+  message") and a line saying what it sends and that a number missed while off is not
+  caught up.
+
+**Tests:** four in `tests/api-handlers.test.js` ("the auto-reply switch": the default,
+off and back on, a failed read, no read for a later message). Mutation-checked: sending
+regardless of the switch fails the off test. `tests/schema.test.js` pins 5 and
+`sanitizeWa`'s new print.
+
+**Deploy:** refresh every device after the merge (the `SCHEMA` raise). No rules change:
+`settings/whatsapp` already has its grant and rev pair.
+
+**Files:** `api/_lib/{inbound-core,rtdb}.js` · `src/lib/{whatsapp,schema}.js` ·
+`src/hooks/{useWaSettings,useWhatsApp}.js` · `src/components/Settings.jsx` ·
+`GLOSSARY.md` · `api/CLAUDE.md` · `src/hooks/CLAUDE.md`.
+
+### /code-review fixes
+
+Nine findings, all confirmed by reading the code path; none disproved, none deferred.
+
+- **`_waSim` turned a real chat into a simulated one.** The client-mode simulator wrote
+  `_waSim: true` on every inbound it simulated, into an existing conversation too, and
+  `isSimConversation` read it, so a real customer's replies would have been stored as
+  delivered and never sent. It reads `sim` alone now, and the client-mode simulator writes
+  `sim` only in the record it CREATES (`wa-sim.js`), never in the per-message patch.
+  Simulator chats from before this version carry neither mark the guard reads, which the
+  go-live plan's required Clear conversations (R-17) covers.
+- **The mark is decided inside the write that creates the conversation (four findings, one
+  fix).** It was a stamp written after the sim events' handlers (`stampCreated`), which a
+  failed write or a throwing handler left off for good (the next run read the chat as
+  existing), with an unmarked moment in between and 2×N extra reads; the client-mode
+  history and echo marked nothing at all; and a chat simulated from a real phone stayed
+  mock-only after that person really wrote to it. `simMarkPatch(existing, sim)`
+  (`lib/whatsapp.js`) is now the one rule, asked by `processInbound` and by `echoConvPatch`
+  / `historyConvPatch` (`lib/wa-coexist.js`): the simulator creating a chat writes
+  `sim: true`, a REAL webhook (an inbound, a phone echo, a history import) into a marked
+  chat deletes the mark. `handleEchoes` and `handleHistory` take `ctx.sim`, which the sim
+  events and the client-mode simulator pass. Mutation-checked: never clearing the mark
+  fails two tests.
+- **A simulator chat's files opened nowhere on a live deployment.** `wa-media`'s GET
+  answered 410 for every `MOCK.` id once sending was live, and phase 1 makes a staff photo
+  to a simulator chat one of those. It now serves the bundled sample when the conversation
+  is the simulator's (one read, on that path only); a real conversation's `MOCK.` id is
+  still 410, and production has no simulator conversations.
+- **The client-mode simulator ignored the switch.** `simulateInbound` added the auto-reply
+  bubble on a first message whatever `autoReply` said, so the sandbox showed what the real
+  webhook no longer does. It asks `waAutoReplyOn(ctx.waSettings)` now, keeping the claim
+  when off as the server does, and App passes `waSettings` in both of the simulator's
+  contexts (the console helpers' and the panel's).
+- **The guard was opt-in.** A send path that forgot `{ simulated }` read as "not
+  simulated" and would have sent a simulator chat to Meta, with no test failing.
+  `simulatedOf(opts)` (`api/_lib/meta.js`) now REQUIRES a boolean in `sendText`,
+  `sendMedia` and `uploadMedia` and refuses anything else with a `TypeError`, rejected
+  before any network call, so it reaches the caller's own send-failed path. Kept as an
+  explicit argument rather than a conversation read inside the send layer: `meta.js` stays
+  free of the database, and a test sends without one.
+- **Settings typed out the auto-reply's English text.** The Auto-reply section quoted
+  "Thanks for your message! We'll get back to you shortly." by hand; it reads
+  `AUTO_ACK_TEXT.en` now, so an edit to the message reaches the screen.
+
+- **Found re-reading the diff before the push: the auto-reply decided "simulated" from the
+  chat's mark.** A real person's first message into a chat the simulator marked cleared the
+  mark and still got a mock reply. It is `sim === true` now (who is writing). The test passes
+  the conversation as `preloadedConv`, because the fake database's read returns the stored
+  object, which the clear mutates in place: read from the fake, the mutation went unseen.
+
+**Gate after the fixes:** main entry 430.01 kB, 125.63 kB gz (125.27 before v18.12.0) · 3730 tests · 0 errors and 63 warnings · style OK.
