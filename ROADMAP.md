@@ -24,9 +24,15 @@ session and keeping it in sync.
   contact sync, phone replies, history import, the disconnect banner, Not a customer).
   What is left needs Meta and a phone. The sandbox's rig is ready (the four coexistence
   webhook fields, Facebook Login for Business and its Embedded Signup configuration,
-  `META_APP_ID` + `META_ES_CONFIG_ID`, all done 17 October), so the rehearsal waits only for
-  a disposable number that has run the Business app for a week, then follows the go-live
-  page from R-5 (the gate) on. **Findings the rehearsal owns:** the `extras` shape FB.login takes (Embedded Signup Builder,
+  `META_APP_ID` + `META_ES_CONFIG_ID`, all done 17 October). **The number (decided
+  2026-10-26): Patryk's own Spanish number, already on the Business app**, not a
+  disposable SIM. Before connecting it: v18.12.0 merged (simulator chats never send for
+  real; Settings → WhatsApp → Auto-reply turned OFF on the sandbox, so his contacts get no
+  greeting), `WA_LLM_MODE=mock` on the sandbox (his contacts' messages never reach
+  Gemini), and the Business app's greeting message off. Then the go-live page from R-5
+  (the gate) on. **After R-11's verdict:** disconnect the number (R-10) and wipe the
+  imported WhatsApp data from DEV (conversations, messages, `waContacts`), since it is
+  six months of his real chats. **Findings the rehearsal owns:** the `extras` shape FB.login takes (Embedded Signup Builder,
   "Check a launch config"); whether `META_WA_TOKEN` may send and retry the syncs on the
   converted account; history chunk sizes against Vercel's 4.5 MB request cap; whether the
   direct route works without Tech Provider status; whether an echo ever names a message
