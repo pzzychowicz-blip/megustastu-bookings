@@ -33,11 +33,14 @@
 // (Q2: replying to an archived conversation un-archives it, unless it is
 // "Not a customer": `replyUnarchives`). The window is NOT reset — only inbound
 // customer messages reset it.
+//
+// v18.12.0: a conversation the sandbox simulator created (`sim: true`) is sent
+// as mock mode would, even on a live deployment (`simulated`, _lib/meta.js).
 
 import { verifyStaffToken, staffAuthError, getConversation, upsertConversation, appendMessage } from "./_lib/rtdb.js";
 import { readJsonBody, bearerToken } from "./_lib/request.js";
 import { sendText } from "./_lib/meta.js";
-import { capOutbound, snippet, replyUnarchives } from "../src/lib/whatsapp.js";
+import { capOutbound, snippet, replyUnarchives, isSimConversation } from "../src/lib/whatsapp.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -74,7 +77,9 @@ export default async function handler(req, res) {
   // ── Send + persist ──────────────────────────────────────────────────────────
   let sent;
   try {
-    sent = await sendText(conv.phone || phoneKey, text);
+    // v18.12.0: a simulator conversation (`sim`) never reaches Meta, whatever
+    // the send mode: its phone is made up and may be somebody's real number.
+    sent = await sendText(conv.phone || phoneKey, text, { simulated: isSimConversation(conv) });
   } catch (e) {
     console.error("[wa-send] provider send failed:", e.message);
     res.status(502).json({ error: "send failed: " + e.message });

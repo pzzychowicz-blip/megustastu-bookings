@@ -229,6 +229,15 @@ a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
   stored as Meta's would be. "Connect (simulated)" writes a `waLink` marked `sim: true`,
   and **a real `waLink` (ids, no `sim`) is never touched**: 409, because the sandbox's
   DEV database is where the rehearsal's real connection lives.
+- **A simulator conversation never reaches Meta (v18.12.0).** Its phone is made up, and
+  once the sandbox sends from a real number (the rehearsal) a reply to it would reach
+  whoever owns that number. A conversation the simulator CREATES is stamped `sim: true`
+  (`injectSimInbound`, and `stampCreated` in `_lib/sim-events.js` for the history's two
+  chats and an echo's new one); the client-mode simulator's `_waSim` counts too
+  (`isSimConversation`, `src/lib/whatsapp.js`). The auto-reply, `wa-send` and
+  `wa-media`'s POST pass `{ simulated }` to `_lib/meta.js`, whose `postMessage` and
+  `uploadMedia` then act as mock mode does, whatever `WA_SEND_MODE` says. An existing
+  conversation is never stamped, so a real chat never becomes a simulated one.
 
 **Tests (v18.4.5).** `tests/api-handlers.test.js` RUNS `wa-send`, `wa-recheck`, `wa-config`,
 `_lib/inbound-core.js` and `_lib/meta.js`: it replaces the three `firebase-admin` modules

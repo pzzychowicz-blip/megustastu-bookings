@@ -2911,3 +2911,67 @@ describe("readJsonBody / bearerToken (api/_lib/request.js)", () => {
     expect(users).toBe(9);
   });
 });
+
+// ── v18.12.0: the rehearsal's safety net for simulator chats ───────────────────────────────
+// The rehearsal connects a REAL number to the sandbox (Patryk's own Business
+// number, 2026-10-26), so a reply to a simulator conversation, whose made-up
+// phone may be somebody's, would reach a real person unless stopped.
+describe("v18.12.0 — a simulator conversation never reaches Meta, whatever WA_SEND_MODE says", () => {
+  beforeEach(() => vi.stubEnv("WA_SIM_ENABLED", "1"));
+
+  it("the simulator's first message stamps the conversation `sim`, and its auto-reply stays mock on a live deployment", async () => {
+    goLive();
+    const f = graphFetch(); vi.stubGlobal("fetch", f);
+    await injectSimInbound({ phone: KEY, text: "hola" }, () => {});
+    expect(convAt(KEY).sim).toBe(true);
+    expect(f).not.toHaveBeenCalled();
+    const ack = msgsAt(KEY).find((m) => m.isAutoAck);
+    expect(ack).toMatchObject({ status: "delivered" });
+    expect(ack.providerMsgId).toMatch(/^wamid\.MOCK\./);
+  });
+
+  it("a real conversation is never stamped, and the simulator writing into one does not stamp it either", async () => {
+    await processInbound({ phone: KEY, text: "Hola", ts: Date.now(), wamid: "wamid.REAL1" });
+    expect("sim" in convAt(KEY)).toBe(false);
+    await injectSimInbound({ phone: KEY, text: "otra" }, () => {});
+    expect("sim" in convAt(KEY)).toBe(false);
+  });
+
+  it("wa-send: a reply to a sim conversation (either mark) is stored as mock-delivered and calls nothing; a real one sends", async () => {
+    goLive();
+    const f = graphFetch(); vi.stubGlobal("fetch", f);
+    for (const mark of [{ sim: true }, { _waSim: true }]) {
+      fake.state.tree = { conversations: { [KEY]: openConv(mark) } };
+      const res = await call(sendHandler, { token: "staff", body: { phoneKey: KEY, text: "Mesa confirmada" } });
+      expect(res.statusCode).toBe(200);
+      expect(res.body.status).toBe("delivered");
+      expect(res.body.wamid).toMatch(/^wamid\.MOCK\./);
+    }
+    expect(f).not.toHaveBeenCalled();
+    fake.state.tree = { conversations: { [KEY]: openConv() } };
+    expect((await call(sendHandler, { token: "staff", body: { phoneKey: KEY, text: "hi" } })).body.status).toBe("sent");
+    expect(messageCalls(f).length).toBe(1);
+  });
+
+  it("wa-media POST: a photo to a sim conversation uploads nothing and sends nothing", async () => {
+    goLive();
+    const f = graphFetch(); vi.stubGlobal("fetch", f);
+    fake.state.tree = { conversations: { [KEY]: openConv({ sim: true }) } };
+    const res = await sendFile({ caption: "La terraza" });
+    expect(res.statusCode).toBe(200);
+    expect(f).not.toHaveBeenCalled();
+    const [m] = msgsAt(KEY);
+    expect(m.media.mediaId).toMatch(/^MOCK\.image\./);
+  });
+
+  it("the simulator's events stamp what they CREATE (the history's two chats, an echo's new chat) and leave an existing chat alone", async () => {
+    const ev = (event, extra) => call(simInboundHandler, { token: "staff", body: Object.assign({ event }, extra || {}) });
+    expect((await ev("history")).statusCode).toBe(200);
+    for (const digits of [SIM_HISTORY_RECENT, SIM_HISTORY_OLD]) expect(convAt("+" + digits).sim).toBe(true);
+    expect((await ev("echo", { phone: "+34600999777", text: "Hola" })).statusCode).toBe(200);
+    expect(convAt("+34600999777").sim).toBe(true);
+    await processInbound({ phone: KEY, text: "Hola", ts: Date.now(), wamid: "wamid.REAL2" });
+    await ev("echo", { phone: KEY, text: "Hola" });
+    expect("sim" in convAt(KEY)).toBe(false);
+  });
+});

@@ -255,6 +255,6 @@ describe("the simulator's media (wa-mock-media.js)", () => {
     })(join(root, "src"));
     const builders = files.filter((f) => /["']MOCK\.["']\s*\+/.test(stripComments(readFileSync(f, "utf8")).join("\n")));
     expect(builders.map((f) => f.slice(root.length))).toEqual(["src/lib/wa-mock-media.js"]);
-    expect(stripComments(readFileSync(join(root, "api/_lib/meta.js"), "utf8")).join("\n")).toMatch(/if \(sendMode\(\) === "mock"\) return mockMediaId\(kind\);/);
+    expect(stripComments(readFileSync(join(root, "api/_lib/meta.js"), "utf8")).join("\n")).toMatch(/if \(sendMode\(\) === "mock" \|\| \(opts && opts\.simulated === true\)\) return mockMediaId\(kind\);/);
   });
 });

@@ -261,6 +261,15 @@ export const AUTO_ACK_TEXT = {
   es: "¡Gracias por su mensaje! Le contestaremos en breve.",
 };
 
+// v18.12.0: is this conversation the sandbox simulator's? Its phone is made up,
+// so nothing sent to it may reach Meta, whatever WA_SEND_MODE says (`simulated`,
+// api/_lib/meta.js). Two marks, one meaning: the server stamps `sim` where the
+// simulator creates a conversation (injectSimInbound, sim-events), and the
+// client-mode simulator (wa-sim.js) writes `_waSim`. Either is enough.
+export function isSimConversation(conv) {
+  return !!(conv && (conv.sim === true || conv._waSim === true));
+}
+
 // ── v18.8.0 phase 8: "Suggest these" ────────────────────────────────────────
 // The reply the draft card offers when a request does not fit (or lands on the
 // kitchen's busiest quarter): written in code, put into the reply box and

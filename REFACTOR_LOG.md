@@ -37704,3 +37704,44 @@ Five findings; four fixed, one left on purpose.
 - **Left: `addToWaitlist` cleans tags the builder already cleaned.** The hook is
   the storage boundary and its header says it takes raw fields, so it keeps its
   own clean.
+
+## v18.12.0 — the WhatsApp rehearsal on Patryk's own number: two safety nets
+
+**Date:** 2026-10-26 · **Branch:** `feat/v18.12.0-wa-rehearsal-safety` · **Behaviour change:**
+yes, see each phase.
+
+Patryk decided to run the coexistence rehearsal (the go-live plan's R1–R2) on his own
+Spanish number, already on the WhatsApp Business app, rather than a disposable SIM
+(the plan's R-1 had decided the opposite on 17 October). Connected to the sandbox, that
+number brings real people into reach of two things the sandbox was built not to care
+about. Decided on 2026-10-26: build a guard for each before the number is connected,
+run the rehearsal with `WA_LLM_MODE=mock` on the sandbox (so his contacts' messages never
+reach Gemini), and wipe the imported WhatsApp data from DEV after the verdict (R-11).
+
+### Phase 1 — a simulator conversation never reaches Meta
+
+The plan's R-15 warned that once the sandbox sends from a real number, a reply or an
+auto-reply to a simulator chat goes out for real, to whoever owns the made-up number.
+The fix it named (`fix/v18.10.1-sim-sends-stay-simulated`) is not on `main` or on the
+remote, and nothing in `api/` told a simulator chat apart, so this phase builds it
+(Patryk's pick of three: mark the chats, rather than an ops-only wipe or refusing the
+simulator in live mode).
+
+- **The mark.** A conversation the simulator CREATES is stamped `sim: true`: by
+  `processInbound`'s new `sim` flag (`injectSimInbound` passes it), and by `stampCreated`
+  in `api/_lib/sim-events.js` for the history's two chats (`SIM_HISTORY_RECENT` /
+  `SIM_HISTORY_OLD`, made-up numbers) and an echo to a phone with no conversation. A
+  conversation that already existed is never stamped. `isSimConversation`
+  (`lib/whatsapp.js`) also accepts the client-mode simulator's `_waSim`.
+- **The guard.** `postMessage` and `uploadMedia` (`api/_lib/meta.js`, the one function
+  that sends and the one that uploads) take `simulated` and then act as mock mode,
+  whatever `WA_SEND_MODE` says. The auto-reply, `wa-send` and `wa-media`'s POST pass it.
+- **What it does not cover.** A sim photo sent this way gets a `MOCK.` id, which a live
+  deployment answers 410 (as it already did for the simulator's customer photos).
+
+**Tests:** five in `tests/api-handlers.test.js` ("a simulator conversation never reaches
+Meta"); `tests/wa-media.test.js`'s pin on `uploadMedia`'s mock line follows the new
+condition. Mutation-checked: dropping `simulated` from `postMessage` fails three.
+
+**Files:** `api/_lib/{meta,inbound-core,sim-events}.js` · `api/{wa-send,wa-media}.js` ·
+`src/lib/whatsapp.js` · `api/CLAUDE.md`.

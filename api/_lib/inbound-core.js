@@ -27,7 +27,7 @@
 // message id is the sanitized wamid, so a redelivery targets the same RTDB
 // path; we additionally skip the whole upsert when the message already exists.
 
-import { normalizePhone, isPhoneKey, pendingDraftOf, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet } from "../../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey, pendingDraftOf, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet, isSimConversation } from "../../src/lib/whatsapp.js";
 import { simMediaMessage } from "../../src/lib/wa-mock-media.js";
 import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours, readOccasionTags } from "./rtdb.js";
 import { sendText } from "./meta.js";
@@ -108,10 +108,15 @@ export async function applyParse(phoneKey, parse, ts) {
 //                  stored on the message, re-checked here.
 //   snippetText  — the conversation list's line when it is not `text` itself
 //                  (a media message's "Photo · caption").
+//   sim          — v18.12.0: the sandbox simulator's message. A conversation
+//                  it CREATES is stamped `sim: true`, and every send to a sim
+//                  conversation stays mock (`simulated`, meta.js): its phone is
+//                  made up, and once the sandbox sends from a real number
+//                  (the rehearsal) it would reach whoever owns it.
 // Returns { phoneKey, skipped, muted } — skipped=true when the wamid was seen
 // before; muted=true when the conversation is "Not a customer" (v18.9.0), so
 // the caller must not parse it.
-export async function processInbound({ phone, text, ts, wamid, profileName, parse, langHint, preloadedConv, willParse, media, snippetText }) {
+export async function processInbound({ phone, text, ts, wamid, profileName, parse, langHint, preloadedConv, willParse, media, snippetText, sim }) {
   const phoneKey = normalizePhone(phone);
   // v18.0.0 phase 6 (CT-WA-04): `!phoneKey` is not the question — "+" is truthy,
   // is a legal RTDB key and is nobody. api/wa-recheck.js had already refused it
@@ -153,6 +158,7 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
   if (!muted) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on inbound
   if (!existing) {
     patch.createdAt = ts;
+    if (sim === true) patch.sim = true; // stamped at creation only: a real chat never becomes one
     patch.acceptedBookingId = null;
     patch.draftStatus = null;
     patch.draftData = null;
@@ -194,9 +200,10 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
   // second one would be the duplicate the claim exists to prevent.
   if (firstEver) {
     const ackText = AUTO_ACK_TEXT[lang] || AUTO_ACK_TEXT.es;
+    const simulated = sim === true || isSimConversation(existing);
     let sent = null;
     try {
-      sent = await sendText(phoneKey, ackText);
+      sent = await sendText(phoneKey, ackText, { simulated });
     } catch (e) {
       // Auto-ack failure must never fail the inbound — log, release, move on.
       console.warn("[wa-inbound] auto-ack send failed: " + e.message);
@@ -304,6 +311,7 @@ export async function injectSimInbound({ phone, text, name, agoMs = 0, media }, 
     media: content.media,
     snippetText: content.snippet,
     willParse: !!parseText, // flags "analyzing…" until applyParse lands the draft
+    sim: true, // v18.12.0: a conversation this creates is the simulator's; nothing it sends leaves
   });
   // /code-review v18.0.0 phase 6: nothing was stored, so there is nothing to
   // parse. `api/wa-inbound.js` has always guarded this — `parseJobs.push` sits

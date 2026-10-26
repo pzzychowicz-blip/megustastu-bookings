@@ -72,7 +72,7 @@ import { bearerToken } from "./_lib/request.js";
 import { mediaInfo, downloadMedia, uploadMedia, sendMedia } from "./_lib/meta.js";
 import {
   isPhoneKey, sanitizeMedia, sendKindOf, mediaLabel, mediaSnippet, snippet, replyUnarchives,
-  WA_SEND_MAX_BYTES, WA_CAPTION_MAX,
+  WA_SEND_MAX_BYTES, WA_CAPTION_MAX, isSimConversation,
 } from "../src/lib/whatsapp.js";
 
 export const config = { api: { bodyParser: false } };
@@ -281,8 +281,11 @@ async function send(req, res) {
   let mediaId;
   let sent;
   try {
-    mediaId = await uploadMedia(bytes, mime, filename, kind);
-    sent = await sendMedia(conv.phone || phoneKey, { kind, mediaId, caption: text, filename });
+    // v18.12.0: a simulator conversation's phone is made up, so nothing leaves
+    // for it, whatever the send mode (`simulated`, `_lib/meta.js`).
+    const simulated = isSimConversation(conv);
+    mediaId = await uploadMedia(bytes, mime, filename, kind, { simulated });
+    sent = await sendMedia(conv.phone || phoneKey, { kind, mediaId, caption: text, filename }, { simulated });
   } catch (e) {
     console.error("[wa-media] provider send failed:", e.message);
     res.status(502).json({ error: "send failed: " + e.message });
