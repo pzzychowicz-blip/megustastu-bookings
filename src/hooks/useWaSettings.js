@@ -14,6 +14,12 @@
 //     the sanitize therefore uses the default-on `!== false` idiom, so an
 //     absent field reads as enabled.
 //
+//   autoReply — v18.12.0: the one-time auto-reply a new customer's first
+//     message gets (api/_lib/inbound-core.js, which reads this key through
+//     `readWaAutoReply`). Default ON by the same idiom, asked through
+//     `waAutoReplyOn` (lib/whatsapp.js) so the server and this hook answer one
+//     question. Off, a new number gets none, and none later either.
+//
 // v18.0.0 phase 5 — the gate is the MODULE, not WA_SANDBOX. Like every other WA
 // listener (see useWhatsApp's note), this attaches nothing while the module is
 // off: the WhatsApp settings tab is hidden then too, so there is nothing to read
@@ -29,6 +35,7 @@ import { dbError } from "../lib/dbError";
 // v18.0.0 session 8: the activity log.
 import { settingsWriteEntry } from "../lib/activity";
 import { emitActivity } from "../lib/activitySink";
+import { waAutoReplyOn } from "../lib/whatsapp";
 
 export const DEFAULT_WA_SETTINGS = {
   v: 1,
@@ -37,6 +44,7 @@ export const DEFAULT_WA_SETTINGS = {
   // hook stamps it once, on the first load that ever sees this node. See the
   // effect below for why it exists.
   autoArchiveSince: 0,
+  autoReply: true,
 };
 
 function sanitizeWa(raw) {
@@ -47,6 +55,7 @@ function sanitizeWa(raw) {
     // Default-ON convention (see CLAUDE.md): only an explicit `false` disables.
     autoArchiveOnComplete: src.autoArchiveOnComplete !== false,
     autoArchiveSince: Number.isFinite(since) && since > 0 ? since : 0,
+    autoReply: waAutoReplyOn(src),
   };
 }
 

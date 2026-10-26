@@ -2912,10 +2912,70 @@ describe("readJsonBody / bearerToken (api/_lib/request.js)", () => {
   });
 });
 
-// ── v18.12.0: the rehearsal's safety net for simulator chats ───────────────────────────────
+// ── v18.12.0: the rehearsal's two safety nets ───────────────────────────────
 // The rehearsal connects a REAL number to the sandbox (Patryk's own Business
-// number, 2026-10-26), so a reply to a simulator conversation, whose made-up
-// phone may be somebody's, would reach a real person unless stopped.
+// number, 2026-10-26). Two things then reach real people unless stopped: the
+// auto-reply, sent to anyone who writes to that number for the first time, and
+// any reply to a simulator conversation, whose made-up phone may be somebody's.
+describe("v18.12.0 — the auto-reply switch (settings/whatsapp.autoReply)", () => {
+  const TS = 1_800_000_000_000;
+  const acks = () => msgsAt(KEY).filter((m) => m.isAutoAck);
+
+  it("absent node, absent key and true all send it: the default is on", async () => {
+    for (const whatsapp of [undefined, {}, { autoReply: true }]) {
+      fake.state.tree = whatsapp === undefined ? {} : { settings: { whatsapp } };
+      await processInbound({ phone: KEY, text: "Hola", ts: TS, wamid: "wamid.ON" });
+      expect(acks().length).toBe(1);
+    }
+  });
+
+  it("off: no reply, no Graph call, and the claim is KEPT, so the number never gets one, even after the switch goes back on", async () => {
+    goLive();
+    const f = graphFetch(); vi.stubGlobal("fetch", f);
+    fake.state.tree = { settings: { whatsapp: { autoReply: false } } };
+    await processInbound({ phone: KEY, text: "Hola", ts: TS, wamid: "wamid.OFF1" });
+    expect(f).not.toHaveBeenCalled();
+    expect(msgsAt(KEY).map((m) => m.direction)).toEqual(["in"]);
+    expect(convAt(KEY).autoAckSent).toBe(true);
+    fake.state.tree.settings.whatsapp.autoReply = true;
+    await processInbound({ phone: KEY, text: "¿Hola?", ts: TS + 60000, wamid: "wamid.OFF2" });
+    expect(f).not.toHaveBeenCalled();
+    expect(acks()).toEqual([]);
+  });
+
+  it("a setting that cannot be read sends nothing and hands the claim back, like a failed send", async () => {
+    goLive();
+    const f = graphFetch(); vi.stubGlobal("fetch", f);
+    const realRef = fake.db.ref;
+    fake.db.ref = (path) => {
+      const r = realRef(path);
+      if (path === "settings/whatsapp") r.get = async () => { throw new Error("read refused"); };
+      return r;
+    };
+    try {
+      await processInbound({ phone: KEY, text: "Hola", ts: TS, wamid: "wamid.ERR" });
+    } finally {
+      fake.db.ref = realRef;
+    }
+    expect(f).not.toHaveBeenCalled();
+    expect(msgsAt(KEY).map((m) => m.direction)).toEqual(["in"]);
+    expect(convAt(KEY).autoAckSent).toBe(false);
+  });
+
+  it("is read only for a first message: a later one costs no extra read", async () => {
+    fake.state.tree = { conversations: { [KEY]: { phoneKey: KEY, autoAckSent: true } } };
+    const realRef = fake.db.ref;
+    const paths = [];
+    fake.db.ref = (path) => { paths.push(path); return realRef(path); };
+    try {
+      await processInbound({ phone: KEY, text: "gracias", ts: TS, wamid: "wamid.LATER" });
+    } finally {
+      fake.db.ref = realRef;
+    }
+    expect(paths).not.toContain("settings/whatsapp");
+  });
+});
+
 describe("v18.12.0 — a simulator conversation never reaches Meta, whatever WA_SEND_MODE says", () => {
   beforeEach(() => vi.stubEnv("WA_SIM_ENABLED", "1"));
 

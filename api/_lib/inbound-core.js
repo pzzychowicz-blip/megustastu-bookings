@@ -29,7 +29,7 @@
 
 import { normalizePhone, isPhoneKey, pendingDraftOf, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet, isSimConversation } from "../../src/lib/whatsapp.js";
 import { simMediaMessage } from "../../src/lib/wa-mock-media.js";
-import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours, readOccasionTags } from "./rtdb.js";
+import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours, readOccasionTags, readWaAutoReply } from "./rtdb.js";
 import { sendText } from "./meta.js";
 import { parseMessage, mockParse } from "./gemini.js";
 
@@ -198,12 +198,21 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
   // flag said it had been sent. A send that succeeded keeps the claim even if
   // storing the ack's bubble then fails: the customer has the message, and a
   // second one would be the duplicate the claim exists to prevent.
+  //
+  // v18.12.0: the switch (Settings → WhatsApp, `readWaAutoReply`). OFF keeps
+  // the claim and sends nothing, so this number never gets one, even after the
+  // switch goes back on: a "thanks for your message" days into a conversation
+  // is worse than none (Patryk, 2026-10-26). A read that FAILS sends nothing
+  // and hands the claim back, like a failed send. Read only here, for a first
+  // message, so an ordinary inbound costs no extra read.
   if (firstEver) {
     const ackText = AUTO_ACK_TEXT[lang] || AUTO_ACK_TEXT.es;
     const simulated = sim === true || isSimConversation(existing);
     let sent = null;
     try {
-      sent = await sendText(phoneKey, ackText, { simulated });
+      const on = await readWaAutoReply();
+      if (on === null) throw new Error("could not read the auto-reply setting");
+      if (on) sent = await sendText(phoneKey, ackText, { simulated });
     } catch (e) {
       // Auto-ack failure must never fail the inbound — log, release, move on.
       console.warn("[wa-inbound] auto-ack send failed: " + e.message);

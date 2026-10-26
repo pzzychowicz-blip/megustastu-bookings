@@ -37745,3 +37745,37 @@ condition. Mutation-checked: dropping `simulated` from `postMessage` fails three
 
 **Files:** `api/_lib/{meta,inbound-core,sim-events}.js` · `api/{wa-send,wa-media}.js` ·
 `src/lib/whatsapp.js` · `api/CLAUDE.md`.
+
+### Phase 2 — the auto-reply switch
+
+With Patryk's own number connected, anyone who writes to it for the first time would
+get the restaurant's "Thanks for your message!". Decided on 2026-10-26: a switch in
+Settings → WhatsApp, on every deployment, default ON, with the auto-archive toggle's
+permission (`settingsWrite`); and OFF means that number never gets one, even after the
+switch goes back on (a "thanks for your message" days into a conversation is worse than
+none).
+
+- **Stored:** `settings/whatsapp.autoReply`, read through `waAutoReplyOn`
+  (`lib/whatsapp.js`, the default-on idiom: only `false` is off) by `useWaSettings`'
+  `sanitizeWa` and by the server's `readWaAutoReply` (`api/_lib/rtdb.js`). A new
+  whitelist key, so **`SCHEMA` 4 → 5**: a device on v18.11.0 saving the WhatsApp settings
+  would drop the key and turn the auto-reply back on.
+- **The server:** `processInbound` reads it only for a first message (an ordinary
+  inbound costs no extra read). Off: the `autoAckSent` claim stays, nothing is sent. A
+  read that fails sends nothing and releases the claim, so the next message asks again.
+- **The screen:** a second `Collapsible`, "Auto-reply", under "Inbox" in Settings →
+  WhatsApp, with one `Toggle` named by its heading ("Reply to a new customer's first
+  message") and a line saying what it sends and that a number missed while off is not
+  caught up.
+
+**Tests:** four in `tests/api-handlers.test.js` ("the auto-reply switch": the default,
+off and back on, a failed read, no read for a later message). Mutation-checked: sending
+regardless of the switch fails the off test. `tests/schema.test.js` pins 5 and
+`sanitizeWa`'s new print.
+
+**Deploy:** refresh every device after the merge (the `SCHEMA` raise). No rules change:
+`settings/whatsapp` already has its grant and rev pair.
+
+**Files:** `api/_lib/{inbound-core,rtdb}.js` · `src/lib/{whatsapp,schema}.js` ·
+`src/hooks/{useWaSettings,useWhatsApp}.js` · `src/components/Settings.jsx` ·
+`GLOSSARY.md` · `api/CLAUDE.md` · `src/hooks/CLAUDE.md`.

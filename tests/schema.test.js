@@ -154,7 +154,8 @@ function sanitisers() {
 const PINNED = {
   // 3: v18.8.0, `settings/admin.waRetentionDays` (sanitizeAdminSettings).
   // 4: v18.10.0, `settings/operatingHours.exceptions` (sanitizeExceptions).
-  schema: 4,
+  // 5: v18.12.0, `settings/whatsapp.autoReply` (sanitizeWa).
+  schema: 5,
   prints: {
       "hooks/useBookingDefaults.js:sanitizeTiers": "8d1b9808c9",
       "hooks/useBookingDefaults.js:sanitizeBookingDefaults": "7a6d45c5c4",
@@ -170,7 +171,7 @@ const PINNED = {
       "hooks/useRoles.js:sanitizeAdminSettings": "42a2f8f352",
       "hooks/useUserPrefs.js:sanitizeUserPrefs": "fb820d1b7b",
       "hooks/useVoucherDefaults.js:sanitizeVoucherDefaults": "7abe4b008f",
-      "hooks/useWaSettings.js:sanitizeWa": "2cbe5d8113",
+      "hooks/useWaSettings.js:sanitizeWa": "1964c16116",
       "lib/booking-fields.js:sanitizeByTable": "1b03b3eeed",
       "lib/booking-fields.js:sanitize": "13df4f0302",
       "lib/booking-logic.js:sanitizeAll": "0f5dccd886",

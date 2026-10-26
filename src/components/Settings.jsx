@@ -72,6 +72,7 @@ import { SETTINGS_TABS, visibleTabs } from "./SettingsChrome";
 import { AdminTabContent } from "./AdminSettings";
 import { hourLabel } from "../lib/time-grid";
 import { splitExceptions, rangeLabel, specialHoursLabel } from "../lib/special-days";
+import { waAutoReplyOn } from "../lib/whatsapp";
 import { CloseIcon, DownloadIcon, TrashIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
@@ -1234,6 +1235,8 @@ function WhatsAppTabContent({ waSettings, onSaveWaSettings, isAdmin, waLink, can
   // Default-ON tri-state read, resolved ONCE: the toggle's state and the value
   // it writes are then obviously each other's inverse.
   const autoArchive = s.autoArchiveOnComplete !== false;
+  // v18.12.0: the auto-reply's switch, read through the server's own question.
+  const autoReply = waAutoReplyOn(s);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {allowed("settingsWrite") ? <Collapsible
@@ -1258,6 +1261,28 @@ function WhatsAppTabContent({ waSettings, onSaveWaSettings, isAdmin, waLink, can
             label="Archive when the booking is completed"
             on={autoArchive}
             onClick={function () { onSaveWaSettings({ autoArchiveOnComplete: !autoArchive }); }} />
+        </div>
+      </Collapsible> : null}
+      {/* v18.12.0: the auto-reply's switch. Off, a new customer's first
+          message gets no reply, and that number never gets one, even if the
+          switch goes back on (api/_lib/inbound-core.js). */}
+      {allowed("settingsWrite") ? <Collapsible
+        title="Auto-reply"
+        subtitle="What a new customer gets on their first message. Shared across all devices."
+        summary={autoReply ? "On" : "Off"}
+        defaultOpen
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, paddingTop: 4 }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Reply to a new customer&rsquo;s first message</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
+              Sends &ldquo;Thanks for your message! We&rsquo;ll get back to you shortly.&rdquo; once, in the customer&rsquo;s language. Someone who writes for the first time while this is off gets no reply, and won&rsquo;t get one later.
+            </div>
+          </div>
+          <Toggle
+            label="Reply to a new customer’s first message"
+            on={autoReply}
+            onClick={function () { onSaveWaSettings({ autoReply: !autoReply }); }} />
         </div>
       </Collapsible> : null}
       {allowed("waCostView") ? <WaCostSection /> : null}

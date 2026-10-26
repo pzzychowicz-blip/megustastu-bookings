@@ -261,6 +261,15 @@ export const AUTO_ACK_TEXT = {
   es: "¡Gracias por su mensaje! Le contestaremos en breve.",
 };
 
+// v18.12.0: the auto-reply's switch, `settings/whatsapp.autoReply` (Settings →
+// WhatsApp). Default ON, by the default-on idiom: only an explicit `false`
+// turns it off, so an absent node or key reads as on and a deployment that
+// never opened the setting behaves as before. One question, asked by the
+// settings hook and by the webhook (`readWaAutoReply`, api/_lib/rtdb.js).
+export function waAutoReplyOn(settings) {
+  return !(settings && typeof settings === "object" && settings.autoReply === false);
+}
+
 // v18.12.0: is this conversation the sandbox simulator's? Its phone is made up,
 // so nothing sent to it may reach Meta, whatever WA_SEND_MODE says (`simulated`,
 // api/_lib/meta.js). Two marks, one meaning: the server stamps `sim` where the

@@ -238,6 +238,11 @@ a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
   `wa-media`'s POST pass `{ simulated }` to `_lib/meta.js`, whose `postMessage` and
   `uploadMedia` then act as mock mode does, whatever `WA_SEND_MODE` says. An existing
   conversation is never stamped, so a real chat never becomes a simulated one.
+- **The auto-reply has a switch (v18.12.0)**, Settings → WhatsApp → Auto-reply
+  (`settings/whatsapp.autoReply`, default on). `processInbound` asks `readWaAutoReply`
+  (`_lib/rtdb.js`, through the client's own `waAutoReplyOn`) only for a first message.
+  Off keeps the `autoAckSent` claim and sends nothing, so that number never gets one; a
+  read that fails sends nothing and hands the claim back, like a failed send.
 
 **Tests (v18.4.5).** `tests/api-handlers.test.js` RUNS `wa-send`, `wa-recheck`, `wa-config`,
 `_lib/inbound-core.js` and `_lib/meta.js`: it replaces the three `firebase-admin` modules
