@@ -142,3 +142,15 @@ describe("simulateInbound in client mode — the sim mark", () => {
     expect(c._waSim).toBeUndefined();
   });
 });
+
+describe("simMarkPatch — the one rule for the `sim` mark", async () => {
+  const { simMarkPatch } = await import("../src/lib/whatsapp.js");
+  it("creates with the mark only for the simulator, clears it only for a real writer, else nothing", () => {
+    expect(simMarkPatch(null, true)).toEqual({ sim: true });
+    expect(simMarkPatch(null, false)).toEqual({});
+    expect(simMarkPatch({ sim: true }, false)).toEqual({ sim: null });
+    expect(simMarkPatch({ sim: true }, true)).toEqual({});
+    expect(simMarkPatch({}, true)).toEqual({});
+    expect(simMarkPatch({}, false)).toEqual({});
+  });
+});

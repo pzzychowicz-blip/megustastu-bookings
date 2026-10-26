@@ -281,6 +281,25 @@ export function isSimConversation(conv) {
   return !!(conv && conv.sim === true);
 }
 
+// simMarkPatch(existing, sim) — the `sim` field a write to a conversation
+// carries (v18.12.0 /code-review), asked by every writer that creates or
+// touches one from a webhook or the simulator: `processInbound`, and the
+// phone-echo and history patches (`echoConvPatch`, `historyConvPatch`,
+// lib/wa-coexist.js). It is decided INSIDE the write, so no conversation the
+// simulator creates is ever stored without it (a stamp written afterwards
+// could fail and leave it unmarked for good). `sim` is true when the
+// simulator is the writer. Two answers, else nothing:
+//   · the simulator creates a conversation → `{ sim: true }`;
+//   · a REAL webhook touches one marked `sim` → `{ sim: null }`, which deletes
+//     the mark: somebody really is writing from that number (a chat simulated
+//     from a real phone, which that person then writes to), so replies to it
+//     must reach them again.
+export function simMarkPatch(existing, sim) {
+  if (!existing) return sim === true ? { sim: true } : {};
+  if (existing.sim === true && sim !== true) return { sim: null };
+  return {};
+}
+
 // ── v18.8.0 phase 8: "Suggest these" ────────────────────────────────────────
 // The reply the draft card offers when a request does not fit (or lands on the
 // kitchen's busiest quarter): written in code, put into the reply box and

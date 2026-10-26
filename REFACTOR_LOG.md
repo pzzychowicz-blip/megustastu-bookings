@@ -37797,3 +37797,15 @@ Nine findings, all confirmed by reading the code path; none disproved, none defe
   `sim` only in the record it CREATES (`wa-sim.js`), never in the per-message patch.
   Simulator chats from before this version carry neither mark the guard reads, which the
   go-live plan's required Clear conversations (R-17) covers.
+- **The mark is decided inside the write that creates the conversation (four findings, one
+  fix).** It was a stamp written after the sim events' handlers (`stampCreated`), which a
+  failed write or a throwing handler left off for good (the next run read the chat as
+  existing), with an unmarked moment in between and 2×N extra reads; the client-mode
+  history and echo marked nothing at all; and a chat simulated from a real phone stayed
+  mock-only after that person really wrote to it. `simMarkPatch(existing, sim)`
+  (`lib/whatsapp.js`) is now the one rule, asked by `processInbound` and by `echoConvPatch`
+  / `historyConvPatch` (`lib/wa-coexist.js`): the simulator creating a chat writes
+  `sim: true`, a REAL webhook (an inbound, a phone echo, a history import) into a marked
+  chat deletes the mark. `handleEchoes` and `handleHistory` take `ctx.sim`, which the sim
+  events and the client-mode simulator pass. Mutation-checked: never clearing the mark
+  fails two tests.

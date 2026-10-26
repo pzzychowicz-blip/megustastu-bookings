@@ -27,7 +27,7 @@
 // message id is the sanitized wamid, so a redelivery targets the same RTDB
 // path; we additionally skip the whole upsert when the message already exists.
 
-import { normalizePhone, isPhoneKey, pendingDraftOf, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet, isSimConversation } from "../../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey, pendingDraftOf, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet, isSimConversation, simMarkPatch } from "../../src/lib/whatsapp.js";
 import { simMediaMessage } from "../../src/lib/wa-mock-media.js";
 import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours, readOccasionTags, readWaAutoReply } from "./rtdb.js";
 import { sendText } from "./meta.js";
@@ -156,9 +156,12 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
     autoAckSent: true,
   };
   if (!muted) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on inbound
+  // v18.12.0: the simulator's mark, in this same write (simMarkPatch): set on a
+  // conversation the simulator creates, cleared when a real message arrives in
+  // one it marked. A real chat never becomes a simulated one.
+  Object.assign(patch, simMarkPatch(existing, sim));
   if (!existing) {
     patch.createdAt = ts;
-    if (sim === true) patch.sim = true; // stamped at creation only: a real chat never becomes one
     patch.acceptedBookingId = null;
     patch.draftStatus = null;
     patch.draftData = null;

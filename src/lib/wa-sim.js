@@ -229,7 +229,7 @@ function clientCoexist(event, p, ctx) {
       if (convOf(ctx, key)) { skipped++; return; }
       const plan = threadPlan(thread, [], simContent, function (id) { return id; }, now);
       if (!plan || plan.newest === -Infinity) return;
-      writeConv(ctx, plan.phoneKey, null, historyConvPatch(null, { phoneKey: plan.phoneKey, oldest: plan.oldest, newest: plan.newest, snippet: snippet(plan.line), now }));
+      writeConv(ctx, plan.phoneKey, null, historyConvPatch(null, { phoneKey: plan.phoneKey, oldest: plan.oldest, newest: plan.newest, snippet: snippet(plan.line), now, sim: true }));
       plan.records.forEach(function (r) { ctx.appendMessage(plan.phoneKey, r); });
       stored += plan.records.length;
       chats++;
@@ -253,7 +253,7 @@ function clientCoexist(event, p, ctx) {
     if (!text) throw new Error("Type the reply first.");
     const m = simEchoValue({ phone: phoneKey, text, now }).message_echoes[0];
     const content = simContent(m);
-    writeConv(ctx, phoneKey, conv, echoConvPatch(conv, { phoneKey, phone: phoneKey, ts: now, snippet: snippet(content.snippet) }));
+    writeConv(ctx, phoneKey, conv, echoConvPatch(conv, { phoneKey, phone: phoneKey, ts: now, snippet: snippet(content.snippet), sim: true }));
     ctx.appendMessage(phoneKey, echoRecord(m.id, m.id, content, now));
     return {};
   }

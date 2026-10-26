@@ -3026,6 +3026,34 @@ describe("v18.12.0 — a simulator conversation never reaches Meta, whatever WA_
     expect(m.media.mediaId).toMatch(/^MOCK\.image\./);
   });
 
+  // /code-review: decided inside the write that creates the conversation, so
+  // there is no unmarked moment and no second write that could fail.
+  it("the mark is in the write that creates the conversation, never a write after it", async () => {
+    await injectSimInbound({ phone: KEY, text: "hola" }, () => {});
+    const created = fake.state.writes.find((w) => w.op === "update" && w.value && w.value.createdAt !== undefined);
+    expect(created.value.sim).toBe(true);
+    const ev = (event, extra) => call(simInboundHandler, { token: "staff", body: Object.assign({ event }, extra || {}) });
+    fake.state.writes = [];
+    await ev("echo", { phone: "+34600999777", text: "Hola" });
+    const echoConv = fake.state.writes.find((w) => w.op === "update" && w.value && w.value.createdAt !== undefined);
+    expect(echoConv.value.sim).toBe(true);
+    expect(fake.state.writes.filter((w) => w.value && w.value.sim === true).length).toBe(1);
+  });
+
+  it("a real message clears the mark: a chat simulated from a real phone that person then writes to", async () => {
+    goLive();
+    const f = graphFetch(); vi.stubGlobal("fetch", f);
+    fake.state.tree = { conversations: { [KEY]: openConv({ sim: true, autoAckSent: true }) } };
+    await processInbound({ phone: KEY, text: "Hola, soy yo", ts: Date.now(), wamid: "wamid.REALIN" });
+    expect("sim" in convAt(KEY)).toBe(false);
+    expect((await call(sendHandler, { token: "staff", body: { phoneKey: KEY, text: "hi" } })).body.status).toBe("sent");
+    // And a reply typed on the phone (a real echo) clears it too.
+    fake.state.tree.conversations[KEY].sim = true;
+    const { handleEchoes } = await import("../api/_lib/coexist-core.js");
+    await handleEchoes(simEchoValue({ phone: KEY, text: "from the phone", now: Date.now() }), freshResults());
+    expect("sim" in convAt(KEY)).toBe(false);
+  });
+
   it("the simulator's events stamp what they CREATE (the history's two chats, an echo's new chat) and leave an existing chat alone", async () => {
     const ev = (event, extra) => call(simInboundHandler, { token: "staff", body: Object.assign({ event }, extra || {}) });
     expect((await ev("history")).statusCode).toBe(200);

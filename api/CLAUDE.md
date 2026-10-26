@@ -231,14 +231,17 @@ a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
   DEV database is where the rehearsal's real connection lives.
 - **A simulator conversation never reaches Meta (v18.12.0).** Its phone is made up, and
   once the sandbox sends from a real number (the rehearsal) a reply to it would reach
-  whoever owns that number. A conversation the simulator CREATES is stamped `sim: true`
-  (`injectSimInbound`, and `stampCreated` in `_lib/sim-events.js` for the history's two
-  chats and an echo's new one), and the client-mode simulator writes the same `sim` when it
+  whoever owns that number. A conversation the simulator CREATES is marked `sim: true` IN
+  THE WRITE THAT CREATES IT (`simMarkPatch`, `src/lib/whatsapp.js`, asked by
+  `processInbound` and by `echoConvPatch` / `historyConvPatch`; `injectSimInbound` passes
+  `sim`, and the sim events pass `{ sim: true }` to `handleEchoes` / `handleHistory`), and a
+  REAL webhook message into a marked chat clears it, since somebody really writes from that
+  number. The client-mode simulator writes the same `sim` when it
   creates one (`isSimConversation`, `src/lib/whatsapp.js`, reads `sim` alone: the client
   simulator's `_waSim` was written on every simulated inbound, a real chat included). The auto-reply, `wa-send` and
   `wa-media`'s POST pass `{ simulated }` to `_lib/meta.js`, whose `postMessage` and
   `uploadMedia` then act as mock mode does, whatever `WA_SEND_MODE` says. An existing
-  conversation is never stamped, so a real chat never becomes a simulated one.
+  conversation is never marked, so a real chat never becomes a simulated one.
 - **The auto-reply has a switch (v18.12.0)**, Settings → WhatsApp → Auto-reply
   (`settings/whatsapp.autoReply`, default on). `processInbound` asks `readWaAutoReply`
   (`_lib/rtdb.js`, through the client's own `waAutoReplyOn`) only for a first message.

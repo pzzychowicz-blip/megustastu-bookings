@@ -25,34 +25,21 @@
 // gates (simEnabled → staff), and the endpoint is not deployed to production.
 
 import { env } from "./env.js";
-import { readWaLink, updateWaLink, readMessageNode, removeSimWaLink, getConversation, upsertConversation } from "./rtdb.js";
+import { readWaLink, updateWaLink, readMessageNode, removeSimWaLink } from "./rtdb.js";
 import { handleStateSync, handleEchoes, handleHistory, handleAccountUpdate, applyMessageChange, freshResults } from "./coexist-core.js";
 import { normalizePhone, isPhoneKey } from "../../src/lib/whatsapp.js";
-import { webhookPhoneKey } from "../../src/lib/wa-coexist.js";
 import {
   simEventRefusal, simContactValue, simEchoValue, simChangeMessage, lastCustomerMessage,
   simHistoryValue, simHistoryMediaValue, simAccountValue, simLinkPatch, SIM_WABA_ID,
-  SIM_HISTORY_RECENT, SIM_HISTORY_OLD,
 } from "../../src/lib/wa-sim-coexist.js";
 
 const NEEDS_PHONE = ["contact", "echo", "edit", "revoke"];
 
-// v18.12.0: a conversation an event CREATES is the simulator's, so it is
-// stamped `sim: true` and nothing sent to it reaches Meta (isSimConversation,
-// src/lib/whatsapp.js). The history's two chats are made-up numbers; an echo
-// to a phone with no conversation makes one. A conversation that already
-// existed is left as it was: a real chat never becomes a simulated one.
-async function stampCreated(phoneKeys, run) {
-  const before = await Promise.all(phoneKeys.map((k) => getConversation(k)));
-  const out = await run();
-  for (let i = 0; i < phoneKeys.length; i++) {
-    if (before[i]) continue;
-    if (await getConversation(phoneKeys[i])) await upsertConversation(phoneKeys[i], { sim: true });
-  }
-  return out;
-}
-// Keyed as the history handler keys them (webhookPhoneKey: the digits with a "+").
-const SIM_HISTORY_KEYS = [webhookPhoneKey(SIM_HISTORY_RECENT), webhookPhoneKey(SIM_HISTORY_OLD)];
+// v18.12.0: the history and echo events pass `{ sim: true }`, so a conversation
+// they CREATE is marked `sim` in the same write (`simMarkPatch`,
+// src/lib/whatsapp.js) and nothing sent to it reaches Meta. The history's two
+// chats are made-up numbers. An existing conversation is left as it was.
+const SIM = { sim: true };
 
 // runSimEvent(body, decoded, now) → { status, data }: what the endpoint
 // answers. `decoded` is the staff token (its email names who connected).
@@ -76,7 +63,7 @@ export async function runSimEvent(body, decoded, now = Date.now()) {
   if (event === "echo") {
     const text = typeof body.text === "string" ? body.text.trim() : "";
     if (!text) return { status: 400, data: { error: "text is required for echo" } };
-    await stampCreated([phoneKey], () => handleEchoes(simEchoValue({ phone: phoneKey, text, now }), results, now));
+    await handleEchoes(simEchoValue({ phone: phoneKey, text, now }), results, now, SIM);
     return ok();
   }
   if (event === "edit" || event === "revoke") {
@@ -92,11 +79,11 @@ export async function runSimEvent(body, decoded, now = Date.now()) {
     return ok({ outcome: r });
   }
   if (event === "history") {
-    await stampCreated(SIM_HISTORY_KEYS, () => handleHistory(simHistoryValue(now), results, now));
+    await handleHistory(simHistoryValue(now), results, now, SIM);
     return ok();
   }
   if (event === "history-media") {
-    await stampCreated(SIM_HISTORY_KEYS, () => handleHistory(simHistoryMediaValue(now), results, now));
+    await handleHistory(simHistoryMediaValue(now), results, now, SIM);
     return ok();
   }
   if (event === "connect") {

@@ -150,6 +150,22 @@ describe("simulateCoexist in client mode", () => {
     expect(ctx.log[1]).toEqual(["contacts", { [KEY]: null }]);
   });
 
+  // v18.12.0 /code-review: client-mode history and echo created chats with no
+  // `sim` mark, so a reply to one from a backend-mode device reached Meta.
+  it("history and an echo to a new phone mark what they create `sim`; an existing chat is left unmarked", async () => {
+    const ctx = fakeCtx();
+    await simulateCoexist("history", {}, ctx);
+    const created = ctx.log.filter((e) => e[0] === "upsert").map((e) => e[2]);
+    expect(created.length).toBe(2);
+    expect(created.every((c) => c.sim === true)).toBe(true);
+    const echo = fakeCtx();
+    await simulateCoexist("echo", { phone: KEY, text: "hola" }, echo);
+    expect(echo.log[0][2].sim).toBe(true);
+    const real = fakeCtx({ conversations: [{ phoneKey: KEY, lastMessageAt: 1 }] });
+    await simulateCoexist("echo", { phone: KEY, text: "hola" }, real);
+    expect("sim" in real.log[0][2]).toBe(false);
+  });
+
   it("contact: a refused write is the panel's failure", async () => {
     const ctx = fakeCtx({ simSetContacts: vi.fn(async () => { throw new Error("PERMISSION_DENIED: Permission denied"); }) });
     await expect(simulateCoexist("contact", { phone: KEY, name: "Ana" }, ctx)).rejects.toThrow("PERMISSION_DENIED");
