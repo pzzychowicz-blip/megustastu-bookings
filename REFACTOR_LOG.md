@@ -37826,3 +37826,8 @@ Nine findings, all confirmed by reading the code path; none disproved, none defe
   before any network call, so it reaches the caller's own send-failed path. Kept as an
   explicit argument rather than a conversation read inside the send layer: `meta.js` stays
   free of the database, and a test sends without one.
+- **Settings typed out the auto-reply's English text.** The Auto-reply section quoted
+  "Thanks for your message! We'll get back to you shortly." by hand; it reads
+  `AUTO_ACK_TEXT.en` now, so an edit to the message reaches the screen.
+
+**Gate after the fixes:** main entry 430.01 kB, 125.63 kB gz (125.27 before v18.12.0) · 3730 tests · 0 errors and 63 warnings · style OK.

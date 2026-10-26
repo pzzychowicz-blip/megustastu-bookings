@@ -72,7 +72,7 @@ import { SETTINGS_TABS, visibleTabs } from "./SettingsChrome";
 import { AdminTabContent } from "./AdminSettings";
 import { hourLabel } from "../lib/time-grid";
 import { splitExceptions, rangeLabel, specialHoursLabel } from "../lib/special-days";
-import { waAutoReplyOn } from "../lib/whatsapp";
+import { waAutoReplyOn, AUTO_ACK_TEXT } from "../lib/whatsapp";
 import { CloseIcon, DownloadIcon, TrashIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
@@ -1276,7 +1276,8 @@ function WhatsAppTabContent({ waSettings, onSaveWaSettings, isAdmin, waLink, can
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Reply to a new customer&rsquo;s first message</div>
             <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
-              Sends &ldquo;Thanks for your message! We&rsquo;ll get back to you shortly.&rdquo; once, in the customer&rsquo;s language. Someone who writes for the first time while this is off gets no reply, and won&rsquo;t get one later.
+              {/* The words are AUTO_ACK_TEXT's (lib/whatsapp.js), never a typed copy. */}
+              Sends &ldquo;{AUTO_ACK_TEXT.en}&rdquo; once, in the customer&rsquo;s language. Someone who writes for the first time while this is off gets no reply, and won&rsquo;t get one later.
             </div>
           </div>
           <Toggle
