@@ -154,3 +154,20 @@ describe("simMarkPatch — the one rule for the `sim` mark", async () => {
     expect(simMarkPatch({}, false)).toEqual({});
   });
 });
+
+// v18.12.0 /code-review: client mode asks the auto-reply's switch, as the server does.
+describe("simulateInbound in client mode — the auto-reply switch", () => {
+  beforeEach(() => { state.on = false; });
+  const run = (waSettings) => {
+    const conv = [], msgs = [];
+    simulateInbound({ phone: "+34600111222", text: "hola" }, { conversations: [], waSettings, upsertConversation: (k, c) => conv.push(c), appendMessage: (k, m) => msgs.push(m) });
+    return { conv: conv[0], acks: msgs.filter((m) => m.isAutoAck).length };
+  };
+  it("on (and absent, the default) adds the reply; off adds none and still keeps the claim", () => {
+    expect(run(undefined).acks).toBe(1);
+    expect(run({ autoReply: true }).acks).toBe(1);
+    const off = run({ autoReply: false });
+    expect(off.acks).toBe(0);
+    expect(off.conv.autoAckSent).toBe(true);
+  });
+});

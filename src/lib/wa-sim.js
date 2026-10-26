@@ -29,7 +29,7 @@
 // phoneKeyOverride params are ignored on that path — the server decides, like
 // production will (see src/lib/wa-backend.js).
 
-import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, mergeDraft, pendingDraftOf, clampConfidence, WA_MAX_TEXT_LEN, sanitizeParse, snippet } from "./whatsapp";
+import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, mergeDraft, pendingDraftOf, clampConfidence, WA_MAX_TEXT_LEN, sanitizeParse, snippet, waAutoReplyOn } from "./whatsapp";
 import { backendEnabled } from "./wa-backend";
 import { countLabel } from "./booking-logic";
 import { backendInbound, postSimEvent } from "./wa-backend-sim";
@@ -91,7 +91,10 @@ export function simulateInbound(params, ctx) {
   const firstEver = !muted && (!existing || !existing.autoAckSent);
 
   const inboundMsg = { id: genMsgId(), direction: "in", text, ts, status: "delivered", isAutoAck: false, channel: "whatsapp" };
-  const autoAckMsg = firstEver
+  // v18.12.0 /code-review: the auto-reply's switch, as the server asks it
+  // (processInbound): off, no reply, and the claim (`autoAckSent`) is kept all
+  // the same, so the number never gets one. `ctx.waSettings` is App's.
+  const autoAckMsg = firstEver && waAutoReplyOn(ctx.waSettings)
     ? { id: genMsgId(), direction: "out", text: AUTO_ACK_TEXT[lang] || AUTO_ACK_TEXT.es, ts: ts + 1500, status: "delivered", isAutoAck: true, channel: "whatsapp" }
     : null;
 

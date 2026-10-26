@@ -37814,3 +37814,8 @@ Nine findings, all confirmed by reading the code path; none disproved, none defe
   to a simulator chat one of those. It now serves the bundled sample when the conversation
   is the simulator's (one read, on that path only); a real conversation's `MOCK.` id is
   still 410, and production has no simulator conversations.
+- **The client-mode simulator ignored the switch.** `simulateInbound` added the auto-reply
+  bubble on a first message whatever `autoReply` said, so the sandbox showed what the real
+  webhook no longer does. It asks `waAutoReplyOn(ctx.waSettings)` now, keeping the claim
+  when off as the server does, and App passes `waSettings` in both of the simulator's
+  contexts (the console helpers' and the panel's).
