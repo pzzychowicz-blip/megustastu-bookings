@@ -28,7 +28,8 @@ session and keeping it in sync.
   2026-10-26): Patryk's own Spanish number, already on the Business app**, not a
   disposable SIM. Before connecting it: v18.12.0 merged (simulator chats never send for
   real; Settings → WhatsApp → Auto-reply turned OFF on the sandbox, so his contacts get no
-  greeting), `WA_LLM_MODE=mock` on the sandbox (his contacts' messages never reach
+  greeting), the simulator's Clear conversations (the chats from before v18.12.0 carry no
+  `sim` mark and would still send live), `WA_LLM_MODE=mock` on the sandbox (his contacts' messages never reach
   Gemini), and the Business app's greeting message off. Then the go-live page from R-5
   (the gate) on. **After R-11's verdict:** disconnect the number (R-10) and wipe the
   imported WhatsApp data from DEV (conversations, messages, `waContacts`), since it is

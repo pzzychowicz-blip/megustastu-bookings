@@ -37722,8 +37722,10 @@ reach Gemini), and wipe the imported WhatsApp data from DEV after the verdict (R
 
 The plan's R-15 warned that once the sandbox sends from a real number, a reply or an
 auto-reply to a simulator chat goes out for real, to whoever owns the made-up number.
-The fix it named (`fix/v18.10.1-sim-sends-stay-simulated`) is not on `main` or on the
-remote, and nothing in `api/` told a simulator chat apart, so this phase builds it
+The fix it named (`fix/v18.10.1-sim-sends-stay-simulated`, `d584dde4`) was committed on
+2026-10-18 in a local session on Patryk's Mac and never pushed, so nothing in `api/` on
+`main` told a simulator chat apart. This phase builds it; on 2026-10-26 Patryk chose to
+keep this version and delete the v18.10.1 branch, which `main` has since passed
 (Patryk's pick of three: mark the chats, rather than an ops-only wipe or refusing the
 simulator in live mode).
 
@@ -37737,7 +37739,11 @@ simulator in live mode).
   that sends and the one that uploads) take `simulated` and then act as mock mode,
   whatever `WA_SEND_MODE` says. The auto-reply, `wa-send` and `wa-media`'s POST pass it.
 - **What it does not cover.** A sim photo sent this way gets a `MOCK.` id, which a live
-  deployment answers 410 (as it already did for the simulator's customer photos).
+  deployment answers 410 (as it already did for the simulator's customer photos). And
+  **a simulator chat created before this version carries no mark**, so it still sends
+  live: the go-live page's R-17 makes the simulator's Clear conversations a REQUIRED
+  step before the gate (Patryk, 2026-10-26, over a code check that would read a thread's
+  messages before every send).
 
 **Tests:** five in `tests/api-handlers.test.js` ("a simulator conversation never reaches
 Meta"); `tests/wa-media.test.js`'s pin on `uploadMedia`'s mock line follows the new
