@@ -125,7 +125,7 @@ import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inboun
 import { numberIsOurs, makeNumberGuard, freshResults, measuredAfter, beganAfter, chunkKeys } from "../api/_lib/coexist-core.js";
 import { readJsonBody, bearerToken } from "../api/_lib/request.js";
 import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyRequested, historyStatus, WA_IMPORT_ARCHIVE_MS, disconnectSentence } from "../src/lib/wa-coexist.js";
-import { verifySignature, sendText } from "../api/_lib/meta.js";
+import { verifySignature, sendText, sendMedia, uploadMedia } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
 import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE, replyUnarchives } from "../src/lib/whatsapp.js";
 import { simMediaMessage } from "../src/lib/wa-mock-media.js";
@@ -1058,18 +1058,19 @@ describe("verifySignature", () => {
   });
 });
 
+const REAL = { simulated: false };
 describe("sendText", () => {
   it("mock mode touches no network and reports delivered", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const r = await sendText(KEY, "hi");
+    const r = await sendText(KEY, "hi", REAL);
     expect(r.status).toBe("delivered");
     expect(r.wamid).toMatch(/^wamid\.MOCK\./);
     expect(fetchMock).not.toHaveBeenCalled();
   });
   it("live mode without its two settings throws rather than pretending", async () => {
     vi.stubEnv("WA_SEND_MODE", "live");
-    await expect(sendText(KEY, "hi")).rejects.toThrow(/META_WA_TOKEN/);
+    await expect(sendText(KEY, "hi", REAL)).rejects.toThrow(/META_WA_TOKEN/);
   });
   it("live mode posts a text message to the number's endpoint, the recipient without its plus", async () => {
     vi.stubEnv("WA_SEND_MODE", "live");
@@ -1077,7 +1078,7 @@ describe("sendText", () => {
     vi.stubEnv("META_PHONE_NUMBER_ID", "555");
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ messages: [{ id: "wamid.X" }] }) }));
     vi.stubGlobal("fetch", fetchMock);
-    expect(await sendText(KEY, "hola")).toEqual({ wamid: "wamid.X", status: "sent" });
+    expect(await sendText(KEY, "hola", REAL)).toEqual({ wamid: "wamid.X", status: "sent" });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toMatch(/^https:\/\/graph\.facebook\.com\/v\d+\.\d+\/555\/messages$/);
     expect(init.headers.Authorization).toBe("Bearer tok");
@@ -1088,9 +1089,21 @@ describe("sendText", () => {
     vi.stubEnv("META_WA_TOKEN", "tok");
     vi.stubEnv("META_PHONE_NUMBER_ID", "555");
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 401, json: async () => ({ error: { message: "Invalid OAuth access token" } }) })));
-    await expect(sendText(KEY, "hi")).rejects.toThrow("Invalid OAuth access token");
+    await expect(sendText(KEY, "hi", REAL)).rejects.toThrow("Invalid OAuth access token");
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500, json: async () => { throw new Error("not json"); } })));
-    await expect(sendText(KEY, "hi")).rejects.toThrow("Graph API error 500");
+    await expect(sendText(KEY, "hi", REAL)).rejects.toThrow("Graph API error 500");
+  });
+  // v18.12.0 /code-review: a send that does not say whether its conversation is
+  // the simulator's is refused, so a new send path cannot forget it silently.
+  it("refuses a send or an upload that does not say whether the chat is the simulator's, before any network", async () => {
+    vi.stubEnv("WA_SEND_MODE", "live");
+    const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+    for (const opts of [undefined, {}, { simulated: "yes" }, { simulated: 1 }]) {
+      await expect(sendText(KEY, "hi", opts)).rejects.toThrow(TypeError);
+      await expect(sendMedia(KEY, { kind: "image", mediaId: "123" }, opts)).rejects.toThrow(TypeError);
+      await expect(uploadMedia(Buffer.from("x"), "image/jpeg", "a.jpg", "image", opts)).rejects.toThrow(TypeError);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

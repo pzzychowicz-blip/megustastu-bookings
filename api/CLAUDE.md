@@ -241,7 +241,9 @@ a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
   creates one (`isSimConversation`, `src/lib/whatsapp.js`, reads `sim` alone: the client
   simulator's `_waSim` was written on every simulated inbound, a real chat included). The auto-reply, `wa-send` and
   `wa-media`'s POST pass `{ simulated }` to `_lib/meta.js`, whose `postMessage` and
-  `uploadMedia` then act as mock mode does, whatever `WA_SEND_MODE` says. An existing
+  `uploadMedia` then act as mock mode does, whatever `WA_SEND_MODE` says. The flag is
+  REQUIRED (`simulatedOf`): a send or upload without a boolean `simulated` is refused, so a
+  new send path cannot forget it. An existing
   conversation is never marked, so a real chat never becomes a simulated one.
 - **The auto-reply has a switch (v18.12.0)**, Settings → WhatsApp → Auto-reply
   (`settings/whatsapp.autoReply`, default on). `processInbound` asks `readWaAutoReply`

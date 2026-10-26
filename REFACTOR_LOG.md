@@ -37819,3 +37819,10 @@ Nine findings, all confirmed by reading the code path; none disproved, none defe
   webhook no longer does. It asks `waAutoReplyOn(ctx.waSettings)` now, keeping the claim
   when off as the server does, and App passes `waSettings` in both of the simulator's
   contexts (the console helpers' and the panel's).
+- **The guard was opt-in.** A send path that forgot `{ simulated }` read as "not
+  simulated" and would have sent a simulator chat to Meta, with no test failing.
+  `simulatedOf(opts)` (`api/_lib/meta.js`) now REQUIRES a boolean in `sendText`,
+  `sendMedia` and `uploadMedia` and refuses anything else with a `TypeError`, rejected
+  before any network call, so it reaches the caller's own send-failed path. Kept as an
+  explicit argument rather than a conversation read inside the send layer: `meta.js` stays
+  free of the database, and a test sends without one.
