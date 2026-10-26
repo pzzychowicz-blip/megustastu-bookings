@@ -30,13 +30,24 @@ session and keeping it in sync.
   real; Settings → WhatsApp → Auto-reply turned OFF on the sandbox, so his contacts get no
   greeting), the simulator's Clear conversations (the chats from before v18.12.0 carry no
   `sim` mark and would still send live), `WA_LLM_MODE=mock` on the sandbox (his contacts' messages never reach
-  Gemini), and the Business app's greeting message off. Then the go-live page from R-5
-  (the gate) on. **After R-11's verdict:** disconnect the number (R-10) and wipe the
+  Gemini), and the Business app's greeting message off. All of that was done on
+  2026-10-26. **The gate (R-5) ran on 2026-10-26 and Meta refused the direct route**, in
+  Live and in Development mode alike: "Me Gustas Tú can't onboard customers right now",
+  shown before any screen about a WhatsApp account or a number, so the number was never
+  connected and nothing was imported. **The verdict (R-11): the Tech Provider route**
+  (Patryk). Business verification of the *Me Gustas Tu* portfolio first (waiting on the
+  owner's censal certificate), then Tech Provider onboarding and App Review for advanced
+  access to `whatsapp_business_messaging` and `whatsapp_business_management` on the
+  sandbox app, then the gate again; the go-live page's T1–T4 has the detail. R-17's
+  sandbox settings stay in place for that rerun. **After the rerun's verdict:** disconnect the number (R-10) and wipe the
   imported WhatsApp data from DEV (conversations, messages, `waContacts`), since it is
   six months of his real chats. **Findings the rehearsal owns:** the `extras` shape FB.login takes (Embedded Signup Builder,
   "Check a launch config"); whether `META_WA_TOKEN` may send and retry the syncs on the
-  converted account; history chunk sizes against Vercel's 4.5 MB request cap; whether the
-  direct route works without Tech Provider status; whether an echo ever names a message
+  converted account, which as a Tech Provider decides more than it did (Meta's coexistence
+  page says a Tech Provider uses business tokens exclusively, and `api/wa-onboard.js` uses
+  the signup's business token once and keeps none, so a refusal means keeping that token
+  in an environment variable for production); history chunk sizes against Vercel's 4.5 MB
+  request cap; whether an echo ever names a message
   MGT sent (if never, `handleEchoes` finds a phone reply by its key alone instead of
   reading the whole thread for each new one; if it can, the scan stays, or `providerMsgId`
   gets an index); and how long one history thread takes to import, which decides whether
