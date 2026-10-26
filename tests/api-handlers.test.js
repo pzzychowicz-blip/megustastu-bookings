@@ -3054,6 +3054,21 @@ describe("v18.12.0 — a simulator conversation never reaches Meta, whatever WA_
     expect("sim" in convAt(KEY)).toBe(false);
   });
 
+  // /code-review: the GET decided on the send mode alone, so on a live
+  // deployment every MOCK file of a sim conversation answered 410.
+  it("wa-media GET: a sim conversation's MOCK file opens on a live deployment; a real one's stays 410", async () => {
+    goLive();
+    vi.stubGlobal("fetch", vi.fn());
+    const msg = { id: "m1", direction: "out", text: "Photo", ts: Date.now(), media: { kind: "image", mediaId: "MOCK.image.ab1", mime: "image/jpeg" } };
+    fake.state.tree = { conversations: { [KEY]: openConv({ sim: true }) }, messages: { [KEY]: { m1: msg } } };
+    const ok = await mediaCall({ query: { phoneKey: KEY, msgId: "m1" } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.bytes.length).toBeGreaterThan(0);
+    fake.state.tree.conversations[KEY] = openConv();
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "m1" } })).statusCode).toBe(410);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("the simulator's events stamp what they CREATE (the history's two chats, an echo's new chat) and leave an existing chat alone", async () => {
     const ev = (event, extra) => call(simInboundHandler, { token: "staff", body: Object.assign({ event }, extra || {}) });
     expect((await ev("history")).statusCode).toBe(200);

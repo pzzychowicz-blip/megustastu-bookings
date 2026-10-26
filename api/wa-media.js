@@ -159,7 +159,15 @@ async function view(req, res) {
   const filename = media.filename || "";
 
   if (media.mediaId.startsWith("MOCK.")) {
-    if (sendMode() !== "mock") { res.status(410).json({ error: "a simulator file — not available on this deployment" }); return; }
+    // v18.12.0 /code-review: a simulator conversation's files are MOCK on a
+    // live deployment too (a staff photo to one is never uploaded, `simulated`),
+    // so the sample is served for one of those whatever the send mode. The
+    // conversation is read only on this path; a production deployment has no
+    // simulator conversations, so it still answers 410 there.
+    if (sendMode() !== "mock" && !isSimConversation(await getConversation(phoneKey))) {
+      res.status(410).json({ error: "a simulator file — not available on this deployment" });
+      return;
+    }
     const sample = SAMPLES[media.kind];
     const bytes = await readFile(sample.url);
     head(res, sample.type, { "Content-Disposition": disposition("inline", filename) });

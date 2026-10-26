@@ -37809,3 +37809,8 @@ Nine findings, all confirmed by reading the code path; none disproved, none defe
   chat deletes the mark. `handleEchoes` and `handleHistory` take `ctx.sim`, which the sim
   events and the client-mode simulator pass. Mutation-checked: never clearing the mark
   fails two tests.
+- **A simulator chat's files opened nowhere on a live deployment.** `wa-media`'s GET
+  answered 410 for every `MOCK.` id once sending was live, and phase 1 makes a staff photo
+  to a simulator chat one of those. It now serves the bundled sample when the conversation
+  is the simulator's (one read, on that path only); a real conversation's `MOCK.` id is
+  still 410, and production has no simulator conversations.

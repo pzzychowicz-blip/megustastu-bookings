@@ -92,7 +92,8 @@ Guards in order: 405 → the staff gate (`staffAuthError`) → 400 → 404 → 4
 `WA_SEND_MODE` is mock, an id starting `MOCK.` is answered with a bundled sample of its
 kind (`_lib/mock-media/`: `photo.jpg`, `voice.ogg`, `menu.pdf`, a few kB each), read
 through static `new URL(…, import.meta.url)`s so the deployment's file tracing includes
-them. On a live deployment a MOCK id is 410. The harness routes it (`/api/wa-media`).
+them. On a live deployment a MOCK id is 410, unless its conversation is the simulator's
+(`isSimConversation`, v18.12.0), whose files are mock there too. The harness routes it (`/api/wa-media`).
 **Phase 6: the simulator's customer sends one too.** Its id has ONE spelling,
 `mockMediaId` in `src/lib/wa-mock-media.js` (pure, shared with the server, imported in
 `src/` by the simulator's stubbed client alone), which `uploadMedia`'s mock calls as well.
