@@ -120,7 +120,10 @@ export function simulateInbound(params, ctx) {
   const base = ex || {
     phoneKey, phone: params.phone || phoneKey, channel: "whatsapp", language: lang,
     acceptedBookingId: null, autoAckSent: false, createdAt: ts,
-    archived: false, archivedAt: null, draftStatus: null, draftData: null, _waSim: true,
+    // v18.12.0: `sim` marks a conversation the simulator CREATED (isSimConversation,
+    // lib/whatsapp.js), so nothing sent to it reaches Meta. Here only, never in the
+    // patch below: an inbound simulated into an existing real chat leaves it real.
+    archived: false, archivedAt: null, draftStatus: null, draftData: null, sim: true,
   };
   const patch = {
     lastMessageAt: ts,
@@ -130,7 +133,6 @@ export function simulateInbound(params, ctx) {
     language: lang,
     acceptedBadgeDismissedAt: null, // inbound re-shows the "confirmed" banner
     autoAckSent: true,
-    _waSim: true,
   };
   if (!muted) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on inbound
   if (params.acceptedBookingId !== undefined) patch.acceptedBookingId = params.acceptedBookingId;

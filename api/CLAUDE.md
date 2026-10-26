@@ -233,8 +233,9 @@ a reason for a line of `wa-inbound.js` or `_lib/coexist-core.js`:
   once the sandbox sends from a real number (the rehearsal) a reply to it would reach
   whoever owns that number. A conversation the simulator CREATES is stamped `sim: true`
   (`injectSimInbound`, and `stampCreated` in `_lib/sim-events.js` for the history's two
-  chats and an echo's new one); the client-mode simulator's `_waSim` counts too
-  (`isSimConversation`, `src/lib/whatsapp.js`). The auto-reply, `wa-send` and
+  chats and an echo's new one), and the client-mode simulator writes the same `sim` when it
+  creates one (`isSimConversation`, `src/lib/whatsapp.js`, reads `sim` alone: the client
+  simulator's `_waSim` was written on every simulated inbound, a real chat included). The auto-reply, `wa-send` and
   `wa-media`'s POST pass `{ simulated }` to `_lib/meta.js`, whose `postMessage` and
   `uploadMedia` then act as mock mode does, whatever `WA_SEND_MODE` says. An existing
   conversation is never stamped, so a real chat never becomes a simulated one.

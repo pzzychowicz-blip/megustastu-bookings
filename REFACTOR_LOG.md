@@ -37785,3 +37785,15 @@ regardless of the switch fails the off test. `tests/schema.test.js` pins 5 and
 **Files:** `api/_lib/{inbound-core,rtdb}.js` · `src/lib/{whatsapp,schema}.js` ·
 `src/hooks/{useWaSettings,useWhatsApp}.js` · `src/components/Settings.jsx` ·
 `GLOSSARY.md` · `api/CLAUDE.md` · `src/hooks/CLAUDE.md`.
+
+### /code-review fixes
+
+Nine findings, all confirmed by reading the code path; none disproved, none deferred.
+
+- **`_waSim` turned a real chat into a simulated one.** The client-mode simulator wrote
+  `_waSim: true` on every inbound it simulated, into an existing conversation too, and
+  `isSimConversation` read it, so a real customer's replies would have been stored as
+  delivered and never sent. It reads `sim` alone now, and the client-mode simulator writes
+  `sim` only in the record it CREATES (`wa-sim.js`), never in the per-message patch.
+  Simulator chats from before this version carry neither mark the guard reads, which the
+  go-live plan's required Clear conversations (R-17) covers.

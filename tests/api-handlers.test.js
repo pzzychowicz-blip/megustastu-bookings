@@ -2997,20 +2997,22 @@ describe("v18.12.0 — a simulator conversation never reaches Meta, whatever WA_
     expect("sim" in convAt(KEY)).toBe(false);
   });
 
-  it("wa-send: a reply to a sim conversation (either mark) is stored as mock-delivered and calls nothing; a real one sends", async () => {
+  it("wa-send: a reply to a sim conversation is stored as mock-delivered and calls nothing; a real one sends", async () => {
     goLive();
     const f = graphFetch(); vi.stubGlobal("fetch", f);
-    for (const mark of [{ sim: true }, { _waSim: true }]) {
-      fake.state.tree = { conversations: { [KEY]: openConv(mark) } };
-      const res = await call(sendHandler, { token: "staff", body: { phoneKey: KEY, text: "Mesa confirmada" } });
-      expect(res.statusCode).toBe(200);
-      expect(res.body.status).toBe("delivered");
-      expect(res.body.wamid).toMatch(/^wamid\.MOCK\./);
-    }
+    fake.state.tree = { conversations: { [KEY]: openConv({ sim: true }) } };
+    const res = await call(sendHandler, { token: "staff", body: { phoneKey: KEY, text: "Mesa confirmada" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.status).toBe("delivered");
+    expect(res.body.wamid).toMatch(/^wamid\.MOCK\./);
     expect(f).not.toHaveBeenCalled();
-    fake.state.tree = { conversations: { [KEY]: openConv() } };
-    expect((await call(sendHandler, { token: "staff", body: { phoneKey: KEY, text: "hi" } })).body.status).toBe("sent");
-    expect(messageCalls(f).length).toBe(1);
+    // A real one, and one carrying only the client simulator's old `_waSim`
+    // (written on every simulated inbound, a real chat included): both send.
+    for (const extra of [{}, { _waSim: true }]) {
+      fake.state.tree = { conversations: { [KEY]: openConv(extra) } };
+      expect((await call(sendHandler, { token: "staff", body: { phoneKey: KEY, text: "hi" } })).body.status).toBe("sent");
+    }
+    expect(messageCalls(f).length).toBe(2);
   });
 
   it("wa-media POST: a photo to a sim conversation uploads nothing and sends nothing", async () => {

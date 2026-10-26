@@ -272,11 +272,13 @@ export function waAutoReplyOn(settings) {
 
 // v18.12.0: is this conversation the sandbox simulator's? Its phone is made up,
 // so nothing sent to it may reach Meta, whatever WA_SEND_MODE says (`simulated`,
-// api/_lib/meta.js). Two marks, one meaning: the server stamps `sim` where the
-// simulator creates a conversation (injectSimInbound, sim-events), and the
-// client-mode simulator (wa-sim.js) writes `_waSim`. Either is enough.
+// api/_lib/meta.js). ONE mark, `sim`, written only where the simulator CREATES
+// a conversation, server or client mode. Not `_waSim` (/code-review): the
+// client-mode simulator wrote that on every inbound it simulated, an existing
+// real chat included, so reading it turned a real customer's thread into one
+// whose replies were stored as delivered and never sent.
 export function isSimConversation(conv) {
-  return !!(conv && (conv.sim === true || conv._waSim === true));
+  return !!(conv && conv.sim === true);
 }
 
 // ── v18.8.0 phase 8: "Suggest these" ────────────────────────────────────────
