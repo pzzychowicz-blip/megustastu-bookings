@@ -27,7 +27,7 @@
 // message id is the sanitized wamid, so a redelivery targets the same RTDB
 // path; we additionally skip the whole upsert when the message already exists.
 
-import { normalizePhone, isPhoneKey, pendingDraftOf, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet, isSimConversation, simMarkPatch } from "../../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey, pendingDraftOf, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet, simMarkPatch } from "../../src/lib/whatsapp.js";
 import { simMediaMessage } from "../../src/lib/wa-mock-media.js";
 import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours, readOccasionTags, readWaAutoReply } from "./rtdb.js";
 import { sendText } from "./meta.js";
@@ -210,7 +210,9 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
   // message, so an ordinary inbound costs no extra read.
   if (firstEver) {
     const ackText = AUTO_ACK_TEXT[lang] || AUTO_ACK_TEXT.es;
-    const simulated = sim === true || isSimConversation(existing);
+    // Who is WRITING decides, not the conversation's mark: a real message into a
+    // chat the simulator marked clears the mark above, so its reply is real too.
+    const simulated = sim === true;
     let sent = null;
     try {
       const on = await readWaAutoReply();

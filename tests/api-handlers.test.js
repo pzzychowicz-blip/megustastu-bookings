@@ -3059,6 +3059,14 @@ describe("v18.12.0 — a simulator conversation never reaches Meta, whatever WA_
     fake.state.tree = { conversations: { [KEY]: openConv({ sim: true, autoAckSent: true }) } };
     await processInbound({ phone: KEY, text: "Hola, soy yo", ts: Date.now(), wamid: "wamid.REALIN" });
     expect("sim" in convAt(KEY)).toBe(false);
+    // A real first message into a marked chat gets a real auto-reply, too.
+    // `preloadedConv` is the webhook's own read: a copy, as Firebase hands one
+    // back (the fake's read returns the stored object, which the clear mutates).
+    fake.state.tree.conversations["+34600222333"] = { phoneKey: "+34600222333", sim: true };
+    await processInbound({ phone: "+34600222333", text: "Hola", ts: Date.now(), wamid: "wamid.REALIN2",
+      preloadedConv: { phoneKey: "+34600222333", sim: true } });
+    expect(messageCalls(f).length).toBe(1);
+    expect("sim" in convAt("+34600222333")).toBe(false);
     expect((await call(sendHandler, { token: "staff", body: { phoneKey: KEY, text: "hi" } })).body.status).toBe("sent");
     // And a reply typed on the phone (a real echo) clears it too.
     fake.state.tree.conversations[KEY].sim = true;

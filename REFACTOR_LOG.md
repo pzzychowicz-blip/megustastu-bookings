@@ -37830,4 +37830,10 @@ Nine findings, all confirmed by reading the code path; none disproved, none defe
   "Thanks for your message! We'll get back to you shortly." by hand; it reads
   `AUTO_ACK_TEXT.en` now, so an edit to the message reaches the screen.
 
+- **Found re-reading the diff before the push: the auto-reply decided "simulated" from the
+  chat's mark.** A real person's first message into a chat the simulator marked cleared the
+  mark and still got a mock reply. It is `sim === true` now (who is writing). The test passes
+  the conversation as `preloadedConv`, because the fake database's read returns the stored
+  object, which the clear mutates in place: read from the fake, the mutation went unseen.
+
 **Gate after the fixes:** main entry 430.01 kB, 125.63 kB gz (125.27 before v18.12.0) · 3730 tests · 0 errors and 63 warnings · style OK.
