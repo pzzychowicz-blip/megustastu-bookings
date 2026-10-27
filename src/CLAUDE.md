@@ -81,7 +81,7 @@ Theme, reduce animations, Plan zoom & pan, lock navigation, split view and plan 
 - **Device fallback is the migration**: each keeps its `localStorage` initializer; once per uid after `prefsLoaded`, a saved field overrides local state and an unsaved one is seeded from this device. **Tri-state**: `null` means never chosen; a sanitize returning `false` for absent would reset every device.
 - **`theme: "auto"`** (Automatic dark mode) is stored explicitly, since `null` would be filled by the next device's explicit value. It reads as `undefined` at every theme site, so the boot script and its CSP hash are untouched (`tests/prefs.test.js` runs the real script). An unset `themePref` is never seeded up.
 - **The booleans come from `PREF_SPEC`** (key and default direction once): only the non-default value is stored, `"whenOn"` the default-off shape, `"whenOff"` default-on.
-- `<BookingApp uid={user.uid} key={user.uid} />`: the **key** remounts on an account switch. Rules deploy app-first (`database.rules.README.md`).
+- `<BookingApp uid={user.uid} key={user.uid} />`: the **key** remounts on an account switch. `$uid` is a wildcard, not an access rule: the top-level `auth != null` still governs, the single-restaurant trust model. Rules deploy app-first (`database.rules.README.md`).
 
 ### Separation between bookings — the turnaround buffer
 Minutes a table stays unavailable after a party's end; off by default (`TURN_BUFFER` 0).
