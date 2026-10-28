@@ -37885,3 +37885,8 @@ Six findings, all confirmed, all fixed (Patryk: "fix them all").
 4. **GLOSSARY's privacy-notice row said "legal owner"**: it names the data controller now.
 5. **The template's header rule 2 said "legal owner"**: likewise.
 6. **This entry had no gate line**: below.
+
+**Gate after the fixes:** main entry 430.01 kB, 125.63 kB gz (unchanged from v18.12.0) ·
+3731 tests (3730 before; +1, the four-fact `privacyIncomplete` case) · 0 errors and 63
+warnings · style OK. `dist/privacy.html` reads the CB, its NIF, the phone, the email and
+the address in both languages, with no "[to be confirmed]" left.
