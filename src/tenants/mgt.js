@@ -86,11 +86,15 @@ export const profile = {
   // asks about their data the way they booked, by WhatsApp, by phone or in
   // person, and the notice says so.
   //
-  // `controller` is the owner's name as he gave it through Patryk (2026-10-13).
+  // `controller` is the legal entity, exactly as the AEAT's certificado de
+  // situación censal names it (issued 2026-10-28): a comunidad de bienes, so the
+  // NIF is what identifies it (v18.12.1, Patryk). It was the owner's own name,
+  // Tomasz Uzarowski, from 2026-10-13: he is one of the CB's three
+  // representatives, not the controller.
   // A tenant that leaves it empty gets a visible "[to be confirmed]" on the
   // page, and `tests/privacy.test.js` then wants a ROADMAP entry saying so.
   privacy: {
-    controller: "Tomasz Uzarowski",
-    updated: "2026-10-16"
+    controller: "ME GUSTAS TU CB (NIF E76318088)",
+    updated: "2026-10-28"
   }
 };

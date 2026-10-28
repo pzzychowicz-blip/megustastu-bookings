@@ -37837,3 +37837,22 @@ Nine findings, all confirmed by reading the code path; none disproved, none defe
   object, which the clear mutates in place: read from the fake, the mutation went unseen.
 
 **Gate after the fixes:** main entry 430.01 kB, 125.63 kB gz (125.27 before v18.12.0) · 3730 tests · 0 errors and 63 warnings · style OK.
+
+## v18.12.1 — the privacy notice names the CB as the data controller
+
+**Date:** 2026-10-28 · **Branch:** `fix/v18.12.1-privacy-controller` · **Behaviour change:**
+`/privacy` only: the controller and the "last updated" date.
+
+**Files:** `src/tenants/mgt.js` · `src/App.jsx` (version) · `REFACTOR_LOG.md`.
+
+The AEAT's *certificado de situación censal* for the business (issued 2026-10-28, for
+Meta's business verification) names the legal entity as **ME GUSTAS TU CB**, NIF
+E76318088, a *comunidad de bienes* with three representatives: Julia Wiktoria Swiderska,
+Olga Anna Wieckowska and Tomasz Uzarowski. v18.7.0 had named Tomasz Uzarowski as the
+controller, which is one of the representatives, not the entity that runs the restaurant.
+`profile.privacy.controller` is now `ME GUSTAS TU CB (NIF E76318088)` (Patryk, through
+AskUserQuestion: name and NIF, because a CB has no legal personality and the NIF is what
+identifies it). The English sentence reads "The data controller is ME GUSTAS TU CB (NIF
+E76318088), the operator of Me Gustas Tú."; the Spanish one follows the same template.
+`privacy.updated` moves to 2026-10-28, since who the controller is counts as a change to
+the notice (Patryk). No stored data changes, so no `SCHEMA` raise and no rules step.
