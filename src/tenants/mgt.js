@@ -92,9 +92,8 @@ export const profile = {
   //
   // `controller` is the legal entity, exactly as the AEAT's certificado de
   // situación censal names it (issued 2026-10-28): a comunidad de bienes, so the
-  // NIF is what identifies it (v18.12.1, Patryk). It was the owner's own name,
-  // Tomasz Uzarowski, from 2026-10-13: he is one of the CB's three
-  // representatives, not the controller.
+  // NIF is what identifies it (v18.12.1, Patryk). From 2026-10-13 it named the
+  // owner, who is one of the CB's representatives, not the controller.
   // A tenant that leaves it empty gets a visible "[to be confirmed]" on the
   // page, and `tests/privacy.test.js` then wants a ROADMAP entry saying so.
   privacy: {

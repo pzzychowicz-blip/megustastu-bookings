@@ -37847,9 +37847,9 @@ Nine findings, all confirmed by reading the code path; none disproved, none defe
 
 The AEAT's *certificado de situación censal* for the business (issued 2026-10-28, for
 Meta's business verification) names the legal entity as **ME GUSTAS TU CB**, NIF
-E76318088, a *comunidad de bienes* with three representatives: Julia Wiktoria Swiderska,
-Olga Anna Wieckowska and Tomasz Uzarowski. v18.7.0 had named Tomasz Uzarowski as the
-controller, which is one of the representatives, not the entity that runs the restaurant.
+E76318088, a *comunidad de bienes* with three representatives (listed on the certificate;
+not recorded here, since no code needs them). v18.7.0 had named the owner, one of those
+representatives, as the controller, not the entity that runs the restaurant.
 `profile.privacy.controller` is now `ME GUSTAS TU CB (NIF E76318088)` (Patryk, through
 AskUserQuestion: name and NIF, because a CB has no legal personality and the NIF is what
 identifies it). The English sentence reads "The data controller is ME GUSTAS TU CB (NIF
