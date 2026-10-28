@@ -35,8 +35,8 @@ session and keeping it in sync.
   Live and in Development mode alike: "Me Gustas Tú can't onboard customers right now",
   shown before any screen about a WhatsApp account or a number, so the number was never
   connected and nothing was imported. **The verdict (R-11): the Tech Provider route**
-  (Patryk). Business verification of the *Me Gustas Tu* portfolio first (waiting on the
-  owner's censal certificate), then Tech Provider onboarding and App Review for advanced
+  (Patryk). Business verification of the *Me Gustas Tu* portfolio first (submitted
+  2026-10-28 with the CB's censal certificate; Meta said about 2 working days), then Tech Provider onboarding and App Review for advanced
   access to `whatsapp_business_messaging` and `whatsapp_business_management` on the
   sandbox app, then the gate again; the go-live page's T1–T4 has the detail. R-17's
   sandbox settings stay in place for that rerun. **After the rerun's verdict:** disconnect the number (R-10) and wipe the
