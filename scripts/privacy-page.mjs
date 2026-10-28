@@ -8,7 +8,7 @@
 // static file because it must load with no bundle, no Firebase and no script.
 //
 // A static file imports nothing, so the facts that belong to a RESTAURANT (its
-// name, who legally runs it) are tokens in the source and
+// name, who legally runs it, how to reach them) are tokens in the source and
 // are filled here from `src/tenants/<slug>.js`, the same way `tenantManifest()`
 // in `vite.config.js` fills the install card. One function, called by the dev
 // middleware and by `closeBundle`, and by `tests/privacy.test.js`.
@@ -31,7 +31,9 @@ function val(v) {
 
 // The tokens the template may carry. A token outside this list is a typo in the
 // template, and `renderPrivacy` throws on it rather than shipping `{{…}}`.
-export const PRIVACY_TOKENS = ["restaurant", "controller", "updated_en", "updated_es"];
+export const PRIVACY_TOKENS = [
+  "restaurant", "controller", "phone", "email", "address", "updated_en", "updated_es",
+];
 
 // `privacy.updated` is stored once, as YYYY-MM-DD, and printed in the language of
 // the section it sits in. A date typed out in words is one language's date, and
@@ -55,6 +57,11 @@ export function renderPrivacy(template, profile) {
   const values = {
     restaurant: val(p.name),
     controller: val(priv.controller),
+    // v18.12.1: the controller's contact details, which GDPR Art. 13(1)(a)
+    // asks for beside its identity.
+    phone: val(priv.phone),
+    email: val(priv.email),
+    address: val(priv.address),
     updated_en: longDate(priv.updated, "en-GB"),
     updated_es: longDate(priv.updated, "es-ES"),
   };
@@ -74,5 +81,6 @@ export function renderPrivacy(template, profile) {
 // that keeps ROADMAP honest about it, and nothing else.
 export function privacyIncomplete(profile) {
   const priv = (profile && profile.privacy) || {};
-  return !String(priv.controller || "").trim();
+  return ["controller", "phone", "email", "address"]
+    .some((k) => !String(priv[k] || "").trim());
 }
