@@ -9,7 +9,8 @@
      dev server. tests/privacy.test.js holds this.
   2. The {{tokens}} are filled from src/tenants/<slug>.js by
      scripts/privacy-page.mjs, in dev and in the build. Never type a
-     restaurant's name or its legal owner into this file.
+     restaurant's name or its data controller (the legal entity
+     that runs it) into this file.
   3. It does not name the app. The app's name is pinned by count in
      tests/stylesheet.test.js, and a customer has no use for it.
 
