@@ -76,8 +76,12 @@ export const profile = {
   // served at `/privacy`) cannot be written without, filled in at build by
   // `scripts/privacy-page.mjs`:
   //
-  //   controller — the LEGAL name of whoever runs the restaurant (the data
-  //                controller). Not `name` above: that is the sign over the door.
+  //   controller — how the notice identifies the data controller: the LEGAL
+  //                name of the entity that runs the restaurant, plus its tax ID
+  //                where the name alone does not identify it (a comunidad de
+  //                bienes has no legal personality, so its NIF does). One
+  //                string, printed as is. Not `name` above: that is the sign
+  //                over the door.
   //   updated    — the date the TEXT last changed, as YYYY-MM-DD. The page
   //                prints it in each section's own language. Change it when the
   //                notice's promises change, not on a deploy.
