@@ -72,7 +72,7 @@ export const profile = {
   // `api/_lib/gemini.js`, and ROADMAP for the alternative that was left.
   waContext: "a small restaurant in the Canary Islands",
 
-  // v18.7.0 — the two facts the public privacy notice (`public/privacy.html`,
+  // v18.7.0 — the facts the public privacy notice (`public/privacy.html`,
   // served at `/privacy`) cannot be written without, filled in at build by
   // `scripts/privacy-page.mjs`:
   //
@@ -82,22 +82,29 @@ export const profile = {
   //                bienes has no legal personality, so its NIF does). One
   //                string, printed as is. Not `name` above: that is the sign
   //                over the door.
+  //   phone · email · address — how a customer reaches the controller, as
+  //                printed (v18.12.1: GDPR Art. 13(1)(a) asks for the
+  //                controller's contact details beside its identity). The
+  //                address is the restaurant's, where a customer can go.
   //   updated    — the date the TEXT last changed, as YYYY-MM-DD. The page
   //                prints it in each section's own language. Change it when the
   //                notice's promises change, not on a deploy.
   //
-  // There is no contact address, by Patryk's decision (2026-10-13): a customer
-  // asks about their data the way they booked, by WhatsApp, by phone or in
-  // person, and the notice says so.
+  // From 2026-10-13 the notice gave no contact details, by Patryk's decision (a
+  // customer asks the way they booked). v18.12.1 adds them, Patryk again: the
+  // reservations number, the restaurant's email and its address.
   //
   // `controller` is the legal entity, exactly as the AEAT's certificado de
   // situación censal names it (issued 2026-10-28): a comunidad de bienes, so the
   // NIF is what identifies it (v18.12.1, Patryk). From 2026-10-13 it named the
   // owner, who is one of the CB's representatives, not the controller.
-  // A tenant that leaves it empty gets a visible "[to be confirmed]" on the
+  // A tenant that leaves any of these empty gets a visible "[to be confirmed]" on the
   // page, and `tests/privacy.test.js` then wants a ROADMAP entry saying so.
   privacy: {
     controller: "ME GUSTAS TU CB (NIF E76318088)",
+    phone: "+34 711 08 68 54",
+    email: "contact@me-gustas-tu.com",
+    address: "C. la Ballena 5, 35660 Corralejo, Las Palmas",
     updated: "2026-10-28"
   }
 };

@@ -37856,3 +37856,32 @@ identifies it). The English sentence reads "The data controller is ME GUSTAS TU 
 E76318088), the operator of Me Gustas Tú."; the Spanish one follows the same template.
 `privacy.updated` moves to 2026-10-28, since who the controller is counts as a change to
 the notice (Patryk). No stored data changes, so no `SCHEMA` raise and no rules step.
+
+### `/code-review` of the branch (2026-10-28)
+
+Six findings, all confirmed, all fixed (Patryk: "fix them all").
+
+1. **The notice named the controller but gave no way to contact it** (GDPR Art.
+   13(1)(a) asks for both). This reverses the 2026-10-13 decision of no contact
+   details, by Patryk, through AskUserQuestion: the reservations number
+   **+34 711 08 68 54**, **contact@me-gustas-tu.com**, and the restaurant's address
+   **C. la Ballena 5, 35660 Corralejo, Las Palmas** (not the fiscal address, which is a
+   flat). Three tenant fields, `privacy.phone` · `email` · `address`, and three tokens
+   in `public/privacy.html`, so another restaurant fills its own; each prints
+   "[to be confirmed]" when empty, and `privacyIncomplete` now counts all four facts,
+   so the ROADMAP test wants an entry while any is blank. Both languages' "Who is
+   responsible" sentence carries them, and the rights paragraph offers email beside
+   WhatsApp, phone and in person. Printed as text, not `tel:`/`mailto:` links: the
+   template test lists every outbound `href` and a link is a decision of its own.
+2. **`controller`'s documented contract said "legal name"** while the value carries the
+   NIF too. The comment now says it is how the notice identifies the controller: the
+   legal name, plus the tax ID where the name alone does not identify it. A separate
+   `nif` field was the alternative; one printed string is simpler while nothing reads
+   the name alone.
+3. **The entry and the tenant comment named private individuals** (the CB's
+   representatives). Both now say "the representatives" without names. The first commit
+   of this branch still carries them in its diff, and v18.7.0's entry names the owner;
+   history is not rewritten (never amend or force-push).
+4. **GLOSSARY's privacy-notice row said "legal owner"**: it names the data controller now.
+5. **The template's header rule 2 said "legal owner"**: likewise.
+6. **This entry had no gate line**: below.

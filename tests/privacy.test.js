@@ -26,7 +26,13 @@ const VERCEL = JSON.parse(read("vercel.json"));
 
 const FULL = {
   name: "Casa Prueba",
-  privacy: { controller: "Prueba Hostelería S.L.", updated: "2027-01-01" },
+  privacy: {
+    controller: "Prueba Hostelería S.L.",
+    phone: "+34 900 000 000",
+    email: "datos@casa-prueba.example",
+    address: "Calle Prueba 1, 35000 Prueba",
+    updated: "2027-01-01",
+  },
 };
 
 describe("the privacy notice — the template", () => {
@@ -120,6 +126,9 @@ describe("the privacy notice — the generator", () => {
     expect(out.includes("<!--")).toBe(false);
     expect(out.startsWith("<!doctype html>")).toBe(true);
     expect(out).toContain("Prueba Hostelería S.L.");
+    // v18.12.1: the controller's contact details, Art. 13(1)(a), in both languages.
+    expect(out).toContain("by phone on +34 900 000 000, by\nemail at datos@casa-prueba.example, or in person at the restaurant, Calle Prueba 1, 35000 Prueba.");
+    expect(out).toContain("por teléfono en el +34 900 000 000,\npor correo electrónico en datos@casa-prueba.example o en persona en el restaurante, Calle Prueba 1, 35000 Prueba.");
     expect(out).toContain("<title>Privacy notice · Casa Prueba</title>");
     expect(out).toContain("last updated 1 January 2027");
     expect(out).toContain("última actualización: 1 de enero de 2027");
@@ -131,6 +140,7 @@ describe("the privacy notice — the generator", () => {
     const out = renderPrivacy(TEMPLATE, { name: "Casa Prueba" });
     expect(out).toContain("The data controller is [to be confirmed], the operator of Casa Prueba.");
     expect(out).toContain("El responsable del tratamiento es [to be confirmed], que gestiona Casa Prueba.");
+    expect(out).toContain("by phone on [to be confirmed], by\nemail at [to be confirmed], or in person at the restaurant, [to be confirmed].");
   });
 
   it("escapes what it is given", () => {
@@ -169,11 +179,19 @@ describe("the privacy notice — the route", () => {
 });
 
 describe("the privacy notice — what is still owed", () => {
-  // The owner's legal name is not ours to invent. While it
+  // The controller and its contact details are not ours to invent. While one
   // is blank the page says "[to be confirmed]" in public, so ROADMAP must keep
   // saying so; the day it is filled, this fails until the entry is removed.
   it("ROADMAP lists the missing legal details exactly as long as they are missing", () => {
     const listed = read("ROADMAP.md").includes("`profile.privacy.controller`");
     expect(listed).toBe(privacyIncomplete(profile));
+  });
+
+  // v18.12.1: a missing contact detail is a blank too, not only the name.
+  it("counts every printed fact, not only the controller", () => {
+    expect(privacyIncomplete(FULL)).toBe(false);
+    for (const k of ["controller", "phone", "email", "address"]) {
+      expect(privacyIncomplete({ privacy: { ...FULL.privacy, [k]: " " } })).toBe(true);
+    }
   });
 });
