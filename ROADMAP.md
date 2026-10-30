@@ -91,10 +91,10 @@ and `MGT_Bookings_Tech_Debt_Scan_2026-10-30.md`.
   clear that package's two advisories (`npm audit` counts them as five packages).
 
 - **Trim DESIGN.md to the nested-notes standard (#33).** After go-live (Patryk). It
-  holds 159,990 characters, up 43% in five weeks, and every visual session pays to read
-  it. The 2026-10-27 trim covered only the nested notes.
+  held 159,990 characters on 2026-10-30, up 43% in five weeks, and every visual session
+  pays to read it. The 2026-10-27 trim covered only the nested notes.
 
-- **Make `InboxPanel.onKey` a table (#32).** Complexity 56. The `lib/shortcuts.js`
+- **Make `InboxPanel.onKey` a table (#32).** Complexity 56 on 2026-10-30. The `lib/shortcuts.js`
   pattern, after go-live.
 
 - **Sweep merged branches and stale worktrees (#37).** 133 merged remote branches and 20
@@ -104,7 +104,7 @@ and `MGT_Bookings_Tech_Debt_Scan_2026-10-30.md`.
 - **Refresh the `.design-sync` snapshot (#39).** It is behind `atoms.jsx`.
 
 - **Measure the eager `atoms` chunk, then decide (#40).** It grew from 23 to 34 kB gz
-  (`atoms.jsx`: 2,565 lines, fan-in 70). Measure which atoms only lazy chunks use before
+  by 2026-10-30 (`atoms.jsx`: 2,565 lines, fan-in 70). Measure which atoms only lazy chunks use before
   deciding whether a split is worth it.
 
 ## Designed, not implemented
