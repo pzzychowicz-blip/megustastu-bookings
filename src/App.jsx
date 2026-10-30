@@ -376,6 +376,7 @@ import { onPrintEnd, printOrReport, PRINT_IGNORED_TEXT } from "./lib/print-end";
 // v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
 // stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
 import { activityWindow, retentionMs, retentionLabel, clearOutcome, CLEAR_FAILED } from "./lib/activity";
+import { noteCrashView } from "./lib/crash-report";
 
 // ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
 // `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
@@ -1957,6 +1958,8 @@ function BookingApp({uid}){
   // before its declaration is a TDZ ReferenceError, not a hoist (the split
   // handlers below are function declarations, so those genuinely do hoist).
   const activeView=split?split[focusedPane]:view;
+  // v18.13.0 (#28): which view a crash happened in, kept where it outlives this tree.
+  useEffect(function(){noteCrashView(activeView);},[activeView]);
   // One writer for both the state and the key, so they can't drift.
   function applySplit(next){
     setSplit(next);

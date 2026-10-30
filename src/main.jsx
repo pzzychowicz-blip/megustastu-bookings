@@ -8,6 +8,35 @@ import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { logActivity } from "./hooks/useActivityLog";
+import { crashEntry, crashGate, crashView } from "./lib/crash-report";
+import { deviceLabel } from "./lib/presence-state";
+
+// v18.13.0 (#28): everything uncaught leaves one `activity` entry, so a fault on a device
+// no longer depends on somebody reporting it. What the entry says, and whether it is
+// written at all, is lib/crash-report.js. Three doors: the boundary for a render, and the
+// two window events for everything a boundary never sees (an event handler, a timer, a
+// promise). The bubble phase on `error` is deliberate: a failed <img> or <script> reaches
+// a capture listener only. The try/catch is the point of this function: a report that
+// throws from `componentDidCatch` would take down the error screen itself.
+const admitCrash = crashGate();
+function reportCrash(thrown, where, componentStack) {
+  try {
+    const build = window.__MGT_BUILD__;
+    const report = crashEntry(thrown, {
+      where,
+      componentStack,
+      version: build && build.version,
+      view: crashView(),
+      device: deviceLabel(),
+    });
+    if (report && admitCrash(report.signature)) logActivity([report.entry]);
+  } catch (err) {
+    console.warn("[crash] could not be reported", err);
+  }
+}
+window.addEventListener("error", function (e) { reportCrash(e.error || e.message, "error"); });
+window.addEventListener("unhandledrejection", function (e) { reportCrash(e.reason, "rejection"); });
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <StrictMode>
@@ -18,7 +47,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         to do. index.html's boot watchdog does not cover it: it fires once at T+10s
         gated on an EMPTY root, which answers "did the app never mount" rather than
         "did it mount and then throw". See src/components/ErrorBoundary.jsx. */}
-    <ErrorBoundary>
+    <ErrorBoundary onCrash={function (error, componentStack) { reportCrash(error, "render", componentStack); }}>
       <App />
     </ErrorBoundary>
   </StrictMode>

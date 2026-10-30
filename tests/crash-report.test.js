@@ -4,6 +4,8 @@
 // a node every account can read, and a loop cannot flood it.
 
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { stripComments } from "../scripts/strip-comments.mjs";
 import { crashEntry, crashGate, framesOf, maskText, noteCrashView, crashView, MAX_PER_LOAD } from "../src/lib/crash-report.js";
 
 const CTX = { where: "render", version: "18.13.0", view: "timeline", device: "Android · Chrome" };
@@ -207,5 +209,31 @@ describe("the view", () => {
     expect(crashView()).toBe("plan");
     noteCrashView(null);
     expect(crashView()).toBe("");
+  });
+});
+
+// `main.jsx` holds the listeners and runs on nothing here, so its wiring is read.
+describe("the wiring", () => {
+  const read = (f) => stripComments(readFileSync(new URL("../src/" + f, import.meta.url), "utf8")).join("\n");
+  const MAIN = read("main.jsx");
+  it("everything uncaught reaches one reporter, once for each door", () => {
+    expect(MAIN).toContain('window.addEventListener("error", function (e) { reportCrash(e.error || e.message, "error"); });');
+    expect(MAIN).toContain('window.addEventListener("unhandledrejection", function (e) { reportCrash(e.reason, "rejection"); });');
+    expect(MAIN).toContain('<ErrorBoundary onCrash={function (error, componentStack) { reportCrash(error, "render", componentStack); }}>');
+  });
+  it("one gate for the page load, and the write goes through it", () => {
+    expect(MAIN.match(/crashGate\(/g)).toHaveLength(1);
+    expect(MAIN).toContain("if (report && admitCrash(report.signature)) logActivity([report.entry]);");
+  });
+  it("a report cannot throw: the boundary's own screen depends on that", () => {
+    const fn = MAIN.slice(MAIN.indexOf("function reportCrash("), MAIN.indexOf('window.addEventListener("error"'));
+    expect(fn.trim().startsWith("function reportCrash(thrown, where, componentStack) {\n  try {")).toBe(true);
+  });
+  it("writes directly, because the sink is gone once BookingApp has unmounted", () => {
+    expect(MAIN).not.toContain("emitActivity");
+    expect(read("hooks/useActivityLog.js")).toContain("export function logActivity(entries) {");
+  });
+  it("App keeps the view noted", () => {
+    expect(read("App.jsx")).toContain("useEffect(function(){noteCrashView(activeView);},[activeView]);");
   });
 });

@@ -95,6 +95,9 @@ export default class ErrorBoundary extends Component {
     // component stack is the part that says WHICH subtree threw, and it exists
     // nowhere else once the tree is gone.
     console.error("[MGT] render error caught by the boundary:", error, info && info.componentStack);
+    // v18.13.0 (#28): a prop, so this file stays free of Firebase. `.design-sync` and
+    // tests/error-boundary.test.js import it, and `main.jsx` is where a crash is written.
+    if (this.props.onCrash) this.props.onCrash(error, info && info.componentStack);
   }
 
   render() {

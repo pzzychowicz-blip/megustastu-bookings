@@ -80,7 +80,10 @@ export const FEED_PAGE = 500;
 // One entry per push key. Written with `set` on a pushed ref rather than
 // `push(ref, value)` so the two steps are separable and the key is in hand —
 // the same shape `usePresence` uses for its own per-connection child.
-function logActivity(entries) {
+// v18.13.0 (#28): exported for `main.jsx`, which writes a crash through this directly:
+// `emitActivity`'s sink is null once `BookingApp` has unmounted, and that is exactly when
+// a render crash needs it.
+export function logActivity(entries) {
   const u = auth.currentUser;
   // No signed-in account = no honest author. See the header: substituting
   // anything here produces a write the rules refuse and the sink swallows.

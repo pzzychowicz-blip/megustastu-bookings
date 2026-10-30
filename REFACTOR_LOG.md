@@ -38096,3 +38096,21 @@ new kind raises `SCHEMA`. It does not, by the test `src/hooks/CLAUDE.md` states 
 field: `activity` is read without a whitelist and never rewritten, so an older build cannot
 delete a key it does not know. `tests/rules/` runs the real `crashEntry` output against the
 real rule, so a key the builder starts to write is checked there.
+
+**Capture.** `ErrorBoundary` takes an `onCrash` prop, so it stays free of Firebase for
+`.design-sync` and its own test. `main.jsx` passes it and adds the `error` and
+`unhandledrejection` listeners, all three going to one `reportCrash` inside a try/catch,
+because a report that threw from `componentDidCatch` would take the error screen down with
+it. It calls `logActivity` directly, since `emitActivity`'s sink is null once `BookingApp`
+has unmounted. `BookingApp` notes the view from an effect, so `view` is the last one
+COMMITTED: a crash while rendering into Plan reads `timeline`, which is what was on screen.
+
+Measured on DEV with a spy on the WebSocket's outgoing frames, since DEV's rules refuse the
+kind until Patryk deploys them (the server's half is the emulator's, above). A throw from a
+timer and a rejection wrote one entry each and a repeat of the first wrote none, the phone
+and the quoted name masked. A temporary throw in `BookingApp`, reverted before this commit,
+drew the error screen and wrote one entry with the real stack and the component path. Eight
+distinct errors on a fresh page wrote five. The first temporary throw measured nothing, and
+it is worth knowing: `if(window.__flag) throw` in `BookingApp` never fired after the flag
+was set, apparently because the React Compiler memoises a block with no reactive
+dependency. The same line testing `activeView` too fired at once.
