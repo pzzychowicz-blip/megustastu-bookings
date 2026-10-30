@@ -37933,3 +37933,16 @@ were the ones on 22. Node 22 ends 2027-04-30, Node 24 ends 2028-04-30. **The `jo
 override stays** (`api/CLAUDE.md`): `require(esm)` works on local Node either way, so the
 gate cannot speak for Vercel's loader, and one deployed-function call after the merge
 is the only check.
+
+### #29: the advisories that can be fixed
+
+Plain `npm audit fix`, never `--force`. `npm audit` goes from 7 high to **5**, and
+production from 5 to **4**, as the scan forecast. Two packages moved, in the lockfile
+only: `re2js` 2.8.6 → 2.9.1 (reachable only through `@firebase/firestore`, which nothing
+in `src`, `api` or `scripts` imports) and `zod` 4.4.3 → 4.6.7 (through
+`eslint-plugin-react-hooks`, dev only). The entry hash did not move, which is the
+measured form of that: no shipped code changed. `npm audit` counts PACKAGES, so the 5
+that remain are the two `@grpc/grpc-js` advisories seen through its dependents. firebase
+13.1 pins the same `~1.9.0`, so an upgrade would not fix them either, and Patryk
+dismisses them as "vulnerable code is not used" after the merge. `npm ls jose` still
+reads 5.10.0.
