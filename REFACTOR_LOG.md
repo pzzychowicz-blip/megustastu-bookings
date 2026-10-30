@@ -37923,3 +37923,13 @@ is what `sandbox.yml`'s `git push --force` authenticates with. Its README still 
 authenticated git commands, but this is the one line no PR can test, because that
 workflow runs only on a push to `main`: the first `Sandbox` run after the merge is the
 proof.
+
+### #34: Node 24 everywhere
+
+`engines` (and the lockfile's own copy of it, at `package-lock.json:30`, which the plan
+did not list), both jobs in `ci.yml`, and `.design-sync/NOTES.md`. The local gate has run
+on 24.14.1 all along, so this closes a difference rather than opening one: CI and Vercel
+were the ones on 22. Node 22 ends 2027-04-30, Node 24 ends 2028-04-30. **The `jose`
+override stays** (`api/CLAUDE.md`): `require(esm)` works on local Node either way, so the
+gate cannot speak for Vercel's loader, and one deployed-function call after the merge
+is the only check.
