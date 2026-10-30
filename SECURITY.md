@@ -234,14 +234,18 @@ Keep that in mind when writing either.
   for over an hour and confirm it still saves. If either fails, set Application
   restrictions back to "None": that undoes it.
 
-  **The PROD key's list, proposed, not yet applied** (project `megustastu-bookings`;
-  due about 2026-10-25, a week after DEV's list settled): `megustastu-bookings.vercel.app`,
+  **The PROD key's list, APPLIED** (project `megustastu-bookings`, 2026-10-25, a week
+  after DEV's list settled): `megustastu-bookings.vercel.app`,
   `megustastu-bookings.vercel.app/*` and `megustastu-bookings.firebaseapp.com/*`, the
-  last for password-reset links, as on DEV. Check it the way DEV was checked, plus one
-  reset sent and opened. That leaves
-  out Vercel's preview addresses, which build against PROD (the stray-preview incident
-  behind the never-push rule): a preview could then load and not sign in. Confirm the
-  list against the Vercel project's domains before applying it.
+  last for password-reset links, as on DEV. Checked the way DEV was, plus one reset
+  sent and opened: sign-out and sign-in, the reset, and a save more than an hour later
+  all passed, a probe from the live origin was allowed and one from `example.com` was
+  refused (403 `API_KEY_HTTP_REFERRER_BLOCKED`). An allowed probe answers
+  `INVALID_LOGIN_CREDENTIALS` here, not `EMAIL_NOT_FOUND`: PROD has email-enumeration
+  protection and DEV does not. The list leaves out Vercel's preview addresses, which
+  build against PROD (the stray-preview incident behind the never-push rule), so a
+  preview can load and not sign in. The Vercel project had no custom domain on that
+  date: a new domain goes on this list before it goes live.
 - **Keep personal data out of it:** no backup files, exports or screenshots with real
   guests. That includes GitHub Actions artifacts and logs, which are public on a public
   repository.
