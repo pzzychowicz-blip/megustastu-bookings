@@ -75,17 +75,18 @@
     },
 
     "activity": {
-      ".indexOn": ["at", "guestKey"],
+      ".indexOn": ["at", "guestKey", "kind"],
       "$eid": {
         ".write": "auth != null && ((!data.exists() && newData.exists() && newData.child('uid').val() === auth.uid && newData.child('email').val() === auth.token.email && newData.child('at').val() === now) || (!newData.exists() && data.exists() && ((root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsAdmin').val() === true) && root.child('roles').child(auth.uid).child('denies').child('settingsAdmin').val() !== true)))",
         ".validate": "!newData.exists() || newData.hasChildren(['at', 'uid', 'email', 'kind', 'text'])",
         "at":       { ".validate": "newData.isNumber()" },
         "uid":      { ".validate": "newData.isString()" },
         "email":    { ".validate": "newData.isString()" },
-        "kind":     { ".validate": "newData.isString() && newData.val().matches(/^(booking|voucher|table|waitlist|reminder|standing|settings|people|session|data)$/)" },
+        "kind":     { ".validate": "newData.isString() && newData.val().matches(/^(booking|voucher|table|waitlist|reminder|standing|settings|people|session|data|crash)$/)" },
         "text":     { ".validate": "newData.isString()" },
         "auto":     { ".validate": "newData.isBoolean() && newData.val() === true" },
         "guestKey": { ".validate": "newData.isString()" },
+        "crash":    { "$field": { ".validate": "newData.isString() && newData.val().length <= 2000" } },
         "bookings": { "$bid": { ".validate": "newData.isBoolean() && newData.val() === true" } },
         "subject": {
           "name": {

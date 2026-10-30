@@ -256,6 +256,23 @@ the walker found at least twelve and that `bookings` is *not* among them (it is
 guarded per-child by the `updatedAt` CAS, not by a rev), so a walker that starts
 returning nothing fails loudly instead of making the whole sweep vacuous.
 
+## v18.13.0 — `crash`, a new `kind` on `/activity`, and its index
+
+No permission changes: the three clauses that bind an author bind a crash entry too. Three
+additions, all on `/activity`. `crash` joins the `kind` pattern, and `tests/activity.test.js`
+fails if that list and `ACTIVITY_KINDS` disagree. A `crash` child holds the entry's detail
+(`where`, `name`, `message`, `version`, `stack`, `component`, `view`, `device`), each a string
+of at most 2,000 characters, a bound `lib/crash-report.js` stays well inside: the entry is
+built from an error's text, so the server holds the size of what an account can file. `kind`
+joins `.indexOn` for Download crash data, one `orderByChild("kind")` read.
+
+**Publish the app first, then the rules.** Until these rules are live a crash entry is
+refused, which `logActivity` swallows with a console line, and Download crash data cannot
+read: without the index a one-shot query is refused outright (the v18.8.0 note below measured
+that), so the screen says it could not be read. Nothing else depends on them, and no `SCHEMA`
+raise goes with them: `activity` is append-only and read without a whitelist, so an older
+build cannot delete a key it does not know, and it shows a `crash` row like any other.
+
 ## v18.8.0 — `.indexOn: ["ts"]` on `messages/$phoneKey`, for the nightly prune
 
 No permission changes. `api/wa-prune.js` asks each live conversation only for its

@@ -50,7 +50,7 @@ import { money } from "./vouchers.js";
 
 export const ACTIVITY_KINDS = [
   "booking", "voucher", "table", "waitlist", "reminder", "standing",
-  "settings", "people", "session", "data",
+  "settings", "people", "session", "data", "crash",
 ];
 
 // 365 days. The SAME number is in the prune rule in `database.rules.json`, and

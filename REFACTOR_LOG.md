@@ -38088,3 +38088,11 @@ first line. A run of digits misses "+34 600 123 456", three runs of three, so th
 counts through a phone's separators. And a promise can reject with a booking, whose `.name`
 is a guest's, so `name` and `message` are believed from a real `Error` only. Double-quoted
 runs are masked too, because that is where V8's `JSON.parse` quotes its input.
+
+**The rules.** `crash` joins the `kind` pattern and `ACTIVITY_KINDS`, `kind` joins `.indexOn`
+for the download, and a `crash` child holds the detail, each field a string of at most 2,000
+characters, so the server bounds what an error's text can file. The plan left open whether a
+new kind raises `SCHEMA`. It does not, by the test `src/hooks/CLAUDE.md` states for the next
+field: `activity` is read without a whitelist and never rewritten, so an older build cannot
+delete a key it does not know. `tests/rules/` runs the real `crashEntry` output against the
+real rule, so a key the builder starts to write is checked there.
