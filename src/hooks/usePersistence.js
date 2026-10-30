@@ -607,9 +607,15 @@ export function usePersistence({ autoOptimizer, nowMins }){
     persist(prev,computed,gate);
     return dispatched;
   }
-  // Returns TRUE if dispatched, FALSE if blocked by the stale gate (so callers can
-  // gate their success UI). tableBlocks are not on the bookings auto-retry queue
-  // (rare, low-stakes); on a stale-block the caller simply re-does the action.
+  // Returns TRUE if dispatched, FALSE if it did not go out (so callers can gate their
+  // success UI). tableBlocks are not on the bookings auto-retry queue (rare,
+  // low-stakes); on a held or refused write the caller re-does the action.
+  //
+  // v18.13.0 (#25): which it can only do if it is told. Both callers threw the
+  // boolean away, so a held block closed its dialog and was gone with no word, and a
+  // block refused before the first read answered TRUE. `addBlock` / `removeBlock`
+  // stop on the answer now and BlockModal says so: not the red banner, which sits
+  // collapsed under the dialog's blur (measured), where the sentence cannot be read.
   function saveBlocks(next,isSilent){
     // v15.2.0/v15.4.0: same staleness gate as saveBookings — held, not errored.
     const early=writeGate({gap:isStaleGap(lastBeatRef.current,Date.now()),stale:staleRef.current});
@@ -620,10 +626,6 @@ export function usePersistence({ autoOptimizer, nowMins }){
       return false;
     }
     function persist(computed){
-      if(writeGate({loaded:blocksLoaded.current}).verdict==="refuse"){
-        console.warn("[SAFE] Refused to write tableBlocks — initial read has not completed yet.");
-        return;
-      }
       // v16.0.0: revision-CAS write (lib/revGuard.js) — a stale device's rev is
       // behind the server's, so its overwrite is rejected server-side; the SDK's
       // rollback echo then restores local state via the onValue listeners.
@@ -645,6 +647,11 @@ export function usePersistence({ autoOptimizer, nowMins }){
     // one-line ordering every activity hook point depends on.
     const prev=blocksRef.current;
     const computed=(typeof next==="function")?next(prev):next;
+    // Asked before the mirror moves, as `saveBookings` does: a refusal changes nothing.
+    if(writeGate({loaded:blocksLoaded.current}).verdict==="refuse"){
+      console.warn("[SAFE] Refused to write tableBlocks — initial read has not completed yet.");
+      return false;
+    }
     blocksRef.current=computed;
     setTableBlocks(computed);
     persist(computed);

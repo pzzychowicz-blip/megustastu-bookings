@@ -3441,7 +3441,10 @@ function BookingApp({uid}){
     // the read path uses. A locally-added block therefore has a stable identity
     // before the Firebase echo lands, rather than acquiring one on the way back.
     const next=tableBlocks.concat([sanitizeBlock(block)]);
-    saveBlocks(next);
+    // v18.13.0 (#25): a block that did not go out stops here. The bookings write below
+    // places the day around `next`, a list the server does not hold, and closing the
+    // dialog would lose the block with nothing said. The dialog reads the false.
+    if(!saveBlocks(next)) return false;
     const ok=saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
     if(ok) flash();
     setBlockTarget(null);
@@ -3451,7 +3454,7 @@ function BookingApp({uid}){
     // (tableId+date+allDay+from+to), which two duplicate blocks share exactly —
     // so unblocking either one dropped BOTH. See sanitizeBlock in booking-logic.
     const next=tableBlocks.filter(function(bl){return bl.id!==block.id;});
-    saveBlocks(next);
+    if(!saveBlocks(next)) return false;
     const ok=saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
     if(ok) flash();
     if(next.filter(function(bl){return bl.tableId===block.tableId&&bl.date===block.date;}).length===0) setBlockTarget(null);

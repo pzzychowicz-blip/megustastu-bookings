@@ -38014,3 +38014,22 @@ a banner saying it had been refused. The two refusals are now asked before the m
 moves, and the `array-shape` hold stays where it was, because a hold is going to land.
 Five snapshots moved, edited by hand rather than with `-u`, each losing its `setBookings`
 line and keeping its mirror, and the 256-run order matrix did not move.
+
+**Behaviour change, from the same reading: a block that did not go out no longer closes
+its dialog** (Patryk, through AskUserQuestion). `saveBlocks` answered, and `addBlock` and
+`removeBlock` threw the answer away: a held block closed the dialog and was gone with no
+word, and the bookings write below it placed the day around a list the server did not
+hold. The not-loaded refusal was worse, answering `true` with the screen already moved.
+That refusal now sits above the mirror and answers `false`, as in `saveBookings`, and both
+callers stop on the answer. **The approved design failed on measurement.** The first
+version put the sentence in the red banner and held the dialog open, and on DEV the banner
+could not be read: the strip sits collapsed under the 8px-blur scrim, the message was in
+neither the page nor the dialog's own text, and pressing Block looked like a button that
+did nothing. Brought back to Patryk, who chose inside the dialog. So `BlockModal` keeps an
+always-mounted `role="alert"` at the end of both bodies, with an `InlineAlert` inside a
+`Reveal`, as `SpecialDayModal` does, and no new state reached `BookingApp`. Measured on
+DEV with the gap gate tripped around one press: Block and Unblock each kept the dialog
+open with the sentence in it, the server's rows unchanged at 3 and 4; after a
+`goOffline`/`goOnline`, the same press landed (4 rows, then 3) and the dialog closed. One
+snapshot moved, by hand: the not-loaded scenario lost `setTableBlocks` and answers `false`.
+`mirror` in those snapshots is the bookings', so a separate test reads the blocks' own.

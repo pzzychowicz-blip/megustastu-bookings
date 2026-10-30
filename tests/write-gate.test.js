@@ -28,7 +28,8 @@
 //
 // Reading those snapshots is how the two defects below were found, and fixing them
 // moved the lines they name, by hand, in commits of their own (Patryk's call). What a
-// refusal did to the screen moved in the not-loaded and empty scenarios.
+// refusal did to the screen moved in the not-loaded and empty scenarios, and what a
+// block's refusal answers moved in `saveBlocks`' not-loaded one.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
@@ -823,21 +824,32 @@ describe("saveBlocks", () => {
       }
     `);
   });
-  it("is refused before the first read, and answers true", () => {
+  it("is refused before the first read: it answers false and the screen does not move", () => {
     expect(blocksWith({ on: ["not-loaded"] }, addBlock, false)).toMatchInlineSnapshot(`
       {
         "log": [
-          "setTableBlocks 2",
           "warn: [SAFE] Refused to write tableBlocks — initial read has not completed yet.",
         ],
         "mirror": "a:2 b:4",
         "parked": [],
         "queued": [],
-        "returned": true,
+        "returned": false,
         "stale": false,
         "warning": null,
       }
     `);
+  });
+  // `mirror` in the snapshots is the bookings'. This is the blocks' own, with the
+  // write that does move it as the control.
+  it("only a write that goes out moves the blocks' mirror", () => {
+    const blocksAfter = (o) => {
+      freeze();
+      const h = harness(o);
+      h.fn.saveBlocks(addBlock, false);
+      return h.refs.blocksRef.current.length;
+    };
+    expect(blocksAfter({})).toBe(2);
+    ["gap", "stale", "not-loaded"].forEach((g) => expect(blocksAfter({ on: [g] }), g).toBe(1));
   });
   it("the first shut gate answers alone here too", () => {
     const BLOCK_GATES = ["gap", "stale", "not-loaded"];
@@ -872,7 +884,7 @@ describe("the hook decides nothing the gate decides", () => {
     expect(BLOCKS).toContain("const early=writeGate({gap:isStaleGap(lastBeatRef.current,Date.now()),stale:staleRef.current});");
     expect(BLOCKS.indexOf("const early=writeGate(")).toBeLessThan(BLOCKS.indexOf("const computed="));
     expect(SAVE).toContain("const gate=writeGate({loaded:bookingsLoaded.current,computed:computed,firstLoadCount:firstLoadCount.current,arrayShape:arrayShapeRef.current});");
-    expect(persistOf(BLOCKS)).toContain("writeGate({loaded:blocksLoaded.current})");
+    expect(BLOCKS).toContain("writeGate({loaded:blocksLoaded.current})");
   });
   it("nothing reaches the server above its question, and a refusal never reaches the mirror", () => {
     // The update is inside `persist`, so what is read is `persist`'s one call.
@@ -882,9 +894,28 @@ describe("the hook decides nothing the gate decides", () => {
     expect(asked).toBeGreaterThan(-1);
     expect(asked).toBeLessThan(SAVE.lastIndexOf("bookingsRef.current=computed;"));
     expect(SAVE.lastIndexOf("bookingsRef.current=computed;")).toBeLessThan(SAVE.indexOf("persist(prev,computed,gate);"));
-    const blocks = persistOf(BLOCKS);
-    expect(blocks.indexOf("writeGate(")).toBeGreaterThan(-1);
-    expect(blocks.indexOf("writeGate(")).toBeLessThan(blocks.indexOf('writeWithRev("tableBlocks"'));
+    expect(persistOf(BLOCKS)).toContain('writeWithRev("tableBlocks"');
+    const loaded = BLOCKS.indexOf("writeGate({loaded:");
+    expect(loaded).toBeGreaterThan(-1);
+    expect(loaded).toBeLessThan(BLOCKS.indexOf("blocksRef.current=computed;"));
+    expect(BLOCKS.indexOf("blocksRef.current=computed;")).toBeLessThan(BLOCKS.indexOf("persist(computed);"));
+  });
+  // Both callers threw `saveBlocks`' answer away, and the dialog closed on a block
+  // that had gone nowhere. Measured on DEV: the banner cannot be read under the
+  // dialog's blur, so the sentence is the dialog's own, in a live region that is
+  // mounted before it has anything to say.
+  it("a block that did not go out stops short of the bookings write, and the dialog says so", () => {
+    const APP = stripComments(readFileSync("src/App.jsx", "utf8")).join("\n");
+    ["addBlock", "removeBlock"].forEach((name) => {
+      const fn = liftFunction(APP, name);
+      expect(fn).toContain("if(!saveBlocks(next)) return false;");
+      expect(fn.indexOf("saveBlocks(next)")).toBeLessThan(fn.indexOf("saveBookings("));
+    });
+    const MODAL = stripComments(readFileSync("src/components/BlockModal.jsx", "utf8")).join("\n");
+    expect(MODAL).toContain("setNotSaved(onSave({ tableId, date, allDay: false, from, to }) === false)");
+    expect(MODAL).toContain("setNotSaved(onRemove(bl) === false)");
+    expect(MODAL).toMatch(/<div role="alert">\s*<Reveal show=\{notSaved\}>/);
+    expect(MODAL.match(/\{notSavedEl\}/g)).toHaveLength(2);
   });
   it("and each write has one door: the migration is the only other, and asks the schema gate itself", () => {
     expect((HOOK.match(/update\(ref\(db,"bookings"\)/g) || []).length).toBe(2);
