@@ -154,7 +154,8 @@ An EU business (Fuerteventura, Spain). What the app keeps about people, and wher
   the parse's intent, language, confidence and preference, and the NAMES of the fields
   it filled. A sandbox still logs the first 200 characters and the full result, which
   holds `notes` (allergies, wheelchair needs: health data, GDPR Art. 9), so a sandbox
-  must never receive real guests' messages. Vercel's log retention applies.
+  must never receive real guests' messages. Vercel's log retention applies: one hour,
+  since hosting stays on the Hobby plan (decided 2026-10-30).
 
 **Right to erasure.** Settings → Customers → **Delete customer & all data**
 anonymizes that guest's bookings (name → "Data removed", phone, notes and history
