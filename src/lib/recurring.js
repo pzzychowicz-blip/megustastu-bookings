@@ -15,11 +15,51 @@
 // bookings on 1, 8 and 15 Oct. A rule now starts where its first booking is.
 
 import { hoursFor } from "./constants.js";
-import { toMins, lastStartMins, optimizerActiveFor, bookingsAfterAction } from "./booking-logic.js";
+import { genId, toMins, lastStartMins, optimizerActiveFor, bookingsAfterAction } from "./booking-logic.js";
 import { occurrenceBooking } from "./booking-save.js";
 import { matchesIdentity, normalizePhone } from "./customers.js";
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+// v18.13.0 (#31): the whitelist over `recurring`, moved verbatim out of
+// useRecurring.js so a test can run it, not only hash it.
+export function clampInt(n, def, min, max) {
+  const v = Math.round(Number(n));
+  if (!Number.isFinite(v)) return def;
+  return Math.max(min, Math.min(max, v));
+}
+
+export function sanitizeRule(r) {
+  if (!r || typeof r !== "object") return null;
+  return {
+    id: r.id || genId(),
+    name: r.name || "",
+    phone: r.phone || "",
+    size: clampInt(r.size, 2, 1, 40),
+    weekday: clampInt(r.weekday, 0, 0, 6),
+    time: r.time || "20:00",
+    preference: r.preference || "auto",
+    notes: r.notes || "",
+    active: r.active !== false,
+    skipDates: Array.isArray(r.skipDates) ? r.skipDates.filter(Boolean) : [],
+    createdAt: Number(r.createdAt) || Date.now(),
+    // v18.3.3: the first date the rule books (the date "Repeat weekly" was
+    // ticked on). Absent on older rules, which `ruleStart` (lib/recurring.js)
+    // derives from their first booking instead. A whitelist, so it must be
+    // listed here or the next write to `recurring` deletes it.
+    ...(ISO_DAY.test(r.startDate || "") ? { startDate: r.startDate } : {})
+  };
+}
+
+export function sanitizeRecurring(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  return {
+    v: 1,
+    enabled: src.enabled === true,
+    horizonWeeks: clampInt(src.horizonWeeks, 4, 1, 12),
+    rules: Array.isArray(src.rules) ? src.rules.map(sanitizeRule).filter(Boolean) : []
+  };
+}
 
 // The first date a rule may book. A rule written since v18.3.3 carries it
 // (`startDate`, the date of the booking "Repeat weekly" was ticked on). An

@@ -21,7 +21,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { dueOccurrences, ruleStart, withOccurrences, rulesOfCustomer } from "../src/lib/recurring.js";
+import { dueOccurrences, ruleStart, withOccurrences, rulesOfCustomer, sanitizeRule, sanitizeRecurring } from "../src/lib/recurring.js";
 import { todayStr } from "../src/lib/day.js";
 import { setWeekHours, DEFAULT_WEEK_HOURS, EMPTY_FORM, ALL_TABLES } from "../src/lib/constants.js";
 import { buildBooking } from "../src/lib/booking-save.js";
@@ -226,10 +226,71 @@ describe("the wiring", () => {
     expect(plan.rule.weekday, "a Wednesday").toBe(3);
     expect(doSaveNewBody()).toMatch(/onLanded:function\(\)\{\s*if\(plan\.rule\) addRule\(plan\.rule\);/);
   });
-  it("useRecurring's whitelist keeps startDate", () => {
-    const HOOK = stripComments(
-      readFileSync(new URL("../src/hooks/useRecurring.js", import.meta.url), "utf8")).join("\n");
-    expect(HOOK).toMatch(/startDate: r\.startDate/);
+});
+
+// v18.13.0 (#31): the whitelist, moved out of useRecurring.js and run. A key it does not
+// list is deleted by the next write to `recurring`, from every rule.
+describe("sanitizeRule", () => {
+  const RULE = { id: "r1", name: "Ana", phone: "+34600", size: 4, weekday: 3, time: "19:30", preference: "indoor",
+    notes: "n", active: true, skipDates: ["2026-11-04"], createdAt: 5, startDate: "2026-10-28" };
+
+  it("keeps every key of a stored rule, and drops what it does not know", () => {
+    expect(sanitizeRule(RULE)).toEqual(RULE);
+    expect(sanitizeRule({ ...RULE, stray: 1 })).toEqual(RULE);
+  });
+  it("what it returns reads back as itself", () => {
+    expect(sanitizeRule(sanitizeRule(RULE))).toEqual(RULE);
+  });
+  it("is not a rule unless it is an object", () => {
+    [null, undefined, "x", 5].forEach((r) => expect(sanitizeRule(r), String(r)).toBe(null));
+  });
+  it("fills a rule with nothing in it", () => {
+    const r = sanitizeRule({ createdAt: 5 });
+    expect(r.id).toBeTruthy();
+    const { id: _, ...rest } = r;
+    expect(rest).toEqual({ name: "", phone: "", size: 2, weekday: 0, time: "20:00", preference: "auto",
+      notes: "", active: true, skipDates: [], createdAt: 5 });
+  });
+  it("clamps the size and the weekday, and rounds", () => {
+    expect(sanitizeRule({ size: 99, weekday: 9 })).toMatchObject({ size: 40, weekday: 6 });
+    expect(sanitizeRule({ size: 0, weekday: -1 })).toMatchObject({ size: 1, weekday: 0 });
+    expect(sanitizeRule({ size: "x", weekday: "y" })).toMatchObject({ size: 2, weekday: 0 });
+    expect(sanitizeRule({ size: 3.6 }).size).toBe(4);
+  });
+  it("only an explicit false pauses a rule", () => {
+    expect(sanitizeRule({ active: false }).active).toBe(false);
+    [undefined, null, 0, "no"].forEach((active) => expect(sanitizeRule({ active }).active, String(active)).toBe(true));
+  });
+  it("a date that is not a date is omitted, because RTDB refuses undefined", () => {
+    ["soon", "2026-1-1", "", 5, null].forEach((startDate) => {
+      expect(sanitizeRule({ startDate }), String(startDate)).not.toHaveProperty("startDate");
+    });
+  });
+  it("skipDates is a list of something", () => {
+    expect(sanitizeRule({ skipDates: ["a", "", null, "b"] }).skipDates).toEqual(["a", "b"]);
+    expect(sanitizeRule({ skipDates: "a" }).skipDates).toEqual([]);
+  });
+});
+
+describe("sanitizeRecurring", () => {
+  it("is off unless it says true", () => {
+    [undefined, null, "x", {}, { enabled: 1 }, { enabled: "true" }].forEach((raw) => {
+      expect(sanitizeRecurring(raw).enabled, JSON.stringify(raw)).toBe(false);
+    });
+    expect(sanitizeRecurring({ enabled: true }).enabled).toBe(true);
+  });
+  it("holds the horizon to 1–12 weeks, 4 when unset", () => {
+    expect(sanitizeRecurring({}).horizonWeeks).toBe(4);
+    expect(sanitizeRecurring({ horizonWeeks: 99 }).horizonWeeks).toBe(12);
+    expect(sanitizeRecurring({ horizonWeeks: 0 }).horizonWeeks).toBe(1);
+  });
+  it("drops what is not a rule, and a rules key that is not a list", () => {
+    expect(sanitizeRecurring({ rules: [null, "x", { id: "r1", createdAt: 5 }] }).rules.map((r) => r.id)).toEqual(["r1"]);
+    expect(sanitizeRecurring({ rules: { 0: { id: "r1" } } }).rules).toEqual([]);
+  });
+  it("has one shape, whatever came in", () => {
+    expect(Object.keys(sanitizeRecurring({ stray: 1 })).sort()).toEqual(["enabled", "horizonWeeks", "rules", "v"]);
+    expect(sanitizeRecurring(null).v).toBe(1);
   });
 });
 

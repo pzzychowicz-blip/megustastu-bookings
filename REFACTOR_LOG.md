@@ -38033,3 +38033,29 @@ open with the sentence in it, the server's rows unchanged at 3 and 4; after a
 `goOffline`/`goOnline`, the same press landed (4 rows, then 3) and the dialog closed. One
 snapshot moved, by hand: the not-loaded scenario lost `setTableBlocks` and answers `false`.
 `mirror` in those snapshots is the bookings', so a separate test reads the blocks' own.
+
+### #31: the deciders, run rather than hashed
+
+Escape, Enter, the device label, the two recurring whitelists, the two weekday whitelists
+and what Apply changes lays over a booking lived unexported in hooks, so nothing could
+call them: `tests/schema.test.js` hashed the whitelists, which spots an edit and not a
+wrong result, and `tests/modal-stack.test.js` looked for a `case` in the source. They moved
+to `lib/modal-keys.js` (new), `lib/operating-hours.js` (new), `lib/recurring.js`,
+`lib/presence-state.js` and `lib/whatsapp.js`, and the hooks kept their listeners, refs and
+state. The plan named `sanitizeRule` and `sanitizeWeek`; `sanitizeRecurring`, `sanitizeDay`
+and `clampInt` went with them, because each is what its neighbour calls.
+
+**No behaviour moved, and that is measured.** With comments and whitespace out, seven of
+the eight bodies compare identical to `HEAD`'s and `deviceLabel` differs only in taking the
+agent as a defaulted parameter, so the four `sanitize*` prints stayed and only their keys
+moved: no `SCHEMA` raise. `modifyChanges` is the one new function, and its body is the
+lines it replaced. Moving imports can reorder module evaluation, which a test here cannot
+see, so DEV was reloaded: no console error, Escape closed the block dialog through its
+guard, Enter on an empty form said what Save says ("Customer name is required."), the
+`presence` child read "Mac · Chrome", and the hours and `recurring` read back right.
+
+`tests/modal-keys.test.js` runs every row: eight guarded closes, 24 plain ones, and a check
+that the two lists are exactly `MODAL_Z`, so a new modal has to be decided there. 16
+mutants across the six, each a plausible mistake (a raw setter in place of a guard, the
+kitchen confirm's two saves swapped, `=== true` loosened, the Mac test ahead of the iPhone
+one), all failed a test.

@@ -165,11 +165,7 @@ const PINNED = {
       "hooks/useGeneralSettings.js:sanitizeGeneral": "9497dee0b6",
       "hooks/useLayout.js:sanitizeFloorPlan": "1c43f674f3",
       "hooks/useLayout.js:sanitizeLayout": "317b68da39",
-      "hooks/useOperatingHours.js:sanitizeDay": "a3106dec44",
-      "hooks/useOperatingHours.js:sanitizeWeek": "626f2ee9fb",
       "hooks/useOptimizerSettings.js:sanitizeOptimizer": "74794693a2",
-      "hooks/useRecurring.js:sanitizeRule": "b047ce1ebe",
-      "hooks/useRecurring.js:sanitizeRecurring": "9f3c9986fd",
       "hooks/useRoles.js:sanitizeAdminSettings": "42a2f8f352",
       "hooks/useUserPrefs.js:sanitizeUserPrefs": "fb820d1b7b",
       "hooks/useVoucherDefaults.js:sanitizeVoucherDefaults": "7abe4b008f",
@@ -180,6 +176,12 @@ const PINNED = {
       "lib/booking-logic.js:sanitizeBlock": "d816dc8acd",
       "lib/booking-logic.js:sanitizeBlocks": "e99a88e569",
       "lib/modules.js:sanitizeModules": "fda6f20b7d",
+      // v18.13.0 (#31): these four moved here from the hooks, bodies untouched, so the
+      // prints did not change and SCHEMA was not raised. Only their keys moved.
+      "lib/operating-hours.js:sanitizeDay": "a3106dec44",
+      "lib/operating-hours.js:sanitizeWeek": "626f2ee9fb",
+      "lib/recurring.js:sanitizeRule": "b047ce1ebe",
+      "lib/recurring.js:sanitizeRecurring": "9f3c9986fd",
       "lib/special-days.js:sanitizeException": "d8b74f8542",
       "lib/special-days.js:sanitizeExceptions": "87e01f6ccd",
       "lib/roles.js:sanitizeRole": "fda2bcc13d",
@@ -213,7 +215,7 @@ describe("what is stored is pinned to SCHEMA", () => {
   it("found the sanitisers (a walker that returns none would pass the next test)", () => {
     expect(Object.keys(now).length).toBeGreaterThanOrEqual(25);
     expect(now["lib/booking-fields.js:sanitize"]).toBeTruthy();
-    expect(now["hooks/useRecurring.js:sanitizeRule"]).toBeTruthy();
+    expect(now["lib/recurring.js:sanitizeRule"]).toBeTruthy();
     expect(now["lib/vouchers.js:sanitizeVoucher"]).toBeTruthy();
   });
   it("SCHEMA is the pinned number", () => {

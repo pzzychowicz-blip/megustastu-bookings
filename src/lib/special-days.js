@@ -30,7 +30,7 @@ import { countLabel, lastStartMins } from "./booking-logic.js";
 
 // The opening-hours bounds every day obeys (v14.5.0): open 06–22, close an hour
 // after opening at the earliest and 01:00 (25) at the latest. sanitizeDay in
-// useOperatingHours reads the same function, so a special day and a weekday can
+// lib/operating-hours.js reads the same function, so a special day and a weekday can
 // never disagree about what an hour may be.
 export function clampHours(open, close) {
   let o = Math.round(Number(open));

@@ -92,3 +92,25 @@ export function presenceState(node, now, myKey, canPrune) {
 
   return { devices, prunable, mySince };
 }
+
+// Best-effort human label from the userAgent — "iPad · Safari", "Mac · Chrome",
+// "Windows · Edge", "Android · Chrome". Purely cosmetic; falls back to "Device".
+// v18.13.0 (#31): moved from usePresence.js, the agent string a parameter so a test can
+// hand one in. The hook calls it with none.
+export function deviceLabel(ua=(typeof navigator!=="undefined"&&navigator.userAgent)||""){
+  let os="Device";
+  if(/iPad/.test(ua)) os="iPad";
+  else if(/iPhone/.test(ua)) os="iPhone";
+  else if(/Android/.test(ua)) os="Android";
+  else if(/Macintosh|Mac OS X/.test(ua)) os="Mac";
+  else if(/Windows/.test(ua)) os="Windows";
+  else if(/Linux/.test(ua)) os="Linux";
+  let br="";
+  // Order matters — Edge/Chrome UAs also contain "Safari"/"Chrome" tokens.
+  if(/Edg\//.test(ua)) br="Edge";
+  else if(/OPR\/|Opera/.test(ua)) br="Opera";
+  else if(/Firefox\//.test(ua)) br="Firefox";
+  else if(/Chrome\//.test(ua)&&!/Chromium/.test(ua)) br="Chrome";
+  else if(/Safari\//.test(ua)) br="Safari";
+  return br?os+" · "+br:os;
+}
