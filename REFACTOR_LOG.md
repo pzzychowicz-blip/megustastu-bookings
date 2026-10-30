@@ -38114,3 +38114,12 @@ distinct errors on a fresh page wrote five. The first temporary throw measured n
 it is worth knowing: `if(window.__flag) throw` in `BookingApp` never fired after the flag
 was set, apparently because the React Compiler memoises a block with no reactive
 dependency. The same line testing `activeView` too fired at once.
+
+**The chip and the download.** `Crashes` joins `KIND_LABEL` and `KIND_ORDER`, last, and turning
+it on shows **Download crash data** to `dataExport`. It reads every crash entry, one `get()` on
+`kind`'s index, rather than the rows on screen, and `lib/crash-report.js` builds the file and
+says what happened (`downloadCrashes`, which never rejects, with `read` and `save` handed in
+as `runBackup` does). The read gives up after 15 seconds, because a one-shot read made offline
+waits for the socket and a button must not spin for ever. The answer is said beside the button,
+in an always-mounted `role="status"`: this session had already measured that a banner cannot
+be read under a modal, so the app's usual `setWriteWarning` was not an option here.

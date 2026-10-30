@@ -101,6 +101,26 @@ export function logActivity(entries) {
   });
 }
 
+// v18.13.0 (#28): every crash entry, for Download crash data. One read on `kind`'s index
+// rather than the log's feed, which holds a page of whatever range is open. The timeout
+// is because a one-shot read made offline waits for the socket and never answers (the
+// `readDatabaseRoot` note in usePersistence.js), and a button must not spin for ever.
+export const CRASH_READ_MS = 15000;
+export function readCrashes() {
+  let timer;
+  const late = new Promise(function (_, reject) {
+    timer = setTimeout(function () { reject(new Error("the crash read timed out")); }, CRASH_READ_MS);
+  });
+  return Promise.race([get(query(ref(db, "activity"), orderByChild("kind"), equalTo("crash"))), late])
+    .then(function (snap) {
+      clearTimeout(timer);
+      return Object.values(snap.val() || {});
+    }, function (err) {
+      clearTimeout(timer);
+      throw err;
+    });
+}
+
 // ── ERASURE ─────────────────────────────────────────────────────────────────
 //
 // "Delete customer & all data" anonymises the guest's BOOKINGS, and the log

@@ -6,7 +6,11 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { crashEntry, crashGate, framesOf, maskText, noteCrashView, crashView, MAX_PER_LOAD } from "../src/lib/crash-report.js";
+import {
+  crashEntry, crashGate, framesOf, maskText, noteCrashView, crashView, crashFileText, downloadCrashes,
+  MAX_PER_LOAD, CRASH_EMPTY, CRASH_UNREADABLE, CRASH_UNSAVED,
+} from "../src/lib/crash-report.js";
+import { ACTIVITY_KINDS } from "../src/lib/activity.js";
 
 const CTX = { where: "render", version: "18.13.0", view: "timeline", device: "Android · Chrome" };
 const V8 = `TypeError: Cannot read properties of undefined (reading 'time')
@@ -235,5 +239,66 @@ describe("the wiring", () => {
   });
   it("App keeps the view noted", () => {
     expect(read("App.jsx")).toContain("useEffect(function(){noteCrashView(activeView);},[activeView]);");
+  });
+});
+
+describe("the download", () => {
+  const CRASH = (at, message) => ({ kind: "crash", at, uid: "u1", email: "a@b.c", text: "crash", auto: true, crash: { where: "error", message } });
+  it("holds crash entries and nothing else, oldest first", () => {
+    const list = JSON.parse(crashFileText([
+      CRASH(2000, "second"),
+      { kind: "booking", at: 1500, email: "a@b.c", text: "created {b:b1}" },
+      CRASH(1000, "first"),
+      null,
+    ]));
+    expect(list).toEqual([
+      { at: "1970-01-01T00:00:01.000Z", email: "a@b.c", where: "error", message: "first" },
+      { at: "1970-01-01T00:00:02.000Z", email: "a@b.c", where: "error", message: "second" },
+    ]);
+  });
+  it("is nothing at all when there is nothing to hold", () => {
+    expect(crashFileText([])).toBe("");
+    expect(crashFileText(null)).toBe("");
+    expect(crashFileText([{ kind: "booking", at: 1 }])).toBe("");
+  });
+  it("hands the file over and says nothing", async () => {
+    const saved = [];
+    const said = await downloadCrashes({
+      read: () => Promise.resolve([CRASH(1000, "x")]),
+      save: (...a) => saved.push(a),
+      today: "2026-10-30",
+    });
+    expect(said).toBe("");
+    expect(saved).toHaveLength(1);
+    expect(saved[0][1]).toBe("mgt-crashes-2026-10-30.json");
+    expect(saved[0][2]).toBe("application/json");
+    expect(JSON.parse(saved[0][0])[0].message).toBe("x");
+  });
+  it("says so when there is nothing, and saves no empty file", async () => {
+    let saves = 0;
+    expect(await downloadCrashes({ read: () => Promise.resolve([]), save: () => { saves++; }, today: "d" })).toBe(CRASH_EMPTY);
+    expect(saves).toBe(0);
+  });
+  it("a failed read, and a failed save, are said and never thrown", async () => {
+    expect(await downloadCrashes({ read: () => Promise.reject(new Error("Index not defined")), save: () => {}, today: "d" })).toBe(CRASH_UNREADABLE);
+    expect(await downloadCrashes({
+      read: () => Promise.resolve([CRASH(1, "x")]),
+      save: () => { throw new Error("no blob"); },
+      today: "d",
+    })).toBe(CRASH_UNSAVED);
+  });
+  it("the read asks for the kind, on its index", () => {
+    const hook = stripComments(readFileSync(new URL("../src/hooks/useActivityLog.js", import.meta.url), "utf8")).join("\n");
+    expect(hook).toContain('get(query(ref(db, "activity"), orderByChild("kind"), equalTo("crash")))');
+  });
+  it("the button is behind the chip and the capability, and refuses twice over", () => {
+    const read = (f) => stripComments(readFileSync(new URL("../src/" + f, import.meta.url), "utf8")).join("\n");
+    const log = read("components/ActivityLogModal.jsx");
+    expect(log).toContain("<Reveal show={crashesOn && !!canDownloadCrashes}>");
+    expect(log).toMatch(/crash: "Crashes"/);
+    ACTIVITY_KINDS.forEach((k) => expect(log, k).toMatch(new RegExp('"' + k + '"|' + k + ":")));
+    const app = read("App.jsx");
+    expect(app).toContain('canDownloadCrashes={can("dataExport")}');
+    expect(app).toContain('function doDownloadCrashes(){\n    if(refused("dataExport")) return Promise.resolve("");');
   });
 });

@@ -136,3 +136,34 @@ export function crashGate(max = MAX_PER_LOAD) {
 let viewNow = "";
 export function noteCrashView(view) { viewNow = view || ""; }
 export function crashView() { return viewNow; }
+
+// ── THE DOWNLOAD ────────────────────────────────────────────────────────────
+export const CRASH_EMPTY = "No crashes have been recorded.";
+export const CRASH_UNREADABLE = "Couldn't read the crash data. Please try again.";
+export const CRASH_UNSAVED = "Couldn't create the file on this device.";
+
+// The file: crash entries and nothing else, oldest first, or "" when there are none. The
+// read asks for the kind already; this filters again, because the promise is the file's.
+export function crashFileText(rows) {
+  const list = (Array.isArray(rows) ? rows : [])
+    .filter((r) => r && r.kind === "crash")
+    .sort((a, b) => (a.at || 0) - (b.at || 0))
+    .map((r) => ({ at: r.at ? new Date(r.at).toISOString() : null, email: r.email || "", ...(r.crash || {}) }));
+  return list.length ? JSON.stringify(list, null, 2) + "\n" : "";
+}
+
+// Resolves to what the screen should say, "" when the file was handed over. It never
+// rejects, so the caller has one path. `read` and `save` are handed in, which is what
+// keeps Firebase and the DOM out of this file, as `runBackup` does.
+export function downloadCrashes({ read, save, today }) {
+  return read().then(function (rows) {
+    const text = crashFileText(rows);
+    if (!text) return CRASH_EMPTY;
+    try {
+      save(text, "mgt-crashes-" + today + ".json", "application/json");
+      return "";
+    } catch {
+      return CRASH_UNSAVED;
+    }
+  }, function () { return CRASH_UNREADABLE; });
+}

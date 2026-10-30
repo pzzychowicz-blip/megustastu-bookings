@@ -31,7 +31,7 @@
 // with it.
 import { useId, useMemo, useState } from "react";
 import { S, T, FW, SP, R, H, IC, BTN } from "../lib/constants";
-import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, mkDangerBtn, AutoHeight } from "./atoms";
+import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, mkDangerBtn, AutoHeight, Reveal } from "./atoms";
 import { rowText, activityCsv, activityCsvName } from "../lib/activity";
 // v18.0.0 session 11: the same index the Customers tab is built from, so "can
 // this row lead anywhere" is answered by the thing that would have to answer it
@@ -56,15 +56,17 @@ import { countLabel } from "../lib/booking-logic";
 
 // The kinds a person would filter by, in the order they matter during service.
 // `session` and `data` are deliberately last: signing in and exporting a backup
-// are real entries and nobody opens this screen looking for them.
+// are real entries and nobody opens this screen looking for them. `crash` is after
+// them: it is for whoever maintains the app, not for the service.
 const KIND_LABEL = {
   booking: "Bookings", voucher: "Vouchers", table: "Tables",
   waitlist: "Waitlist", reminder: "Reminders", standing: "Standing",
   settings: "Settings", people: "People", session: "Sign-in", data: "Data",
+  crash: "Crashes",
 };
 const KIND_ORDER = [
   "booking", "voucher", "table", "waitlist", "reminder",
-  "standing", "settings", "people", "session", "data",
+  "standing", "settings", "people", "session", "data", "crash",
 ];
 
 // v18.2.0 phase 73 (round 2's X4): the range and kind chips are the app's
@@ -101,7 +103,8 @@ function personOf(email) {
 export function ActivityLogModal({
   fromDay, toDay, onSetFromDay, onSetToDay, badDay, backwards,
   rows, loading, loadingMore, hasMore, onLoadOlder,
-  canClear, clearBusy, clearMsg, onClearRange, onDownload, onOpenCustomer, retentionText,
+  canClear, clearBusy, clearMsg, onClearRange, onDownload, canDownloadCrashes, onDownloadCrashes,
+  onOpenCustomer, retentionText,
   bookings, onOpenBooking, onClose,
 }) {
   const [armed, setArmed] = useState(false);
@@ -114,6 +117,9 @@ export function ActivityLogModal({
   // PERSON do" is the question an audit log is opened for. On a busy day the
   // answer was buried under the auto-optimiser's own reshuffles.
   const [peopleOnly, setPeopleOnly] = useState(false);
+  // v18.13.0 (#28): Download crash data. Its answer stays here, beside the button.
+  const [crashBusy, setCrashBusy] = useState(false);
+  const [crashMsg, setCrashMsg] = useState("");
 
   // The quick ranges. `addDays(todayStr(), -6)` is six days back INCLUSIVE of
   // today, which is what "last 7 days" means to a person counting shifts.
@@ -206,6 +212,16 @@ export function ActivityLogModal({
       return next;
     });
   }
+
+  function pressCrashes() {
+    setCrashBusy(true);
+    setCrashMsg("");
+    onDownloadCrashes().then(function (said) {
+      setCrashBusy(false);
+      setCrashMsg(said);
+    });
+  }
+  const crashesOn = !!kinds.crash;
 
   return (
     <Overlay onClose={onClose} footer={
@@ -306,6 +322,33 @@ export function ActivityLogModal({
           aria-pressed={peopleOnly}
           onClick={function () { setPeopleOnly(function (v) { return !v; }); }}
         >People only</OutlineChip>
+      </div>
+
+      {/* v18.13.0 (#28): the whole of the crash record, not the rows on screen, so a person
+          is never left working out how far back the list reaches. Behind the chip, because
+          nobody else opens this screen for it; `dataExport`, because it is a file leaving
+          the building, like the CSV and the backup. */}
+      <Reveal show={crashesOn && !!canDownloadCrashes}>
+        {crashesOn && canDownloadCrashes ? (
+          <div style={{ marginBottom: SP.base }}>
+            <button
+              type="button"
+              className="mgt-hover-scale"
+              disabled={crashBusy}
+              onClick={pressCrashes}
+              style={mkBtn({
+                background: BTN.nav, fontSize: T.body, minHeight: H.compact,
+                display: "inline-flex", alignItems: "center", gap: SP.snug,
+                opacity: crashBusy ? 0.5 : 1,
+              })}
+            ><DownloadIcon size={IC.control} />{crashBusy ? "Reading…" : "Download crash data"}</button>
+          </div>
+        ) : null}
+      </Reveal>
+      <div role="status" style={{ fontSize: T.body, color: S.muted }}>
+        <Reveal show={crashesOn && !!crashMsg}>
+          {crashesOn && crashMsg ? <div style={{ marginBottom: SP.base }}>{crashMsg}</div> : null}
+        </Reveal>
       </div>
 
       {/* The count, because the list is no longer bounded by a day and "how

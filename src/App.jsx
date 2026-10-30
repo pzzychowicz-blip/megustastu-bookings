@@ -340,7 +340,7 @@ import { knownTagIds } from "./lib/tags";
 // v18.0.0 session 8: the activity log. `useActivityLog` installs the module-level
 // sink every writer emits into; `useActivityFeed` is the app's first Firebase
 // QUERY, and is attached only while the log is open.
-import { useActivityLog, useActivityFeed, redactGuest, pruneActivity, clearActivityAndLog } from "./hooks/useActivityLog";
+import { useActivityLog, useActivityFeed, redactGuest, pruneActivity, clearActivityAndLog, readCrashes } from "./hooks/useActivityLog";
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
@@ -376,7 +376,7 @@ import { onPrintEnd, printOrReport, PRINT_IGNORED_TEXT } from "./lib/print-end";
 // v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
 // stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
 import { activityWindow, retentionMs, retentionLabel, clearOutcome, CLEAR_FAILED } from "./lib/activity";
-import { noteCrashView } from "./lib/crash-report";
+import { noteCrashView, downloadCrashes } from "./lib/crash-report";
 
 // ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
 // `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
@@ -1693,6 +1693,12 @@ function BookingApp({uid}){
     if(refused("dataExport")) return;
     try{saveTextFile(text,filename,"text/csv;charset=utf-8");}
     catch{setWriteWarning("Couldn't create the file on this device.");}
+  }
+  // v18.13.0 (#28): the same capability, the same reasoning. Resolves to what the log
+  // should say, in the log: the banner cannot be read under a modal (measured, v18.13.0).
+  function doDownloadCrashes(){
+    if(refused("dataExport")) return Promise.resolve("");
+    return downloadCrashes({read:readCrashes,save:saveTextFile,today:todayStr()});
   }
   const prunedRef=useRef(false);
   useEffect(function(){
@@ -4909,6 +4915,8 @@ function BookingApp({uid}){
           clearMsg={activityClearMsg}
           onClearRange={doClearActivity}
           onDownload={doDownloadActivity}
+          canDownloadCrashes={can("dataExport")}
+          onDownloadCrashes={doDownloadCrashes}
           onOpenCustomer={openCustomerByName}
           retentionText={retentionLabel(activityRetentionDays)}
           bookings={bookings}
