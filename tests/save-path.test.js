@@ -48,9 +48,8 @@
 import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import process from "node:process";
-import { Linter } from "eslint";
-import globals from "globals";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { liftFunction, liftEffect, compiler, freeNames, importScope as scopeOf } from "./lift.js";
 import * as bookingLogic from "../src/lib/booking-logic.js";
 import * as bookingFields from "../src/lib/booking-fields.js";
 import * as bookingSave from "../src/lib/booking-save.js";
@@ -84,100 +83,8 @@ const read = (rel) => stripComments(readFileSync(new URL("../" + rel, import.met
 const APP = read("src/App.jsx");
 const WALKIN = read("src/hooks/useWalkin.js");
 
-// ── Lifting ─────────────────────────────────────────────────────────────────
-// Skip a string literal starting at `i`; returns the index of its closing quote.
-function skipString(src, i) {
-  const q = src[i];
-  for (let j = i + 1; j < src.length; j++) {
-    if (src[j] === "\\") { j++; continue; }
-    if (src[j] === q) return j;
-  }
-  throw new Error("unterminated string at " + i);
-}
-// The index of the brace closing the one opened at `open`, skipping strings.
-function closeOf(src, open) {
-  let depth = 0;
-  for (let i = open; i < src.length; i++) {
-    const c = src[i];
-    if (c === '"' || c === "'" || c === "`") { i = skipString(src, i); continue; }
-    if (c === "{") depth++;
-    else if (c === "}" && --depth === 0) return i;
-  }
-  throw new Error("unbalanced braces from " + open);
-}
-// `function NAME(…){…}` — exactly one declaration, or the lift is ambiguous.
-function liftFunction(src, name) {
-  const head = "function " + name + "(";
-  const at = src.indexOf(head);
-  if (at < 0) throw new Error("no function " + name);
-  if (src.indexOf(head, at + 1) >= 0) throw new Error("two functions named " + name);
-  const open = src.indexOf("{", src.indexOf(")", at));
-  return src.slice(at, closeOf(src, open) + 1);
-}
-// The `useEffect(function(){…}` callback whose body holds `marker`.
-function liftEffect(src, marker, as) {
-  const m = src.indexOf(marker);
-  if (m < 0) throw new Error("no marker " + marker);
-  const at = src.lastIndexOf("useEffect(function(){", m);
-  const open = src.indexOf("{", at);
-  const close = closeOf(src, open);
-  if (close < m) throw new Error("marker " + marker + " is not inside the effect before it");
-  return "function " + as + "()" + src.slice(open, close + 1);
-}
-
-// `import { a, b as c } from "…/lib/x"` → { c: LIB.x.b, … } for every name the
-// lifted text actually uses. Word-boundary match: binding an unused name is
-// harmless, missing a used one is not (and `freeNames` below catches that).
-function importScope(src, lifted) {
-  const scope = {};
-  const re = /import\s*\{([^}]*)\}\s*from\s*"([^"]+)"/g;
-  let m;
-  while ((m = re.exec(src)) !== null) {
-    const lib = /(?:^|\/)lib\/([\w-]+)$/.exec(m[2]);
-    m[1].split(",").map((s) => s.trim()).filter(Boolean).forEach((spec) => {
-      const [imported, local] = spec.split(/\s+as\s+/).map((x) => x.trim());
-      const name = local || imported;
-      if (!new RegExp("\\b" + name.replace(/\$/g, "\\$") + "\\b").test(lifted)) return;
-      const mod = lib && LIB[lib[1]];
-      if (!mod) throw new Error("lifted code uses `" + name + "` from " + m[2] + ", which the harness does not provide");
-      if (!(imported in mod)) throw new Error(m[2] + " has no export " + imported);
-      scope[name] = mod[imported];
-    });
-  }
-  return scope;
-}
-
-// Every free name in the lifted text, by ESLint's own `no-undef` (a direct
-// devDependency, so this is the linter's scope analysis rather than a regex).
-const freeNamesCache = new Map();
-function freeNames(text) {
-  if (freeNamesCache.has(text)) return freeNamesCache.get(text);
-  const msgs = new Linter().verify(text, {
-    languageOptions: { ecmaVersion: 2024, sourceType: "script", globals: { ...globals.builtin } },
-    rules: { "no-undef": "error" },
-  });
-  const fatal = msgs.filter((m) => m.ruleId !== "no-undef");
-  if (fatal.length) throw new Error("lifted code does not parse: " + fatal[0].message);
-  const names = Array.from(new Set(msgs.map((m) => /'([^']+)'/.exec(m.message)[1]))).sort();
-  freeNamesCache.set(text, names);
-  return names;
-}
-
-// Compile the lifted functions together, so they call each other as they do in
-// the file, inside one scope: the file's lib imports plus `env`.
-function compile(fileSrc, lifted, env) {
-  const text = lifted.join("\n");
-  const imports = importScope(fileSrc, text);
-  Object.keys(env).forEach((k) => {
-    if (k in imports) throw new Error("env shadows the import " + k);
-  });
-  const unbound = freeNames(text).filter((n) => !(n in imports) && !(n in env));
-  if (unbound.length) throw new Error("lifted code uses names the harness does not bind: " + unbound.join(", "));
-  const names = Object.keys(imports).concat(Object.keys(env));
-  const exported = lifted.map((src) => /^function ([\w$]+)\(/.exec(src)[1]);
-  const body = '"use strict";\n' + text + "\nreturn {" + exported.join(",") + "};";
-  return new Function(...names, body)(...names.map((n) => (n in env ? env[n] : imports[n])));
-}
+const compile = compiler(LIB);
+const importScope = (src, lifted) => scopeOf(LIB, src, lifted, {});
 
 // ── App's save path, lifted ─────────────────────────────────────────────────
 // `doSave` is the door both kinds of save go through (validation, the prompts,

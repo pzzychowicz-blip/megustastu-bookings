@@ -37957,3 +37957,21 @@ Thirty lockfile packages in all, sixteen of them rolldown's platform binaries;
 `package.json` is unchanged, because every one was in range. `firebase` 13 and
 `@firebase/rules-unit-testing` 6 are the only `npm outdated` rows left, and they wait for
 go-live (#36). The gate and the 311 rules tests ran on a clean `npm ci`.
+
+### #25: the write gates under test
+
+The scan's top item. `lib/write-path.js` tested the arithmetic, but the ORDER of the
+gates lived inline in `saveBookings` and `persist`, in a hook no test executes, and
+`/bookings/$bid` allows a delete with no CAS, so for a manager's or admin's session the
+client's empty-array check is the last defence against the failure behind the original
+data-loss incident.
+
+**Characterization first, in its own commit, against the untouched hook.**
+`tests/write-gate.test.js` runs the hook's own code the way `save-path.test.js` runs
+App's: `saveBookings`, `saveBlocks` and the queue around them lifted from the stripped
+source, with the real lib modules, the refs as plain objects and recorded stubs for
+React's setters and Firebase. `save-path`'s helpers moved to `tests/lift.js` so there is
+one copy of them (116 tests and every snapshot unchanged). 41 tests: 25 pinned scenarios
+and every combination of shut gates (64 × 4 forms of write) against the first gate alone,
+which is what holds their order. It follows a held write through the real `resync()` to
+the server, and a rejected one through its four attempts to the parked banner.
