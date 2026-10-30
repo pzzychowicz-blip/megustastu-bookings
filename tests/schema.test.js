@@ -79,8 +79,10 @@ describe("the writers ask it", () => {
   it("bookings, before the freshness gate, and the legacy migration", () => {
     const P = read("hooks/usePersistence.js");
     const fn = P.slice(P.indexOf("function saveBookings("), P.indexOf("function saveBlocks("));
-    expect(fn.indexOf('if(writesBlocked("bookings")){dropped();return false;}')).toBeGreaterThan(-1);
-    expect(fn.indexOf('if(writesBlocked("bookings"))')).toBeLessThan(fn.indexOf("if(staleRef.current){"));
+    // v18.13.0: the order is `writeGate`'s (tests/write-gate.test.js runs it); what
+    // is left to read here is that the hook hands this gate its own answer.
+    expect(fn).toContain('const early=writeGate({schemaBlocked:writesBlocked("bookings"),');
+    expect(fn).toContain('if(early.verdict==="refuse"){dropped();return false;}');
     expect(P).toContain('if(writesBlocked("the bookings migration")) return;');
   });
   it("every rev-paired node, in the one function that writes them", () => {

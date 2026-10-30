@@ -838,3 +838,43 @@ describe("saveBlocks", () => {
     }));
   });
 });
+
+// ── The hook cannot go round it ──────────────────────────────────────────────
+// Everything above runs the code as it stands. This is what stops a later edit
+// adding a seventh `if` beside the gate, or a write that never asks: it reads the
+// stripped source, because the hook's comments describe every one of these in prose.
+describe("the hook decides nothing the gate decides", () => {
+  const SAVE = liftFunction(HOOK, "saveBookings");
+  const BLOCKS = liftFunction(HOOK, "saveBlocks");
+  const persistOf = (fn) => liftFunction(fn, "persist");
+
+  it("no gate's condition is left in saveBookings or saveBlocks", () => {
+    [SAVE, BLOCKS].forEach((fn) => {
+      [/if\(staleRef\.current\)/, /if\(isStaleGap\(/, /if\(writesBlocked\(/, /if\(!(bookings|blocks)Loaded\.current\)/,
+        /\.length===0/, /firstLoadCount\.current[!>=]/, /if\(arrayShapeRef\.current\)/,
+      ].forEach((old) => expect(fn).not.toMatch(old));
+    });
+  });
+  it("each write asks before it runs its updater, and each fact goes in the question", () => {
+    expect(SAVE).toContain('const early=writeGate({schemaBlocked:writesBlocked("bookings"),gap:isStaleGap(lastBeatRef.current,Date.now()),stale:staleRef.current});');
+    expect(SAVE.indexOf("const early=writeGate(")).toBeLessThan(SAVE.indexOf("next(prevHeld)"));
+    expect(SAVE.indexOf("const early=writeGate(")).toBeLessThan(SAVE.indexOf("const computed="));
+    expect(BLOCKS).toContain("const early=writeGate({gap:isStaleGap(lastBeatRef.current,Date.now()),stale:staleRef.current});");
+    expect(BLOCKS.indexOf("const early=writeGate(")).toBeLessThan(BLOCKS.indexOf("const computed="));
+    expect(persistOf(SAVE)).toContain("writeGate({loaded:bookingsLoaded.current,computed:computed,firstLoadCount:firstLoadCount.current,arrayShape:arrayShapeRef.current})");
+    expect(persistOf(BLOCKS)).toContain("writeGate({loaded:blocksLoaded.current})");
+  });
+  it("nothing reaches the server above its question", () => {
+    const save = persistOf(SAVE);
+    expect(save.indexOf("writeGate(")).toBeGreaterThan(-1);
+    expect(save.indexOf("writeGate(")).toBeLessThan(save.indexOf('update(ref(db,"bookings"),patch)'));
+    const blocks = persistOf(BLOCKS);
+    expect(blocks.indexOf("writeGate(")).toBeGreaterThan(-1);
+    expect(blocks.indexOf("writeGate(")).toBeLessThan(blocks.indexOf('writeWithRev("tableBlocks"'));
+  });
+  it("and each write has one door: the migration is the only other, and asks the schema gate itself", () => {
+    expect((HOOK.match(/update\(ref\(db,"bookings"\)/g) || []).length).toBe(2);
+    expect(HOOK).toMatch(/if\(writesBlocked\("the bookings migration"\)\) return;\s+update\(ref\(db,"bookings"\),Object\.assign\(nulls,keyed\)\)/);
+    expect((HOOK.match(/writeWithRev\(/g) || []).length).toBe(1);
+  });
+});

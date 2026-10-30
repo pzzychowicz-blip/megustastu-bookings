@@ -37975,3 +37975,33 @@ one copy of them (116 tests and every snapshot unchanged). 41 tests: 25 pinned s
 and every combination of shut gates (64 × 4 forms of write) against the first gate alone,
 which is what holds their order. It follows a held write through the real `resync()` to
 the server, and a rejected one through its four attempts to the parked banner.
+
+**Then `writeGate`** (`lib/write-path.js`), which answers `{verdict, gate}`:
+refuse, hold or write, and which gate said so. `saveBookings`, its `persist` and
+`saveBlocks` ask it at the moments they asked before, and each branch's body is
+unchanged. **No behaviour change, and the proof is that `tests/write-gate.test.js`
+passed with no line of it moved.** Two source reads spelled the old conditions
+(`tests/schema.test.js`, `tests/retry-report.test.js`) and now read the new ones. A
+stripped-source pin fails a gate's condition left in either writer, a fact not passed,
+or a write above its question.
+
+**Sabotage, measured.** 19 mutants: each gate removed, each neighbouring pair swapped,
+the wipe's bound moved, and each hook branch disconnected. All 19 fail a test; 18 fail
+in the hook's own code. **The one that did not was informative**: swapping `stale` and
+`not-loaded` passed all 45, because the hook asks those two in separate calls, so
+inside the hook they never meet and the order across that join is its call order. A unit
+test holds the function's own order there now. Four more mutants went round the gate (a
+seventh `if`, `persist` no longer asking, a fact left out, a second door to the
+server), and the pin caught each. The first report read "SURVIVED" on all 19: its regex
+had matched vitest's `Failed Tests` banner rather than the summary, and the counts beside
+it said otherwise.
+
+**Live, on DEV, through the worktree preview** (`writeGate` served, v18.13.0, judged from
+the stored row rather than the screen). A write: status `seated`, a new `updatedAt`, two
+history lines, no warning. **Refuse**, with the real schema gate shut in that page's
+module state only: the row byte-identical, the card unchanged, the `[SAFE]` line logged.
+**Hold**, with `Date.now` shifted 120 s around one tap so the gap gate tripped at the write:
+the card read `seated` while the server still read `confirmed`, "Syncing" on screen, and
+after a `goOffline`/`goOnline` the replay landed with its history and the banner cleared.
+The not-loaded, empty and legacy-shape branches are not reachable on a loaded DEV page
+without wiping it, so those rest on the hook's own code under test.

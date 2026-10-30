@@ -230,6 +230,49 @@ export function isStaleGap(lastBeat, nowMs, gapMs) {
   return (nowMs - lastBeat) > (gapMs == null ? STALE_GAP_MS : gapMs);
 }
 
+// v18.13.0 (#25): which gate stops a write, in the order a write meets them.
+//
+// The order IS the contract, and it lived as six `if`s spread over `saveBookings`
+// and its `persist`, in a hook no test executes. It is the last client defence for
+// a manager's or admin's session: `/bookings/$bid` allows a delete with no CAS, so
+// the empty-array line below is what stands between that session and the failure
+// behind the v13 incident. tests/write-gate.test.js runs every combination of shut
+// gates through the hook's own code.
+//
+//   schema       refuse  a build the database is ahead of drops fields it cannot see
+//   gap          hold    the event loop froze; this tab's snapshot may be old
+//   stale        hold    the snapshot is marked old, or a write was just rejected
+//   not-loaded   refuse  the first read has not landed, so state is [] whatever is stored
+//   empty        refuse  a list that was non-empty at load is about to be wiped
+//   array-shape  hold    the legacy node has not migrated to per-booking children
+//   (none)       write
+//
+// A refusal is final. A hold can be replayed on fresh data, if the write is the kind
+// that can: the hook decides that, and everything else about carrying a verdict out.
+//
+// **A fact a caller does not pass is a gate that caller does not ask.** The hook asks
+// twice: the first three before the write is computed, because a refused or dropped
+// write must never run its updater, and the rest once `computed` exists. `saveBlocks`
+// asks only gap, stale and not-loaded: `writeWithRev` holds the schema gate, removing
+// the last block is an ordinary edit, and a block list has no legacy shape. So
+// `loaded` refuses only on a literal `false`. No call passes both halves, so the
+// order across that join in the running app is the hook's own call order.
+//
+// `gap` comes before `stale` and is named apart because it is the one gate with a side
+// effect to run: the caller trips `gapTrip()` on it, whether or not `stale` is already set.
+export function writeGate(facts) {
+  const f = facts || {};
+  if (f.schemaBlocked) return { verdict: "refuse", gate: "schema" };
+  if (f.gap) return { verdict: "hold", gate: "gap" };
+  if (f.stale) return { verdict: "hold", gate: "stale" };
+  if (f.loaded === false) return { verdict: "refuse", gate: "not-loaded" };
+  if (Array.isArray(f.computed) && f.computed.length === 0 && f.firstLoadCount !== null && f.firstLoadCount > 0) {
+    return { verdict: "refuse", gate: "empty" };
+  }
+  if (f.arrayShape) return { verdict: "hold", gate: "array-shape" };
+  return { verdict: "write", gate: null };
+}
+
 // v15.4.0: how many times a blocked or server-rejected user write is replayed on
 // freshly-resynced data before the automatic attempts stop.
 //
