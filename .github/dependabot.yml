@@ -16,11 +16,12 @@
 #    PREVIEW of it. Nothing merges by itself. Auto-merge is not configured.
 #  • Version bumps stay a decision made by hand, one release at a time (the
 #    majors that are waiting are ROADMAP #36).
-#  • An advisory with no fix in range gets no pull request. The five high
-#    `@grpc/grpc-js` advisories under `@firebase/firestore` are that case on
-#    2026-10-07: their only offered fix downgrades firebase to 9. firebase 13.1
-#    pins the same range, so the waiting major does not clear them either, and
-#    nothing in src, api or scripts imports Firestore (2026-10-30).
+#  • An advisory with no fix in range gets no pull request. The two
+#    `@grpc/grpc-js` advisories under `@firebase/firestore` (five high packages
+#    in `npm audit`) are that case: their only offered fix downgrades firebase
+#    to 9, firebase 13.1 pins the same range, so the waiting major does not
+#    clear them either, and nothing in src, api or scripts imports Firestore
+#    (2026-10-30).
 version: 2
 updates:
   - package-ecosystem: npm

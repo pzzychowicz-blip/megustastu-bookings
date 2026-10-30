@@ -88,7 +88,7 @@ and `MGT_Bookings_Tech_Debt_Scan_2026-10-30.md`.
 
 - **Firebase 13 and rules-unit-testing 6, together (#36).** After go-live (Patryk), with
   a tablet check. firebase 13.1 pins the same `@grpc/grpc-js` `~1.9.0`, so it does not
-  clear the five `@firebase/firestore` advisories.
+  clear that package's two advisories (`npm audit` counts them as five packages).
 
 - **Trim DESIGN.md to the nested-notes standard (#33).** After go-live (Patryk). It
   holds 159,990 characters, up 43% in five weeks, and every visual session pays to read
