@@ -37946,3 +37946,14 @@ that remain are the two `@grpc/grpc-js` advisories seen through its dependents. 
 13.1 pins the same `~1.9.0`, so an upgrade would not fix them either, and Patryk
 dismisses them as "vulnerable code is not used" after the merge. `npm ls jose` still
 reads 5.10.0.
+
+### #35: the in-range bumps
+
+Each measured alone, so a change could be pinned on one package. **eslint** 10.12 → 10.14:
+lint stays at 63, so the cap is not in question. **react** and **react-dom** 19.3.0 →
+19.3.1: same size, new hash. **vite** 8.3.3 → 8.3.5, with rolldown 1.2.13 → 1.2.16: entry
+430.01 → 430.11 kB (125.63 → 125.65 gz). **vitest** 5.0.3 → 5.0.5: 3,731 tests, 4.2 s.
+Thirty lockfile packages in all, sixteen of them rolldown's platform binaries;
+`package.json` is unchanged, because every one was in range. `firebase` 13 and
+`@firebase/rules-unit-testing` 6 are the only `npm outdated` rows left, and they wait for
+go-live (#36). The gate and the 311 rules tests ran on a clean `npm ci`.
