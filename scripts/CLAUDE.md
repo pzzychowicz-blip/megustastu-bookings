@@ -12,6 +12,54 @@ everywhere: never hand-edit the generated icons in `public/`.
 
 ---
 
+## Reading a crash's stack — rebuild on demand (v18.13.0)
+
+Production ships no source maps, and nothing about production changes for this. A crash
+entry's frames are minified positions (`assets/index-x.js:1:123456`), read by rebuilding the
+commit that crashed, with a map, in a throwaway copy.
+
+1. Settings → Admin → **Open the log** → **Crashes** → **Download crash data**. Each entry
+   carries its `version`.
+2. Find that version's merge on `main`:
+
+   ```bash
+   git log --first-parent origin/main --format='%h %s' --grep='v18.13.0'
+   ```
+
+3. Rebuild that commit. **`VERCEL_ENV=production` is not optional**, and the reason is below:
+
+   ```bash
+   git worktree add /tmp/mgt-rebuild <commit>
+   cd /tmp/mgt-rebuild && npm ci && VERCEL_ENV=production npx vite build --sourcemap hidden
+   ```
+
+4. The printed `index-….js` must be the name in the entry's frames. If it is not, stop: this
+   is not the build that crashed, and every line it would give you is wrong.
+5. Decode, from the main checkout. A frame this rebuild has no file for says so:
+
+   ```bash
+   node scripts/decode-stack.mjs ~/Downloads/mgt-crashes-<date>.json /tmp/mgt-rebuild/dist
+   ```
+
+6. `git worktree remove --force /tmp/mgt-rebuild`.
+
+**Why it can be trusted, measured 2026-10-30.** A commit builds to the same bytes every time:
+34 of 34 output files from a clean copy, in another directory, on Node 24. CI's build of
+`bb168e15` (Linux, Node 22) and a local one (macOS, Node 24) both gave `index-BIhywGog.js`.
+**That is not production's name.** `vite.config.js` inlines `VERCEL_ENV` as
+`VITE_DEPLOY_ENV`, so Vercel's build of the same commit is `index-y47v6LRu.js` (its build log,
+430.02 kB, 125.64 kB gz), and a local build with `VERCEL_ENV=production` gives that exact name
+and size. Without the variable the file is ten characters shorter from `useSchemaGate` onward,
+so a map from it would answer every later frame with a real-looking wrong line.
+
+`--sourcemap hidden` leaves the bundle byte-identical, where plain `--sourcemap` adds a comment.
+Proved end to end on a production rebuild: three strings found in the real bundle, handed to
+the script as frames, came back as the exact lines holding them.
+
+`vite build` rather than `npm run build`, because the second half of that is `/wa-connect`.
+A frame from it decodes the same way with `-c vite.wa-connect.config.js`. A preview's frames
+want `VERCEL_ENV=preview`, and the sandbox's `VITE_FB_TARGET=dev` as well.
+
 ## Gotchas
 
 | Issue | Constraint |

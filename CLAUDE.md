@@ -278,6 +278,7 @@ Already lazy-loaded and covers the exact same phrases ("give me the deployment v
 ### Debugging
 - **Version mismatch:** DevTools console boot banner; `window.__MGT_BUILD__`.
 - **Firebase issues:** Firebase Console for live state; console for `[SAFE]` refusal logs and the `[firebase] DEV/PROD` badge.
+- **A crash on a device:** the activity log's Crashes chip. Its stack is read by rebuilding that commit, with `VERCEL_ENV=production` (`scripts/CLAUDE.md`).
 - **State inspection:** React DevTools (BookingApp's state tree).
 - **Re-render storms:** React DevTools profiler. Common culprit: an un-memoised derivation in BookingApp (no `React.memo` in use yet — add only when profiling proves need).
 

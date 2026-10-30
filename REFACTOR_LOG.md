@@ -38123,3 +38123,22 @@ as `runBackup` does). The read gives up after 15 seconds, because a one-shot rea
 waits for the socket and a button must not spin for ever. The answer is said beside the button,
 in an always-mounted `role="status"`: this session had already measured that a banner cannot
 be read under a modal, so the app's usual `setWriteWarning` was not an option here.
+
+**Reading a stack: the plan's check passed and missed the point.** Stack traces are read by
+rebuilding on demand, so the plan asked for two builds of one commit to hash the same and to
+match CI's entry. Both hold: 34 of 34 files byte-identical from a clean copy in another
+directory, and `bb168e15` is `index-BIhywGog.js` from CI (Linux, Node 22) and locally (macOS,
+Node 24). But CI's name is not production's. `vite.config.js` inlines `VERCEL_ENV`, so
+Vercel's build log for the same commit says `index-y47v6LRu.js`, and a rebuild made as the plan
+assumed would have been ten characters out from `useSchemaGate` onward, every later frame
+decoding to a real-looking wrong line. A local build with `VERCEL_ENV=production` gives
+production's exact name and size, so the runbook (`scripts/CLAUDE.md`) sets it and says why.
+`--sourcemap hidden` leaves the bundle byte-identical. `scripts/decode-stack.mjs` was not in the
+plan: without it the runbook ended at "and then read the map". It refuses to guess at a frame
+from another build, and three strings located in a production rebuild came back as the exact
+lines holding them. CI's entry for this branch's own tip cannot be read until it is pushed.
+
+**Not verified here, and why.** DEV keeps the old rules until Patryk runs `firebase login` and
+deploys them, so on DEV a crash entry is refused and the download says it could not read. The
+write's bytes were read off the wire and the server's half is the emulator's, against the real
+rules, but a crash entry landing on DEV and the file downloading from it have not been seen.
