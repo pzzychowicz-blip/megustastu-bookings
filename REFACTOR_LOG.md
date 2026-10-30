@@ -37909,3 +37909,17 @@ deleted the ROADMAP entry, and this is its record.
 **Open question from the hand-off, settled:** `CI` on `bb168e15` finished `success`, so
 the branch starts on a green `main`. Dependabot PR #159 (`re2js` 2.8.6 → 2.9.1) is closed
 by Patryk's call: `npm audit fix` delivers it here, inside this version.
+
+### #30: the CI actions
+
+`checkout` and `setup-node` move from v4 to v7, `setup-java` and `cache` from v4 to v6,
+in `ci.yml` and `sandbox.yml`. Each major's release notes were read against what this
+repo uses, and none of them reaches it: `setup-node`'s automatic cache keys on a
+`packageManager` field `package.json` does not have, `setup-java` v6 drops only the
+legacy Adopt distributions (the JDK here is `temurin`), and `checkout` v7's new block is
+on `pull_request_target` and `workflow_run`, neither of which runs here. **`checkout` v6
+moved the persisted token out of `.git/config` to a file under `$RUNNER_TEMP`**, which
+is what `sandbox.yml`'s `git push --force` authenticates with. Its README still promises
+authenticated git commands, but this is the one line no PR can test, because that
+workflow runs only on a push to `main`: the first `Sandbox` run after the merge is the
+proof.

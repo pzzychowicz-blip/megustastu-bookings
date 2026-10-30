@@ -23,8 +23,8 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -72,8 +72,8 @@ jobs:
     env:
       FIREBASE_TOOLS_VERSION: "15.28.2"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -83,7 +83,7 @@ jobs:
       # further down). That prefix is the macOS-local half; this step is the
       # CI half. Neither is redundant: without the prefix the script cannot
       # find java on a Mac, where openjdk is keg-only.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
@@ -104,7 +104,7 @@ jobs:
       # the CLI is what SELECTS the jar version, so the key cannot go stale
       # while that pin holds; bumping the pin misses the cache once, correctly.
       - name: Cache the emulator jar
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ runner.os }}-${{ env.FIREBASE_TOOLS_VERSION }}
