@@ -4,13 +4,13 @@
 // of that line. See the header of src/index.css for the full reasoning.
 import "./index.css";
 
-import React from "react";
+import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
+  <StrictMode>
     {/* v17.16.0 (CT-2A-02): until this, `<App/>` was rendered bare — and React's
         contract for an uncaught render error is to unmount the WHOLE tree, so any
         throw in render or in one of ~30 effects left `#root` empty. A white screen
@@ -21,7 +21,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <ErrorBoundary>
       <App />
     </ErrorBoundary>
-  </React.StrictMode>
+  </StrictMode>
 );
 
 // Service worker: v17.4.0 registered one, it froze the app at

@@ -38059,3 +38059,13 @@ that the two lists are exactly `MODAL_Z`, so a new modal has to be decided there
 mutants across the six, each a plausible mistake (a raw setter in place of a guard, the
 kitchen confirm's two saves swapped, `=== true` loosened, the Mac test ahead of the iPhone
 one), all failed a test.
+
+### #38: three slips
+
+`schemaEnforced` (`lib/schema.js`) had no caller and went. `src/main.jsx` imported `React`
+for one `<React.StrictMode>`, so it now imports `StrictMode` by name, as the house rule
+asks. The three `var`s the scan named in `lib/booking-logic.js` (`BLOCK_KEY_FIELDS`, the
+four `K_*` separators, `SEP_RE`) are the file's module-level ones and are `const` now. A
+`const` throws where a `var` read as undefined, so the check first: all three are read only
+inside functions, and the file has no module-level call that could reach one early. The
+file's other `var` lines, 251 of them, are inside functions and stay, as the scan left them.
