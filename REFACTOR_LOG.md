@@ -37890,3 +37890,22 @@ Six findings, all confirmed, all fixed (Patryk: "fix them all").
 3731 tests (3730 before; +1, the four-fact `privacyIncomplete` case) · 0 errors and 63
 warnings · style OK. `dist/privacy.html` reads the CB, its NIF, the phone, the email and
 the address in both languages, with no "[to be confirmed]" left.
+
+## v18.13.0 — the write gate under test, and a crash on a device leaves a trace
+
+**Date:** 2026-10-30 · **Branch:** `feat/v18.13.0-write-gate-crash-trace` · **Behaviour
+change:** extended by each commit below.
+
+Phase 2 of the 2026-10-30 tech-debt scan (`MGT_Bookings_Tech_Debt_Scan_2026-10-30.md` in
+the context folder), which numbers its register #25–#42. Every code, CI and dependency
+change of that scan ships in this one version (Patryk); the docs chore was PR #158. The
+CI and dependency commits come first, so every later commit is tested on the toolchain
+that ships.
+
+**#12 closed.** The PROD browser API key has been restricted by HTTP referrer since
+2026-10-25, and verified then: Patryk's probe answers `INVALID_LOGIN_CREDENTIALS`. PR #158
+deleted the ROADMAP entry, and this is its record.
+
+**Open question from the hand-off, settled:** `CI` on `bb168e15` finished `success`, so
+the branch starts on a green `main`. Dependabot PR #159 (`re2js` 2.8.6 → 2.9.1) is closed
+by Patryk's call: `npm audit fix` delivers it here, inside this version.
