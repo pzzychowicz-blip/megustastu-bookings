@@ -442,7 +442,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
     function dropped(){tellDiscarded(report,LANDED,DISCARDED);}
     // v18.13.0 (#25): every gate below is decided by `writeGate` (lib/write-path.js),
     // which holds their order; this hook carries the verdict out. The first half is
-    // asked before `next` runs, the rest in `persist` once there is a `computed`.
+    // asked before `next` runs, the rest once there is a `computed`.
     const early=writeGate({schemaBlocked:writesBlocked("bookings"),gap:isStaleGap(lastBeatRef.current,Date.now()),stale:staleRef.current});
     // v18.6.0: the schema gate (lib/schema.js), before every other gate. A
     // build the database is ahead of would write this booking without the
@@ -504,20 +504,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       return false;
     }
     let dispatched=true;
-    function persist(prev,computed){
-      const gate=writeGate({loaded:bookingsLoaded.current,computed:computed,firstLoadCount:firstLoadCount.current,arrayShape:arrayShapeRef.current});
-      if(gate.gate==="not-loaded"){
-        console.warn("[SAFE] Refused to write bookings — initial read has not completed yet.");
-        if(!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
-        dropped();
-        dispatched=false;return;
-      }
-      if(gate.gate==="empty"){
-        console.warn("[SAFE] Refused to write empty bookings array — Firebase had "+firstLoadCount.current+" entries on load. This is a safety check against accidental wipe.");
-        if(!isSilent) setWriteWarning("Refused to write empty data. Reload the page and try again. If you intended to delete everything, contact support.");
-        dropped();
-        dispatched=false;return;
-      }
+    function persist(prev,computed,gate){
       // v15.5.0: still on the legacy single-array shape (migration not yet echoed) —
       // hold the write so a string-keyed child is never mixed into the integer array.
       // Treated like the stale gate: queue the user write + kick a resync; once the
@@ -597,9 +584,27 @@ export function usePersistence({ autoOptimizer, nowMins }){
     // `lastPatchSigRef` exists to absorb.
     const prev=bookingsRef.current;
     const computed=(typeof next==="function")?next(prev):next;
+    // v18.13.0 (#25): the second half of the gates, asked BEFORE the mirror moves. A
+    // refusal is final, so it must change nothing here: asked inside `persist`, it ran
+    // after the assignment below, and a refused wipe left this device's screen and its
+    // mirror empty, with the server untouched and the banner saying it was refused.
+    // A HOLD still shows, because a held write is going to land.
+    const gate=writeGate({loaded:bookingsLoaded.current,computed:computed,firstLoadCount:firstLoadCount.current,arrayShape:arrayShapeRef.current});
+    if(gate.gate==="not-loaded"){
+      console.warn("[SAFE] Refused to write bookings — initial read has not completed yet.");
+      if(!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
+      dropped();
+      return false;
+    }
+    if(gate.gate==="empty"){
+      console.warn("[SAFE] Refused to write empty bookings array — Firebase had "+firstLoadCount.current+" entries on load. This is a safety check against accidental wipe.");
+      if(!isSilent) setWriteWarning("Refused to write empty data. Reload the page and try again. If you intended to delete everything, contact support.");
+      dropped();
+      return false;
+    }
     bookingsRef.current=computed;
     setBookings(computed);
-    persist(prev,computed);
+    persist(prev,computed,gate);
     return dispatched;
   }
   // Returns TRUE if dispatched, FALSE if blocked by the stale gate (so callers can

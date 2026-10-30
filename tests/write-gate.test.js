@@ -25,6 +25,10 @@
 // line of them. **A snapshot here that moves is a behaviour change**, a finding to
 // explain and never an expectation to update, so never run this file with `-u` to
 // make a change pass.
+//
+// Reading those snapshots is how the two defects below were found, and fixing them
+// moved the lines they name, by hand, in commits of their own (Patryk's call). What a
+// refusal did to the screen moved in the not-loaded and empty scenarios.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
@@ -358,17 +362,19 @@ describe("the freshness gate holds", () => {
   });
 });
 
+// A refusal is final, so it changes nothing on this device. Until v18.13.0 the mirror
+// and the screen moved first: a refused wipe left the device showing no bookings at
+// all, with the server untouched and a banner saying it had been refused.
 describe("the loaded gate refuses", () => {
   it("a person's change, out loud", () => {
     expect(saveWith({ on: ["not-loaded"] }, resize, false)).toMatchInlineSnapshot(`
       {
         "log": [
-          "setBookings a:6 b:4",
           "warn: [SAFE] Refused to write bookings — initial read has not completed yet.",
           "warning: Refused to write: not connected to the server yet. If this persists, reload the page.",
           "onDiscarded",
         ],
-        "mirror": "a:6 b:4",
+        "mirror": "a:2 b:4",
         "parked": [],
         "queued": [],
         "returned": false,
@@ -381,11 +387,10 @@ describe("the loaded gate refuses", () => {
     expect(saveWith({ on: ["not-loaded"] }, resize, true)).toMatchInlineSnapshot(`
       {
         "log": [
-          "setBookings a:6 b:4",
           "warn: [SAFE] Refused to write bookings — initial read has not completed yet.",
           "onDiscarded",
         ],
-        "mirror": "a:6 b:4",
+        "mirror": "a:2 b:4",
         "parked": [],
         "queued": [],
         "returned": false,
@@ -402,12 +407,11 @@ describe("the empty-array gate refuses a wipe", () => {
     expect(saveWith({ on: ["empty"] }, wipe, false)).toMatchInlineSnapshot(`
       {
         "log": [
-          "setBookings (none)",
           "warn: [SAFE] Refused to write empty bookings array — Firebase had 2 entries on load. This is a safety check against accidental wipe.",
           "warning: Refused to write empty data. Reload the page and try again. If you intended to delete everything, contact support.",
           "onDiscarded",
         ],
-        "mirror": "(none)",
+        "mirror": "a:2 b:4",
         "parked": [],
         "queued": [],
         "returned": false,
@@ -420,11 +424,10 @@ describe("the empty-array gate refuses a wipe", () => {
     expect(saveWith({ on: ["empty"] }, wipe, true)).toMatchInlineSnapshot(`
       {
         "log": [
-          "setBookings (none)",
           "warn: [SAFE] Refused to write empty bookings array — Firebase had 2 entries on load. This is a safety check against accidental wipe.",
           "onDiscarded",
         ],
-        "mirror": "(none)",
+        "mirror": "a:2 b:4",
         "parked": [],
         "queued": [],
         "returned": false,
@@ -437,11 +440,10 @@ describe("the empty-array gate refuses a wipe", () => {
     expect(saveWith({ on: ["empty"] }, [], true)).toMatchInlineSnapshot(`
       {
         "log": [
-          "setBookings (none)",
           "warn: [SAFE] Refused to write empty bookings array — Firebase had 2 entries on load. This is a safety check against accidental wipe.",
           "onDiscarded",
         ],
-        "mirror": "(none)",
+        "mirror": "a:2 b:4",
         "parked": [],
         "queued": [],
         "returned": false,
@@ -449,6 +451,14 @@ describe("the empty-array gate refuses a wipe", () => {
         "warning": null,
       }
     `);
+  });
+  it("and the next save still diffs from what is stored", () => {
+    freeze();
+    const h = harness({ on: ["empty"] });
+    expect(h.fn.saveBookings(wipe, false, h.report)).toBe(false);
+    expect(h.fn.saveBookings(resize, false, {})).toBe(true);
+    expect(h.log.filter((l) => l.startsWith("update "))).toEqual(["update bookings a=6 base 100"]);
+    expect(rowsOf(h.refs.bookingsRef.current)).toBe("a:6 b:4");
   });
   it("however many it loaded", () => {
     expect(saveWith({ firstLoad: 1 }, wipe, false).returned).toBe(false);
@@ -861,13 +871,17 @@ describe("the hook decides nothing the gate decides", () => {
     expect(SAVE.indexOf("const early=writeGate(")).toBeLessThan(SAVE.indexOf("const computed="));
     expect(BLOCKS).toContain("const early=writeGate({gap:isStaleGap(lastBeatRef.current,Date.now()),stale:staleRef.current});");
     expect(BLOCKS.indexOf("const early=writeGate(")).toBeLessThan(BLOCKS.indexOf("const computed="));
-    expect(persistOf(SAVE)).toContain("writeGate({loaded:bookingsLoaded.current,computed:computed,firstLoadCount:firstLoadCount.current,arrayShape:arrayShapeRef.current})");
+    expect(SAVE).toContain("const gate=writeGate({loaded:bookingsLoaded.current,computed:computed,firstLoadCount:firstLoadCount.current,arrayShape:arrayShapeRef.current});");
     expect(persistOf(BLOCKS)).toContain("writeGate({loaded:blocksLoaded.current})");
   });
-  it("nothing reaches the server above its question", () => {
-    const save = persistOf(SAVE);
-    expect(save.indexOf("writeGate(")).toBeGreaterThan(-1);
-    expect(save.indexOf("writeGate(")).toBeLessThan(save.indexOf('update(ref(db,"bookings"),patch)'));
+  it("nothing reaches the server above its question, and a refusal never reaches the mirror", () => {
+    // The update is inside `persist`, so what is read is `persist`'s one call.
+    expect(SAVE.match(/\bpersist\(/g)).toHaveLength(2);
+    expect(persistOf(SAVE)).toContain('update(ref(db,"bookings"),patch)');
+    const asked = SAVE.indexOf("const gate=writeGate(");
+    expect(asked).toBeGreaterThan(-1);
+    expect(asked).toBeLessThan(SAVE.lastIndexOf("bookingsRef.current=computed;"));
+    expect(SAVE.lastIndexOf("bookingsRef.current=computed;")).toBeLessThan(SAVE.indexOf("persist(prev,computed,gate);"));
     const blocks = persistOf(BLOCKS);
     expect(blocks.indexOf("writeGate(")).toBeGreaterThan(-1);
     expect(blocks.indexOf("writeGate(")).toBeLessThan(blocks.indexOf('writeWithRev("tableBlocks"'));

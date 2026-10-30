@@ -38005,3 +38005,12 @@ the card read `seated` while the server still read `confirmed`, "Syncing" on scr
 after a `goOffline`/`goOnline` the replay landed with its history and the banner cleared.
 The not-loaded, empty and legacy-shape branches are not reachable on a loaded DEV page
 without wiping it, so those rest on the hook's own code under test.
+
+**Behaviour change, from reading those snapshots: a refused write no longer changes the
+screen** (Patryk, through AskUserQuestion). The mirror and `setBookings` ran before the
+not-loaded and empty gates were asked, so a refused wipe left the device showing no
+bookings at all until a reload or another device's change, with the server untouched and
+a banner saying it had been refused. The two refusals are now asked before the mirror
+moves, and the `array-shape` hold stays where it was, because a hold is going to land.
+Five snapshots moved, edited by hand rather than with `-u`, each losing its `setBookings`
+line and keeping its mirror, and the 256-run order matrix did not move.

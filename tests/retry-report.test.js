@@ -136,8 +136,8 @@ describe("the hook tells it wherever a write is dropped", () => {
     expect((SAVE.match(/else dropped\(\);/g) || []).length).toBe(3);
   });
   it("and the two outright refusals (not loaded, the empty array)", () => {
-    const refusals = SAVE.match(/dropped\(\);\s+dispatched=false;return;/g) || [];
-    expect(refusals.length).toBe(2);
+    const refusals = SAVE.match(/dropped\(\);\s+return false;\s+\}/g) || [];
+    expect(refusals.length, "not loaded and the empty array; the schema gate's is on one line").toBe(2);
   });
   it("a write parked or handed back to the queue is told nothing", () => {
     const RETRY = body("retryParked", "function discardParked(");
