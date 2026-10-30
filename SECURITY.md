@@ -164,10 +164,8 @@ the module is on or off. A guest who wrote on WhatsApp from a number that no boo
 of theirs carries is not reached by it; delete that conversation from the Inbox.
 
 **Access:** every signed-in account sees every customer's data (§2). That's acceptable
-for one small team, but it's a decision, not an accident.
-
-**Open, to decide before WhatsApp goes live:**
-- per-role read scope
+for one small team, but it's a decision, not an accident: on 2026-10-30 Patryk decided
+it stays for WhatsApp go-live too, so there is no per-role read scope to build first.
 
 The public `/privacy` page Meta requires draws on this section.
 
