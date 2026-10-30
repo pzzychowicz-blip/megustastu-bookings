@@ -38069,3 +38069,22 @@ four `K_*` separators, `SEP_RE`) are the file's module-level ones and are `const
 `const` throws where a `var` read as undefined, so the check first: all three are read only
 inside functions, and the file has no module-level call that could reach one early. The
 file's other `var` lines, 251 of them, are inside functions and stay, as the scan left them.
+
+### #28: a crash leaves a trace
+
+Nothing recorded a fault on a device: `ErrorBoundary` called `console.error` and nothing
+listened to `window`, so every crash depended on staff reporting it or on the USB rig. A
+crash now becomes one `activity` entry of kind `crash`.
+
+**The core, `lib/crash-report.js`.** `crashEntry` builds the entry and `crashGate` allows one
+per signature and five per page load, because an effect throwing on every 15s tick would
+otherwise write for as long as the tablet stays on. `.read` is `auth != null`, so an entry
+is readable by every account, and "no guest data" was designed for rather than masked for.
+Three things in the plan's one line ("masks runs of six or more digits") would have been
+wrong as written. Masking the stack would have masked the columns: one in a minified bundle
+can be six digits, and those are what a rebuild decodes, so the digit mask is the message's
+alone and the stack is a whitelist of frames, which also drops the message V8 repeats on its
+first line. A run of digits misses "+34 600 123 456", three runs of three, so the mask
+counts through a phone's separators. And a promise can reject with a booking, whose `.name`
+is a guest's, so `name` and `message` are believed from a real `Error` only. Double-quoted
+runs are masked too, because that is where V8's `JSON.parse` quotes its input.
