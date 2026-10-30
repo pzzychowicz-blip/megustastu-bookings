@@ -7,7 +7,8 @@ name: CI
 #            fixes for unused vars / empty catches / conditional hooks, plus the
 #            react-hooks v6 React-Compiler advisories downgraded to warnings in
 #            eslint.config.js — they flag the app's documented live-binding /
-#            ref-mirror architecture). Warnings do not block.
+#            ref-mirror architecture). Up to 63 warnings pass and one more fails
+#            (--max-warnings in package.json's lint script).
 #   rules  — the Firebase Security Rules suite against a local RTDB emulator.
 #            Added 2026-09-02; until then it ran on a developer machine only, so
 #            a rules regression was caught only if someone remembered to run it.
@@ -57,9 +58,12 @@ jobs:
   #
   # Deliberately NOT path-filtered. The suite's inputs are database.rules.json,
   # tests/rules/**, firebase.json, vitest.rules.config.js AND package.json — a
-  # five-path filter is one more list nothing keeps in step, and a filtered job
-  # reports as *skipped*, which blocks a merge outright if it is ever made a
-  # required check. ~1 min of parallel runner time is the cheaper side of that.
+  # five-path filter is one more list nothing keeps in step, and a path-filtered
+  # workflow stays Pending, which would block a merge outright: `verify` and `rules`
+  # are required checks on main (a GitHub ruleset, since 2026-10-30). A job skipped
+  # by an `if` is worse, because GitHub reports it as Success. Renaming either job
+  # means changing the ruleset too, or every PR waits on a check that never comes.
+  # ~1 min of parallel runner time is the cheaper side of that.
   rules:
     runs-on: ubuntu-latest
     # ONE copy of the pin. It is read twice below — the install, and the

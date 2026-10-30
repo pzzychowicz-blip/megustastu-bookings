@@ -50,8 +50,8 @@ Highlights:
 - **Built to serve more than one restaurant:** one codebase, one Firebase
   project per restaurant, per-restaurant module switches, credentials kept out
   of the database.
-- **Tested adversarially, not just automatically:** 1,245 unit tests and 257
-  security-rules tests against the Firebase emulator in CI, with lint and
+- **Tested adversarially, not just automatically:** a unit suite and a
+  security-rules suite against the Firebase emulator in CI, with lint and
   design-token gates; plus written crash-test campaigns, each finding filed
   with a reproduction, a root cause and why the existing tests missed it.
 - **Process discipline:** Git with semantic versioning and changelogs,

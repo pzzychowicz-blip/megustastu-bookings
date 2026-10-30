@@ -35,8 +35,8 @@ session and keeping it in sync.
   Live and in Development mode alike: "Me Gustas Tú can't onboard customers right now",
   shown before any screen about a WhatsApp account or a number, so the number was never
   connected and nothing was imported. **The verdict (R-11): the Tech Provider route**
-  (Patryk). Business verification of the *Me Gustas Tu* portfolio first (submitted
-  2026-10-28 with the CB's censal certificate; Meta said about 2 working days), then Tech Provider onboarding and App Review for advanced
+  (Patryk). Business verification of the *Me Gustas Tu* portfolio first (refused twice on
+  its documents, resubmitted 2026-10-30, waiting for Meta), then Tech Provider onboarding and App Review for advanced
   access to `whatsapp_business_messaging` and `whatsapp_business_management` on the
   sandbox app, then the gate again; the go-live page's T1–T4 has the detail. R-17's
   sandbox settings stay in place for that rerun. **After the rerun's verdict:** disconnect the number (R-10) and wipe the
@@ -63,10 +63,11 @@ session and keeping it in sync.
   Vercel's logs, which a Hobby project keeps for an hour. If the rehearsal passes, the
   restaurant's number, with the Business app's greeting message turned off.
 
-The entries marked `#N` come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
-in its register, and the report
-(`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
-evidence for each.
+The entries marked `#N` come from the tech-debt scans of **2026-09-23** (and its
+`/code-review`) and **2026-10-30**. `#N` is the item's number in its register, and the
+reports have the evidence for each: in `megustastu-bookings context/`,
+`Archive/Documentation/Claude workflow md files/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`
+and `MGT_Bookings_Tech_Debt_Scan_2026-10-30.md`.
 
 - **Design the bookings archive at 2,500 bookings or 2.5 GB a month (#3).** Every
   device subscribes to every booking ever made, each with an uncapped `history`, and
@@ -85,13 +86,26 @@ evidence for each.
   reached at about 22 MB, roughly three years off at this rate. `REFACTOR_LOG.md`
   v18.5.0 has the table and DEV's node-by-node sizes. Not read: the peak-load graph.
 
-- **The public repository (#12): restrict the PROD browser API key by HTTP referrer,
-  about 2026-10-25.** The DEV key has been restricted since mid-October (six entries,
-  probed 2026-10-18). The PROD list and how to check and undo it are in SECURITY.md §4:
-  `megustastu-bookings.vercel.app` (bare and `/*`) and
-  `megustastu-bookings.firebaseapp.com/*` for reset links. Confirm it against the Vercel
-  project's domains first. The step is Patryk's, in Google Cloud → APIs & Services →
-  Credentials; a wrong list stops sign-in on every device until it is corrected.
+- **Firebase 13 and rules-unit-testing 6, together (#36).** After go-live (Patryk), with
+  a tablet check. firebase 13.1 pins the same `@grpc/grpc-js` `~1.9.0`, so it does not
+  clear that package's two advisories (`npm audit` counts them as five packages).
+
+- **Trim DESIGN.md to the nested-notes standard (#33).** After go-live (Patryk). It
+  held 159,990 characters on 2026-10-30, up 43% in five weeks, and every visual session
+  pays to read it. The 2026-10-27 trim covered only the nested notes.
+
+- **Make `InboxPanel.onKey` a table (#32).** Complexity 56 on 2026-10-30. The `lib/shortcuts.js`
+  pattern, after go-live.
+
+- **Sweep merged branches and stale worktrees (#37).** 133 merged remote branches and 20
+  worktrees (5.1 GB) on 2026-10-30, in one pass, checking each first. New merges have
+  deleted their own branch since that date.
+
+- **Refresh the `.design-sync` snapshot (#39).** It is behind `atoms.jsx`.
+
+- **Measure the eager `atoms` chunk, then decide (#40).** It grew from 23 to 34 kB gz
+  by 2026-10-30 (`atoms.jsx`: 2,565 lines, fan-in 70). Measure which atoms only lazy chunks use before
+  deciding whether a split is worth it.
 
 ## Designed, not implemented
 
