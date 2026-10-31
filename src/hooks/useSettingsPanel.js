@@ -109,23 +109,6 @@ export function useSettingsPanel({
   const activityBackwards=activityWin.backwards;
   const activityRangeOk=activityWin.ok;
   const {rows:activityRows,loading:activityLoading,loadingMore:activityLoadingMore,hasMore:activityHasMore,loadOlder:activityLoadOlder}=useActivityFeed({from:activityFrom,to:activityTo,enabled:!!activityOpen&&activityRangeOk});
-  // The 12-month retention promise, kept by the app because this plan has no
-  // server-side scheduler — and kept HONEST by the rules, which refuse a delete
-  // unless the caller is an admin and the entry really is older than a year. It
-  // runs when an admin OPENS the log, which is the one moment somebody is
-  // already waiting for the node and a few deletes cost nothing.
-  //
-  // Gated on `isAdmin` client-side as well: a staff account's attempt would be
-  // refused anyway, and asking for a refusal on every open is noise in the
-  // console for a promise that was never theirs to keep.
-  // v18.0.0 session 11: clearing a range. Admin-only on the client because it is
-  // admin-only in the rules — asking for a refusal a staff account was never
-  // going to get is noise in the console for a control they cannot use.
-  //
-  // The busy flag is a ref MIRROR plus state, the `saveBookings` shape: the
-  // guard has to be read synchronously in the handler (two taps arriving faster
-  // than a render would otherwise start two clears over the same range), and
-  // the state is what the button paints with.
   // v18.0.0 session 11: what the Customers tab should be searching for when we
   // send somebody there. A NAME and not the `guestKey`, because `searchCustomers`
   // matches on name or phone digits and never on a `guestId` — so seeding it
@@ -147,6 +130,14 @@ export function useSettingsPanel({
     setSettingsTab("customers");
     setCustomerSeek(n);
   }
+  // v18.0.0 session 11: clearing a range. Admin-only on the client because it is
+  // admin-only in the rules — asking for a refusal a staff account was never
+  // going to get is noise in the console for a control they cannot use.
+  //
+  // The busy flag is a ref MIRROR plus state, the `saveBookings` shape: the
+  // guard has to be read synchronously in the handler (two taps arriving faster
+  // than a render would otherwise start two clears over the same range), and
+  // the state is what the button paints with.
   const [activityClearing,setActivityClearing]=useState(false);
   // What the last clear did, so a REFUSAL is visible. Without it the button
   // simply returns to rest and the list is unchanged, which reads as a dead
@@ -187,6 +178,15 @@ export function useSettingsPanel({
     if(refused("dataExport")) return Promise.resolve("");
     return downloadCrashes({read:readCrashes,save:saveTextFile,today:todayStr()});
   }
+  // The 12-month retention promise, kept by the app because this plan has no
+  // server-side scheduler — and kept HONEST by the rules, which refuse a delete
+  // unless the caller is an admin and the entry really is older than a year. It
+  // runs when an admin OPENS the log, which is the one moment somebody is
+  // already waiting for the node and a few deletes cost nothing.
+  //
+  // Gated on `isAdmin` client-side as well: a staff account's attempt would be
+  // refused anyway, and asking for a refusal on every open is noise in the
+  // console for a promise that was never theirs to keep.
   const prunedRef=useRef(false);
   useEffect(function(){
     if(!activityOpen||!isAdmin){ if(!activityOpen) prunedRef.current=false; return; }
