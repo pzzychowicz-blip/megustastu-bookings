@@ -38851,3 +38851,32 @@ Android time picker feels with this is on the hardware list.
 
 **Files:** `booking-logic.js`, `App.jsx`, `tests/booking-logic.test.js`.
 
+### M4: busy tables you can read, and a walk-in picker you can see
+
+A busy table in the picker was solid red at half opacity, which took the white text down with it: 1.7–1.94:1, on the
+10px word "busy" too. It is now the danger pane's pair, a pale red with the ink at full strength, and it has no
+shadow because it does nothing. With Swap busy on, a table a party can be moved from stays amber at full strength,
+which the plan had already found to hold.
+
+The Walk-in form exists to choose a table, Seat stays disabled until there is one, and the picker began below the
+fold. The order is now Time and guests, then the picker, then the kitchen line, Duration and Notes.
+
+| Reading | Before | After |
+|---|---|---|
+| Busy table, Light, from the rendered pixels | 1.7–1.94:1 (the scan) | 6.86–6.91:1 at 507 and 570 |
+| Busy table, Dark | not measured then | 7.32:1 |
+| Swap busy on | | amber, opacity 1, pointer, every table on DEV's evening |
+| Walk-in, first table's y, 998 × 507 | 523, body ends at 404 | 340 |
+| Tables on screen on opening, 507 and 570 | 0 of 13 | 3 of 13 |
+| Duration and Notes labels | 12px apart | level |
+| Pick table 3 | | Seat goes live, "Selected: 3 · Capacity: 2 (fits 2 guests)" |
+
+**Decisions.** The reorder alone gained 105px and left the first row just under the fold, so two more things moved.
+The kitchen line went below the picker, because it usually reads "none yet" and Seat still asks the kitchen question
+when it matters. "Tap tables to select / deselect." went, because the card directly under it said "Select tables
+below." Notes lost a 12px top margin from the old layout. The walk-in's "no tables" banner stays under the grid. It
+is off screen on a full evening, and moving it was not in the plan.
+
+**Files:** `TableGrid.jsx`, `WalkinForm.jsx`, `tests/walkin.test.js`, `tests/contrast.test.js`,
+`tests/destructive-buttons.test.js`.
+

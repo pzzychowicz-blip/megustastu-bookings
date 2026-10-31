@@ -69,3 +69,37 @@ describe("both walk-in doors ask it before writing", () => {
     expect(HOOK).not.toMatch(/hoursFor\(/);
   });
 });
+
+// v18.14.0 (M4): the picker began below the fold while Seat stayed disabled.
+describe("the walk-in form's order", () => {
+  const FORM = stripComments(readFileSync(new URL("../src/components/WalkinForm.jsx", import.meta.url), "utf8")).join("\n");
+  const at = (s) => {
+    const i = FORM.indexOf(s, FORM.indexOf('<ModalTitle marginBottom={4} background="var(--app-walkin)">'));
+    expect(i, s).toBeGreaterThan(-1);
+    return i;
+  };
+
+  it("is Time and guests, then the picker, then the kitchen line, Duration and Notes", () => {
+    const order = ['<Fld label="Time">', '<Fld label="Number of guests">', "<TableGrid", "{wKitchenSection}", '<Fld label="Duration">', '<Fld label="Notes">'].map(at);
+    expect(order).toEqual(order.slice().sort((a, b) => a - b));
+  });
+
+  it("keeps the guests beside the time, and the hint the card already gives is gone", () => {
+    expect(FORM).not.toContain("Tap tables to select / deselect.");
+    expect(FORM).toContain("Select tables below.");
+  });
+});
+
+describe("a busy table in the grid both pickers share", () => {
+  const GRID = stripComments(readFileSync(new URL("../src/components/TableGrid.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("is the danger pane's pair, with no opacity to take the text down with it", () => {
+    expect(GRID).toMatch(/else if \(blocked\) \{ bg = "var\(--danger-bg\)"; +clr = "var\(--danger-text\)";/);
+    expect(GRID).not.toMatch(/opacity:/);
+  });
+
+  it("its word takes the same ink as its number", () => {
+    expect(GRID).toContain('const subClr = blocked && !isSel ? clr :');
+  });
+});
+

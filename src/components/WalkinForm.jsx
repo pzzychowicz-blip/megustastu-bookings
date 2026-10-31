@@ -361,6 +361,12 @@ export function WalkinForm({
     </>
   );
 
+  // v18.14.0 (M4): Time and guests, then the picker, then the kitchen line, Duration
+  // and Notes. The form's job is choosing a table, Seat stays disabled until there
+  // is one, and the picker began below the fold: 0 of 13 tables on screen at
+  // 998 × 507. The kitchen line goes below it because Seat still asks the kitchen
+  // question when it matters, and "Tap tables to select / deselect." went because
+  // the card says "Select tables below." directly under it.
   return (
     <Overlay onClose={onClose} footer={footerEl}>
       <AutoHeight>
@@ -426,65 +432,8 @@ export function WalkinForm({
               </button>
             </div>
           </Fld>
-          <Fld label="Duration">
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button
-                className="mgt-hover-scale"
-                style={stepperBtnStyle}
-                aria-label="Decrease duration"
-                {...stepPress(() => {
-                  const cd = wf.customDur || getDur(Number(wf.size) || 2);
-                  setDraft({ ...wf, customDur: Math.max(15, cd - 15) });
-                })}
-              >
-                −
-              </button>
-              <span style={stepperValueStyle}>{countLabel(wDur, "min")}</span>
-              <button
-                className="mgt-hover-scale"
-                style={stepperBtnStyle}
-                aria-label="Increase duration"
-                {...stepPress(() => {
-                  const cd = wf.customDur || getDur(Number(wf.size) || 2);
-                  setDraft({ ...wf, customDur: Math.min(480, cd + 15) });
-                })}
-              >
-                +
-              </button>
-              <span style={{ fontSize: T.body, color: S.muted, marginLeft: 4 }}>
-                {"End: " + toTime(toMins(wTime) + wDur)}
-              </span>
-              {wf.customDur ? (
-                <button
-                  className="mgt-hover-scale mgt-press"
-                  style={mkBtn({ fontSize: T.body, background: BTN.reset })}
-                  // v18.2.0: pointer-only like the steppers beside it; same fix.
-                  {...stepPress(() => setDraft({ ...wf, customDur: null }))}
-                >
-                  Reset
-                </button>
-              ) : null}
-            </div>
-          </Fld>
-          <Fld label="Notes" style={{ marginTop: 12 }}>{(fid) => (
-            <textarea
-              id={fid}
-              value={wf.notes}
-              onChange={(e) => setDraft({ ...wf, notes: e.target.value })}
-              rows={2}
-              placeholder="Special requests..."
-              className="mgt-hover-scale"
-              style={mkArea()}
-            />
-          )}</Fld>
         </div>
       </Section>
-
-      {wKitchenSection}
-
-      <div style={{ fontSize: T.body, color: S.text, marginBottom: 14, textAlign: "center" }}>
-        Tap tables to select / deselect.
-      </div>
 
       <div style={{
         marginBottom: 14, padding: "12px 14px", borderRadius: R.card,
@@ -549,6 +498,68 @@ export function WalkinForm({
         </>
         ) : null}
       </Reveal>
+
+      {wKitchenSection}
+
+      <Section>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+          gap: 12
+        }}>
+          <Fld label="Duration">
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button
+                className="mgt-hover-scale"
+                style={stepperBtnStyle}
+                aria-label="Decrease duration"
+                {...stepPress(() => {
+                  const cd = wf.customDur || getDur(Number(wf.size) || 2);
+                  setDraft({ ...wf, customDur: Math.max(15, cd - 15) });
+                })}
+              >
+                −
+              </button>
+              <span style={stepperValueStyle}>{countLabel(wDur, "min")}</span>
+              <button
+                className="mgt-hover-scale"
+                style={stepperBtnStyle}
+                aria-label="Increase duration"
+                {...stepPress(() => {
+                  const cd = wf.customDur || getDur(Number(wf.size) || 2);
+                  setDraft({ ...wf, customDur: Math.min(480, cd + 15) });
+                })}
+              >
+                +
+              </button>
+              <span style={{ fontSize: T.body, color: S.muted, marginLeft: 4 }}>
+                {"End: " + toTime(toMins(wTime) + wDur)}
+              </span>
+              {wf.customDur ? (
+                <button
+                  className="mgt-hover-scale mgt-press"
+                  style={mkBtn({ fontSize: T.body, background: BTN.reset })}
+                  // v18.2.0: pointer-only like the steppers beside it; same fix.
+                  {...stepPress(() => setDraft({ ...wf, customDur: null }))}
+                >
+                  Reset
+                </button>
+              ) : null}
+            </div>
+          </Fld>
+          <Fld label="Notes">{(fid) => (
+            <textarea
+              id={fid}
+              value={wf.notes}
+              onChange={(e) => setDraft({ ...wf, notes: e.target.value })}
+              rows={2}
+              placeholder="Special requests..."
+              className="mgt-hover-scale"
+              style={mkArea()}
+            />
+          )}</Fld>
+        </div>
+      </Section>
       </AutoHeight>
     </Overlay>
   );

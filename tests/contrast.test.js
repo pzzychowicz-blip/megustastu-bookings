@@ -337,6 +337,8 @@ const FILLS = [
   // left the red for the stepper's neutral, which the form's ± steppers have
   // always drawn on and nothing had registered.
   { fill: "--danger-bg", alpha: null, ink: "--danger-text", role: "button", what: "row delete at rest (mkDangerBtn)" },
+  // v18.14.0 (M4): it was solid red at half opacity, white on it, 1.7–1.94:1.
+  { fill: "--danger-bg", alpha: null, ink: "--danger-text", role: "label", what: "a busy table in the picker (TableGrid): the number and the word" },
   { fill: "--bg-stepper", alpha: null, ink: "--text-primary", role: "button", what: "stepper ± and Layout's Cancel ×" },
   // v18.2.0 phase 34: the Week / Month / Stats cells, opaque now. Today's
   // number in --accent is a pre-existing pair left out here: the accent as

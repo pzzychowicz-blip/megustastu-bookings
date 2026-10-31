@@ -258,7 +258,6 @@ describe("phase 62 — one red for every destructive control, and the trash mark
 
   // What may still paint an old red, and why. Everything else is a failure.
   const ALLOWED = {
-    "components/TableGrid.jsx": 1,      // a BLOCKED table's fill: a status, not a button
     "components/whatsapp/WaSimulator.jsx": 1, // "Make next staff reply fail": sandbox-only, destroys nothing
   };
   it("no control is left on BTN.del, --btn-del or --wa-btn-cancel", () => {

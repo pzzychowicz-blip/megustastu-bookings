@@ -8,7 +8,7 @@
 //
 // Per-table colour states:
 //   • selected  → orange       (currently in `selected`)
-//   • blocked   → red          (busy and not swappable in this mode)
+//   • blocked   → pale red     (busy and not swappable in this mode)
 //   • busy/swap → yellow       (busy but swappable — only when swapBusy=true
 //                               and the slot's booking is not seated)
 //   • free      → outlined     (white with indoor/outdoor accent border)
@@ -70,14 +70,18 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
               // or CURRENT SELECTION — which is literally this state, and it is
               // free now that table badges are teal and purple.
               if (isSel)        { bg = S.accent;                 clr = "var(--text-on-accent)"; brd = "2px solid var(--border-glass)"; }
-              else if (blocked) { bg = "var(--btn-del)";         clr = "var(--text-on-accent)"; brd = "2px solid var(--border-glass)"; }
+              // v18.14.0 (M4): a busy table is the danger pane's pair and no longer a
+              // solid red at half opacity, which took the text down with it: 1.7–1.94:1
+              // on the number and the word. Pale is what "dimmed" looked like, and now
+              // the ink stands at full strength on it, registered in contrast.test.js.
+              else if (blocked) { bg = "var(--danger-bg)";       clr = "var(--danger-text)";    brd = "2px solid transparent"; }
               else if (isBusyT) { bg = "var(--app-warn-solid)";  clr = "var(--text-on-accent)"; brd = "2px solid var(--border-glass)"; }
               else              { bg = "var(--bg-input)";       clr = S.text; brd = "2px solid " + tc.bg; }
               // v17.1.1: isSel first — a Plan-view pre-selected table can be
               // selected AND busy; it paints orange (isSel wins above), so the
               // label must agree.
               const label = isSel ? "selected" : blocked ? "busy" : isBusyT ? "swap" : "cap " + t.cap;
-              const subClr = isSel || blocked || isBusyT ? "rgba(255,255,255,0.8)" : S.text;  /* @fixed-fill */
+              const subClr = blocked && !isSel ? clr : isSel || isBusyT ? "rgba(255,255,255,0.8)" : S.text;  /* @fixed-fill */
               return (
                 <button
                   key={t.id}
@@ -92,11 +96,10 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
                     border: brd, background: bg, color: clr,
                     fontWeight: FW.semi, fontSize: T.lead,
                     cursor: blocked && !isSel ? "not-allowed" : "pointer",
-                    opacity: blocked && !isSel ? 0.5 : 1,
                     display: "flex", flexDirection: "column",
                     alignItems: "center", justifyContent: "center",
                     gap: 2, boxSizing: "border-box",
-                    boxShadow: "var(--shadow-btn)"
+                    boxShadow: blocked && !isSel ? "none" : "var(--shadow-btn)"
                   }}
                 >
                   <span>{t.id}</span>
