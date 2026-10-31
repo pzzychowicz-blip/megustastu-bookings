@@ -37890,3 +37890,316 @@ Six findings, all confirmed, all fixed (Patryk: "fix them all").
 3731 tests (3730 before; +1, the four-fact `privacyIncomplete` case) · 0 errors and 63
 warnings · style OK. `dist/privacy.html` reads the CB, its NIF, the phone, the email and
 the address in both languages, with no "[to be confirmed]" left.
+
+## v18.13.0 — the write gate under test, and a crash on a device leaves a trace
+
+**Date:** 2026-10-30 to 2026-10-31 · **Branch:** `feat/v18.13.0-write-gate-crash-trace`
+
+**Behaviour change:** three things. A refused bookings write no longer changes the screen. A
+block that did not go out keeps its dialog and says so. A crash on a device leaves one
+`activity` entry, and the log gains a Crashes chip and Download crash data. The rest is CI,
+dependencies, and code moved to where a test can run it.
+
+**Files:** 58 changed, +3192 −561, of which `tests/` is 18 files, +1879 −121. New:
+`src/lib/crash-report.js` · `src/lib/modal-keys.js` · `src/lib/operating-hours.js` ·
+`scripts/decode-stack.mjs` · `tests/lift.js` · `tests/write-gate.test.js` ·
+`tests/crash-report.test.js` · `tests/decode-stack.test.js` · `tests/modal-keys.test.js` ·
+`tests/operating-hours.test.js`.
+
+Phase 2 of the 2026-10-30 tech-debt scan (`MGT_Bookings_Tech_Debt_Scan_2026-10-30.md` in
+the context folder), which numbers its register #25–#42. Every code, CI and dependency
+change of that scan ships in this one version (Patryk); the docs chore was PR #158. The
+CI and dependency commits come first, so every later commit is tested on the toolchain
+that ships.
+
+**#12 closed.** The PROD browser API key has been restricted by HTTP referrer since
+2026-10-25, and verified then: Patryk's probe answers `INVALID_LOGIN_CREDENTIALS`. PR #158
+deleted the ROADMAP entry, and this is its record.
+
+**Open question from the hand-off, settled:** `CI` on `bb168e15` finished `success`, so
+the branch starts on a green `main`. Dependabot PR #159 (`re2js` 2.8.6 → 2.9.1) is closed
+by Patryk's call: `npm audit fix` delivers it here, inside this version.
+
+### #30: the CI actions
+
+`checkout` and `setup-node` move from v4 to v7, `setup-java` and `cache` from v4 to v6,
+in `ci.yml` and `sandbox.yml`. Each major's release notes were read against what this
+repo uses, and none of them reaches it: `setup-node`'s automatic cache keys on a
+`packageManager` field `package.json` does not have, `setup-java` v6 drops only the
+legacy Adopt distributions (the JDK here is `temurin`), and `checkout` v7's new block is
+on `pull_request_target` and `workflow_run`, neither of which runs here. **`checkout` v6
+moved the persisted token out of `.git/config` to a file under `$RUNNER_TEMP`**, which
+is what `sandbox.yml`'s `git push --force` authenticates with. Its README still promises
+authenticated git commands, but this is the one line no PR can test, because that
+workflow runs only on a push to `main`: the first `Sandbox` run after the merge is the
+proof.
+
+### #34: Node 24 everywhere
+
+`engines` (and the lockfile's own copy of it, at `package-lock.json:30`, which the plan
+did not list), both jobs in `ci.yml`, and `.design-sync/NOTES.md`. The local gate has run
+on 24.14.1 all along, so this closes a difference rather than opening one: CI and Vercel
+were the ones on 22. Node 22 ends 2027-04-30, Node 24 ends 2028-04-30. **The `jose`
+override stays** (`api/CLAUDE.md`): `require(esm)` works on local Node either way, so the
+gate cannot speak for Vercel's loader, and one deployed-function call after the merge
+is the only check.
+
+### #29: the advisories that can be fixed
+
+Plain `npm audit fix`, never `--force`. `npm audit` goes from 7 high to **5**, and
+production from 5 to **4**, as the scan forecast. Two packages moved, in the lockfile
+only: `re2js` 2.8.6 → 2.9.1 (reachable only through `@firebase/firestore`, which nothing
+in `src`, `api` or `scripts` imports) and `zod` 4.4.3 → 4.6.7 (through
+`eslint-plugin-react-hooks`, dev only). The entry hash did not move, which is the
+measured form of that: no shipped code changed. `npm audit` counts PACKAGES, so the 5
+that remain are the two `@grpc/grpc-js` advisories seen through its dependents. firebase
+13.1 pins the same `~1.9.0`, so an upgrade would not fix them either, and Patryk
+dismisses them as "vulnerable code is not used" after the merge. `npm ls jose` still
+reads 5.10.0.
+
+### #35: the in-range bumps
+
+Each measured alone, so a change could be pinned on one package. **eslint** 10.12 → 10.14:
+lint stays at 63, so the cap is not in question. **react** and **react-dom** 19.3.0 →
+19.3.1: same size, new hash. **vite** 8.3.3 → 8.3.5, with rolldown 1.2.13 → 1.2.16: entry
+430.01 → 430.11 kB (125.63 → 125.65 gz). **vitest** 5.0.3 → 5.0.5: 3,731 tests, 4.2 s.
+Thirty lockfile packages in all, sixteen of them rolldown's platform binaries;
+`package.json` is unchanged, because every one was in range. `firebase` 13 and
+`@firebase/rules-unit-testing` 6 are the only `npm outdated` rows left, and they wait for
+go-live (#36). The gate and the 311 rules tests ran on a clean `npm ci`.
+
+### #25: the write gates under test
+
+The scan's top item. `lib/write-path.js` tested the arithmetic, but the ORDER of the
+gates lived inline in `saveBookings` and `persist`, in a hook no test executes, and
+`/bookings/$bid` allows a delete with no CAS, so for a manager's or admin's session the
+client's empty-array check is the last defence against the failure behind the original
+data-loss incident.
+
+**Characterization first, in its own commit, against the untouched hook.**
+`tests/write-gate.test.js` runs the hook's own code the way `save-path.test.js` runs
+App's: `saveBookings`, `saveBlocks` and the queue around them lifted from the stripped
+source, with the real lib modules, the refs as plain objects and recorded stubs for
+React's setters and Firebase. `save-path`'s helpers moved to `tests/lift.js` so there is
+one copy of them (116 tests and every snapshot unchanged). 41 tests: 25 pinned scenarios
+and every combination of shut gates (64 × 4 forms of write) against the first gate alone,
+which is what holds their order. It follows a held write through the real `resync()` to
+the server, and a rejected one through its four attempts to the parked banner.
+
+**Then `writeGate`** (`lib/write-path.js`), which answers `{verdict, gate}`:
+refuse, hold or write, and which gate said so. `saveBookings`, its `persist` and
+`saveBlocks` ask it at the moments they asked before, and each branch's body is
+unchanged. **No behaviour change, and the proof is that `tests/write-gate.test.js`
+passed with no line of it moved.** Two source reads spelled the old conditions
+(`tests/schema.test.js`, `tests/retry-report.test.js`) and now read the new ones. A
+stripped-source pin fails a gate's condition left in either writer, a fact not passed,
+or a write above its question.
+
+**Sabotage, measured.** 19 mutants: each gate removed, each neighbouring pair swapped,
+the wipe's bound moved, and each hook branch disconnected. All 19 fail a test; 18 fail
+in the hook's own code. **The one that did not was informative**: swapping `stale` and
+`not-loaded` passed all 45, because the hook asks those two in separate calls, so
+inside the hook they never meet and the order across that join is its call order. A unit
+test holds the function's own order there now. Four more mutants went round the gate (a
+seventh `if`, `persist` no longer asking, a fact left out, a second door to the
+server), and the pin caught each. The first report read "SURVIVED" on all 19: its regex
+had matched vitest's `Failed Tests` banner rather than the summary, and the counts beside
+it said otherwise.
+
+**Live, on DEV, through the worktree preview** (`writeGate` served, v18.13.0, judged from
+the stored row rather than the screen). A write: status `seated`, a new `updatedAt`, two
+history lines, no warning. **Refuse**, with the real schema gate shut in that page's
+module state only: the row byte-identical, the card unchanged, the `[SAFE]` line logged.
+**Hold**, with `Date.now` shifted 120 s around one tap so the gap gate tripped at the write:
+the card read `seated` while the server still read `confirmed`, "Syncing" on screen, and
+after a `goOffline`/`goOnline` the replay landed with its history and the banner cleared.
+The not-loaded, empty and legacy-shape branches are not reachable on a loaded DEV page
+without wiping it, so those rest on the hook's own code under test.
+
+**Behaviour change, from reading those snapshots: a refused write no longer changes the
+screen** (Patryk, through AskUserQuestion). The mirror and `setBookings` ran before the
+not-loaded and empty gates were asked, so a refused wipe left the device showing no
+bookings at all until a reload or another device's change, with the server untouched and
+a banner saying it had been refused. The two refusals are now asked before the mirror
+moves, and the `array-shape` hold stays where it was, because a hold is going to land.
+Five snapshots moved, edited by hand rather than with `-u`, each losing its `setBookings`
+line and keeping its mirror, and the 256-run order matrix did not move.
+
+**Behaviour change, from the same reading: a block that did not go out no longer closes
+its dialog** (Patryk, through AskUserQuestion). `saveBlocks` answered, and `addBlock` and
+`removeBlock` threw the answer away: a held block closed the dialog and was gone with no
+word, and the bookings write below it placed the day around a list the server did not
+hold. The not-loaded refusal was worse, answering `true` with the screen already moved.
+That refusal now sits above the mirror and answers `false`, as in `saveBookings`, and both
+callers stop on the answer. **The approved design failed on measurement.** The first
+version put the sentence in the red banner and held the dialog open, and on DEV the banner
+could not be read: the strip sits collapsed under the 8px-blur scrim, the message was in
+neither the page nor the dialog's own text, and pressing Block looked like a button that
+did nothing. Brought back to Patryk, who chose inside the dialog. So `BlockModal` keeps an
+always-mounted `role="alert"` at the end of both bodies, with an `InlineAlert` inside a
+`Reveal`, as `SpecialDayModal` does, and no new state reached `BookingApp`. Measured on
+DEV with the gap gate tripped around one press: Block and Unblock each kept the dialog
+open with the sentence in it, the server's rows unchanged at 3 and 4; after a
+`goOffline`/`goOnline`, the same press landed (4 rows, then 3) and the dialog closed. One
+snapshot moved, by hand: the not-loaded scenario lost `setTableBlocks` and answers `false`.
+`mirror` in those snapshots is the bookings', so a separate test reads the blocks' own.
+
+### #31: the deciders, run rather than hashed
+
+Escape, Enter, the device label, the two recurring whitelists, the two weekday whitelists
+and what Apply changes lays over a booking lived unexported in hooks, so nothing could
+call them: `tests/schema.test.js` hashed the whitelists, which spots an edit and not a
+wrong result, and `tests/modal-stack.test.js` looked for a `case` in the source. They moved
+to `lib/modal-keys.js` (new), `lib/operating-hours.js` (new), `lib/recurring.js`,
+`lib/presence-state.js` and `lib/whatsapp.js`, and the hooks kept their listeners, refs and
+state. The plan named `sanitizeRule` and `sanitizeWeek`; `sanitizeRecurring`, `sanitizeDay`
+and `clampInt` went with them, because each is what its neighbour calls.
+
+**No behaviour moved, and that is measured.** With comments and whitespace out, seven of
+the eight bodies compare identical to `HEAD`'s and `deviceLabel` differs only in taking the
+agent as a defaulted parameter, so the four `sanitize*` prints stayed and only their keys
+moved: no `SCHEMA` raise. `modifyChanges` is the one new function, and its body is the
+lines it replaced. Moving imports can reorder module evaluation, which a test here cannot
+see, so DEV was reloaded: no console error, Escape closed the block dialog through its
+guard, Enter on an empty form said what Save says ("Customer name is required."), the
+`presence` child read "Mac · Chrome", and the hours and `recurring` read back right.
+
+`tests/modal-keys.test.js` runs every row: eight guarded closes, 24 plain ones, and a check
+that the two lists are exactly `MODAL_Z`, so a new modal has to be decided there. 16
+mutants across the six, each a plausible mistake (a raw setter in place of a guard, the
+kitchen confirm's two saves swapped, `=== true` loosened, the Mac test ahead of the iPhone
+one), all failed a test.
+
+### #38: three slips
+
+`schemaEnforced` (`lib/schema.js`) had no caller and went. `src/main.jsx` imported `React`
+for one `<React.StrictMode>`, so it now imports `StrictMode` by name, as the house rule
+asks. The three `var`s the scan named in `lib/booking-logic.js` (`BLOCK_KEY_FIELDS`, the
+four `K_*` separators, `SEP_RE`) are the file's module-level ones and are `const` now. A
+`const` throws where a `var` read as undefined, so the check first: all three are read only
+inside functions, and the file has no module-level call that could reach one early. The
+file's other `var` lines, 251 of them, are inside functions and stay, as the scan left them.
+
+### #28: a crash leaves a trace
+
+Nothing recorded a fault on a device: `ErrorBoundary` called `console.error` and nothing
+listened to `window`, so every crash depended on staff reporting it or on the USB rig. A
+crash now becomes one `activity` entry of kind `crash`.
+
+**The core, `lib/crash-report.js`.** `crashEntry` builds the entry and `crashGate` allows one
+per signature and five per page load, because an effect throwing on every 15s tick would
+otherwise write for as long as the tablet stays on. `.read` is `auth != null`, so an entry
+is readable by every account, and "no guest data" was designed for rather than masked for.
+Three things in the plan's one line ("masks runs of six or more digits") would have been
+wrong as written. Masking the stack would have masked the columns: one in a minified bundle
+can be six digits, and those are what a rebuild decodes, so the digit mask is the message's
+alone and the stack is a whitelist of frames, which also drops the message V8 repeats on its
+first line. A run of digits misses "+34 600 123 456", three runs of three, so the mask
+counts through a phone's separators. And a promise can reject with a booking, whose `.name`
+is a guest's, so `name` and `message` are believed from a real `Error` only. Double-quoted
+runs are masked too, because that is where V8's `JSON.parse` quotes its input.
+
+**The rules.** `crash` joins the `kind` pattern and `ACTIVITY_KINDS`, `kind` joins `.indexOn`
+for the download, and a `crash` child holds the detail, each field a string of at most 2,000
+characters, so the server bounds what an error's text can file. The plan left open whether a
+new kind raises `SCHEMA`. It does not, by the test `src/hooks/CLAUDE.md` states for the next
+field: `activity` is read without a whitelist and never rewritten, so an older build cannot
+delete a key it does not know. `tests/rules/` runs the real `crashEntry` output against the
+real rule, so a key the builder starts to write is checked there.
+
+**Capture.** `ErrorBoundary` takes an `onCrash` prop, so it stays free of Firebase for
+`.design-sync` and its own test. `main.jsx` passes it and adds the `error` and
+`unhandledrejection` listeners, all three going to one `reportCrash` inside a try/catch,
+because a report that threw from `componentDidCatch` would take the error screen down with
+it. It calls `logActivity` directly, since `emitActivity`'s sink is null once `BookingApp`
+has unmounted. `BookingApp` notes the view from an effect, so `view` is the last one
+COMMITTED: a crash while rendering into Plan reads `timeline`, which is what was on screen.
+
+Measured on DEV with a spy on the WebSocket's outgoing frames, since DEV's rules refuse the
+kind until Patryk deploys them (the server's half is the emulator's, above). A throw from a
+timer and a rejection wrote one entry each and a repeat of the first wrote none, the phone
+and the quoted name masked. A temporary throw in `BookingApp`, reverted before this commit,
+drew the error screen and wrote one entry with the real stack and the component path. Eight
+distinct errors on a fresh page wrote five. The first temporary throw measured nothing, and
+it is worth knowing: `if(window.__flag) throw` in `BookingApp` never fired after the flag
+was set, apparently because the React Compiler memoises a block with no reactive
+dependency. The same line testing `activeView` too fired at once.
+
+**The chip and the download.** `Crashes` joins `KIND_LABEL` and `KIND_ORDER`, last, and turning
+it on shows **Download crash data** to `dataExport`. It reads every crash entry, one `get()` on
+`kind`'s index, rather than the rows on screen, and `lib/crash-report.js` builds the file and
+says what happened (`downloadCrashes`, which never rejects, with `read` and `save` handed in
+as `runBackup` does). The read gives up after 15 seconds, because a one-shot read made offline
+waits for the socket and a button must not spin for ever. The answer is said beside the button,
+in an always-mounted `role="status"`: this session had already measured that a banner cannot
+be read under a modal, so the app's usual `setWriteWarning` was not an option here.
+
+**Reading a stack: the plan's check passed and missed the point.** Stack traces are read by
+rebuilding on demand, so the plan asked for two builds of one commit to hash the same and to
+match CI's entry. Both hold: 34 of 34 files byte-identical from a clean copy in another
+directory, and `bb168e15` is `index-BIhywGog.js` from CI (Linux, Node 22) and locally (macOS,
+Node 24). But CI's name is not production's. `vite.config.js` inlines `VERCEL_ENV`, so
+Vercel's build log for the same commit says `index-y47v6LRu.js`, and a rebuild made as the plan
+assumed would have been ten characters out from `useSchemaGate` onward, every later frame
+decoding to a real-looking wrong line. A local build with `VERCEL_ENV=production` gives
+production's exact name and size, so the runbook (`scripts/CLAUDE.md`) sets it and says why.
+`--sourcemap hidden` leaves the bundle byte-identical. `scripts/decode-stack.mjs` was not in the
+plan: without it the runbook ended at "and then read the map". It refuses to guess at a frame
+from another build, and three strings located in a production rebuild came back as the exact
+lines holding them. CI's entry for this branch's own tip cannot be read until it is pushed.
+
+**End to end on DEV, once Patryk had deployed the rules** (2026-10-31). A timer's throw, a
+rejection and a temporary render throw, reverted before this commit, each stored one entry,
+the last after `BookingApp` had unmounted, which is what the direct `logActivity` is for. The
+phone and the quoted name were masked in all three. The Crashes chip read "3 of 500 shown", each
+row carrying the Automatic chip, and the press handed over `mgt-crashes-2026-10-31.json`, typed
+`application/json`: those three entries and nothing else, oldest first, with no trace of what
+was masked. Before the rules went out the same press said it could not read, so both of its
+answers have now been seen live. One reading to know about: a test label holding `Date.now()` is
+masked too, thirteen digits being a number like any other, so filtering stored entries on it
+finds nothing.
+
+### /code-review
+
+- **A crash's `view` was the view before it.** `noteCrashView` sat in an effect, and a view that
+  throws as it opens never commits: with a temporary throw in PlanView, tapping Plan filed
+  `crash in timeline`. Written in the render now, above the views, the same tap files `crash in
+  plan`. One reading on the way: a reload sent straight after the edit raced Vite's file watcher
+  and repeated the old answer, so a console trace had to settle it.
+- **The mask paired its quotes.** V8 prints a short text it could not parse whole, quotes
+  included, so `"x{"n":"Ana"}"` masked as `"#"n"#"Ana"#"`: the value sat between the pairs, in a
+  node every account reads and past the reach of Delete customer. A quote that never closed was
+  not masked at all. A quoted value now runs from the first quote to the last, a lone quote to
+  the end. Two quoted runs in one message become one, which costs the words between them and
+  nothing else.
+- **The mask read a message of any length, before the gate.** Its address pattern is quadratic
+  on a long token: 50 KB took 2.5 s and 200 KB 39 s in Node, on the main thread, inside an error
+  handler, and a repeat paid again before the gate turned it away. It reads the first 1,200
+  characters now, four times the cap, because a mask shortens what it matches.
+- **The gate spent a signature on a crash nobody could sign.** `admitCrash` records what it
+  admits, and `logActivity` then returned without an account, so a crash on the sign-in screen
+  wrote nothing and the same crash after signing in was turned away as a repeat. `main.jsx` asks
+  `hasLogAuthor` first.
+- **One extension frame anywhere dropped an app crash.** The test ran over the whole stack, so a
+  TypeError thrown by the app, with a `chrome-extension://` wrapper below it, came back as
+  noise. It asks the frame that threw now.
+- **The decoder printed nothing through a symlink.** Its main-module check compared argv, which
+  is not resolved, with `import.meta.url`, which is. /tmp on a Mac is a symlink and the runbook
+  leaves the shell in /tmp/mgt-rebuild, where the command printed nothing and exited 0. Both
+  sides are resolved now, and a test runs it through a link.
+- **The decoder printed a 0-based column.** It took one off to look a frame up, and printed the
+  map's answer as it stood, a column to the left of the token in any editor. It adds the one
+  back.
+- **The header said a thrown value that is not an Error is never described.** A thrown string
+  is, through the mask: that is the shape `event.message` arrives in, and a test pins it. No
+  site in `src/` rejects with a string (grep), so nothing leaks today, and the header and
+  `src/lib/CLAUDE.md` now say what happens and what not to do. No code changed.
+- **Download's answer came back with the chip.** Its sentence survived the Crashes chip going
+  off, so turning it on again showed the answer to an earlier press. Measured on DEV with the
+  file refused: the sentence shows after the press, and is gone once the chip has been off.
+
+Twelve findings: ten fixed, nine above and this entry's header, one commit each, and two
+disproved. `downloadCrashes` could reject only on an `at` past `Date`'s range, and the `.write`
+on `activity/$eid` holds `at` to `now`. `saveBlocks` answers true while `writeWithRev`'s schema
+gate writes nothing, but no press reaches it: `UpdateRequired` cannot be dismissed and
+`anyModal` takes `schemaBlocked`, so the page is inert. Nothing was deferred.

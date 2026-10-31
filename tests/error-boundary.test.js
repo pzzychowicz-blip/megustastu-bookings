@@ -26,6 +26,28 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // read report the wrong arguments for the call below it.
 const src = (rel) => stripComments(readFileSync(resolve(HERE, "../src/", rel), "utf8")).join("\n");
 
+// v18.13.0 (#28): the report leaves through a prop, and only there.
+describe("a crash is handed on, and this file never writes it", () => {
+  const quiet = () => vi.spyOn(console, "error").mockImplementation(() => {});
+  it("gives the error and the component stack to onCrash", () => {
+    const spy = quiet();
+    const onCrash = vi.fn();
+    const err = new Error("x");
+    new ErrorBoundary({ onCrash }).componentDidCatch(err, { componentStack: "\n    at Qx" });
+    expect(onCrash).toHaveBeenCalledExactlyOnceWith(err, "\n    at Qx");
+    spy.mockRestore();
+  });
+  it("needs no onCrash", () => {
+    const spy = quiet();
+    expect(() => new ErrorBoundary({}).componentDidCatch(new Error("x"), null)).not.toThrow();
+    spy.mockRestore();
+  });
+  it("stays free of Firebase, for .design-sync and for this test", () => {
+    const imports = src("components/ErrorBoundary.jsx").match(/from "[^"]+"/g);
+    expect(imports.join(" ")).not.toMatch(/firebase|useActivityLog/);
+  });
+});
+
 // Walk a returned element tree. React elements are plain objects, so this needs
 // no renderer — which is the whole reason these assertions are possible here.
 function findAll(node, pred, out = []) {
@@ -227,7 +249,7 @@ describe("the boundary is wired into the tree", () => {
     // React boundaries catch errors from their children only. Rendered beside
     // <App/> rather than around it, this file would exist, look right in review,
     // and catch nothing at all.
-    const open = main.indexOf("<ErrorBoundary>");
+    const open = main.indexOf("<ErrorBoundary");
     const app = main.indexOf("<App />");
     const close = main.indexOf("</ErrorBoundary>");
     expect(open).toBeGreaterThan(-1);

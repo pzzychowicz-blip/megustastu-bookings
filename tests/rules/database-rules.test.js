@@ -48,6 +48,7 @@ import {
 import { sanitize } from "../../src/lib/booking-logic.js";
 import { sanitizeVoucher } from "../../src/lib/vouchers.js";
 import { can, ROLES, ALWAYS_ENFORCED, RULE_ENFORCED, CAP_IDS } from "../../src/lib/roles.js";
+import { crashEntry } from "../../src/lib/crash-report.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RULES_PATH = resolve(HERE, "../../database.rules.json");
@@ -2090,6 +2091,18 @@ describe("/activity — a create names its own author, at the server's clock", (
     await assertFails(logAs(ME(), "e1", entry({ kind: "whatever" })));
     await assertFails(logAs(ME(), "e1", entry({ auto: false })));
     await assertFails(logAs(ME(), "e1", entry({ bookings: { b1: "yes" } })));
+  });
+
+  // v18.13.0 (#28): the real builder, so a key it starts to write is checked against the
+  // real rule. Every field is a string under the bound `crash-report.js` caps to.
+  it("accepts what a crash writes, and holds its fields to short strings", async () => {
+    const { entry: crash } = crashEntry(new TypeError("x".repeat(5000)), {
+      where: "render", version: "18.13.0", view: "timeline", device: "Android · Chrome",
+    });
+    await assertSucceeds(logAs(ME(), "e1", entry(crash)));
+    await assertFails(logAs(ME(), "e2", entry({ ...crash, crash: { stack: "x".repeat(2001) } })));
+    await assertFails(logAs(ME(), "e3", entry({ ...crash, crash: { where: 5 } })));
+    await assertFails(logAs(ME(), "e4", entry({ ...crash, kind: "crashes" })));
   });
 
   it("accepts the optional halves an entry may carry", async () => {

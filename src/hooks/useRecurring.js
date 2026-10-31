@@ -25,6 +25,7 @@ import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { genId } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
+import { clampInt, sanitizeRule, sanitizeRecurring } from "../lib/recurring";
 import { dbError } from "../lib/dbError";
 // v18.0.0 session 8: the activity log.
 import { settingsWriteEntry } from "../lib/activity";
@@ -34,46 +35,6 @@ import { emitActivity } from "../lib/activitySink";
 // booking-form "Repeat weekly" toggle) stays hidden until staff enable it in
 // Settings. Absent/legacy node ⇒ off (sanitize requires `enabled === true`).
 const DEFAULT_RECURRING = { v: 1, enabled: false, horizonWeeks: 4, rules: [] };
-
-function clampInt(n, def, min, max) {
-  const v = Math.round(Number(n));
-  if (!Number.isFinite(v)) return def;
-  return Math.max(min, Math.min(max, v));
-}
-
-const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
-
-function sanitizeRule(r) {
-  if (!r || typeof r !== "object") return null;
-  return {
-    id: r.id || genId(),
-    name: r.name || "",
-    phone: r.phone || "",
-    size: clampInt(r.size, 2, 1, 40),
-    weekday: clampInt(r.weekday, 0, 0, 6),
-    time: r.time || "20:00",
-    preference: r.preference || "auto",
-    notes: r.notes || "",
-    active: r.active !== false,
-    skipDates: Array.isArray(r.skipDates) ? r.skipDates.filter(Boolean) : [],
-    createdAt: Number(r.createdAt) || Date.now(),
-    // v18.3.3: the first date the rule books (the date "Repeat weekly" was
-    // ticked on). Absent on older rules, which `ruleStart` (lib/recurring.js)
-    // derives from their first booking instead. A whitelist, so it must be
-    // listed here or the next write to `recurring` deletes it.
-    ...(ISO_DAY.test(r.startDate || "") ? { startDate: r.startDate } : {})
-  };
-}
-
-function sanitizeRecurring(raw) {
-  const src = raw && typeof raw === "object" ? raw : {};
-  return {
-    v: 1,
-    enabled: src.enabled === true,
-    horizonWeeks: clampInt(src.horizonWeeks, 4, 1, 12),
-    rules: Array.isArray(src.rules) ? src.rules.map(sanitizeRule).filter(Boolean) : []
-  };
-}
 
 // v18.6.0 round 2: how often a refused rule removal is tried again, and the
 // wait before the first retry (the second waits twice that, the third three

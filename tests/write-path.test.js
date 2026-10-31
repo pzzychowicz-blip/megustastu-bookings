@@ -17,7 +17,7 @@ import { describe, it, expect } from "vitest";
 import {
   contentKey, bookingChanged, stampForWrite, buildPatch,
   patchSignature, isDuplicatePatch, isStaleGap, retryDecision, replayOutcome,
-  changedIds, describeWrite,
+  changedIds, describeWrite, writeGate,
   DEDUPE_WINDOW_MS, STALE_GAP_MS, MAX_RETRIES,
 } from "../src/lib/write-path.js";
 
@@ -263,6 +263,54 @@ describe("isStaleGap — the freshness gate", () => {
   // or every device trips the gate every time it is backgrounded.
   it("keeps its clearance above the background throttle", () => {
     expect(STALE_GAP_MS).toBeGreaterThan(60000);
+  });
+});
+
+// v18.13.0 (#25). What each gate answers. The order, run through the hook's own code
+// over every combination, is tests/write-gate.test.js.
+describe("writeGate — refuse, hold or write", () => {
+  const open = { schemaBlocked: false, gap: false, stale: false, loaded: true, computed: [{ id: "a" }], firstLoadCount: 1, arrayShape: false };
+  it("writes when nothing is in the way", () => {
+    expect(writeGate(open)).toEqual({ verdict: "write", gate: null });
+  });
+  it("names each gate and what it answers", () => {
+    expect(writeGate({ ...open, schemaBlocked: true })).toEqual({ verdict: "refuse", gate: "schema" });
+    expect(writeGate({ ...open, gap: true })).toEqual({ verdict: "hold", gate: "gap" });
+    expect(writeGate({ ...open, stale: true })).toEqual({ verdict: "hold", gate: "stale" });
+    expect(writeGate({ ...open, loaded: false })).toEqual({ verdict: "refuse", gate: "not-loaded" });
+    expect(writeGate({ ...open, computed: [] })).toEqual({ verdict: "refuse", gate: "empty" });
+    expect(writeGate({ ...open, arrayShape: true })).toEqual({ verdict: "hold", gate: "array-shape" });
+  });
+  it("calls a gap a gap when the flag is already up: the hook has a trip to run on it", () => {
+    expect(writeGate({ ...open, gap: true, stale: true }).gate).toBe("gap");
+  });
+  it("a wipe is a wipe only of a list that held something at load", () => {
+    expect(writeGate({ ...open, computed: [], firstLoadCount: 0 }).verdict).toBe("write");
+    expect(writeGate({ ...open, computed: [], firstLoadCount: null }).verdict).toBe("write");
+    expect(writeGate({ ...open, computed: [], firstLoadCount: 1 }).gate).toBe("empty");
+  });
+  it("a list that is not an array is no wipe", () => {
+    expect(writeGate({ ...open, computed: undefined }).verdict).toBe("write");
+  });
+  // The hook asks in two halves, so it never passes `stale` and `loaded` in one call
+  // and the order across that join is its own: swapping those two lines here passes
+  // tests/write-gate.test.js. This is what holds the function's order at that join.
+  it("given every gate at once, answers with the first and then the next", () => {
+    const all = { schemaBlocked: true, gap: true, stale: true, loaded: false, computed: [], firstLoadCount: 1, arrayShape: true };
+    const order = [
+      ["schema", { schemaBlocked: false }], ["gap", { gap: false }], ["stale", { stale: false }],
+      ["not-loaded", { loaded: true }], ["empty", { computed: [{ id: "a" }] }], ["array-shape", { arrayShape: false }],
+    ];
+    const seen = [];
+    order.reduce((facts, [gate, open]) => { seen.push(writeGate(facts).gate); expect(writeGate(facts).gate).toBe(gate); return { ...facts, ...open }; }, all);
+    expect(seen).toHaveLength(6);
+  });
+  it("a fact not passed is a gate not asked", () => {
+    expect(writeGate({}).verdict).toBe("write");
+    expect(writeGate().verdict).toBe("write");
+    expect(writeGate({ stale: false, gap: false }).verdict).toBe("write");
+    expect(writeGate({ loaded: false }).gate).toBe("not-loaded");
+    expect(writeGate({ loaded: undefined }).verdict).toBe("write");
   });
 });
 

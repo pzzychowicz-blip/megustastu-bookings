@@ -72,6 +72,10 @@ describe("the rules and this module agree", () => {
     expect(inRules.slice().sort()).toEqual(ACTIVITY_KINDS.slice().sort());
   });
 
+  it("the crash download's query has its index", () => {
+    expect(JSON.parse(RULES).rules.activity[".indexOn"]).toContain("kind");
+  });
+
   it("the rules NO LONGER age-gate a delete — the floor is the app's alone", () => {
     // This assertion read `expect(RULES).toContain("now - " + PRUNE_AFTER_MS)`
     // until v18.0.0 session 11, and inverting it deliberately is the point.

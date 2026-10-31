@@ -42,7 +42,7 @@ import { emitActivity } from "../lib/activitySink";
 // what shape a booking reaches the server now lives in one testable module;
 // this hook keeps the refs, listeners, effects and setState. See its header.
 import {
-  buildPatch, patchSignature, isDuplicatePatch,
+  buildPatch, patchSignature, isDuplicatePatch, writeGate,
   isStaleGap, replayOutcome, tellDiscarded, describeWrite, STALE_GAP_MS, MAX_RETRIES,
 } from "../lib/write-path";
 import { todayStr } from "../lib/day";
@@ -440,17 +440,21 @@ export function usePersistence({ autoOptimizer, nowMins }){
     }
     // v18.4.8: this attempt is the write's last, and it did not land.
     function dropped(){tellDiscarded(report,LANDED,DISCARDED);}
+    // v18.13.0 (#25): every gate below is decided by `writeGate` (lib/write-path.js),
+    // which holds their order; this hook carries the verdict out. The first half is
+    // asked before `next` runs, the rest once there is a `computed`.
+    const early=writeGate({schemaBlocked:writesBlocked("bookings"),gap:isStaleGap(lastBeatRef.current,Date.now()),stale:staleRef.current});
     // v18.6.0: the schema gate (lib/schema.js), before every other gate. A
     // build the database is ahead of would write this booking without the
     // fields it does not know. Not parked: a replay from this build would
     // drop them just the same. App shows the "refresh this device" card.
-    if(writesBlocked("bookings")){dropped();return false;}
+    if(early.verdict==="refuse"){dropped();return false;}
     // v15.2.0/v15.4.0: staleness gate FIRST — hold the SERVER write when the local
     // snapshot may be stale, so a frozen tab's stale data never lands on the server.
     // This is NOT a red error: a user write is PARKED for auto-replay on freshly-
     // resynced data (resync() drains the queue), and (v15.6.0) shown optimistically.
-    if(isStaleGap(lastBeatRef.current,Date.now())) gapTrip();
-    if(staleRef.current){
+    if(early.gate==="gap") gapTrip();
+    if(early.verdict==="hold"){
       console.warn("[SAFE] bookings write held — local data may be stale; queued for resync + retry, shown optimistically.");
       if(typeof next==="function"&&!isSilent){
         // v17.16.9: the item carries a LABEL, so that if the automatic retries are
@@ -500,24 +504,12 @@ export function usePersistence({ autoOptimizer, nowMins }){
       return false;
     }
     let dispatched=true;
-    function persist(prev,computed){
-      if(!bookingsLoaded.current){
-        console.warn("[SAFE] Refused to write bookings — initial read has not completed yet.");
-        if(!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
-        dropped();
-        dispatched=false;return;
-      }
-      if(Array.isArray(computed)&&computed.length===0&&firstLoadCount.current!==null&&firstLoadCount.current>0){
-        console.warn("[SAFE] Refused to write empty bookings array — Firebase had "+firstLoadCount.current+" entries on load. This is a safety check against accidental wipe.");
-        if(!isSilent) setWriteWarning("Refused to write empty data. Reload the page and try again. If you intended to delete everything, contact support.");
-        dropped();
-        dispatched=false;return;
-      }
+    function persist(prev,computed,gate){
       // v15.5.0: still on the legacy single-array shape (migration not yet echoed) —
       // hold the write so a string-keyed child is never mixed into the integer array.
       // Treated like the stale gate: queue the user write + kick a resync; once the
       // keyed shape lands (arrayShapeRef clears) the queued retry succeeds.
-      if(arrayShapeRef.current){
+      if(gate.gate==="array-shape"){
         console.warn("[SAFE] bookings write held — legacy array shape, migration to per-booking nodes pending.");
         if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed,report&&report.subject),report:report});
         else dropped();
@@ -592,27 +584,48 @@ export function usePersistence({ autoOptimizer, nowMins }){
     // `lastPatchSigRef` exists to absorb.
     const prev=bookingsRef.current;
     const computed=(typeof next==="function")?next(prev):next;
+    // v18.13.0 (#25): the second half of the gates, asked BEFORE the mirror moves. A
+    // refusal is final, so it must change nothing here: asked inside `persist`, it ran
+    // after the assignment below, and a refused wipe left this device's screen and its
+    // mirror empty, with the server untouched and the banner saying it was refused.
+    // A HOLD still shows, because a held write is going to land.
+    const gate=writeGate({loaded:bookingsLoaded.current,computed:computed,firstLoadCount:firstLoadCount.current,arrayShape:arrayShapeRef.current});
+    if(gate.gate==="not-loaded"){
+      console.warn("[SAFE] Refused to write bookings — initial read has not completed yet.");
+      if(!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
+      dropped();
+      return false;
+    }
+    if(gate.gate==="empty"){
+      console.warn("[SAFE] Refused to write empty bookings array — Firebase had "+firstLoadCount.current+" entries on load. This is a safety check against accidental wipe.");
+      if(!isSilent) setWriteWarning("Refused to write empty data. Reload the page and try again. If you intended to delete everything, contact support.");
+      dropped();
+      return false;
+    }
     bookingsRef.current=computed;
     setBookings(computed);
-    persist(prev,computed);
+    persist(prev,computed,gate);
     return dispatched;
   }
-  // Returns TRUE if dispatched, FALSE if blocked by the stale gate (so callers can
-  // gate their success UI). tableBlocks are not on the bookings auto-retry queue
-  // (rare, low-stakes); on a stale-block the caller simply re-does the action.
+  // Returns TRUE if dispatched, FALSE if it did not go out (so callers can gate their
+  // success UI). tableBlocks are not on the bookings auto-retry queue (rare,
+  // low-stakes); on a held or refused write the caller re-does the action.
+  //
+  // v18.13.0 (#25): which it can only do if it is told. Both callers threw the
+  // boolean away, so a held block closed its dialog and was gone with no word, and a
+  // block refused before the first read answered TRUE. `addBlock` / `removeBlock`
+  // stop on the answer now and BlockModal says so: not the red banner, which sits
+  // collapsed under the dialog's blur (measured), where the sentence cannot be read.
   function saveBlocks(next,isSilent){
     // v15.2.0/v15.4.0: same staleness gate as saveBookings — held, not errored.
-    if(isStaleGap(lastBeatRef.current,Date.now())) gapTrip();
-    if(staleRef.current){
+    const early=writeGate({gap:isStaleGap(lastBeatRef.current,Date.now()),stale:staleRef.current});
+    if(early.gate==="gap") gapTrip();
+    if(early.verdict==="hold"){
       console.warn("[SAFE] tableBlocks write held — local data may be stale; resyncing first.");
       markStale();
       return false;
     }
     function persist(computed){
-      if(!blocksLoaded.current){
-        console.warn("[SAFE] Refused to write tableBlocks — initial read has not completed yet.");
-        return;
-      }
       // v16.0.0: revision-CAS write (lib/revGuard.js) — a stale device's rev is
       // behind the server's, so its overwrite is rejected server-side; the SDK's
       // rollback echo then restores local state via the onValue listeners.
@@ -634,6 +647,11 @@ export function usePersistence({ autoOptimizer, nowMins }){
     // one-line ordering every activity hook point depends on.
     const prev=blocksRef.current;
     const computed=(typeof next==="function")?next(prev):next;
+    // Asked before the mirror moves, as `saveBookings` does: a refusal changes nothing.
+    if(writeGate({loaded:blocksLoaded.current}).verdict==="refuse"){
+      console.warn("[SAFE] Refused to write tableBlocks — initial read has not completed yet.");
+      return false;
+    }
     blocksRef.current=computed;
     setTableBlocks(computed);
     persist(computed);

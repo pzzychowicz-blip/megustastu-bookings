@@ -476,7 +476,7 @@ export function sanitizeBlock(bl,legacyId){
 // already stores. Identical siblings still get _1, _2 — the common case is
 // unchanged — and determinism is untouched, since the scan is left-to-right
 // over a stable array.
-var BLOCK_KEY_FIELDS=["tableId","date","allDay","from","to","reason"];
+const BLOCK_KEY_FIELDS=["tableId","date","allDay","from","to","reason"];
 function blockContentKey(bl){
   return BLOCK_KEY_FIELDS.map(function(k){return String(bl[k]===undefined?"":bl[k]);}).join("\u001f");
 }
@@ -1667,7 +1667,7 @@ function computeAfterAction(synced,date,blocks,changedId,forceReassign,autoOptim
 // — \u001b..\u001f map to [ \ ] ^ _ — so a decoder is unambiguous even though
 // nothing decodes: the key is compared, and injectivity is the only property
 // asked of it.
-var K_ARR="\u001f", K_FLD="\u001e", K_REC="\u001d", K_LST="\u001c";
+const K_ARR="\u001f", K_FLD="\u001e", K_REC="\u001d", K_LST="\u001c";
 // `no-control-regex` exists to catch a control character that got into a pattern
 // by ACCIDENT — a pasted byte, a mistyped escape. Here the characters are the
 // entire subject: this is the one regex in the app whose job is to find them.
@@ -1676,7 +1676,7 @@ var K_ARR="\u001f", K_FLD="\u001e", K_REC="\u001d", K_LST="\u001c";
 // `dayBookingsSig`, and `new RegExp("[\\u001b-\\u001f]")` is flagged by the same
 // rule while hiding the range from a reader.
 // eslint-disable-next-line no-control-regex
-var SEP_RE=/[\u001b-\u001f]/g;
+const SEP_RE=/[\u001b-\u001f]/g;
 function escSep(v){
   return String(v).replace(SEP_RE,function(c){
     return "\u001b"+String.fromCharCode(c.charCodeAt(0)+0x40);

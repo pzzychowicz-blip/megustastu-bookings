@@ -41,7 +41,7 @@ jobs:
     steps:
       # `ref: main` and not the default: a manual run started from another
       # branch must still build the sandbox from main.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
       - name: Rebuild sandbox as main + the simulator re-include

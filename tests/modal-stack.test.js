@@ -7,6 +7,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { applyModal, topModal, modalMap, MODAL_Z } from "../src/hooks/useModalStack.js";
+import { escapeAction } from "../src/lib/modal-keys.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
 const open = (stack, id, v) => applyModal(stack, id, v === undefined ? true : v);
@@ -150,7 +151,8 @@ describe("MODAL_Z covers every surface App can open", () => {
     // those two lists, which is why one of them was short.
     // v18.4.4: the hook AND the shortcut table it calls. The table's rows read
     // K too (and its actions take it as `K2`), so half the names moved there.
-    const kb = ["../src/hooks/useKeyboardShortcuts.js", "../src/lib/shortcuts.js"]
+    // v18.13.0 (#31): and the two modal tables, in lib/modal-keys.js.
+    const kb = ["../src/hooks/useKeyboardShortcuts.js", "../src/lib/shortcuts.js", "../src/lib/modal-keys.js"]
       .map((f) => stripComments(readFileSync(new URL(f, import.meta.url), "utf8")).join("\n")).join("\n");
     const app = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
     const used = [...new Set([...kb.matchAll(/\bK2?\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]))];
@@ -167,11 +169,11 @@ describe("MODAL_Z covers every surface App can open", () => {
   });
 
   it("every id in MODAL_Z has an Escape action", () => {
-    const kb = stripComments(readFileSync(new URL("../src/hooks/useKeyboardShortcuts.js", import.meta.url), "utf8")).join("\n");
-    const body = kb.slice(kb.indexOf("function escapeAction"), kb.indexOf("const MODAL_ENTER_ORDER"));
-    expect(body.length).toBeGreaterThan(200);     // the anchor still resolves
+    // v18.13.0 (#31): asked of the function, not looked for in its source. What each
+    // row does is tests/modal-keys.test.js.
+    const K = new Proxy({}, { get: () => () => {} });
     MODAL_Z.forEach((id) => {
-      expect(body, "no Escape action for modal \"" + id + "\"").toContain('case "' + id + '":');
+      expect(typeof escapeAction(K, id), "no Escape action for modal \"" + id + "\"").toBe("function");
     });
   });
 });

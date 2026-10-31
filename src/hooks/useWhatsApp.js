@@ -41,8 +41,7 @@ import { EMPTY_FORM } from "../lib/constants";
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
-import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch, contactDeletePatch, replyUnarchives, requestedOccasions } from "../lib/whatsapp";
-import { unionTagIds } from "../lib/tags";
+import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch, contactDeletePatch, replyUnarchives, modifyChanges } from "../lib/whatsapp";
 import { sendsViaServer, sendViaBackend, sendMediaViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
@@ -733,27 +732,13 @@ export function useWhatsApp({
     if (!conv || !conv.acceptedBookingId) return;
     const booking = bookings.find((b) => b.id === conv.acceptedBookingId);
     if (!booking) return;
-    const d = conv.draftData || {};
-    const date = d.date || booking.date || "";
-    const time = d.time || booking.time || "13:00";
-    const size = d.size != null ? d.size : (booking.size || 2);
-    // A modify request that states a seating area overrides the booking's current
-    // preference; otherwise ("auto"/unset) keep what the booking already had.
-    const preference = (d.preference === "indoor" || d.preference === "outdoor") ? d.preference : (booking.preference || "auto");
     // The booking's own draft with the requested changes on top (`openEdit`),
     // so a field the request does not mention keeps its value.
-    const changes = { date, time, size, preference };
-    // v18.11.0: an occasion the request names ("it's for a birthday now") is
-    // ADDED to the booking's occasion tags, never in place of them: a change
-    // request says what is new, and a tag already on the booking was put there
-    // by somebody. Removing one stays a tap in the form. Only the ones the
-    // booking does not have yet (`requestedOccasions`), the banner's list.
-    const occ = requestedOccasions(d, booking, tagList);
-    if (occ.length) changes.tags = unionTagIds(booking.tags, occ);
+    const changes = modifyChanges(conv.draftData, booking, tagList);
     if (!openEdit(booking, changes)) return;
     modifyApplyRef.current = { phoneKey: conv.phoneKey, bookingId: booking.id };
     setReturnToInboxKey(conv.phoneKey);
-    setShowInbox(false); setViewDate(date);
+    setShowInbox(false); setViewDate(changes.date);
   }
   // completeModifyApply(bookingId, ok): called from doSave's edit-success path.
   // When this edit was started via "Apply changes" (modifyApplyRef matches) AND

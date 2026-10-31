@@ -90,7 +90,6 @@ let warned = false;
 
 export function configureSchemaGate(opts) { enforce = !(opts && opts.enforce === false); }
 export function setStoredSchema(n) { stored = n; }
-export function schemaEnforced() { return enforce; }
 
 // Asked by every gated writer before it dispatches. `what` names the write for
 // the console line.

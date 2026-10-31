@@ -392,7 +392,7 @@ import { isReadableTime, countLabel } from "./booking-logic.js";
 import { isReadableDate, formatDay, localDay, stepDate } from "./day.js";
 // v18.11.0: the occasion ids a parse may carry are a booking's tag ids, so they
 // are cleaned by the rule a booking's are (`cleanTagIds`). tags.js imports nothing.
-import { cleanTagIds, knownTagIds } from "./tags.js";
+import { cleanTagIds, knownTagIds, unionTagIds } from "./tags.js";
 
 // ── What a conversation is called (v18.9.0) ────────────────────────────────
 // conversationName(conv, bookings, contacts) → `{ title, phoneLine, source }`:
@@ -628,6 +628,28 @@ export function draftOccasions(draft, tagList) {
 export function requestedOccasions(draft, booking, tagList) {
   const has = cleanTagIds(booking && booking.tags);
   return draftOccasions(draft, tagList).filter(function (id) { return has.indexOf(id) < 0; });
+}
+
+// modifyChanges(draft, booking, tagList) → what "Apply changes" lays over the booking
+// in the edit form (v18.13.0, #31: the decision in `handleApplyModify`, moved here so a
+// test can run it). Each field is the request's, falling back to the booking's.
+export function modifyChanges(draft, booking, tagList) {
+  const d = draft || {};
+  const date = d.date || booking.date || "";
+  const time = d.time || booking.time || "13:00";
+  const size = d.size != null ? d.size : (booking.size || 2);
+  // A modify request that states a seating area overrides the booking's current
+  // preference; otherwise ("auto"/unset) keep what the booking already had.
+  const preference = (d.preference === "indoor" || d.preference === "outdoor") ? d.preference : (booking.preference || "auto");
+  const changes = { date, time, size, preference };
+  // v18.11.0: an occasion the request names ("it's for a birthday now") is
+  // ADDED to the booking's occasion tags, never in place of them: a change
+  // request says what is new, and a tag already on the booking was put there
+  // by somebody. Removing one stays a tap in the form. Only the ones the
+  // booking does not have yet (`requestedOccasions`), the banner's list.
+  const occ = requestedOccasions(d, booking, tagList);
+  if (occ.length) changes.tags = unionTagIds(booking.tags, occ);
+  return changes;
 }
 
 // clampConfidence(stated, draft) — the confidence ceiling rule (decided

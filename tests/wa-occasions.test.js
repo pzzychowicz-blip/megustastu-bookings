@@ -16,7 +16,7 @@ import process from "node:process";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { parseMessage, parseThread, mockParse, responseSchemaFor, occasionList, knownOccasions } from "../api/_lib/gemini.js";
-import { sanitizeParse, mergeDraft, draftOccasions, occasionIdsIn, requestedOccasions, pendingDraftOf } from "../src/lib/whatsapp.js";
+import { sanitizeParse, mergeDraft, draftOccasions, occasionIdsIn, requestedOccasions, modifyChanges, pendingDraftOf } from "../src/lib/whatsapp.js";
 import { draftPrefill } from "../src/lib/draft-check.js";
 import { DEFAULT_TAG_LIST } from "../src/lib/tags.js";
 import { SCENARIOS } from "../src/lib/wa-sim-scenarios.js";
@@ -190,11 +190,30 @@ describe("a change request's occasion reaches the booking", () => {
     expect(requestedOccasions({ intent: "modify" }, { tags: [] }, DEFAULT_TAG_LIST)).toEqual([]);
   });
   it("Apply changes ADDS those to the booking's tags, and the banner lists those", () => {
+    // v18.13.0 (#31): the decision moved to lib, so it is run, and the hook only has to call it.
     const hook = src("hooks/useWhatsApp.js");
     const apply = hook.slice(hook.indexOf("function handleApplyModify("), hook.indexOf("function completeModifyApply("));
-    expect(apply).toMatch(/const occ = requestedOccasions\(d, booking, tagList\);\s*if \(occ\.length\) changes\.tags = unionTagIds\(booking\.tags, occ\);\s*if \(!openEdit\(booking, changes\)\) return;/);
+    expect(apply).toContain("const changes = modifyChanges(conv.draftData, booking, tagList);");
+    const booked = { tags: ["o-birthday", "g-vip"] };
+    expect(modifyChanges({ occasions: ["o-anniversary", "o-birthday"] }, booked, DEFAULT_TAG_LIST).tags)
+      .toEqual(["g-vip", "o-anniversary", "o-birthday"]);
+    expect(modifyChanges({ occasions: ["o-birthday"] }, booked, DEFAULT_TAG_LIST)).not.toHaveProperty("tags");
+    expect(modifyChanges({ occasions: [] }, booked, DEFAULT_TAG_LIST)).not.toHaveProperty("tags");
     expect(src("components/whatsapp/IntentBanner.jsx")).toMatch(/tagLabels\(tagList, "occasion", requestedOccasions\(draftData, linkedBooking, tagList\)\)\.forEach/);
     expect(src("components/whatsapp/ConversationView.jsx")).toMatch(/<IntentBanner[^>]*tagList=\{tagList\}/);
+  });
+  it("Apply changes takes each field from the request, and the booking's where it says nothing", () => {
+    const booking = { date: "2026-11-02", time: "20:00", size: 4, preference: "indoor" };
+    expect(modifyChanges({}, booking, DEFAULT_TAG_LIST)).toEqual(booking);
+    expect(modifyChanges(null, booking, DEFAULT_TAG_LIST)).toEqual(booking);
+    expect(modifyChanges({ date: "2026-11-03", time: "21:00", size: 6, preference: "outdoor" }, booking, DEFAULT_TAG_LIST))
+      .toEqual({ date: "2026-11-03", time: "21:00", size: 6, preference: "outdoor" });
+    expect(modifyChanges({}, {}, DEFAULT_TAG_LIST)).toEqual({ date: "", time: "13:00", size: 2, preference: "auto" });
+  });
+  it("a seating request overrides the booking's only when it names one", () => {
+    const booking = { preference: "indoor" };
+    expect(modifyChanges({ preference: "auto" }, booking, DEFAULT_TAG_LIST).preference).toBe("indoor");
+    expect(modifyChanges({ preference: "outdoor" }, booking, DEFAULT_TAG_LIST).preference).toBe("outdoor");
   });
   it("a handled request is not merged into the next message (/code-review)", () => {
     const draftData = { intent: "modify", size: 6, occasions: ["o-anniversary"] };

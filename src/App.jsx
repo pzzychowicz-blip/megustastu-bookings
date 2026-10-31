@@ -340,7 +340,7 @@ import { knownTagIds } from "./lib/tags";
 // v18.0.0 session 8: the activity log. `useActivityLog` installs the module-level
 // sink every writer emits into; `useActivityFeed` is the app's first Firebase
 // QUERY, and is attached only while the log is open.
-import { useActivityLog, useActivityFeed, redactGuest, pruneActivity, clearActivityAndLog } from "./hooks/useActivityLog";
+import { useActivityLog, useActivityFeed, redactGuest, pruneActivity, clearActivityAndLog, readCrashes } from "./hooks/useActivityLog";
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
@@ -376,6 +376,7 @@ import { onPrintEnd, printOrReport, PRINT_IGNORED_TEXT } from "./lib/print-end";
 // v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
 // stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
 import { activityWindow, retentionMs, retentionLabel, clearOutcome, CLEAR_FAILED } from "./lib/activity";
+import { noteCrashView, downloadCrashes } from "./lib/crash-report";
 
 // ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
 // `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
@@ -425,7 +426,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.12.1"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.13.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1693,6 +1694,12 @@ function BookingApp({uid}){
     try{saveTextFile(text,filename,"text/csv;charset=utf-8");}
     catch{setWriteWarning("Couldn't create the file on this device.");}
   }
+  // v18.13.0 (#28): the same capability, the same reasoning. Resolves to what the log
+  // should say, in the log: the banner cannot be read under a modal (measured, v18.13.0).
+  function doDownloadCrashes(){
+    if(refused("dataExport")) return Promise.resolve("");
+    return downloadCrashes({read:readCrashes,save:saveTextFile,today:todayStr()});
+  }
   const prunedRef=useRef(false);
   useEffect(function(){
     if(!activityOpen||!isAdmin){ if(!activityOpen) prunedRef.current=false; return; }
@@ -1957,6 +1964,11 @@ function BookingApp({uid}){
   // before its declaration is a TDZ ReferenceError, not a hoist (the split
   // handlers below are function declarations, so those genuinely do hoist).
   const activeView=split?split[focusedPane]:view;
+  // v18.13.0 (#28): which view a crash happened in, kept where it outlives this tree.
+  // In the render and not an effect: a view that throws as it opens never commits, so
+  // an effect files its crash under the view before it (measured on DEV). The children
+  // render after this line, and the write is the same string however often it runs.
+  noteCrashView(activeView);
   // One writer for both the state and the key, so they can't drift.
   function applySplit(next){
     setSplit(next);
@@ -3441,7 +3453,10 @@ function BookingApp({uid}){
     // the read path uses. A locally-added block therefore has a stable identity
     // before the Firebase echo lands, rather than acquiring one on the way back.
     const next=tableBlocks.concat([sanitizeBlock(block)]);
-    saveBlocks(next);
+    // v18.13.0 (#25): a block that did not go out stops here. The bookings write below
+    // places the day around `next`, a list the server does not hold, and closing the
+    // dialog would lose the block with nothing said. The dialog reads the false.
+    if(!saveBlocks(next)) return false;
     const ok=saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
     if(ok) flash();
     setBlockTarget(null);
@@ -3451,7 +3466,7 @@ function BookingApp({uid}){
     // (tableId+date+allDay+from+to), which two duplicate blocks share exactly —
     // so unblocking either one dropped BOTH. See sanitizeBlock in booking-logic.
     const next=tableBlocks.filter(function(bl){return bl.id!==block.id;});
-    saveBlocks(next);
+    if(!saveBlocks(next)) return false;
     const ok=saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
     if(ok) flash();
     if(next.filter(function(bl){return bl.tableId===block.tableId&&bl.date===block.date;}).length===0) setBlockTarget(null);
@@ -4903,6 +4918,8 @@ function BookingApp({uid}){
           clearMsg={activityClearMsg}
           onClearRange={doClearActivity}
           onDownload={doDownloadActivity}
+          canDownloadCrashes={can("dataExport")}
+          onDownloadCrashes={doDownloadCrashes}
           onOpenCustomer={openCustomerByName}
           retentionText={retentionLabel(activityRetentionDays)}
           bookings={bookings}

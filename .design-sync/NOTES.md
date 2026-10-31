@@ -55,9 +55,8 @@ Read this first; add to it whenever a sync teaches something new.
 - `runtimeFontPrefixes: ["SF Pro"]`: the app's own `--font-app` declaration is
   still in the stylesheet, overridden, so the validator sees SF Pro named.
   Nothing renders in it.
-- **Environment:** Node 24.14.1. `engines` says 22.x, but no 22 is installed
-  here, and nothing in the sync cared. Playwright 1.60.0 with its cached
-  `chromium-1223`.
+- **Environment:** Node 24.14.1, which is what `engines` says since v18.13.0.
+  Playwright 1.60.0 with its cached `chromium-1223`.
 
 ## Previews — what made them render right
 

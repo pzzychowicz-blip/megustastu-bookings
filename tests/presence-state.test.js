@@ -9,7 +9,7 @@
 // cause a delete it shouldn't?"
 
 import { describe, it, expect } from "vitest";
-import { presenceState, lastProof, STALE_MS, PRUNE_MS } from "../src/lib/presence-state.js";
+import { presenceState, lastProof, deviceLabel, STALE_MS, PRUNE_MS } from "../src/lib/presence-state.js";
 
 const NOW = 1_700_000_000_000;
 const fresh = (over) => Object.assign({ email: "a@b.c", ua: "Mac · Chrome", since: NOW - 60_000, lastSeen: NOW - 5_000 }, over);
@@ -128,5 +128,34 @@ describe("presenceState — mySince", () => {
     const s = presenceState({ me: fresh({ since: 999, lastSeen: NOW - (STALE_MS + 1) }) }, NOW, "me", false);
     expect(s.devices).toEqual([]);
     expect(s.mySince).toBe(999);
+  });
+});
+
+// v18.13.0 (#31): moved from usePresence.js. Each token below also sits in a later
+// test's agent string, so these fail if a branch of the two chains is reordered.
+describe("deviceLabel", () => {
+  const WEBKIT = "AppleWebKit/605.1.15 (KHTML, like Gecko)";
+  const CHROME = "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36";
+  it("names the device and the browser", () => {
+    expect(deviceLabel("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) " + WEBKIT + " Version/17.0 Mobile/15E148 Safari/604.1")).toBe("iPad · Safari");
+    expect(deviceLabel("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " + CHROME)).toBe("Mac · Chrome");
+    expect(deviceLabel("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0")).toBe("Windows · Firefox");
+    expect(deviceLabel("Mozilla/5.0 (X11; Linux x86_64) " + CHROME)).toBe("Linux · Chrome");
+  });
+  it("an iPhone says Mac OS X and an Android says Linux, and neither is that", () => {
+    expect(deviceLabel("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " + WEBKIT + " Version/17.0 Mobile/15E148 Safari/604.1")).toBe("iPhone · Safari");
+    expect(deviceLabel("Mozilla/5.0 (Linux; Android 14; Tablet) " + CHROME)).toBe("Android · Chrome");
+  });
+  it("Edge and Opera carry Chrome's and Safari's tokens, and are themselves", () => {
+    expect(deviceLabel("Mozilla/5.0 (Windows NT 10.0; Win64; x64) " + CHROME + " Edg/154.0.0.0")).toBe("Windows · Edge");
+    expect(deviceLabel("Mozilla/5.0 (Windows NT 10.0; Win64; x64) " + CHROME + " OPR/110.0.0.0")).toBe("Windows · Opera");
+  });
+  it("Chromium is not reported as Chrome", () => {
+    expect(deviceLabel("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chromium/120.0 Chrome/120.0 Safari/537.36")).toBe("Linux · Safari");
+  });
+  it("falls back to Device, and to the device alone when the browser is unknown", () => {
+    expect(deviceLabel("")).toBe("Device");
+    expect(deviceLabel("curl/8.0")).toBe("Device");
+    expect(deviceLabel("Mozilla/5.0 (Macintosh)")).toBe("Mac");
   });
 });

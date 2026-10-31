@@ -80,11 +80,20 @@ export const FEED_PAGE = 500;
 // One entry per push key. Written with `set` on a pushed ref rather than
 // `push(ref, value)` so the two steps are separable and the key is in hand —
 // the same shape `usePresence` uses for its own per-connection child.
-function logActivity(entries) {
+// v18.13.0 (#28): exported for `main.jsx`, which writes a crash through this directly:
+// `emitActivity`'s sink is null once `BookingApp` has unmounted, and that is exactly when
+// a render crash needs it.
+// `hasLogAuthor` is asked apart for the same file: its gate spends a signature on
+// admission, and a crash nobody can sign would otherwise spend one on nothing.
+export function hasLogAuthor() {
   const u = auth.currentUser;
   // No signed-in account = no honest author. See the header: substituting
   // anything here produces a write the rules refuse and the sink swallows.
-  if (!u || !u.uid || !u.email) return;
+  return !!(u && u.uid && u.email);
+}
+export function logActivity(entries) {
+  if (!hasLogAuthor()) return;
+  const u = auth.currentUser;
   (Array.isArray(entries) ? entries : []).forEach(function (e) {
     if (!e || !e.kind || !e.text) return;
     const row = push(ref(db, "activity"));
@@ -96,6 +105,26 @@ function logActivity(entries) {
       console.warn("[activity] entry refused by the server", err);
     });
   });
+}
+
+// v18.13.0 (#28): every crash entry, for Download crash data. One read on `kind`'s index
+// rather than the log's feed, which holds a page of whatever range is open. The timeout
+// is because a one-shot read made offline waits for the socket and never answers (the
+// `readDatabaseRoot` note in usePersistence.js), and a button must not spin for ever.
+export const CRASH_READ_MS = 15000;
+export function readCrashes() {
+  let timer;
+  const late = new Promise(function (_, reject) {
+    timer = setTimeout(function () { reject(new Error("the crash read timed out")); }, CRASH_READ_MS);
+  });
+  return Promise.race([get(query(ref(db, "activity"), orderByChild("kind"), equalTo("crash"))), late])
+    .then(function (snap) {
+      clearTimeout(timer);
+      return Object.values(snap.val() || {});
+    }, function (err) {
+      clearTimeout(timer);
+      throw err;
+    });
 }
 
 // ── ERASURE ─────────────────────────────────────────────────────────────────

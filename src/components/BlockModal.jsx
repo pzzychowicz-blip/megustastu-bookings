@@ -19,11 +19,17 @@ import { useState, useEffect } from "react";
 import { S, TBL, OPEN, GRID_CLOSE, hoursFor, R, T, FW } from "../lib/constants";
 import { toMins, isIn } from "../lib/booking-logic";
 import { hourLabel } from "../lib/time-grid";
-import { Overlay, Section, Fld, mkBtn, mkSolidBtn, mkDangerBtn, mkInp, Reveal, AutoHeight } from "./atoms";
+import { Overlay, Section, Fld, mkBtn, mkSolidBtn, mkDangerBtn, mkInp, Reveal, AutoHeight, InlineAlert } from "./atoms";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { ClosedIcon } from "./Icons";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { formatDay } from "../lib/day";
+
+// v18.13.0 (#25): what a block that did not go out says. `onSave` and `onRemove` answer
+// false when `saveBlocks` held or refused it, and the sentence is here, not in the red
+// banner: that strip sits collapsed under this dialog's blur, so with the dialog open
+// (measured on DEV) pressing Block looked like a button that did nothing.
+const NOT_SAVED = "Couldn't save the block: this device is catching up. Please try again.";
 
 export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClose, onDirty }) {
   const existing = blocks.filter((bl) => bl.tableId === tableId && bl.date === date);
@@ -40,6 +46,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
   // untouched form dirty.
   const dayEnd = hoursFor(date).gridClose + ":00";
   const [to, setTo] = useState(dayEnd);
+  const [notSaved, setNotSaved] = useState(false);
 
   // v17.15.2: per-row ease-in/out for the blocked list, keyed on the block's own
   // id since v17.15.3 — before that a block had none, and this list identified a
@@ -78,8 +85,14 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
 
   function handleSave() {
     if (!from || !to || toMins(to) <= toMins(from)) return;
-    onSave({ tableId, date, allDay: false, from, to });
+    setNotSaved(onSave({ tableId, date, allDay: false, from, to }) === false);
   }
+  // One slot, at the end of both bodies. Inside AutoHeight, so the card eases open for it.
+  const notSavedEl = (
+    <div role="alert">
+      <Reveal show={notSaved}>{notSaved ? <InlineAlert style={{ marginTop: 12 }}>{NOT_SAVED}</InlineAlert> : null}</Reveal>
+    </div>
+  );
 
   // ── View mode: existing blocks listed with Unblock buttons ───────────────
   if (mode === "view" && existing.length > 0) {
@@ -89,7 +102,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
         <button
           className="mgt-hover-scale"
           style={mkBtn({ minHeight: 40, padding: "8px 16px", background: "var(--app-btn-slate)" })}
-          onClick={() => setMode("add")}
+          onClick={() => { setNotSaved(false); setMode("add"); }}
         >
           + Add block
         </button>
@@ -167,7 +180,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
                       {bl.allDay ? hourLabel(OPEN) + " – " + hourLabel(GRID_CLOSE) : bl.from + " – " + bl.to}
                     </span>
                     <button
-                      onClick={() => onRemove(bl)}
+                      onClick={() => setNotSaved(onRemove(bl) === false)}
                       className="mgt-hover-scale"
                       style={mkDangerBtn({ fontSize: T.body, flexShrink: 0 })}
                     >
@@ -179,6 +192,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
             );
           })}
         </AlertPanel>
+        {notSavedEl}
       </AutoHeight></Overlay>
     );
   }
@@ -248,6 +262,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
           )}</Fld>
         </div>
       </Section>
+      {notSavedEl}
     </AutoHeight></Overlay>
   );
 }

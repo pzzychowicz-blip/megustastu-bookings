@@ -118,7 +118,7 @@ The APP is MGT Bookings (`APP_NAME`, `src/lib/constants.js`); the RESTAURANT is 
 
 ## The five write guards — the mechanics
 
-The root `CLAUDE.md` keeps the five guards as rules; this is how each works. Code: `src/hooks/usePersistence.js` and its pure core `src/lib/write-path.js`.
+The root `CLAUDE.md` keeps the five guards as rules; this is how each works. Code: `src/hooks/usePersistence.js` and its pure core `src/lib/write-path.js`. **`writeGate` (`lib/write-path.js`, v18.13.0) holds which gate stops a write and in what order** (schema, gap, stale, not loaded, empty, legacy shape): `saveBookings` (before its updater runs, and again before the mirror moves, so a refusal changes nothing on screen) and `saveBlocks` ask it and carry the verdict out, and no condition of its stays in the hook (`tests/write-gate.test.js` runs the hook's own code and reads it for that).
 
 1. **Loaded + non-empty** — the root's pattern.
 2. **Freshness / resync gate.** A 10s heartbeat bumps `lastBeatRef`; a gap `> STALE_GAP_MS` (90s, ≫ the heartbeat) means the event loop froze (a sleeping laptop wrote a stale snapshot over a night of bookings). The gap is checked **at write time**, before any setState. `markStale()` sets `staleRef` and the banner; `resync()` force-pulls `bookings` + `tableBlocks` with `get()`, only while `isConnectedRef` (an offline `get()` serves the cache), and `gapTrip()` resets that ref on wake. Cleared by a live `onValue` or a successful resync; network blips never trip it.

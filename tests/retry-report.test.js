@@ -76,7 +76,7 @@ describe("onLanded fires for a write the server has, and only then", () => {
     expect(SAVE).toMatch(/if\(isDuplicatePatch\(sig,lastPatchSigRef\.current,nowMs\)\) return;/);
   });
   it("once per report, and a throw in it cannot reach the write's catch", () => {
-    const fn = SAVE.slice(SAVE.indexOf("function landed("), SAVE.indexOf("if(isStaleGap("));
+    const fn = SAVE.slice(SAVE.indexOf("function landed("), SAVE.indexOf("const early=writeGate("));
     expect(fn).toContain("LANDED.has(report)");
     expect(HOOK, "one set for the module, not one per render").toMatch(/^const LANDED=new WeakSet\(\);$/m);
     expect(fn).toMatch(/try\{report\.onLanded\(\);\}catch/);
@@ -136,8 +136,8 @@ describe("the hook tells it wherever a write is dropped", () => {
     expect((SAVE.match(/else dropped\(\);/g) || []).length).toBe(3);
   });
   it("and the two outright refusals (not loaded, the empty array)", () => {
-    const refusals = SAVE.match(/dropped\(\);\s+dispatched=false;return;/g) || [];
-    expect(refusals.length).toBe(2);
+    const refusals = SAVE.match(/dropped\(\);\s+return false;\s+\}/g) || [];
+    expect(refusals.length, "not loaded and the empty array; the schema gate's is on one line").toBe(2);
   });
   it("a write parked or handed back to the queue is told nothing", () => {
     const RETRY = body("retryParked", "function discardParked(");

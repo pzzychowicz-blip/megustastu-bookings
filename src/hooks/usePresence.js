@@ -47,32 +47,11 @@ import { useState, useEffect, useRef } from "react";
 import { ref, onValue, onDisconnect, push, set, update, remove, serverTimestamp } from "firebase/database";
 import { db, auth } from "../firebase";
 import { dbError } from "../lib/dbError";
-import { presenceState, BEAT_MS } from "../lib/presence-state";
+import { presenceState, deviceLabel, BEAT_MS } from "../lib/presence-state";
 
 // v17.8.0 tech-debt: the thresholds and the read model live in
 // lib/presence-state.js — pure, and therefore testable. This file keeps the
 // subscription, the refs, and the writes.
-
-// Best-effort human label from the userAgent — "iPad · Safari", "Mac · Chrome",
-// "Windows · Edge", "Android · Chrome". Purely cosmetic; falls back to "Device".
-function deviceLabel(){
-  const ua=(typeof navigator!=="undefined"&&navigator.userAgent)||"";
-  let os="Device";
-  if(/iPad/.test(ua)) os="iPad";
-  else if(/iPhone/.test(ua)) os="iPhone";
-  else if(/Android/.test(ua)) os="Android";
-  else if(/Macintosh|Mac OS X/.test(ua)) os="Mac";
-  else if(/Windows/.test(ua)) os="Windows";
-  else if(/Linux/.test(ua)) os="Linux";
-  let br="";
-  // Order matters — Edge/Chrome UAs also contain "Safari"/"Chrome" tokens.
-  if(/Edg\//.test(ua)) br="Edge";
-  else if(/OPR\/|Opera/.test(ua)) br="Opera";
-  else if(/Firefox\//.test(ua)) br="Firefox";
-  else if(/Chrome\//.test(ua)&&!/Chromium/.test(ua)) br="Chrome";
-  else if(/Safari\//.test(ua)) br="Safari";
-  return br?os+" · "+br:os;
-}
 
 export function usePresence(){
   const [devices, setDevices] = useState([]);
