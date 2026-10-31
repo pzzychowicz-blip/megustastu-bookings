@@ -843,7 +843,7 @@ console.log(
 // ── Booking App ───────────────────────────────────────────────────────────────
 // v18.5.1: the List's tag filter with nothing chosen, one array for every mount.
 const NO_LIST_TAGS=[];
-function BookingApp({uid}){
+export function BookingApp({uid}){
   // ── Phase D1 (v14.1.8): persistence state lives in ./hooks/usePersistence ──
   // `bookings`, `tableBlocks`, write-guards (bookingsLoaded/blocksLoaded/
   // firstLoadCount/hasConnectedRef), connection-status state, saveBookings/

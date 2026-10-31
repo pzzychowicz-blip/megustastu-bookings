@@ -38245,3 +38245,17 @@ warnings with no error, and only this rule says so. It is not on all of `src/hoo
 **Proved by planting each fault in `npm run lint`'s config, then restoring the file:**
 `activeView` below the `useKeyboardShortcuts` call fails `no-use-before-define`, and a
 `class` in the body fails `react-hooks/invariant`.
+
+### The first-render test
+
+`tests/first-render.test.js` is the first time `App.jsx` runs under test. It renders the real
+`BookingApp` once through React's server renderer with Firebase mocked whole, which needed
+`export function BookingApp`. A TDZ is a render-time throw, so one pass of the body with no
+throw means no const was read above itself on that path.
+
+It keeps to `tests/CLAUDE.md`'s bar: no jsdom, nothing mounted. Because effects do not run
+on the server renderer, it says nothing about effect order, and that stays a walk on DEV.
+
+**Proved by planting:** with `activeView` moved below the `useKeyboardShortcuts` call it
+fails with `ReferenceError: Cannot access 'activeView' before initialization`. The
+hygiene guard learned that `import(` is module resolution, not a source read.

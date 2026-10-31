@@ -130,13 +130,15 @@ describe("a test that greps JS source strips comments first", () => {
 // its list widens every pin at once. A test that goes round it still passes, which
 // is the defect: once its subject moves, a negative or an order pin passes while
 // checking nothing. A bare "App.jsx" is left alone: it is a label, or a row in a
-// table of positive pins, and a positive pin reports a move by failing.
+// table of positive pins, and a positive pin reports a move by failing. An
+// `import(` is module resolution, not a source read: `first-render` runs App.
 const READS_APP = /"(?:\.\.\/)?src\/App\.jsx"|"src",\s*"App\.jsx"|(?<!\.push)\("App\.jsx"\)/;
+const readsApp = (line) => !line.trim().startsWith("//") && !/\bimport\(/.test(line) && READS_APP.test(line);
 
 describe("a test reads App's source through tests/app-source.js", () => {
   it("names App.jsx in no read of its own", () => {
     const offenders = files
-      .filter(([, src]) => src.split("\n").some((l) => !l.trim().startsWith("//") && READS_APP.test(l)))
+      .filter(([, src]) => src.split("\n").some(readsApp))
       .map(([f]) => f);
     expect(offenders).toEqual([]);
   });
@@ -152,8 +154,14 @@ describe("a test reads App's source through tests/app-source.js", () => {
       'new URL("../src/App.jsx", import.meta.url)',
       'join(HERE, "..", "src", "App.jsx")',
       'readFileSync("src/App.jsx", "utf8")',
-    ].forEach((read) => expect(read).toMatch(READS_APP));
-    ['hasnt(App, "App.jsx", X)', 'offenders.push("App.jsx")', '"/src/App.jsx"', '["App.jsx", /x/]'].forEach((label) => expect(label).not.toMatch(READS_APP));
+    ].forEach((read) => expect(readsApp(read), read).toBe(true));
+    [
+      'hasnt(App, "App.jsx", X)',
+      'offenders.push("App.jsx")',
+      '"/src/App.jsx"',
+      '["App.jsx", /x/]',
+      'await import("../src/App.jsx")',
+    ].forEach((label) => expect(readsApp(label), label).toBe(false));
   });
 
   it("the helper answers with App's source, imports included", () => {
