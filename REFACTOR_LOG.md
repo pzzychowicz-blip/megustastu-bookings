@@ -38880,3 +38880,74 @@ is off screen on a full evening, and moving it was not in the plan.
 **Files:** `TableGrid.jsx`, `WalkinForm.jsx`, `tests/walkin.test.js`, `tests/contrast.test.js`,
 `tests/destructive-buttons.test.js`.
 
+### M1: every button reads at 4.5:1 in Light
+
+`NEED.button` went from 3 to 4.5 and the fills were solved to it. The scan's readings,
+the same controls after, from rendered pixels at 998 × 507 and 998 × 570 (identical at
+both, DPR 2, touch):
+
+| Control | Before | After |
+|---|---|---|
+| Follow | 3.24 | 4.96 |
+| Following | 5.74 | 9.45 |
+| Zoom buttons | 3.29 | 4.96 |
+| Hours for this day, Print, More | 3.12 | 4.96 |
+| "+ New" | 3.23 | 5.42 |
+| Walk-in | 3.99 (token) | 4.96 |
+| Assign, in the form | 3.11 | 5.42 |
+| Reshuffle | 3.11 | 4.70 |
+| Completed, in the popup | 2.31 | 4.96 |
+| Completed, in the form | 2.19 (token) | 4.96 |
+| Modal title pills | 3.35 | 5.42 blue, 4.96 grey (token) |
+| Save booking | 4.02 | 5.42 |
+
+Nothing white-inked in those states reads under 4.5 except the block fills the decision
+keeps: amber 2.93, and yellow 1.86 on the Waitlist button. Log out, Re-check and the
+write-warning dismiss were not on screen in the rig, and read from their tokens: 4.96,
+4.96 and 4.76.
+
+**What moved.** Light's fills are opaque, because a translucent one reads differently
+over every surface it lands on. One grey, `--app-btn-grey` `#6c7079`, with `--btn-default`,
+`--btn-nav`, `--app-btn-grey-strong` and the new `--btn-completed` as aliases. One blue,
+`--accent` `#0066d6`, with `--btn-tables`, `--btn-edit`, `--btn-today` and `--app-new` as
+aliases. Red `#d33a3a`, which is `--btn-del`'s own colour without its alpha. Orange
+`#bf5319`, Walk-in green `#387d54`, slate-dim `#6a747e`. The two WhatsApp fills darken in
+both themes: `rgb(0, 102, 214)` and `rgb(15, 118, 110)`.
+
+**Dark did not move, and that is a measured statement.** Every token resolved per theme
+against HEAD: 3 differ of 206 in Dark and in Dark under more contrast, namely those two
+WhatsApp fills and the new `--btn-completed`, which reads `--block-completed` there.
+Light has 23. Many of these fills were `:root`-only, so each one's old value is copied
+into the dark block, the halo and the row glow included. The `more` states read the same
+as at rest, since neither block touches an opaque fill.
+
+**`--accent` and its copies.** Registered at last, as a text-bearing fill: the primary
+button of every form was measured by nothing. Light is held to the bar through
+`EXEMPT_FLOOR`'s per-theme form, and Dark's `#0a84ff` is a named exemption at 3.65:1,
+because against Dark's surface `#0066d6` reads 2.36:1 where `#0a84ff` reads 3.51:1, and
+`--accent` is also text and rings there. Swept by value: `--bg-ac-hover`, `--toggle-on`,
+`--shadow-btn-accent`, `--wa-row-active-bg`, `-border` and `-glow`. Two copies the plan
+did not name turned up in the same grep:
+
+- `index.html`'s boot-failure button, now `#0066D6`, which moved the boot script's CSP
+  hash in `vercel.json`. `tests/csp.test.js` holds that pair.
+- **`public/sw.js`'s offline page keeps `#007AFF`, on purpose.** Changing a byte of the
+  worker ships a new worker to every device, for a page seen only on a cold start with no
+  network, and no version carries a worker change it did not need.
+
+**Beyond the plan's list:**
+
+- `--app-btn-dark`. Follow says which state it is in by getting darker, and at 5.74
+  Following would have stood beside an idle Follow at 4.96. It is `#43464d` in Light, so
+  the step stays where it was (1.91 before, 1.91 after), and a new test holds the step
+  rather than either number. Dark keeps its alpha.
+- `flashStatus` in the form reads `STATUS_BTN_BG` too, so the wipe is the colour of the
+  button that was tapped. Live: `rgb(108, 112, 121)` on Completed.
+
+`STATUS_BTN_BG` (`constants.js`) is `BLOCK_BG` with Completed on the grey, read by the
+three status-button sites. Blocks, `SBadge` and the Plan legend stay on `BLOCK_BG`, so
+the Completed badge on a List card stays at its exempt 2.19.
+
+**Files:** `src/index.css`, `constants.js`, `BookingFormModal.jsx`, `ListView.jsx`,
+`QuickStatusPopup.jsx`, `index.html`, `vercel.json`, `tests/contrast.test.js`,
+`tests/a11y.test.js`, `DESIGN.md`.

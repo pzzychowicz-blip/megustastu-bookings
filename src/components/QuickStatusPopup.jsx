@@ -26,7 +26,7 @@
 //   onClose()      — clear the parent's popup state
 
 import { useEffect, useRef } from "react";
-import { S, BLOCK_BG, BLOCK_INK, BTN, R, T, FW, IC } from "../lib/constants";
+import { S, STATUS_BTN_BG, BLOCK_INK, BTN, R, T, FW, IC } from "../lib/constants";
 import { seatingClosed } from "../lib/booking-logic";
 import { useArmAfterRelease } from "../hooks/useArmAfterRelease";
 import { NoShowIcon, StatusIcon, TrashIcon } from "./Icons";
@@ -150,7 +150,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
               key={st}
               className="mgt-hover-scale"
               style={{
-                background: BLOCK_BG[st], border: "none",
+                background: STATUS_BTN_BG[st], border: "none",
                 borderRadius: R.pill, padding: "10px 18px",
                 fontSize: T.lead, fontWeight: FW.bold, color: BLOCK_INK[st] || "var(--text-on-accent)",
                 cursor: "pointer", textTransform: "capitalize",

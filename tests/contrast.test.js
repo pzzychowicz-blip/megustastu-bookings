@@ -202,9 +202,12 @@ const BASE = { light: { r: 255, g: 255, b: 255, a: 1 }, dark: { r: 50, g: 50, b:
 //          carries its own alpha, so it is used verbatim).
 // ink    — the token painted ON it.
 // role   — `label` is small bold text (<18.66px) and takes the full AA 4.5:1.
-//          `button` is a large solid control whose meaning is also carried by
-//          position and shape, and takes 3:1 — Patryk's call, so the palette
-//          stays recognisable rather than every button going muddy.
+//          `button` is a solid control with a word on it. It took 3:1 from v17.8.0
+//          on the argument that position and shape carry the meaning, and takes
+//          the same 4.5:1 since v18.14.0 (M1, Patryk's decision of 2026-10-31):
+//          the tablet sits in a dim room in front of someone who struggles with
+//          small text, and a 36px pill is not large. Amber and yellow stay exempt
+//          by the same decision (below).
 const FILLS = [
   // Table badges — 11px/600, the most-read label in the app.
   { fill: "--tbl-out-rgb", alpha: 0.8, ink: "--text-on-accent", role: "label", what: "outdoor table badge" },
@@ -362,6 +365,13 @@ const FILLS = [
   // enumerates TOKENS, and "an audit that enumerates tokens has a blind spot
   // exactly the size of the literals."
   { fill: "--app-btn-dark", alpha: null, ink: "--text-on-accent", role: "button", what: "timeline Follow, while following" },
+  // v18.14.0 (M1): the primary button of every form, unregistered until now because
+  // it is a text-bearing use of a token whose name says nothing about buttons. An
+  // `exempt` entry only in Dark: EXEMPT_FLOOR holds Light at the bar. See there.
+  { fill: "--accent", alpha: null, ink: "--text-on-accent", role: "exempt", what: "the primary button (Save booking, Assign, the blue modal titles)" },
+  // v18.14.0 (M1): the status buttons, through STATUS_BTN_BG. The other four are the
+  // block's own fill and already measured above.
+  { fill: "--btn-completed", alpha: null, ink: "--ink-completed", role: "button", what: "the Completed status button" },
   // The greyed-out primary in both form footers, ReminderEditor and ManualModal.
   //
   // v17.13.0 recorded this as an EXEMPTION: WCAG 1.4.3 exempts inactive
@@ -472,7 +482,7 @@ const FILLS = [
   { fill: "--wa-header-bg", alpha: null, ink: "--text-primary", role: "label", what: "panel header strip" },
 ];
 
-const NEED = { label: 4.5, button: 3 };
+const NEED = { label: 4.5, button: 4.5 };
 
 // ── The recorded exemption ───────────────────────────────────────────────────
 // `exempt` fills are measured and REPORTED but not asserted against a bar. Both
@@ -558,7 +568,21 @@ const NEED = { label: 4.5, button: 3 };
 // longer an exemption (v17.14.0), but the pair form stays, because the next fill
 // whose themes diverge should not have to rediscover why one number is not
 // enough.
-const EXEMPT_FLOOR = { "--block-confirmed": 2.8, "--block-pending": 1.75, "--block-completed": 2.1 };
+//
+// ── v18.14.0 (M1): --accent, an exemption in one theme ───────────────────────
+// The first entry to use the pair for that. Light is held to the button bar through
+// its floor (4.5, at 5.42 since #0066d6), so the entry is `exempt` only in the sense
+// that Dark is: Dark's #0a84ff reads 3.65:1 under white. Patryk's M1 decision was to
+// darken Light and leave Dark's fills alone. Dark's other buttons all clear the bar,
+// and --accent is also text and rings there, where Light's value would be the wrong
+// way round: against Dark's surface #0066d6 reads 2.36:1, and #0a84ff 3.51:1. The
+// number is recorded, not forgotten: it cannot fall.
+const EXEMPT_FLOOR = {
+  "--block-confirmed": 2.8,
+  "--block-pending": 1.75,
+  "--block-completed": 2.1,
+  "--accent": { light: 4.5, dark: 3.65 },
+};
 const exemptFloor = (fill, theme) => {
   const f = EXEMPT_FLOOR[fill];
   return typeof f === "number" ? f : f[theme];
@@ -723,6 +747,19 @@ describe("fill/ink contrast — every text-bearing fill, both themes, at rest an
         ).toBeGreaterThanOrEqual(need);
       });
     }
+  }
+});
+
+// v18.14.0 (M1): Follow says which state it is in by getting darker, so a pair of
+// fills can each clear the bar and still fail together. Raising the idle grey alone
+// would have left 4.96 beside 5.74. The step is the ratio of the two readings: 1.91
+// before M1, and it is the distance, not either number, that the control depends on.
+describe("Following stays a clear step darker than Follow", () => {
+  for (const theme of ["light", "dark"]) {
+    it(`in ${theme}`, () => {
+      const read = (fill) => measure({ fill, alpha: null, ink: "--text-on-accent" }, theme);
+      expect(read("--app-btn-dark") / read("--app-btn-grey")).toBeGreaterThanOrEqual(1.85);
+    });
   }
 });
 

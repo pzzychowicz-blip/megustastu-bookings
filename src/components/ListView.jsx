@@ -30,7 +30,7 @@
 // unchanged, just hoisted into renderCard() so both groups share it.
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP, ROW_FOLD } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, STATUS_BTN_BG, STATUS_COLORS, BTN, R, T, FW, IC, SP, ROW_FOLD } from "../lib/constants";
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { useLeavingOrder } from "../hooks/useLeavingOrder";
@@ -787,7 +787,7 @@ export const ListView = memo(function ListView({
         const nextBtn = nextSt ? (
           <button
             className="mgt-hover-scale"
-            style={mkBtn({ background: BLOCK_BG[nextSt], color: BLOCK_INK[nextSt] || "var(--text-on-accent)", textTransform: "capitalize", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: NEXT_COL })}
+            style={mkBtn({ background: STATUS_BTN_BG[nextSt], color: BLOCK_INK[nextSt] || "var(--text-on-accent)", textTransform: "capitalize", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: NEXT_COL })}
             onClick={stopped(() => onStatus(b.id, nextSt))}
           >
             <StatusIcon status={nextSt} size={IC.control} />{nextSt}

@@ -567,6 +567,12 @@ export var SCROLL_CLEAR_RULER=32;
 // confirmed recolored to accent blue in index.html (the yellow moved to pending).
 export var STATUS_COLORS={confirmed:{bg:"rgba(var(--status-confirmed-rgb),0.15)",text:"var(--status-confirmed-text)",border:"rgba(var(--status-confirmed-rgb),0.35)"},pending:{bg:"rgba(var(--status-pending-rgb),0.15)",text:"var(--status-pending-text)",border:"rgba(var(--status-pending-rgb),0.35)"},seated:{bg:"rgba(var(--status-seated-rgb),0.15)",text:"var(--status-seated-text)",border:"rgba(var(--status-seated-rgb),0.35)"},completed:{bg:"rgba(var(--status-completed-rgb),0.12)",text:"var(--status-completed-text)",border:"rgba(var(--status-completed-rgb),0.3)"},cancelled:{bg:"rgba(var(--status-cancelled-rgb),0.12)",text:"var(--status-cancelled-text)",border:"rgba(var(--status-cancelled-rgb),0.3)"}};
 export var BLOCK_BG={confirmed:"var(--block-confirmed)",pending:"var(--block-pending)",seated:"var(--block-seated)",completed:"var(--block-completed)",cancelled:"var(--block-cancelled)"};
+// v18.14.0 (M1) — the fill of a BUTTON that sets a status. Four of the five are the
+// block's own fill. Completed is not: its pale grey is accepted at 2.19:1 on a block,
+// whose position and width carry the status, and a button has only its word (it read
+// 2.31:1 live in the quick-status popup). Anything that paints a status on a block,
+// a badge or a legend keeps BLOCK_BG.
+export var STATUS_BTN_BG=Object.assign({},BLOCK_BG,{completed:"var(--btn-completed)"});
 // v17.8.0 — the INK each block fill carries. A fill and the text on it are one
 // decision, and splitting them across two files is how "Save pending" shipped
 // white-on-yellow at 1.83:1. Pair them here; tests/contrast.test.js measures

@@ -233,9 +233,27 @@ explaining why is usually the one to read.
   1.94:1 and the outdoor table pill 2.15:1, while every one of them passed in
   dark. **Dark mode is the easy case; light is where a saturated fill washes
   out.** `tests/contrast.test.js` measures every fill/ink pair in both themes
-  and fails on an unregistered text-bearing fill. Small bold labels take 4.5:1;
-  buttons take 3:1. `BLOCK_INK` pairs each block fill with its ink.
-  **The amber pair is a RECORDED EXEMPTION, not a pass**: confirmed sits at
+  and fails on an unregistered text-bearing fill. Small bold labels and buttons
+  take 4.5:1. `BLOCK_INK` pairs each block fill with its ink.
+  **v18.14.0 raised the button bar (`NEED.button`) from 3 to 4.5, Patryk's
+  decision of 2026-10-31.** It stood at 3 on the argument that a button is large
+  and its position and shape carry the meaning. On the tablet, in a dim room, in
+  front of someone who struggles with small text, a 36px pill is not large. Light's
+  button fills are OPAQUE now, so what the test reads is what the screen shows: the
+  "3:1" controls measured 3.0–3.3 live, and Completed in the popup 2.31. One grey
+  (`--app-btn-grey`) and one blue (`--accent`), by alias. Dark moved nowhere, apart
+  from the two WhatsApp fills, which have one value each. `--accent` in Dark stays
+  a named exemption at 3.65:1, in `EXEMPT_FLOOR`'s per-theme form, because it is
+  also text and rings there. A status BUTTON reads `STATUS_BTN_BG`: Completed takes
+  the grey on a button, and its pale fill stays on blocks, badges and legends.
+  **Two fills that each clear the bar can still fail together.** Follow says which
+  state it is in by getting darker, so the idle grey moving to 4.96:1 would have
+  left it beside Following at 5.74:1. `--app-btn-dark` moved with it, and
+  `tests/contrast.test.js` holds the step between the two, not either number. Any
+  pair that signals a state by darkness alone needs the same pin.
+  **The amber pair is a RECORDED EXEMPTION, not a pass**, and the 2026-10-31 scan
+  did not change that: it raised white on amber (H1) and on yellow (M2), and Patryk
+  kept both exactly as they are. Do not re-raise them. Confirmed sits at
   2.9:1 and pending at 1.8:1 with white ink, because both alternatives were
   tried and are worse — darkening the fills destroys the matched-intensity pair
   v17.0.0 engineered, and dark ink (shipped for exactly one commit) reads as

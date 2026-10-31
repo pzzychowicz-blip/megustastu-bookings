@@ -36,7 +36,7 @@
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
 import { useRef, useState, useMemo } from "react";
-import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC, SP, exitHold } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT, STATUS_BTN_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC, SP, exitHold } from "../lib/constants";
 import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
@@ -129,7 +129,7 @@ export function BookingFormModal({
   const [statusFlash,setStatusFlash]=useState(null);
   const flashTimer=useRef(null);
   function flashStatus(s){
-    setStatusFlash({color:BLOCK_BG[s],k:Date.now()});
+    setStatusFlash({color:STATUS_BTN_BG[s],k:Date.now()});
     if(flashTimer.current) clearTimeout(flashTimer.current);
     flashTimer.current=setTimeout(function(){setStatusFlash(null);},exitHold("wipe")); // outlives the --t-wipe sweep (exitHold)
   }
@@ -824,7 +824,7 @@ export function BookingFormModal({
         <button
           key={s}
           className="mgt-hover-scale"
-          style={mkBtn({background:BLOCK_BG[s],color:BLOCK_INK[s]||"var(--text-on-accent)",textTransform:"capitalize",minHeight:H.control,display:"inline-flex",alignItems:"center",gap:6})}
+          style={mkBtn({background:STATUS_BTN_BG[s],color:BLOCK_INK[s]||"var(--text-on-accent)",textTransform:"capitalize",minHeight:H.control,display:"inline-flex",alignItems:"center",gap:6})}
           onClick={function(){flashStatus(s);if(s==="cancelled"){onRequestCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}><StatusIcon status={s} size={IC.control} />{s}</button>
       );})}</div></Section>:null;
 

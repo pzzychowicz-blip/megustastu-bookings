@@ -1373,8 +1373,9 @@ describe("a status painted as a FILL is never colour alone (WCAG 1.4.1)", () => 
 
   // Comments stripped, for this file's standing reason: PlanView's own mark
   // carries a paragraph naming `fillFor` and `isBlocked`, and a guard that
-  // reads it is measuring the documentation.
-  const painting = srcFilesMatching(/BLOCK_BG\[/);
+  // reads it is measuring the documentation. v18.14.0: `STATUS_BTN_BG[expr]` is the
+  // same act through another map, the fill of a status BUTTON, so it counts.
+  const painting = srcFilesMatching(/\b(?:BLOCK_BG|STATUS_BTN_BG)\[/);
 
   it("every surface that indexes BLOCK_BG by status is registered", () => {
     const unregistered = painting.map(([rel]) => rel).filter((rel) => !(rel in PAINTS_STATUS));
