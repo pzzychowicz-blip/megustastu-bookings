@@ -81,7 +81,7 @@ export function ClashBanner({ pairs, bookings, onAssign, onDismiss, swapKey }) {
         <button
           onClick={function () { onAssign(later.id); }}
           className="mgt-hover-scale"
-          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>{"Assign " + laterWho}</button>
+          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.tables })}>{"Assign " + laterWho}</button>
         <button
           onClick={function () { onDismiss(rowId); }}
           /* v17.15.6: the PAIR, matching `clashRowId`'s own identity — a clash

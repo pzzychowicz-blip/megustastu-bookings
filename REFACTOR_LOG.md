@@ -39039,3 +39039,13 @@ At rest **Dark did not change**: `--field-edge` is `--border-input` there. Its r
 
 **Files:** `src/index.css`, `atoms.jsx`, `LayoutSettings.jsx`, `ReplyComposer.jsx`,
 `tests/contrast.test.js`, `DESIGN.md`.
+
+### M7: Assign is blue everywhere
+
+The two Assign buttons in the Notifications strip, `UnplacedBanner.jsx:55` and
+`ClashBanner.jsx:84`, take `BTN.tables`, so the same action has one colour. Live at 507
+and 570: "Assign Rita Nowak" and "Assign Camilo Rey" read `rgb(0, 102, 214)`, 36px tall,
+5.42:1, the blue the form's Assign reads. Orange stays on the buttons that move a party
+somewhere it did not ask to go: Reassign, Reshuffle, No show.
+
+**Files:** `UnplacedBanner.jsx`, `ClashBanner.jsx`.
