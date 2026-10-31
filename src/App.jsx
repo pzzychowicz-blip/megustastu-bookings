@@ -3057,15 +3057,14 @@ export function BookingApp({uid}){
     // the FOCUSED pane, not on the stale single-view `view`. Passing activeView
     // here means the whole hook is split-aware without touching each branch.
     view:activeView,setView:setView,goView:pickView,
-    viewDate:viewDate,setViewDate:setViewDate,
+    viewDate:viewDate,
     timelineZoom:timelineZoom,setTimelineZoom:setTimelineZoomManual,tlFollowZoom:tlSettings.followZoom,tlMaxZoom:tlSettings.maxZoom,
     followNow:followNow,setFollowNow:setFollowNow,
     autoOptimizer:autoOptimizer,setAutoOptimizer:setAutoOptimizer,
-    showForm:showForm,setShowForm:setShowForm,editId:editId,form:form,setForm:setForm,setSwapAffected:setSwapAffected,
-    showWalkin:showWalkin,setShowWalkin:setShowWalkin,
-    showHistory:showHistory,setShowHistory:setShowHistory,
-    showSettings:showSettings,setShowSettings:setShowSettings,
-    showSearch:showSearch,setShowSearch:setShowSearch, // v16.3.0: "/" opens global search
+    editId:editId,form:form,setForm:setForm,setSwapAffected:setSwapAffected,
+    setShowHistory:setShowHistory,
+    setShowSettings:setShowSettings,
+    setShowSearch:setShowSearch, // v16.3.0: "/" opens global search
     // v14 p7: settingsTab for ←/→ tab-cycle shortcut inside Settings modal.
     settingsTab:settingsTab,setSettingsTab:setSettingsTab,
     // v18.0.0 phase 3: the ←/→ cycle runs over visibleTabs(can), not the raw
@@ -3074,23 +3073,22 @@ export function BookingApp({uid}){
     // the capability grid.
     can:can,hasModule:hasModule,setRolesFor:setRolesFor,setActivityOpen:setActivityOpen,requestDelete:requestDelete,
     // v14 p7: reminder editor state for Esc/Enter handling.
-    reminderEditor:reminderEditor,setReminderEditor:setReminderEditor,
+    reminderEditor:reminderEditor,
     saveReminderFromEditor:saveReminderFromEditor,
     // v14 p7 fix: reminder-delete confirm state.
     confirmReminderDel:confirmReminderDel,setConfirmReminderDel:setConfirmReminderDel,
     doDeleteReminder:doDeleteReminder,
-    manualTarget:manualTarget,setManualTarget:setManualTarget,
+    setManualTarget:setManualTarget,
     showPrefPicker:showPrefPicker,setShowPrefPicker:setShowPrefPicker,
     confirmDel:confirmDel,setConfirmDel:setConfirmDel,
-    confirmReshuffle:confirmReshuffle,setConfirmReshuffle:setConfirmReshuffle,
-    confirmCancel:confirmCancel,setConfirmCancel:setConfirmCancel,
+    setConfirmReshuffle:setConfirmReshuffle,
+    setConfirmCancel:setConfirmCancel,
     confirmKitchen:confirmKitchen,setConfirmKitchen:setConfirmKitchen,
     setVoucherAsk:setVoucherAsk,
     setVoucherBack:setVoucherBack,
     setSeatNote:setSeatNote,
     setSeatClash:setSeatClash,
     setVoucherCarry:setVoucherCarry,
-    blockTarget:blockTarget,setBlockTarget:setBlockTarget,
     bookings:bookings,
     // v14.4.0: List-view selection + the handlers its A/E/S/C/Delete shortcuts call.
     listDay:listDaySorted,selectedListId:selectedListId,setSelectedListId:setSelectedListId,
@@ -3104,14 +3102,13 @@ export function BookingApp({uid}){
     openNew:openNew,openWalkin:openWalkin,
     // v14.6.0: Summary panel toggle (the g shortcut).
     setSummaryOpen:setSummaryOpen,
-    showWeek:showWeek,setShowWeek:setShowWeek,
+    setShowWeek:setShowWeek,
     setPrintAsk:setPrintAsk,
     // WhatsApp sandbox: the I shortcut's opener, and the four setters
-    // `escapeAction` names. `showInbox` is still read directly — the I key must
-    // not re-open a panel that is already up.
-    showInbox:showInbox,setShowInbox:setShowInbox,closeInbox:closeInbox,
+    // `escapeAction` names.
+    setShowInbox:setShowInbox,closeInbox:closeInbox,
     setConfirmArchive:setConfirmArchive,setConfirmDeleteConv:setConfirmDeleteConv,setWaPhoto:setWaPhoto,
-    showSim:showSim,setShowSim:setShowSim,
+    setShowSim:setShowSim,
     // v17.14.0 (/code-review): the waitlist panel's Escape close. It is here and
     // not merely in `escapeAction` because the OLD chain had no waitlist branch,
     // so this setter had never been needed in the ctx — adding the `case` without
@@ -3132,8 +3129,8 @@ export function BookingApp({uid}){
     // would otherwise be a silent back door past the guard), and the discard
     // confirm needs its own Esc (dismiss) / Enter (discard) branches.
     // v17.5.0 correction: Esc closes the split-setup popup (it has no Cancel).
-    splitMenuFor:splitMenuFor,setSplitMenuFor:setSplitMenuFor,
-    confirmDiscard:confirmDiscard,setConfirmDiscard:setConfirmDiscard,doDiscard:doDiscard,
+    setSplitMenuFor:setSplitMenuFor,
+    setConfirmDiscard:setConfirmDiscard,doDiscard:doDiscard,
     requestCloseForm:requestCloseForm,requestCloseWalkin:requestCloseWalkin,requestCloseManual:requestCloseManual,
     // v17.8.0: the three surfaces added to the guard — same reason as above.
     requestCloseReminderEditor:requestCloseReminderEditor,requestCloseBlock:requestCloseBlock,requestCloseSettings:requestCloseSettings,

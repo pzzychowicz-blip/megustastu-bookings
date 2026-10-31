@@ -38259,3 +38259,15 @@ on the server renderer, it says nothing about effect order, and that stays a wal
 **Proved by planting:** with `activeView` moved below the `useKeyboardShortcuts` call it
 fails with `ReferenceError: Cannot access 'activeView' before initialization`. The
 hygiene guard learned that `import(` is module resolution, not a source read.
+
+### The keyboard ctx
+
+19 of the ctx's 111 keys were read by nothing: not `useKeyboardShortcuts.js`, not
+`lib/shortcuts.js`, not `lib/modal-keys.js`, and nothing reads the ctx dynamically. They are
+gone, leaving 92: `setViewDate` `showForm` `setShowForm` `showWalkin` `setShowWalkin`
+`showHistory` `showSettings` `showSearch` `setReminderEditor` `manualTarget`
+`confirmReshuffle` `confirmCancel` `blockTarget` `setBlockTarget` `showWeek` `showInbox`
+`showSim` `splitMenuFor` `confirmDiscard`. The comment saying the I key reads `showInbox`
+went with them; it had stopped being true. The ctx stays one flat literal on purpose:
+`tests/modal-stack.test.js` reads its keys from the text, so a spread would blind that test
+without failing it.
