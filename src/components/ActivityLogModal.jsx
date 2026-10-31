@@ -206,6 +206,8 @@ export function ActivityLogModal({
   const dateCol = showDate && shown.some(function (r) { return showsYear(localDay(r.at)); }) ? 84 : 54;
 
   function toggleKind(k) {
+    // The sentence answers one press, and is stale the moment the chip goes off.
+    if (k === "crash") setCrashMsg("");
     setKinds(function (prev) {
       const next = Object.assign({}, prev);
       if (next[k]) delete next[k]; else next[k] = true;

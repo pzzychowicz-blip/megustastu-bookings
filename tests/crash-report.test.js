@@ -336,6 +336,7 @@ describe("the download", () => {
     const read = (f) => stripComments(readFileSync(new URL("../src/" + f, import.meta.url), "utf8")).join("\n");
     const log = read("components/ActivityLogModal.jsx");
     expect(log).toContain("<Reveal show={crashesOn && !!canDownloadCrashes}>");
+    expect(log).toContain('if (k === "crash") setCrashMsg("");');
     expect(log).toMatch(/crash: "Crashes"/);
     ACTIVITY_KINDS.forEach((k) => expect(log, k).toMatch(new RegExp('"' + k + '"|' + k + ":")));
     const app = read("App.jsx");
