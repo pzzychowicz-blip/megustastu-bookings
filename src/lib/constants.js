@@ -59,8 +59,8 @@ import { todayStr } from "./day.js";
 // sees when the app is broken — free to keep an old name silently.
 export const APP_NAME = "MGT Bookings";
 // v18.4.4: the three views, in the order their buttons sit. It decides which
-// way a view switch slides and validates a restored split (App.jsx), and the
-// T / L / P shortcuts' fallback reads it (lib/shortcuts.js). It was written out
+// way a view switch slides (App.jsx), validates a restored split (useShellPrefs),
+// and the T / L / P shortcuts' fallback reads it (lib/shortcuts.js). It was written out
 // in both, with a comment asking that the two be kept identical.
 export const VIEW_ORDER=["timeline","list","plan"];
 

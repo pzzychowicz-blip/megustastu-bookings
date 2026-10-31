@@ -110,10 +110,6 @@ function readPrefLS(name){
   try{return readPrefValue(spec.store,localStorage.getItem(spec.ls));}
   catch{return readPrefValue(spec.store,null);}
 }
-// The canonical view order — drives the slide direction on a view switch AND
-// validates a restored split. v18.4.4: it is `VIEW_ORDER` in lib/constants.js,
-// the one list the T / L / P shortcuts read too.
-export const VIEW_ORD=VIEW_ORDER;
 // Validate HARD, and return null on anything unexpected: a hand-edited or
 // half-written key must never be able to wedge the app in a broken layout, and
 // the same view appearing twice would collide on the singleton per-view state
@@ -125,7 +121,7 @@ function readSplit(){
     if(typeof window!=="undefined"&&window.innerWidth<600) return null; // tablet/desktop only
     const s=JSON.parse(localStorage.getItem(SPLIT_KEY)||"null");
     if(!s||typeof s!=="object") return null;
-    if(VIEW_ORD.indexOf(s.a)===-1||VIEW_ORD.indexOf(s.b)===-1||s.a===s.b) return null;
+    if(VIEW_ORDER.indexOf(s.a)===-1||VIEW_ORDER.indexOf(s.b)===-1||s.a===s.b) return null;
     if(s.dir!=="v"&&s.dir!=="h") return null;
     const r=Number(s.ratio);
     return {a:s.a,b:s.b,dir:s.dir,ratio:Number.isFinite(r)&&r>=0.2&&r<=0.8?r:0.5};

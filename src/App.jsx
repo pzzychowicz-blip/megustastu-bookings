@@ -29,7 +29,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME } from "./lib/constants";
+  OPEN, CLOSE, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME, VIEW_ORDER } from "./lib/constants";
 
 import {
   getDur, toMins, sanitizeBlock,
@@ -282,9 +282,8 @@ import { useGeneralSettings } from "./hooks/useGeneralSettings";
 // syncs, what stays per-device, and why the localStorage mirror stays.
 import { useUserPrefs } from "./hooks/useUserPrefs";
 // v18.13.2: the shell's preferences and Split View. `readTlSettings` seeds the zoom,
-// `VIEW_ORD` picks a view switch's slide direction, `readThemePref` is what
-// SignedOutTheme mounts with.
-import { useShellPrefs, readTlSettings, readThemePref, VIEW_ORD } from "./hooks/useShellPrefs";
+// `readThemePref` is what SignedOutTheme mounts with.
+import { useShellPrefs, readTlSettings, readThemePref } from "./hooks/useShellPrefs";
 import { useLayout } from "./hooks/useLayout";
 
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
@@ -3552,7 +3551,7 @@ export function BookingApp({uid}){
       applySplit(fitTimeline(Object.assign({},split,{[focusedPane]:v})));
       return;
     }
-    if(v!==view) bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(view)?"mgt-view-in-right":"mgt-view-in-left");
+    if(v!==view) bumpSlide(VIEW_ORDER.indexOf(v)>VIEW_ORDER.indexOf(view)?"mgt-view-in-right":"mgt-view-in-left");
     setView(v);
   }
 
