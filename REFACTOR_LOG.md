@@ -38992,7 +38992,7 @@ section open (86 sites):
 |---|---|---|---|---|
 | The main card, `#eef1f7` (Plan's hint) | 1 | 2.71 | 4.56 | 5.29 |
 | A Section in a dialog, `#f8fafd` | 70 | 2.93 | 4.93 | 5.72 |
-| The Summary's cells, `#fbfcfe` | 2 | 2.99 | 5.03 | 5.83 |
+| The Summary's cells, `#fbfcfe` | 2 | 2.99 | 5.02 | 5.83 |
 | A dialog's sheet, `#fdfdfd` | 3 | 3.02 | 5.07 | 5.88 |
 
 Solved to the darkest surface, so the rest clear it with room. The scan's 2.28–2.32 on
@@ -39008,3 +39008,34 @@ before and after.
 and 4.05 on the sheet. The scan measured Light, and the plan says Light.
 
 **Files:** `src/index.css`, `tests/contrast.test.js`, `DESIGN.md`.
+
+### M6: a field has an edge
+
+`--field-edge`, `#7a8494` in Light, is a new token rather than a change to
+`--border-input`, whose other readers are stat cells and rows, not controls. `mkInp`
+reads it, so `DateField` and `SearchField` do, along with `LayoutSettings`' two small
+inputs, the WhatsApp composer and the header's date pill (`--app-date-border`).
+
+| Against | White rim, before | `--field-edge` |
+|---|---|---|
+| A dialog's sheet, `#fdfdfd` | 1.01 | 3.72 |
+| A Section in a dialog, `#f8fafd` | 1.02 | 3.62 |
+| The main card, `#eef1f7` | 1.05 | 3.34 |
+| The page, `#e2e7f1` | 1.09 | 3.05 |
+
+Live at 507 and 570: all 64 fields walked (the main screen, a new booking, Walk-in, Search
+and eight Settings tabs with every section open) read `rgb(122, 132, 148)`, 1px solid, the
+wrapped ones measured on the wrapper. Fields in dialogs that were not opened spread
+`mkInp`, and the readers left on `--border-input` are all non-controls.
+
+**Focus still reads as a change.** Tapping the name field takes the darkest pixel round it
+from `#7a8494` to the `#0a2540` ring, 2px solid, and the ring reads 14.9:1 on the Section
+against the edge's 3.62.
+
+Increase Contrast takes `--text-muted` here too, with the other hairlines, in both themes.
+At rest **Dark did not change**: `--field-edge` is `--border-input` there. Its rim reads
+1.44 on a Section and its fill 1.25, and the fill is what shows a field. That is under
+3:1, and the decision was about Light.
+
+**Files:** `src/index.css`, `atoms.jsx`, `LayoutSettings.jsx`, `ReplyComposer.jsx`,
+`tests/contrast.test.js`, `DESIGN.md`.

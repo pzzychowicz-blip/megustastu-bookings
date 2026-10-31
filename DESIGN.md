@@ -255,6 +255,15 @@ explaining why is usually the one to read.
   It is the ink of every Settings tab's help text and it read 2.7–3.0:1, because
   it is no fill's partner and the registry enumerates fills. It has its own test,
   which also holds it a step under `--text-muted`: two inks at one level are one ink.
+  **A field's edge is a control's boundary, 3:1 in Light (v18.14.0).** WCAG 1.4.11
+  again, and the same blind spot, since a boundary has no ink. `--border-input` is a
+  white rim that drew a field at 1.02:1 on a Section, so on a near-white card a text
+  box was a label with nothing under it. `--field-edge` is the field's own token,
+  because `--border-input` also rims stat cells and rows that are not controls.
+  `mkInp` reads it, so `DateField` and `SearchField` do; so do `LayoutSettings`' two
+  small inputs, the WhatsApp composer and the header's date pill. A new field built
+  without `mkInp` takes it by hand. Focus stays the 2px `--focus-ring`, a long way
+  from the edge. Dark keeps its rim, because its fill is what shows a field there.
   **The amber pair is a RECORDED EXEMPTION, not a pass**, and the 2026-10-31 scan
   did not change that: it raised white on amber (H1) and on yellow (M2), and Patryk
   kept both exactly as they are. Do not re-raise them. Confirmed sits at
@@ -296,7 +305,7 @@ explaining why is usually the one to read.
   to the phone's 0.98 in both themes, because at 0.72 an amber block behind a
   dialog tinted the form. A sheet that near-opaque has no use for a white rim,
   so a hairline inside one takes `--border-soft`. **The hairlines take the muted ink**: `--border-soft`,
-  `--border-sheet` and `--tl-card-border` become `var(--text-muted)`, which is
+  `--border-sheet`, `--tl-card-border` and `--field-edge` become `var(--text-muted)`, which is
   what "more contrast" asks of an edge. **Text does not change**: every ink
   already passes, and the setting asks for solid surfaces and visible edges,
   not a second palette. The dark rule comes second inside the block, so at

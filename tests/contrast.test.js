@@ -909,6 +909,35 @@ describe("--text-faint on the cards it sits on, in Light", () => {
   }
 });
 
+// ── A field's edge — a NON-TEXT boundary (v18.14.0, M6) ──────────────────────────
+// The party-size ring's shape again (below): WCAG 1.4.11 asks 3:1 of a control's
+// boundary, there is no ink, so it is not a row in FILLS. A white rim drew a field at
+// 1.02:1 on a Section. These are the surfaces fields sit on, the page itself included,
+// because the date pill in the header is one. Light only: Dark's fill shows the field.
+describe("a field's edge against what it sits on, in Light", () => {
+  const app = parse(LIGHT_VARS["--bg-app"]);
+  const sheet = over(parse(LIGHT_VARS["--bg-sheet"]), app);
+  const SURFACES = {
+    "a Section in a dialog": over(parse(LIGHT_VARS["--bg-soft"]), sheet),
+    "a dialog's sheet": sheet,
+    "the main card": over(parse(LIGHT_VARS["--tl-card-bg"]), app),
+    "the page": app,
+  };
+  for (const [what, bg] of Object.entries(SURFACES)) {
+    it(`clears 3:1 on ${what}, and Increase Contrast does not weaken it`, () => {
+      const rest = ratio(parse(LIGHT_VARS["--field-edge"]), bg);
+      expect(rest).toBeGreaterThanOrEqual(3);
+      expect(ratio(parse(LIGHT_MORE_VARS["--field-edge"]), bg)).toBeGreaterThanOrEqual(rest);
+    });
+  }
+  it("the header's date pill and mkInp both draw it", () => {
+    expect(LIGHT_VARS["--app-date-border"]).toBe(LIGHT_VARS["--field-edge"]);
+    const start = ATOMS_SRC.indexOf("export function mkInp");
+    expect(start).toBeGreaterThan(-1);
+    expect(ATOMS_SRC.slice(start, ATOMS_SRC.indexOf("}", start + 40))).toContain("var(--field-edge)");
+  });
+});
+
 // v18.14.0 (L6): at 0.72 an amber block behind a dialog moved the sheet's blue channel
 // by 34 levels, and everything on the sheet read against that. Two facts hold the fix:
 // a dialog's sheet stays as opaque as the phone sheet, and each Increase Contrast value

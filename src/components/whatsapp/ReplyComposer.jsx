@@ -379,7 +379,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
           // visible line. mkArea's centring only rescues the SHORT-content case.
           // At R.inset the corner reaches at most 10px, inside the 12px padding,
           // so no line can be clipped at any scroll position.
-          style={{ flex: 1, boxSizing: "border-box", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset, padding: "10px 12px", fontSize: T.lead, color: "var(--text-primary)", fontWeight: FW.regular, resize: "none", fontFamily: "inherit", minHeight: 44, boxShadow: "var(--shadow-input)", opacity: disabled ? 0.6 : 1 }}
+          style={{ flex: 1, boxSizing: "border-box", background: "var(--bg-input)", border: "1px solid var(--field-edge)", borderRadius: R.inset, padding: "10px 12px", fontSize: T.lead, color: "var(--text-primary)", fontWeight: FW.regular, resize: "none", fontFamily: "inherit", minHeight: 44, boxShadow: "var(--shadow-input)", opacity: disabled ? 0.6 : 1 }}
         />
         <button
           onClick={send}

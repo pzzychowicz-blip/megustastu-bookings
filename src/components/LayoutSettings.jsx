@@ -64,13 +64,13 @@ const PICK_CHIP = {
 };
 // Small text input — table id (rename / add).
 const TXT_INP = {
-  background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.pill,
+  background: "var(--bg-input)", border: "1px solid var(--field-edge)", borderRadius: R.pill,
   padding: "6px 8px", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)",
   width: 70, boxSizing: "border-box", boxShadow: "var(--shadow-input)"
 };
 // Small select — combo / table pickers in the priorities editor (v15.9.0).
 const SEL_INP = {
-  background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.pill,
+  background: "var(--bg-input)", border: "1px solid var(--field-edge)", borderRadius: R.pill,
   // v17.8.0: paddingRight ~= this control's own pill radius (~15px on its 30px
   // box), for the same reason mkSel exists — the arrow sat inside the curve.
   padding: "6px 8px", paddingRight: 14, fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)",

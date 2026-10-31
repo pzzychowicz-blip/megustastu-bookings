@@ -76,7 +76,7 @@ export function mkInp() {
     boxSizing: "border-box",
     height: H.touch,
     background: "var(--bg-input)",
-    border: "1px solid var(--border-input)",
+    border: "1px solid var(--field-edge)",
     borderRadius: R.pill,
     padding: "10px 12px",
     fontSize: T.title,

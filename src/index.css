@@ -247,6 +247,13 @@
   --border-sheet: rgba(255, 255, 255, 0.5);
   --border-soft: rgba(210, 218, 230, 0.8);
   --border-input: rgba(255, 255, 255, 0.4);
+  /* v18.14.0 (M6): the edge of a real field, its own token because --border-input
+     also rims stat cells and rows that are not controls. That white rim drew a
+     field at 1.02:1 on a Section, so on a near-white card a text box was a label
+     with nothing under it. WCAG 1.4.11 asks 3:1 of a control's boundary, and this
+     clears it on every surface a field sits on, the page included (3.05). Dark has
+     a visible fill and keeps its rim. Focus stays a 2px ring in --focus-ring. */
+  --field-edge: #7a8494;
   --border-kbd: rgba(180, 190, 210, 0.55);
   --border-glass: rgba(255, 255, 255, 0.3);      /* white rim on filled btns / Toggle */
   /* v17.13.0 — the hairline rim on a THEME-INVARIANT solid fill, and the
@@ -480,7 +487,7 @@
      warning read as the same KIND of surface, differing only in hue. */
   --danger-bg-soft: rgba(255, 241, 241, 0.6);
   /* Date input (header) */
-  --app-date-bg: rgba(255, 255, 255, 0.45); --app-date-border: rgba(255, 255, 255, 0.4);
+  --app-date-bg: rgba(255, 255, 255, 0.45); --app-date-border: var(--field-edge);
   /* Neutral grey button fills (header Log out / dialog Back-Cancel / Settings title) */
   --app-btn-grey: #6c7079;                 --app-btn-grey-strong: var(--app-btn-grey);
   --app-btn-slate: #64748b;                 /* dialog secondary buttons */
@@ -863,6 +870,7 @@
   --border-sheet: rgba(255, 255, 255, 0.12);
   --border-soft: rgba(255, 255, 255, 0.1);
   --border-input: rgba(255, 255, 255, 0.12);
+  --field-edge: var(--border-input);
   --border-kbd: rgba(255, 255, 255, 0.15);
   --border-glass: rgba(255, 255, 255, 0.14);
   --scrim: rgba(0, 0, 0, 0.5);
@@ -953,6 +961,7 @@
     --border-soft: var(--text-muted);
     --border-sheet: var(--text-muted);
     --tl-card-border: var(--text-muted);
+    --field-edge: var(--text-muted);
   }
   [data-theme="dark"] {
     --tl-card-bg: #212327;
@@ -962,6 +971,7 @@
     --border-soft: var(--text-muted);
     --border-sheet: var(--text-muted);
     --tl-card-border: var(--text-muted);
+    --field-edge: var(--text-muted);
   }
 }
 html, body { margin: 0; }
