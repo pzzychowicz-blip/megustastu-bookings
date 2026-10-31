@@ -38340,7 +38340,11 @@ skips such a function; the same `class` beside a `useState` is an error.
 
 **Behaviour change:** none.
 
-**Files:** new `src/hooks/useShellPrefs.js` (552 lines). `src/App.jsx` is +31 −508.
+**Files:** 21 changed. New: `src/hooks/useShellPrefs.js` (548 lines). `src/App.jsx` is +31 −509.
+Code: the two hooks, `useWaSettings.js`, and one line of `eslint.config.js`. Eight more files change
+only a comment that named where something used to be, among them `index.html`, above its `<script>`,
+so the CSP hash does not move. `tests/app-source.js` adds the hook to `APP_FILES`. The rest is
+`REFACTOR_LOG`, `ROADMAP`, `DESIGN.md` and the `CLAUDE.md` files.
 
 The state-by-domain design's V4, out of its order. V2–V5 were on hold until WhatsApp go-live;
 on 2026-10-31 Patryk lifted the hold for this one hook, since go-live is waiting on Meta and
@@ -38350,16 +38354,16 @@ V2 and V3 in first, so the census was re-run: 44 statements, 10 inputs (1 hoiste
 
 ### What moved
 
-The 11 states, the two effect-owning refs, the registration effect for the offline shell, the
+The 11 states, the two refs its effects use, the registration effect for the offline shell, the
 prefs seeding, the phone collapse, the side-by-side repair, `shellFixed` and its `<body>` effect,
-every toggle, and five of the six Split View handlers, with the 14 module helpers. 494 of the
-508 lines removed from App are in the hook word for word. The other 14 are the import lines, the
-version, three `export`s and five comments that named where something used to be.
+every toggle, and every Split View handler but `pickView`, with the 15 module helpers. 494 of the
+508 lines phase 1 removed from App are in the hook word for word. The other 14 are the import lines,
+the version, three `export`s and five comments that named where something used to be.
 
 **What stayed:** `pickView`, a view switch first, which reads `view` and `bumpSlide`; `activeView`
 and `noteCrashView`; the `data-kbd` effect, which reads nothing of this domain; `splitMenuFor`.
-`VIEW_ORD`, `readTlSettings` and `readThemePref` are exported, the last two for the zoom's initial
-state and for `SignedOutTheme`. The design named only the second.
+`readTlSettings` and `readThemePref` are exported, for the zoom's initial state and for
+`SignedOutTheme`. The design named only the first.
 
 **Effect order.** One effect changed its place among App's: the offline shell's registration moved
 from below `useRoles` to the hook's call, below the WhatsApp, waitlist and presence effects. It reads
@@ -38380,9 +38384,10 @@ above the `shellFixed` effect.
 | Lint, total / App | 63 / 7 | 63 / 6 | | |
 
 The hook has one warning, the seeding effect's `set-state-in-effect`, which is App's old line 1764
-moving with its statement. Code lines are 16 under the design because the call is 19 lines,
-where the simulation had one. Entry 128.04 kB gz, +0.60, as the design expected: object keys at a
-hook boundary do not minify.
+moving with its statement. Code lines are 16 under the design because the call is 17 lines,
+where the simulation had one. Entry 128.02 kB gz, +0.58. The design gives no figure per step and
+does not gate on size; its simulation ends 1.56 kB gz up across all five hooks, because object keys
+at a hook boundary do not minify.
 
 ### Checks
 
@@ -38396,10 +38401,18 @@ App width; Timeline zoom, with Maximum zoom clamping Follow and then back; Autom
 the Dark switch, ⇧D's refusal toast naming it (the one hoisted input), and off keeping the look; Escape
 closing Settings; Split View entered both ways, with swap, direction, a tap on a view in the other pane,
 leave, the side-by-side refusal for a Timeline at 1250 wide, the repair turning it stacked, the layout
-restored after a reload, and the collapse at phone width. No new console error. **Not checked on a
-device.**
+restored after a reload, and the collapse at phone width. No new console error.
 
-**Gate:** 436.70 kB, 128.04 kB gz · 3,892 tests passed · lint 63 problems, 0 errors · `check:style`
+Walked on the restaurant tablet, on a DEV tab through `adb reverse`, cold-loaded at 998 × 507: the three
+views by real CDP taps; all eight switches there and back, each effect read both ways and restored,
+with Work offline unregistering the worker and registering it again; Split View with swap, direction
+both ways, the layout restored after a cold load, and leave; a Timeline split, with Side by side
+refused at this width. No console error. **Not checked:** a finger's hold. A 700ms CDP touch opened the
+menu at 650ms, then the lift's `click` landed on the scrim and closed it, so the walk went on through
+the `contextmenu` door. `ViewSwitcher.jsx` is not in this branch's diff, and whether a finger's lift
+does the same is the one thing here only a person can check.
+
+**Gate:** 436.68 kB, 128.02 kB gz · 3,892 tests passed · lint 63 problems, 0 errors · `check:style`
 OK. `save-path` and `write-gate`: 164 passed under `CI=1`, no snapshot changed, no `-u`.
 
 ### `useWaSettings` goes back under the compiler
@@ -38421,3 +38434,32 @@ the file. Bundling the 37 alone against all 49 gives 18.64 and 19.17 kB gz, so a
 startup. And the chunk is not the atoms: its 33.8 kB gz holds 15 modules, among them `booking-logic`,
 `constants`, `Icons`, `vouchers`, `booking-fields` and `phone-countries`, all needed at startup anyway
 (a source-map build, which reproduced the same chunk hash). **Decided (Patryk, 2026-10-31): no split.**
+
+### The #37 sweep
+
+Outside the repo's tree, so this is the only record in it. 15 of 20 worktrees removed, the folder 5.9 →
+1.9 GB. Local branches 288 → 27: 257 merged, 4 retired and unmerged (`wa-sandbox`, `wa-sandbox-v18`,
+`chore/roadmap-scheduling-ports`, `claude/gallant-cartwright-70ded7`). No remote branch was deleted:
+GitHub already held only `main` and `sandbox`, and the 137 "merged remote branches" were stale tracking
+refs, cleared by `git fetch --prune`. Every worktree with a live session stayed, and so did
+`fix/v18.10.1-sim-sends-stay-simulated`, whose work is unmerged. The leftovers, a bundle of the retired
+branches and the list of merged ones are in `Archive/Sweep 2026-10-31/` in the context folder. The tar
+holds `.env.local` files, so treat it as a secret. Two worktrees could not be archived, and ROADMAP has them.
+
+### `/code-review` (extra)
+
+14 findings, 13 fixed, 1 deferred. **No regression:** every effect, input and output of the move held up.
+
+- **Stale pointers, fixed.** Thirteen sentences still sent a reader to App, in code comments, `DESIGN.md`
+  and three `CLAUDE.md` files. Two mattered: `index.html`'s "MUST stay in sync with `readThemePref()`", and
+  three statements of the `bookingsReady` gate, the property that stops a broken build caching itself.
+- **`VIEW_ORD`, fixed.** A local alias had become a public export of a hook file for one line of `pickView`.
+  App now reads `VIEW_ORDER` from `lib/constants`, as `lib/shortcuts.js` does. Six view switches on a cold
+  DEV load slide the right way.
+- **This entry, fixed.** The handler count, the helper count (15, `APP_WIDTH_MAX` had been missed), the
+  call's length (17, which is what makes the 16-line gap add up), a claim that the design predicted the
+  size, the Files line, and the sweep's missing record.
+- **Deferred to ROADMAP: the split direction button on a Timeline split.** `toggleSplitDir` does not ask
+  `fitTimeline`, so on a shell too narrow for a side-by-side Timeline a tap writes `v` and the repair effect
+  writes `h` straight back. Measured on the restaurant tablet at 998 wide, and the title still offers
+  "Switch to side by side". The line moved verbatim, and this version changes no behaviour.

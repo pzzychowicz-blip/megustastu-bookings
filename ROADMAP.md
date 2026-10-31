@@ -99,6 +99,13 @@ and `MGT_Bookings_Tech_Debt_Scan_2026-10-30.md`.
 - **Make `InboxPanel.onKey` a table (#32).** Complexity 56 on 2026-10-30. The `lib/shortcuts.js`
   pattern, after go-live.
 
+- **The split direction button does nothing on a Timeline split at tablet width.** On a shell too narrow
+  for a side-by-side Timeline, `toggleSplitDir` (`useShellPrefs.js`) writes `v` and the repair effect
+  writes `h` straight back, with the title still offering "Switch to side by side". Measured on the
+  restaurant tablet at 998 wide. `SplitMenu` already refuses that choice and says why, so the button
+  should do the same: disabled there, with the reason. Found by v18.13.2's review, which changes no
+  behaviour.
+
 - **Two June worktrees are left from the #37 sweep.** `awesome-meninsky-14260e` and
   `trusting-sutherland-89fdb5` hold uncommitted WhatsApp prototypes that v18 superseded. 11 files in
   each are evicted by iCloud, so they could not be archived and were not removed. Download them or
