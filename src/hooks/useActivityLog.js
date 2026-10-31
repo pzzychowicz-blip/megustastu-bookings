@@ -83,11 +83,17 @@ export const FEED_PAGE = 500;
 // v18.13.0 (#28): exported for `main.jsx`, which writes a crash through this directly:
 // `emitActivity`'s sink is null once `BookingApp` has unmounted, and that is exactly when
 // a render crash needs it.
-export function logActivity(entries) {
+// `hasLogAuthor` is asked apart for the same file: its gate spends a signature on
+// admission, and a crash nobody can sign would otherwise spend one on nothing.
+export function hasLogAuthor() {
   const u = auth.currentUser;
   // No signed-in account = no honest author. See the header: substituting
   // anything here produces a write the rules refuse and the sink swallows.
-  if (!u || !u.uid || !u.email) return;
+  return !!(u && u.uid && u.email);
+}
+export function logActivity(entries) {
+  if (!hasLogAuthor()) return;
+  const u = auth.currentUser;
   (Array.isArray(entries) ? entries : []).forEach(function (e) {
     if (!e || !e.kind || !e.text) return;
     const row = push(ref(db, "activity"));

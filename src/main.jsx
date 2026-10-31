@@ -8,7 +8,7 @@ import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
-import { logActivity } from "./hooks/useActivityLog";
+import { hasLogAuthor, logActivity } from "./hooks/useActivityLog";
 import { crashEntry, crashGate, crashView } from "./lib/crash-report";
 import { deviceLabel } from "./lib/presence-state";
 
@@ -30,7 +30,7 @@ function reportCrash(thrown, where, componentStack) {
       view: crashView(),
       device: deviceLabel(),
     });
-    if (report && admitCrash(report.signature)) logActivity([report.entry]);
+    if (report && hasLogAuthor() && admitCrash(report.signature)) logActivity([report.entry]);
   } catch (err) {
     console.warn("[crash] could not be reported", err);
   }

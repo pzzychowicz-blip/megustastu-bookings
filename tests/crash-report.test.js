@@ -248,7 +248,14 @@ describe("the wiring", () => {
   });
   it("one gate for the page load, and the write goes through it", () => {
     expect(MAIN.match(/crashGate\(/g)).toHaveLength(1);
-    expect(MAIN).toContain("if (report && admitCrash(report.signature)) logActivity([report.entry]);");
+    expect(MAIN).toContain("if (report && hasLogAuthor() && admitCrash(report.signature)) logActivity([report.entry]);");
+  });
+  // The gate spends a signature on admission. Asked first, a crash on the sign-in screen
+  // writes nothing and spends nothing, and the same crash once signed in is recorded.
+  it("nobody signed in spends no signature", () => {
+    const hook = read("hooks/useActivityLog.js");
+    expect(hook).toContain("return !!(u && u.uid && u.email);");
+    expect(hook).toContain("if (!hasLogAuthor()) return;");
   });
   it("a report cannot throw: the boundary's own screen depends on that", () => {
     const fn = MAIN.slice(MAIN.indexOf("function reportCrash("), MAIN.indexOf('window.addEventListener("error"'));
