@@ -39069,3 +39069,39 @@ The scan's bar was WCAG 2.5.8's 24, and the plan's is `H.chip`, the size the app
 uses for a tiny target.
 
 **Files:** `AvailBanner.jsx`, `atoms.jsx`.
+
+### L2: a Plan table can be tapped on a phone
+
+On a 375px phone the room's 900 units are drawn 323px wide, so tables are 21.5 and 25.1px.
+The drawn table does not change: `lib/plan-hit.js` gives each one an invisible box instead.
+PlanView paints the boxes below every table, so a tap on a drawn table can only be that
+table, and only a coarse pointer reaches them.
+
+**A box cannot just be 44px.** The closest pair stand 35.9px apart, centre to centre, so
+two 44px boxes overlap, and the overlap goes to whichever was painted last, which can be
+the table further from the finger. So boxes meet halfway across each gap, and none overlap.
+
+| 375 × 812, touch, Lock navigation on | Before | After |
+|---|---|---|
+| Smallest target | 21.5 × 21.5 | 37.7 × 44.5 |
+| Largest of the 13 boxes | 44.1 (table 9) | 44.5 × 44.5 |
+| Drawn tables | 21.5, 25.1, 44.1 | unchanged |
+
+Live, with fresh geometry before each tap:
+
+- A tap on each of the 13 drawn tables opens that table.
+- 26 taps 8px outside a drawn table, above and below: 23 open it. Two (11 below, 12 above)
+  are past the middle of a 14.4px gap and open the nearer table, which is the design. One
+  (9 below) lands on bare floor, `svg` by `elementFromPoint`, and opened table 2. That is
+  Chrome's own touch adjustment choosing the nearest clickable thing, not one of the boxes.
+- Either side of the 3 and 4 gap's midpoint, 2px off it: 4 on the left, 3 on the right.
+- A held finger on a box raises the quick-status popup, exactly as on the drawn table.
+- A drag that starts on a box opens nothing, because the pan is the svg's.
+- A mouse in a 375px window: 13 boxes, `pointer-events: none`. The tablet at 998: no boxes,
+  because a table is 73px there.
+
+The boxes sit in the zoomed group, so they pan and zoom with the room. `tableTap(id)` is
+the table's three handlers, once, so a box cannot answer differently from its table.
+
+**Files:** `src/lib/plan-hit.js` (new), `PlanView.jsx`, `src/index.css`,
+`tests/plan-hit.test.js` (new), `src/lib/CLAUDE.md`, `DESIGN.md`.

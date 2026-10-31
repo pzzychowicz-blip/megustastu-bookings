@@ -47,6 +47,7 @@ by generated cases). And **the files on the WhatsApp backend's Node ESM chain**
 - **plan-avail.js** — `nextBusyAt` / `freeWindow(…, needMins)` → `{until, fits}`: how long a table stays free from the Plan's minute. PlanView reads it for the availability rim AND the "Walk-in here" gate, so the two cannot disagree. `tests/plan-avail.test.js`.
 
 - **plan-zoom.js** — the Plan's zoom and pan LIMITS: `bandZoom` (a pinch, rubber-banded past `ZOOM_MIN`/`ZOOM_MAX` in log-zoom, at most ×1.25), `clampZoom` (the hard range), `clampPan` (keeps `PAN_KEEP` of the view covered). **Pure and when-free**: PlanView decides where each applies (the band during a pinch only); wiring pinned in `tests/plan-gestures.test.js`.
+- **plan-hit.js** (v18.14.0, L2) — `hitBoxes(tables, size)` and `PHONE_HIT`: a finger-sized box round each Plan table on a phone. Boxes hold their drawn table, stop halfway across a gap and never overlap, so a tap has one answer. PlanView paints them under every table, so a drawn table always wins, and only for a coarse pointer (`.mgt-plan-hit`).
 
 - **tab-rows.js** — `tabColumns(…)`: Settings' tab bar as one row if it fits, else the fewest balanced rows of equal cells sized to the widest label in bold. The one-row test adds the most any ONE label gains in bold, so choosing a tab cannot flip the layout. `tests/tab-rows.test.js`.
 

@@ -215,6 +215,10 @@ explaining why is usually the one to read.
   not jump to the press: the divider used to move TO the pointer, a 5px snap
   at most on 10px but 22px on 44. It now keeps the press's offset from the
   rule, so a press alone moves nothing and a drag moves it by the drag.
+  **Plan tables on a phone are the same rule with neighbours (v18.14.0).** Each table
+  has a finger-sized box under it (`lib/plan-hit.js`). The boxes go below every drawn
+  table, so a tap on a table is that table, they stop halfway across each gap, so a
+  tap in a gap is the nearer table, and only a coarse pointer reaches them.
 - **A literal is invisible to a token audit (v17.8.0).** The contrast pass
   measured every `--token` and still missed four fills carrying white text —
   TableGrid's selected (2.31), blocked (3.13) and swap (~1.4, white on bright

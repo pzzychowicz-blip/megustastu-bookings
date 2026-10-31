@@ -1336,6 +1336,9 @@ html[data-holding] * {
    way the hover brighten is not. A filter that is fine in one direction is
    not automatically fine in the other. */
 .mgt-glyph-shape { transition: filter var(--t-tap) var(--ease-out); }
+/* v18.14.0 (L2): a phone's finger target round a Plan table (lib/plan-hit.js). A
+   mouse in a narrow window can aim, and should not open a table from empty floor. */
+@media (pointer: fine) { .mgt-plan-hit { pointer-events: none; } }
 @media (hover: hover) and (pointer: fine) {
   .mgt-glyph:hover .mgt-glyph-shape { filter: var(--glyph-halo); }
 }
