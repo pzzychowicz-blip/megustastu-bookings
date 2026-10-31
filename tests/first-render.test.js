@@ -1,10 +1,11 @@
 // tests/first-render.test.js
 //
-// One render of the real `BookingApp` (v18.13.1), and the only time App.jsx runs
-// under test: everything else reads its text. A `const` read above its declaration
-// is a RENDER-time throw that blanks the whole app, and lint and build both pass
-// over it. So this runs the body once, top to bottom: if nothing throws, no const
-// was read above itself on that path.
+// One render of the real `BookingApp` (v18.13.1), and the only time all of it runs
+// under test: everything else reads its text or lifts a piece of it (`tests/lift.js`).
+// A `const` read above its declaration is a RENDER-time throw that blanks the whole
+// app, and the build passes over it. Lint sees the plain case; a hoisted function
+// called in render reads through a scope the rule ignores. So this runs the body
+// once, top to bottom: if nothing throws, no const was read above itself on that path.
 //
 // `tests/CLAUDE.md` sets the bar for exercising a component, and this meets it the
 // same way `error-boundary.test.js` does: no jsdom and nothing mounted. It asks
