@@ -2277,6 +2277,10 @@ export function OutlineChip({ tone = "neutral", as = "span", size = "micro", sty
       // says what the guest has (Settings → Customers, for an account that may
       // not edit bookings).
       ...(as === "button" ? { cursor: rest.disabled ? "default" : "pointer", transition: CHIP_BUTTON_EASE } : null),
+      // v18.14.0 (L1): a small chip that is a target is `H.chip` tall, not 21px. The
+      // tag chips, the log's filters and the pinned countries each said so by hand;
+      // the Regular and No-show disclosures, the last four, did not.
+      ...(as === "button" && size === "small" ? { minHeight: H.chip } : null),
       ...(style || {})
     }}>{children}</Tag>
   );

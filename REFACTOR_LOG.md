@@ -39049,3 +39049,23 @@ and 570: "Assign Rita Nowak" and "Assign Camilo Rey" read `rgb(0, 102, 214)`, 36
 somewhere it did not ask to go: Reassign, Reshuffle, No show.
 
 **Files:** `UnplacedBanner.jsx`, `ClashBanner.jsx`.
+
+### L1: the small chips you tap are 28px
+
+`TimeChip` takes `H.chip` by default, which covers the WhatsApp "Accept at" row and
+Walk-in's banner. The availability line and the phone codes pass their own 40px, as they
+did. `OutlineChip` now gives a small button chip `H.chip` itself: the tag chips, the
+activity log's filters and the pinned countries each said so by hand, and the Regular and
+No-show disclosures, the last four, did not. A span chip is not a target and stays as it was.
+
+| At 998 × 507 and 998 × 570 | Before | After |
+|---|---|---|
+| "Accept at" time chips, WhatsApp | 21 | 28 |
+| "Regular · 3 past visits", WhatsApp | 21 | 28 |
+| "Regular · 12 past visits", the form | 21 | 28 |
+| Time chips in Walk-in's banner | 21 | 28 |
+
+The scan's bar was WCAG 2.5.8's 24, and the plan's is `H.chip`, the size the app already
+uses for a tiny target.
+
+**Files:** `AvailBanner.jsx`, `atoms.jsx`.

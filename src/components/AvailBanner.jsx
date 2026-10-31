@@ -23,7 +23,7 @@
 // outline chip in a third hue would read as decoration rather than as something
 // to press.
 
-import { R, T, FW } from "../lib/constants";
+import { R, T, FW, H } from "../lib/constants";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { AlertIcon } from "./Icons";
 
@@ -36,7 +36,8 @@ import { AlertIcon } from "./Icons";
 // `style` (v18.14.0): the availability line sizes its chips to the row they sit
 // in; everywhere else the chip is its own size. `label` (v18.14.0, H4): the same
 // pill for another one-tap answer, Save's country codes, which pick a code by its
-// `time` and read as its flag and number.
+// `time` and read as its flag and number. v18.14.0 (L1): `H.chip` tall on its own,
+// the WhatsApp "Accept at" row and Walk-in's banner. It was 21px, under WCAG 2.5.8's 24.
 export function TimeChip({ time, label, onPick, style }) {
   return (
     <button
@@ -44,7 +45,7 @@ export function TimeChip({ time, label, onPick, style }) {
       className="mgt-hover-scale"
       onClick={() => onPick(time)}
       style={{
-        cursor: "pointer", padding: "2px 8px", borderRadius: R.pill,
+        cursor: "pointer", padding: "2px 8px", minHeight: H.chip, borderRadius: R.pill,
         fontWeight: FW.semi, fontSize: T.body,
         background: "var(--suggest-bg)",
         color: "var(--success-text)",
