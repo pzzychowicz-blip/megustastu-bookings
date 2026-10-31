@@ -77,7 +77,7 @@ Customers are **DERIVED from bookings by normalized phone** (`lib/customers.js`)
 - **Integrations holds no secret and says so**: root `.read` is `auth != null` and cascades down, so any key in RTDB is readable by every account. Keys live in deployment env vars; the panel states where, and never claims to know whether one is set.
 
 ### Per-user preferences — `settings/users/{uid}/prefs`
-Theme, reduce animations, Plan zoom & pan, lock navigation, split view and plan availability follow the ACCOUNT (`useUserPrefs.js`).
+Theme, reduce animations, Plan zoom & pan, lock navigation, split view and plan availability follow the ACCOUNT (`useUserPrefs.js`, applied by `useShellPrefs.js`).
 - **Device fallback is the migration**: each keeps its `localStorage` initializer; once per uid after `prefsLoaded`, a saved field overrides local state and an unsaved one is seeded from this device. **Tri-state**: `null` means never chosen; a sanitize returning `false` for absent would reset every device.
 - **`theme: "auto"`** (Automatic dark mode) is stored explicitly, since `null` would be filled by the next device's explicit value. It reads as `undefined` at every theme site, so the boot script and its CSP hash are untouched (`tests/prefs.test.js` runs the real script). An unset `themePref` is never seeded up.
 - **The booleans come from `PREF_SPEC`** (key and default direction once): only the non-default value is stored, `"whenOn"` the default-off shape, `"whenOff"` default-on.
@@ -107,7 +107,7 @@ Two of Timeline / List / Plan at once, per device; tablet and up (`winW >= 600`,
 A wrong order throws during render and the build passes over it. `no-use-before-define` (all of `src/`) and `tests/first-render.test.js` hold it. Design: `MGT_Bookings_State_By_Domain_Design.md`, context folder.
 - **A hook's arguments are read at the call**, so every const it takes sits above the call, even one only a handler reads today.
 - **A function a hook returns is no longer hoisted**: anything using it in render, or passing it on, sits below that hook.
-- **`useKeyboardShortcuts` and `viewActionsRef.current=` stay below every domain hook**, and `useTagSettings` above `useWhatsApp`.
+- **`useKeyboardShortcuts` and `viewActionsRef.current=` stay below every domain hook**, and `useTagSettings` above `useWhatsApp`. `useShellPrefs` sits between `setSplitMenuFor` and `activeView`, seven original lines: App's mount effect stays above it, so `<body>`'s baseline is set before the `shellFixed` effect.
 - **A hoisted function handed to a hook must not read a const that hook returns**: that cycle makes the compiler give up (v18.4.9). Use a `VA` wrapper. No `VA` function is called during render.
 - **Moving a hook moves its effects**, and effects fire in declaration order. Nothing automated checks that: walk the domain on DEV.
 - **The keyboard ctx stays one flat literal**: `tests/modal-stack.test.js` reads its keys from the text, so a spread would blind it.

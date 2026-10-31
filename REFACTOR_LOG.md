@@ -38333,3 +38333,71 @@ comments and docs. The gate numbers above still hold.
 **A plant has to be compiled before its silence means anything.** A `class` planted in a hook
 that called no hook reported nothing, which read as the widened rule not working. The compiler
 skips such a function; the same `class` beside a `useState` is an error.
+
+## v18.13.2 — `BookingApp` V4: `useShellPrefs`
+
+**Date:** 2026-10-31 · **Branch:** `refactor/v18.13.2-shell-prefs-hook`
+
+**Behaviour change:** none.
+
+**Files:** new `src/hooks/useShellPrefs.js` (552 lines). `src/App.jsx` is +31 −508.
+
+The state-by-domain design's V4, out of its order. V2–V5 were on hold until WhatsApp go-live;
+on 2026-10-31 Patryk lifted the hold for this one hook, since go-live is waiting on Meta and
+this domain holds no WhatsApp code. V2, V3 and V5 stay on hold. The design was simulated with
+V2 and V3 in first, so the census was re-run: 44 statements, 10 inputs (1 hoisted, `flashRefusal`),
+32 outputs, 11 states, 5 effects, 2 refs, the design's figures to the digit.
+
+### What moved
+
+The 11 states, the two effect-owning refs, the registration effect for the offline shell, the
+prefs seeding, the phone collapse, the side-by-side repair, `shellFixed` and its `<body>` effect,
+every toggle, and five of the six Split View handlers, with the 14 module helpers. 494 of the
+508 lines removed from App are in the hook word for word. The other 14 are the import lines, the
+version, three `export`s and five comments that named where something used to be.
+
+**What stayed:** `pickView`, a view switch first, which reads `view` and `bumpSlide`; `activeView`
+and `noteCrashView`; the `data-kbd` effect, which reads nothing of this domain; `splitMenuFor`.
+`VIEW_ORD`, `readTlSettings` and `readThemePref` are exported, the last two for the zoom's initial
+state and for `SignedOutTheme`. The design named only the second.
+
+**Effect order.** One effect changed its place among App's: the offline shell's registration moved
+from below `useRoles` to the hook's call, below the WhatsApp, waitlist and presence effects. It reads
+`swEnabled` and `bookingsReady` and calls `applyServiceWorker`, so nothing between depends on it, and
+its `bookingsReady` gate moved unchanged. Everything else keeps its order. App's mount effect stays
+above the `shellFixed` effect.
+
+### Measures
+
+| | Before | After | Design delta | Actual delta |
+|---|---:|---:|---:|---:|
+| Code lines in `BookingApp` | 1,877 | 1,719 | −174 | −158 |
+| Statements | 376 | 333 | −43 | −43 |
+| `useState` | 47 | 36 | −11 | −11 |
+| `useEffect` | 21 | 16 | −5 | −5 |
+| `useRef` | 29 | 27 | −2 | −2 |
+| Functions | 90 | 70 | −20 | −20 |
+| Lint, total / App | 63 / 7 | 63 / 6 | | |
+
+The hook has one warning, the seeding effect's `set-state-in-effect`, which is App's old line 1764
+moving with its statement. Code lines are 16 under the design because the call is 19 lines,
+where the simulation had one. Entry 128.04 kB gz, +0.60, as the design expected: object keys at a
+hook boundary do not minify.
+
+### Checks
+
+An order pin means nothing once its subjects sit in two files, so `APP_FILES` was reversed for one
+run: an order pin straddling App and a hook would flip. Only the helper's own "App comes first" test
+failed. Nothing in `tests/` names a moved subject in an `indexOf`.
+
+Walked on DEV, cold-loaded, at 1400 and 375 wide: all eight switches both ways, read back from
+`localStorage`, `<html>` and `<body>`; Work offline unregistering the worker and re-registering it;
+App width; Timeline zoom, with Maximum zoom clamping Follow and then back; Automatic dark mode locking
+the Dark switch, ⇧D's refusal toast naming it (the one hoisted input), and off keeping the look; Escape
+closing Settings; Split View entered both ways, with swap, direction, a tap on a view in the other pane,
+leave, the side-by-side refusal for a Timeline at 1250 wide, the repair turning it stacked, the layout
+restored after a reload, and the collapse at phone width. No new console error. **Not checked on a
+device.**
+
+**Gate:** 436.70 kB, 128.04 kB gz · 3,892 tests passed · lint 63 problems, 0 errors · `check:style`
+OK. `save-path` and `write-gate`: 164 passed under `CI=1`, no snapshot changed, no `-u`.

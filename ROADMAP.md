@@ -21,7 +21,7 @@ session and keeping it in sync.
 
 - **`useWaSettings` bails out of the compiler.** `react-hooks/invariant` reports `PruneHoistedContexts: Unexpected hoisted function` on `saveWaSettings` (line 115), so the compiler says nothing about that hook. The file is named in that rule's `ignores` in `eslint.config.js`, and leaves it when this is fixed. Found in v18.13.1. The cause is not established: a small hook with a hoisted function called from an effect does not reproduce it. A fix may surface advisories against the `--max-warnings` cap.
 
-- **`BookingApp` V2–V5** (`useInboxEntry`, `useWaitlistOffers`, `useShellPrefs`, `useBookingForm`). Designed in `MGT_Bookings_State_By_Domain_Design.md`, context folder. After WhatsApp go-live settles; each version needs its own approval and a fresh census first.
+- **`BookingApp` V2, V3 and V5** (`useInboxEntry`, `useWaitlistOffers`, `useBookingForm`). Designed in `MGT_Bookings_State_By_Domain_Design.md`, context folder. After WhatsApp go-live settles; each version needs its own approval and a fresh census first.
 
 - **WhatsApp coexistence: the rehearsal, then the restaurant's number.** The code
   shipped in v18.9.0 (Embedded Signup at `/wa-connect`, the four coexistence webhooks,

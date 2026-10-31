@@ -764,8 +764,8 @@ export var SP={
 // 54px calendar day cell is a grid dimension, not a control.
 export var H={chip:28,compact:32,chrome:36,control:40,touch:44};
 
-// The Split View divider's width, in px of LAYOUT (v18.3.0 /code-review). App's
-// `tlPaneOk` takes it out of the width a timeline pane is measured by, and
+// The Split View divider's width, in px of LAYOUT (v18.3.0 /code-review).
+// useShellPrefs' `tlPaneOk` takes it out of the width a timeline pane is measured by, and
 // SplitLayout draws it (its touch hit area is H.touch across, on top of this).
 // Here because both need it and a component file cannot export a constant
 // (react-refresh): until now each kept a copy with a comment asking the two to

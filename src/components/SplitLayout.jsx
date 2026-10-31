@@ -30,7 +30,7 @@ const MAX_RATIO = 0.8;
 // rule resized the panes and one a few points to either side went to a pane, a
 // 10pt target against DESIGN.md's touch floor of 44. The extra HIT_PAD on each
 // side is an invisible child overlapping the panes (see the divider below).
-// DIVIDER is lib/constants' SPLIT_DIVIDER_PX, which App's tlPaneOk (the room
+// DIVIDER is lib/constants' SPLIT_DIVIDER_PX, which useShellPrefs' tlPaneOk (the room
 // rule) reads too, so the two cannot drift (/code-review: they were two copies).
 const DIVIDER = SPLIT_DIVIDER_PX;
 const HIT_PAD = (H.touch - DIVIDER) / 2;

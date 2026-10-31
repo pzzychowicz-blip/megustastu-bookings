@@ -21,6 +21,7 @@ import { stripComments } from "../scripts/strip-comments.mjs";
 export const APP_FILES = [
   "App.jsx",
   "hooks/useSettingsPanel.js",
+  "hooks/useShellPrefs.js",
 ];
 
 const raw = (rel) => readFileSync(new URL("../src/" + rel, import.meta.url), "utf8");

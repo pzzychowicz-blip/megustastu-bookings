@@ -13,7 +13,7 @@
 // Toggle's `on` state.
 //
 // In Bookings the preference is per-device localStorage (there is no Firebase
-// settings node): BookingApp derives `explicitPref` via readThemePref() and
+// settings node): useShellPrefs derives `explicitPref` via readThemePref() and
 // the Settings toggle writes the key. The no-flash inline script in index.html
 // paints the correct theme BEFORE React mounts — the hook alone runs too late
 // to prevent the wrong-theme flash.
