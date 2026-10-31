@@ -19,6 +19,8 @@ session and keeping it in sync.
 
 ## Deferred
 
+- **`useWaSettings` bails out of the compiler.** `saveWaSettings` (line 115) is a hoisted function an effect above it calls, which `react-hooks/invariant` reports as `PruneHoistedContexts`, so the compiler says nothing about that hook. The file is named in that rule's `ignores` in `eslint.config.js`, and leaves it when this is fixed. Found in v18.13.1; the fix is not tried, and it may surface advisories against the `--max-warnings` cap.
+
 - **`BookingApp` V2–V5** (`useInboxEntry`, `useWaitlistOffers`, `useShellPrefs`, `useBookingForm`). Designed in `MGT_Bookings_State_By_Domain_Design.md`, context folder. After WhatsApp go-live settles; each version needs its own approval and a fresh census first.
 
 - **WhatsApp coexistence: the rehearsal, then the restaurant's number.** The code

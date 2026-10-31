@@ -38238,10 +38238,10 @@ scope, which is what throws during render. It has 0 findings there today. `src/l
 is left out by name: its two findings (lines 182-183) are an import read below its use, which
 ESM hoists.
 
-`react-hooks/invariant` is an error on `src/App.jsx`, and each domain hook joins it. The
+`react-hooks/invariant` is an error on all of `src/`, so a new domain hook needs no entry. The
 compiler can stop analysing `BookingApp` silently: a `class` in the body removes all of App's
-warnings with no error, and only this rule says so. It is not on all of `src/hooks/`, because
-`useWaSettings.js:115` already reports.
+warnings with no error, and only this rule says so. `src/hooks/useWaSettings.js` is left out by
+name, because line 115 already reports; that fix is on the ROADMAP.
 
 **Proved by planting each fault in `npm run lint`'s config, then restoring the file:**
 `activeView` below the `useKeyboardShortcuts` call fails `no-use-before-define`, and a
