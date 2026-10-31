@@ -7,12 +7,9 @@
 // needs the old code. These are the cases that stay: one per outcome, each
 // asserting what is WRITTEN.
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import { planAssign, planReassign, swapSlot, liveSwap } from "../src/lib/manual-assign.js";
 import { todayStr, addDays } from "../src/lib/day.js";
-import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const TODAY = todayStr();
 // A day that is not today: the optimiser is always on.
@@ -124,8 +121,7 @@ describe("planAssign: a swap", () => {
 });
 
 describe("App's manualAssign is the plan and its three effects", () => {
-  const APP = stripComments(readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), "../src/App.jsx"), "utf8")).join("\n");
+  const APP = appCode();
   const at = APP.indexOf("function manualAssign(");
   const body = APP.slice(at, APP.indexOf("function addBlock(", at));
 
@@ -169,8 +165,7 @@ describe("liveSwap: a swap lasts as long as the draft stays in its slot", () => 
 });
 
 describe("the picker opened from the booking form fills the draft (v18.4.9)", () => {
-  const APP = stripComments(readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), "../src/App.jsx"), "utf8")).join("\n").replace(/\s+/g, "");
+  const APP = appCode().replace(/\s+/g, "");
 
   it("for an edit as for a new booking, and writes nothing", () => {
     expect(APP).toContain('consttoDraft=manualTarget==="__new__"||(showForm&&manualTarget===editId);');
@@ -261,8 +256,7 @@ describe("planReassign", () => {
 });
 
 describe("App's reassignBooking is the plan and its three effects", () => {
-  const APP = stripComments(readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), "../src/App.jsx"), "utf8")).join("\n");
+  const APP = appCode();
   const at = APP.indexOf("function reassignBooking(");
   const body = APP.slice(at, APP.indexOf("function flashRefusal(", at));
   it("decides nothing itself", () => {

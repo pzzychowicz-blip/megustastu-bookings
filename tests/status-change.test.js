@@ -9,13 +9,10 @@
 // code. These are the cases that stay: one per outcome, each asserting what is
 // ASKED or what is WRITTEN.
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
-import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import { planStatus, planCancel, completeCleared, seatClashSnap } from "../src/lib/status-change.js";
 import { voucherDue, voucherHeld, voucherReturnDue, sanitizeVoucher } from "../src/lib/vouchers.js";
 import { todayStr } from "../src/lib/day.js";
-import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const TODAY = todayStr();
 const NOW = Date.now();
@@ -311,8 +308,7 @@ describe("seatClashSnap", () => {
 });
 
 describe("BookingApp's three functions are the gate, the plan and the side effects", () => {
-  const APP = stripComments(readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), "..", "src", "App.jsx"), "utf8")).join("\n").replace(/[ \t]+/g, "").replace(/\n+/g, "\n");
+  const APP = appCode().replace(/[ \t]+/g, "").replace(/\n+/g, "\n");
   const slice = (from, to) => { const at = APP.indexOf(from); expect(at, from).toBeGreaterThan(-1); return APP.slice(at, APP.indexOf(to, at)); };
 
   it("updateStatus", () => {

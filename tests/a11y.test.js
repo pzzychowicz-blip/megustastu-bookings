@@ -39,6 +39,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 
@@ -51,7 +52,7 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 // source check that reads comments is measuring the documentation.
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
 
-const App = read("App.jsx");
+const App = appCode();
 const Atoms = read("components/atoms.jsx");
 const List = read("components/ListView.jsx");
 const Timeline = read("components/TimelineView.jsx");

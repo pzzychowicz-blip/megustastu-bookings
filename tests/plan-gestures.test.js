@@ -17,6 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { ZOOM_MIN, ZOOM_MAX, PAN_KEEP, RUBBER, rubber, bandZoom, clampZoom, clampPan } from "../src/lib/plan-zoom.js";
+import { appSource } from "./app-source.js";
 
 const Plan = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "PlanView.jsx"), "utf8")).join("\n");
 
@@ -50,7 +51,7 @@ describe("A1: the touch defences hang off the HTML wrapper, which iOS honours", 
     // /code-review: App's isMobile, a prop, so a resize reaches this memoised view.
     expect(Plan).toMatch(/const narrow = isMobile;/);
     expect(Plan).not.toMatch(/innerWidth/);
-    expect(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "App.jsx"), "utf8")).toMatch(/gesturesEnabled=\{planGestures\}\s*isMobile=\{isMobile\}/);
+    expect(appSource()).toMatch(/gesturesEnabled=\{planGestures\}\s*isMobile=\{isMobile\}/);
     expect(Plan).toMatch(/if \(narrow && ev\.touches\.length < 2\) return;\s*ev\.preventDefault\(\);/);
   });
 });

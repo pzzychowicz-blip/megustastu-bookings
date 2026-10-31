@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { unplacedReason, unplacedOf, primaryGridTable, unplacedPhrase, packLanes, unplacedHeight } from "../src/lib/unplaced.js";
 import { everyFrame } from "../src/lib/after-frame.js";
+import { appCode } from "./app-source.js";
 
 const GRID = new Set(["1A", "1B", "2", "3", "4", "5A", "5B", "6", "7", "i1", "i2", "i3", "i4"]);
 const bk = (over) => Object.assign({ id: "x", date: "2026-10-03", time: "20:00", size: 2, status: "confirmed", tables: ["2"], _conflict: false }, over);
@@ -117,7 +118,7 @@ describe("the surfaces read the ONE rule", () => {
   const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
   const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
   const Timeline = read("components/TimelineView.jsx");
-  const App = read("App.jsx");
+  const App = appCode();
 
   it("the timeline's row comes from unplacedOf, and is drawn ABOVE the table rows", () => {
     expect(Timeline).toMatch(/const unplaced = unplacedOf\(day, gridIds\)/);
@@ -163,7 +164,7 @@ describe("phase 69 — the List card's pill says a table is missing", () => {
     expect(fn).toMatch(/aria-label=\{"Table " \+ id \+ ", not in the layout"\}/);
   });
   it("the card asks the SAME rule the Unplaced row and the strip read", () => {
-    const App = rd("App.jsx");
+    const App = appCode();
     expect(App).toMatch(/unplacedItems\.forEach\(function\(u\)\{if\(u\.reason==="missing"\) out\[u\.b\.id\]=u\.missing;\}\);/);
     expect(App).toMatch(/<ListView\s+missingTables=\{missingTables\}/);
     expect(rd("components/ListView.jsx")).toMatch(/<TBadge key=\{t\} id=\{t\} missing=\{\(missingTables\[b\.id\] \|\| \[\]\)\.indexOf\(t\) >= 0\} \/>/);

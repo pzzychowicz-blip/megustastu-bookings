@@ -61,6 +61,7 @@ import * as submitGuard from "../src/lib/submitGuard.js";
 import * as recurringLib from "../src/lib/recurring.js";
 import * as drafts from "../src/lib/drafts.js";
 import * as statusChange from "../src/lib/status-change.js";
+import { appCode } from "./app-source.js";
 
 // ── The lib modules the lifted code may bind, by basename ───────────────────
 // A lifted function that names an import from any OTHER module (a component, a
@@ -80,7 +81,7 @@ const LIB = {
 };
 
 const read = (rel) => stripComments(readFileSync(new URL("../" + rel, import.meta.url), "utf8")).join("\n");
-const APP = read("src/App.jsx");
+const APP = appCode();
 const WALKIN = read("src/hooks/useWalkin.js");
 
 const compile = compiler(LIB);

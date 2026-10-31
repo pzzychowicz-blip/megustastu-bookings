@@ -8,13 +8,12 @@
 // in REFACTOR_LOG, since it needs the old code. These are the cases that stay:
 // one per outcome, each asserting what is ASKED or what is WRITTEN.
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
 import { planDelete, planUndo, planCustomerDelete } from "../src/lib/delete-undo.js";
 import { undoSnapshots } from "../src/lib/booking-logic.js";
 import { guestTagMap, guestTagsOf } from "../src/lib/customers.js";
 import { sanitizeVoucher } from "../src/lib/vouchers.js";
 import { todayStr } from "../src/lib/day.js";
-import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const TODAY = todayStr();
 const stamp = (action, user) => ({ action, by: user });
@@ -146,7 +145,7 @@ describe("planUndo", () => {
 
 // What App still does itself, read from its source (no DOM here).
 describe("the wiring", () => {
-  const APP = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n").replace(/\s+/g, "");
+  const APP = appCode().replace(/\s+/g, "");
   const slice = (from, to) => { const i = APP.indexOf(from); return APP.slice(i, APP.indexOf(to, i)); };
 
   it("delBooking asks planDelete, parks the skipDate before the write and stops when it is refused", () => {
@@ -199,7 +198,7 @@ describe("planCustomerDelete", () => {
     expect(planCustomerDelete(null, list, { phone: PHONE }).pause).toEqual([]);
   });
   it("App erases nothing until the write has landed, and resumes the paused rules on a discard", () => {
-    const APP = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n").replace(/\s+/g, "");
+    const APP = appCode().replace(/\s+/g, "");
     const at = APP.indexOf("functiondeleteCustomer(");
     const body = APP.slice(at, APP.indexOf("functionopenNewWith(", at));
     const landed = body.indexOf("onLanded:function(){");

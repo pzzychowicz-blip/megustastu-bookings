@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
@@ -91,7 +92,7 @@ describe("X6 — Stats: a balanced grid of tiles, and tables as badges", () => {
     expect(W).toMatch(/gridTemplateColumns: isMobile \? "repeat\(6, 1fr\)" : "repeat\(5, 1fr\)"/);
     expect(W).toMatch(/gridColumn: isMobile \? \(i < 3 \? "span 2" : "span 3"\) : "auto"/);
     expect(W, "the greedy flex basis is back").not.toMatch(/flex: "1 1 84px"/);
-    expect(read("App.jsx")).toMatch(/<WeekView[\s\S]{0,120}isMobile=\{isMobile\}/);
+    expect(appCode()).toMatch(/<WeekView[\s\S]{0,120}isMobile=\{isMobile\}/);
   });
   it("a table is a badge, dashed when the layout does not have it", () => {
     expect(W).toMatch(/const inLayout = new Set\(TIMELINE_TABLES\.map\(function\(t\)\{ return t\.id; \}\)\);/);
@@ -113,7 +114,7 @@ describe("X7 — Find a booking's results are columns", () => {
     expect(P).toMatch(/const FIND_CARD_W = 720;/);
     expect(P).toMatch(/<Overlay onClose=\{onClose\} footer=\{footerEl\} footerYields maxWidth=\{FIND_CARD_W\}>/);
     expect(P).toMatch(/flexWrap: isMobile \? "wrap" : "nowrap"/);
-    expect(read("App.jsx")).toMatch(/<SearchPanel bookings=\{bookings\} todayStr=\{todayStr\(\)\} isMobile=\{isMobile\}/);
+    expect(appCode()).toMatch(/<SearchPanel bookings=\{bookings\} todayStr=\{todayStr\(\)\} isMobile=\{isMobile\}/);
   });
   it("each cell is a column sized to the widest in the results, in its own font", () => {
     expect(P).toMatch(/const nameCol = nameW \? Math\.min\(NAME_CAP, Math\.max\(nameW, tagW\)\) : NAME_CAP;/);

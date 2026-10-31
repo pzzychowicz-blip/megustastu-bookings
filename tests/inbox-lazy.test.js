@@ -16,11 +16,11 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SRC = join(ROOT, "src");
 const DIST = join(ROOT, "dist");
-const read = (p) => stripComments(readFileSync(join(ROOT, p), "utf8")).join("\n");
 
 // String literals that exist only in the lazy screens (a minifier keeps string
 // literals and renames identifiers, so only these can prove an absence).
@@ -49,7 +49,7 @@ function startupChunks() {
 
 describe("the WhatsApp inbox loads only when it is opened", () => {
   it("App reaches the inbox and the photo viewer through lazyChunk, never a static import", () => {
-    const app = read("src/App.jsx");
+    const app = appCode();
     expect(app).not.toMatch(/^import \{ InboxPanel \}/m);
     expect(app).not.toMatch(/^import \{ PhotoViewer \}/m);
     expect(app).toMatch(/const InboxPanel = lazyChunk\(function\(\)\{return import\("\.\/components\/whatsapp\/InboxPanel"\)\.then\(function\(m\)\{return \{default:m\.InboxPanel\};\}\);\}/);

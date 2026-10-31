@@ -18,6 +18,7 @@ import {
 import { trialFits, findTimes, formatSugg, genId, toMins } from "../src/lib/booking-logic.js";
 import { ALL_TABLES, setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
 import { availabilityReply, spokenDay } from "../src/lib/whatsapp.js";
+import { appCode } from "./app-source.js";
 
 const D = "2099-06-15"; // a Monday, far in the future
 const read = (...p) => stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", ...p), "utf8")).join("\n");
@@ -207,7 +208,7 @@ describe("draftPrefill — one rule for Accept and for the waitlist", () => {
     expect(accept).toMatch(/tags: p\.tags,/);
     expect(accept).toMatch(/const time = \(over && over\.time\) \|\| p\.time;/);
     expect(accept).not.toMatch(/matchCustomerByPhone|charAt\(0\)/);
-    const App = read("App.jsx");
+    const App = appCode();
     const wl = App.slice(App.indexOf("function addDraftToWaitlist(conv){"), App.indexOf("function addFormToWaitlist(){"));
     // v18.11.0: the entry is `waitlistEntry`'s, built from the prefill.
     // v18.11.0: with the tag list, so the entry keeps the draft's occasions.

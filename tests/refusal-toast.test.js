@@ -14,6 +14,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { toastBox } from "../src/lib/toast-box.js";
+import { appCode } from "./app-source.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
@@ -24,7 +25,7 @@ const walk = (dir) => readdirSync(dir).flatMap((n) => {
 
 const Layer = read("components/RefusalToast.jsx");
 const Toasts = read("components/StatusToasts.jsx");
-const App = read("App.jsx");
+const App = appCode();
 
 describe("toastBox", () => {
   it("is the anchor's own box, rounded", () => {

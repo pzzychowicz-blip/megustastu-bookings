@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { formatDay, showsYear, localDay, formatDaysIn, todayStr } from "../src/lib/day.js";
 import { formatRelativeTime } from "../src/lib/whatsapp.js";
+import { APP_FILES, appCode } from "./app-source.js";
 
 const REAL_TZ = process.env.TZ;
 function withTZ(tz, fn) {
@@ -249,11 +250,11 @@ describe("every date on screen goes through formatDay", () => {
       if (n) hits.push(f + ":" + n);
     }
     expect(hits).toEqual(["App.jsx:1"]);
-    expect(read("App.jsx")).toMatch(/d\.toLocaleDateString\("en-GB",\{weekday:"long",day:"numeric",month:"long",timeZone:"UTC"\}\)/);
+    expect(appCode()).toMatch(/d\.toLocaleDateString\("en-GB",\{weekday:"long",day:"numeric",month:"long",timeZone:"UTC"\}\)/);
   });
 
   it("no longer builds a dd/mm by hand anywhere", () => {
-    for (const f of ["App.jsx", "components/BookingFormModal.jsx", "components/VoucherCarryModal.jsx"]) {
+    for (const f of [...APP_FILES, "components/BookingFormModal.jsx", "components/VoucherCarryModal.jsx"]) {
       expect(read(f), f).not.toMatch(/slice\(8, ?10\) ?\+ ?"\/"/);
     }
   });

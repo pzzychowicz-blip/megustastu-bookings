@@ -13,6 +13,7 @@ import { phoneForSave, NO_CODE_REFUSAL } from "../src/lib/booking-logic";
 import { draftFromBooking } from "../src/lib/booking-fields";
 import { againDraft, draftForSave, draftRefusal } from "../src/lib/booking-save.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const read = (...p) => stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", ...p), "utf8")).join("\n");
 
@@ -147,7 +148,7 @@ describe("phoneHasCode (v18.2.0 phase 19)", () => {
 });
 
 describe("the booking form asks for the code (v18.2.0 phase 19)", () => {
-  const App = read("src", "App.jsx");
+  const App = appCode();
   const Field = read("src", "components", "PhoneField.jsx");
   const Settings = read("src", "components", "Settings.jsx");
 
@@ -263,7 +264,7 @@ describe("numberCleared — when a found country is forgotten (v18.2.0 phase 52)
 });
 
 describe("where the detection runs (v18.2.0 phase 20)", () => {
-  const App = read("src", "App.jsx");
+  const App = appCode();
   const Field = read("src", "components", "PhoneField.jsx");
   const Form = read("src", "components", "BookingFormModal.jsx");
 
@@ -431,7 +432,7 @@ describe("withTypedCode — the home 0 after any code (v18.3.1)", () => {
 // phone field ("Choose the country code…", aria-invalid, nothing written);
 // "34 600 111 333", pressed the same way, was stored as "+34 600 111 333".
 describe("Add to waitlist takes the phone the way Save does (v18.2.0 phase 80)", () => {
-  const App = read("src", "App.jsx");
+  const App = appCode();
   const add = App.slice(App.indexOf("function addFormToWaitlist(){"), App.indexOf("function addWalkinToWaitlist(){"));
   it("finds a code typed without its plus, then refuses a number that still names no country", () => {
     // v18.3.2: through `phoneForSave`, and never with Save's exemption — the

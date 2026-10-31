@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import * as C from "../src/lib/constants.js";
+import { appCode } from "./app-source.js";
 
 // A date whose weekday runs the default 13–22 (GRID_CLOSE 23). The live
 // bindings are module state, so every test starts from a fresh setActiveDayHours.
@@ -68,7 +69,7 @@ describe("extendActiveGrid", () => {
 describe("the call sites", () => {
   const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
   const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
-  const App = read("App.jsx");
+  const App = appCode();
   const Timeline = read("components/TimelineView.jsx");
   const Plan = read("components/PlanView.jsx");
 

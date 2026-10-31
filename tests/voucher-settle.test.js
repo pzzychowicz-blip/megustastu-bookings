@@ -15,10 +15,11 @@ import { stripComments } from "../scripts/strip-comments.mjs";
 import { planSettle, settleEffects, carryOffer, carryTransform, SETTLE_GONE } from "../src/lib/voucher-settle.js";
 import { normalizeCode, formatCode, remainingOf, attachedElsewhere, carryTarget } from "../src/lib/vouchers.js";
 import { hasRealPhone, matchesIdentity } from "../src/lib/customers.js";
+import { appCode } from "./app-source.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
-const App = read("App.jsx");
+const App = appCode();
 const Modal = read("components/VoucherRedeemModal.jsx");
 
 describe("Settle opens the redeem prompt, not the edit form", () => {

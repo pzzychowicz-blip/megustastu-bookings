@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { READY, DISPATCHED, mayDispatch } from "../src/lib/submitGuard.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // v18.0.0 phase 4: COMMENTS OFF before matching (`a11y.test.js` /
@@ -148,7 +149,7 @@ describe("one open produces at most one create", () => {
 // assertions that fail if the fix is removed from either surface.
 
 describe("the booking form is wired to the guard", () => {
-  const app = src("App.jsx");
+  const app = appCode();
 
   it("doSave consults the guard BEFORE it validates anything", () => {
     const body = app.slice(app.indexOf("function doSave(){"));

@@ -8,6 +8,7 @@ import { SCHEMA, storedSchemaOf, schemaBehind, shouldAnnounce, mayAnnounceFrom, 
   writesBlocked, resetSchemaGate } from "../src/lib/schema.js";
 import { BOOKING_FIELDS } from "../src/lib/booking-fields.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const SRC = fileURLToPath(new URL("../src/", import.meta.url));
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
@@ -104,7 +105,7 @@ describe("the writers ask it", () => {
     expect(H.indexOf("announced.current = true;")).toBeGreaterThan(ask);
     expect(H.indexOf("announced.current = true;")).toBeLessThan(H.indexOf('writeWithRev("schema"'));
     expect(H).toContain('writeWithRev("schema", { v: SCHEMA }, revRef,');
-    const A = read("App.jsx");
+    const A = appCode();
     // /code-review: until `/schema` is read the gate lets every write through.
     // The hook is called before `usePersistence`, so its listener is attached
     // first and the number arrives before the bookings any write needs.

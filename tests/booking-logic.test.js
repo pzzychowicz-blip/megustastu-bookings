@@ -36,6 +36,7 @@ import { setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { draftFromBooking } from "../src/lib/booking-fields.js";
 import { applyEdit, buildBooking, editWindow, keptRefusal, releaseSwapped, pickedRefusal, PICKED_REFUSAL } from "../src/lib/booking-save.js";
+import { APP_FILES, appCode, appSource } from "./app-source.js";
 
 const D = "2099-06-15";      // fixed future date — optimizer always active
 // v17.16.2: same source as the app. Derived with toISOString() this drifted
@@ -478,7 +479,7 @@ describe("canAssign / getBusy / getBlockSlots", () => {
     const files = ["src/lib/booking-logic.js", "src/components/TimelineView.jsx",
       "src/components/PlanView.jsx", "src/components/DaySheet.jsx",
       "src/components/BlockModal.jsx", "src/components/ManualModal.jsx",
-      "src/components/WalkinForm.jsx", "src/App.jsx"];
+      "src/components/WalkinForm.jsx", ...APP_FILES.map((f) => "src/" + f)];
     const offenders = [];
     files.forEach((f) => {
       const src = stripComments(readFileSync(new URL("../" + f, import.meta.url), "utf8")).join("\n");
@@ -1949,7 +1950,7 @@ describe("voucherCode is in all three booking-field lists (v18.0.0)", () => {
 // v18.3.4: `openEdit` opens the field table's draft (`draftFromBooking`), so its
 // site is the voucher row's `draft` seed, and the check is the draft itself.
 describe("a booking field reaches STORAGE, not just a read (v18.0.0)", () => {
-  const APP = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+  const APP = appSource();
 
   // v18.3.4: the three sites (the create, the edit, the draft) are
   // `buildBooking`, `applyEdit` and `draftFromBooking`, so each is run.
@@ -3044,8 +3045,7 @@ describe("keptRefusal — what Save will say about the tables it keeps (v18.3.3)
 // The facts above are only worth having if the save and the preview ASK them,
 // and both are closures this suite does not run, so the wiring is read.
 describe("the save and the preview ask tablesKept (v18.3.2)", () => {
-  const APP = stripComments(
-    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+  const APP = appCode();
   const FORM = stripComments(
     readFileSync(new URL("../src/components/BookingFormModal.jsx", import.meta.url), "utf8")).join("\n");
 
@@ -3118,8 +3118,7 @@ describe("a cleared party must be COMPLETED in what the seat reads (v18.0.0 sess
 
 // The wiring, by source, for the reason the gate above is pinned that way.
 describe("doSave hands the seat a list with the cleared party completed (v18.0.0 session 10)", () => {
-  const APP = stripComments(
-    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+  const APP = appCode();
 
   it("seatAfterClearing records the cleared ids BEFORE it resumes the seat", () => {
     const i = APP.indexOf("clearedSeatsRef.current={ids:ids");
@@ -3164,8 +3163,7 @@ describe("doSave hands the seat a list with the cleared party completed (v18.0.0
 // without locking" affordance is exactly what would remove that quietly, so it
 // is what turns these red.
 describe("`_manual` implies `_locked`, which is what keeps the two previews agreeing", () => {
-  const APP = stripComments(
-    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+  const APP = appCode();
   const MANUAL = stripComments(
     readFileSync(new URL("../src/components/ManualModal.jsx", import.meta.url), "utf8")).join("\n");
   const ASSIGN = stripComments(
@@ -3275,7 +3273,7 @@ describe("pickedRefusal: what Save will say about the tables picked in the form"
   });
 
   // Where it is asked. The sentence exists once, in the lib.
-  const APP = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+  const APP = appCode();
   const FORM = stripComments(readFileSync(new URL("../src/components/BookingFormModal.jsx", import.meta.url), "utf8")).join("\n");
 
   it("Save and the form both ask it, and neither keeps a copy of the check", () => {

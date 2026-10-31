@@ -41,6 +41,7 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist/assets");
@@ -172,7 +173,7 @@ describe("the WhatsApp simulator cannot reach production", () => {
   });
 
   it("App reaches the simulator only through a dynamic import", () => {
-    const app = read("src/App.jsx");
+    const app = appCode();
     expect(app, "a STATIC import puts the simulator in the entry chunk whatever WA_SANDBOX says")
       .not.toMatch(/^import .*from "\.\/lib\/wa-sim(-scenarios)?";$/m);
     expect(app).not.toMatch(/^import \{ WaSimulator \}/m);

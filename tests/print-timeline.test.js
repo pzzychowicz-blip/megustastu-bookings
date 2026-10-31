@@ -8,6 +8,7 @@ import { describe, it, expect, vi } from "vitest";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { PRINT_FILL, spanIn, printRange, PRINT_PAGE_PX, PRINT_BLOCK, fittingFlags } from "../src/lib/print-timeline.js";
 import { onPrintEnd, PRINT_EARLY_MS, printOrReport, PRINT_IGNORED_MS, PRINT_IGNORED_TEXT } from "../src/lib/print-end.js";
+import { appCode } from "./app-source.js";
 
 const raw = (rel) => readFileSync(new URL("../" + rel, import.meta.url), "utf8");
 const code = (rel) => stripComments(raw(rel)).join("\n");
@@ -87,7 +88,7 @@ describe("which sheet prints", () => {
 });
 
 describe("the print call", () => {
-  const app = code("src/App.jsx");
+  const app = appCode();
   const fn = app.slice(app.indexOf("function doPrint(job){"), app.indexOf("const printModal="));
   it("mounts the sheet, stamps the kind, then prints, inside the click", () => {
     const order = ["flushSync(function(){setPrintJob(job);});", 'setAttribute("data-print",job.kind)', "printOrReport(function(){"].map((s) => fn.indexOf(s));
@@ -256,7 +257,7 @@ describe("a print the device ignores is reported", () => {
     });
   });
   it("App prints through it, takes the job down and says the sentence", () => {
-    const app = code("src/App.jsx");
+    const app = appCode();
     const fn = app.slice(app.indexOf("function doPrint(job){"), app.indexOf("const printModal="));
     expect(fn).toMatch(/printOrReport\(function\(\)\{\s*document\.documentElement\.removeAttribute\("data-print"\);setPrintJob\(null\);\s*flashRefusal\(PRINT_IGNORED_TEXT\);\s*\}\);/);
     expect(fn).not.toMatch(/window\.print\(\)/);

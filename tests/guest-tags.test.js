@@ -42,6 +42,7 @@ import {
 import { cleanTagIds, cleanTagEdits, editTagIds, toggleTagEdit, addTag, DEFAULT_TAG_LIST } from "../src/lib/tags.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
 import { addDays, todayStr } from "../src/lib/day.js";
+import { appCode } from "./app-source.js";
 
 afterEach(() => { vi.useRealTimers(); });
 
@@ -615,7 +616,7 @@ describe("a tag tapped on a customer, in Settings → Customers", () => {
 // real in tests/save-path.test.js; the delete and Delete customer are not, so
 // they are read.
 describe("App is wired to it", () => {
-  const app = stripComments(readFileSync(fileURLToPath(new URL("../src/App.jsx", import.meta.url)), "utf8")).join("\n");
+  const app = appCode();
 
   it("Delete customer anonymises through anonymizeBooking, and nothing else in src marks a booking anonymised", () => {
     // v18.6.0: the transform is `planCustomerDelete` (lib/delete-undo.js), and

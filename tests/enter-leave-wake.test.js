@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
@@ -28,7 +29,7 @@ describe("useEnterLeave: a hidden or quiet diff is a replacement", () => {
   });
   it("the timeline passes the catch-up window, and App defines it once for all three consumers", () => {
     expect(read("components/TimelineView.jsx")).toMatch(/\{ speed: "move", quiet: catchingUp \}/);
-    const app = read("App.jsx");
+    const app = appCode();
     expect(app).toMatch(/const catchingUp=reconnectShown\|\|resyncing;/);
     expect(app.match(/catchingUp=\{catchingUp\}/g) || []).toHaveLength(3);
     expect(app).not.toMatch(/catchingUp=\{reconnectShown/);

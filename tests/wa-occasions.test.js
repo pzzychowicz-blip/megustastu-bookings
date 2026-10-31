@@ -20,6 +20,7 @@ import { sanitizeParse, mergeDraft, draftOccasions, occasionIdsIn, requestedOcca
 import { draftPrefill } from "../src/lib/draft-check.js";
 import { DEFAULT_TAG_LIST } from "../src/lib/tags.js";
 import { SCENARIOS } from "../src/lib/wa-sim-scenarios.js";
+import { appCode } from "./app-source.js";
 
 vi.mock("../src/lib/wa-sim", () => ({ simulateInbound: (args, ctx) => ctx && ctx.__capture && ctx.__capture(args) }));
 
@@ -167,7 +168,7 @@ describe("the name rule", () => {
 describe("the tag list reaches the draft card", () => {
   const src = (f) => stripComments(readFileSync(new URL("../src/" + f, import.meta.url), "utf8")).join("\n");
   it("at every link: App, InboxPanel, ConversationView, DraftCard", () => {
-    expect(src("App.jsx")).toMatch(/<InboxPanel[\s\S]*?tagList=\{tagList\}/);
+    expect(appCode()).toMatch(/<InboxPanel[\s\S]*?tagList=\{tagList\}/);
     expect(src("components/whatsapp/InboxPanel.jsx")).toMatch(/<ConversationView[\s\S]*?tagList=\{tagList\}/);
     expect(src("components/whatsapp/ConversationView.jsx")).toMatch(/<DraftCard[\s\S]*?tagList=\{tagList\}/);
     expect(src("components/whatsapp/DraftCard.jsx")).toMatch(/tagLabels\(tagList, "occasion", d\.occasions\)/);

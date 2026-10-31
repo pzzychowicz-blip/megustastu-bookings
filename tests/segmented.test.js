@@ -7,6 +7,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
@@ -45,7 +46,7 @@ describe("one segment look, two users", () => {
 });
 
 describe("the header subtitle (v18.2.0)", () => {
-  const App = read("App.jsx");
+  const App = appCode();
   it("separates its three facts, and ranges with an en dash", () => {
     expect(App).toMatch(/INDOOR\.length\+" indoor · "\+OUTDOOR\.length\+" outdoor · "\+\(dayClosed\?"Closed":hourLabel\(OPEN\)\+"–"\+hourLabel\(CLOSE\)\)/);
   });
@@ -68,6 +69,6 @@ describe("a modal title is a label, not a button (v18.2.0)", () => {
 describe("phase 64 — the switcher keeps its own place", () => {
   it("nothing moves it: the hook is gone and App no longer calls it", () => {
     expect(existsSync(join(SRC, "hooks", "useAlignLeft.js"))).toBe(false);
-    expect(read("App.jsx")).not.toMatch(/useAlignLeft|viewSwitchRef|titleBlockRef/);
+    expect(appCode()).not.toMatch(/useAlignLeft|viewSwitchRef|titleBlockRef/);
   });
 });

@@ -15,6 +15,7 @@ import { phoneForSave, enteredPhone, NO_CODE_REFUSAL } from "../src/lib/booking-
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { knownTagIds, DEFAULT_TAG_LIST } from "../src/lib/tags.js";
+import { appCode } from "./app-source.js";
 
 const P = ["ES", "GB"];
 const PREFIX = "+34";
@@ -150,8 +151,8 @@ describe("the waitlist keeps a party's occasion tags (v18.11.0)", () => {
     expect(hook).toMatch(/const occ=cleanTagIds\(tags\);\s*if\(occ\.length\) entry\.tags=occ;/);
   });
   it("Book opens the form with those the list still has, and the panel names them", () => {
-    expect(src("App.jsx")).toMatch(/tags:knownTagIds\(tagList,"occasion",w\.tags\)/);
-    expect(src("App.jsx")).toMatch(/onBook=\{bookFromWaitlist\}\s*tagList=\{tagList\}/);
+    expect(appCode()).toMatch(/tags:knownTagIds\(tagList,"occasion",w\.tags\)/);
+    expect(appCode()).toMatch(/onBook=\{bookFromWaitlist\}\s*tagList=\{tagList\}/);
     expect(src("components/WaitlistPanel.jsx")).toMatch(/tagLabels\(tagList,"occasion",w\.tags\)/);
     expect(knownTagIds(DEFAULT_TAG_LIST, "occasion", ["o-birthday", "o-gone", "g-vip"])).toEqual(["o-birthday"]);
     expect(knownTagIds(DEFAULT_TAG_LIST, "occasion", undefined)).toEqual([]);

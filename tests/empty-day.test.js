@@ -12,14 +12,10 @@
 // the comment above it names `bookingsReady`, and a raw read would match that.
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
-const APP = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "App.jsx");
 // stripComments returns LINES (comments blanked, line numbers kept).
-const src = stripComments(readFileSync(APP, "utf8")).join("\n");
+const src = appCode();
 
 // The body and dep array of `const isEmptyDay=useMemo(function(){ … },[…]);`
 function isEmptyDayMemo() {

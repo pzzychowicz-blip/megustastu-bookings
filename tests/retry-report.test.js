@@ -15,6 +15,7 @@ import { stripComments } from "../scripts/strip-comments.mjs";
 import { goneRefusal, applyEdit } from "../src/lib/booking-save.js";
 import { replayOutcome, tellDiscarded } from "../src/lib/write-path.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
+import { appCode } from "./app-source.js";
 
 const HOOK = stripComments(
   readFileSync(new URL("../src/hooks/usePersistence.js", import.meta.url), "utf8")).join("\n");
@@ -27,8 +28,7 @@ function body(name, endMarker) {
   return HOOK.slice(start, end);
 }
 const SAVE = body("saveBookings", "function saveBlocks(");
-const APP_SRC = stripComments(
-  readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+const APP_SRC = appCode();
 const DRAIN = body("drainPending", "function resync(");
 
 describe("a queued bookings write keeps its report", () => {
@@ -162,8 +162,7 @@ describe("a rejected write disarms the duplicate-patch window", () => {
 });
 
 // ── A change replayed after its booking was deleted on another device ────────
-const APP = stripComments(
-  readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+const APP = appCode();
 const row = (o) => Object.assign({ id: "a", name: "Rita", date: "2099-06-15", time: "21:00", size: 2, duration: 90, status: "confirmed", tables: ["3"], history: [] }, o);
 
 describe("goneRefusal — the sentence a replay shows for a booking that is gone", () => {
