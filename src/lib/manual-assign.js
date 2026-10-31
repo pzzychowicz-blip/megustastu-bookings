@@ -3,12 +3,14 @@
 // the three side effects (`saveBookings`, closing the picker, the reshuffle
 // flash) and this file keeps the decision, so a test can reach it.
 //
-//   planAssign(ctx) → { transform, reshuffles }
+//   planAssign(ctx) → { transform, reshuffles, done }
 //
 // `transform` is a function of the list, as before: `saveBookings` hands it the
 // fresh `prev`, so a write parked by the stale gate replays on fresh data.
 // `reshuffles` is true when the picker's Swap took tables from another party,
 // which is when the day is re-optimised and App flashes.
+// `done` (v18.14.0, H5) is the sentence the Undo pill carries, in the words a
+// timeline drop uses; `ctx.bookings` is only read for the names in it.
 //
 // `locked` is written as `locked===true` and nothing else. The picker passes the
 // literal true every time, and `_manual` implying `_locked` is what keeps the
@@ -45,7 +47,10 @@ export function planAssign(ctx){
   const bookingId=ctx.bookingId,tables=ctx.tables,locked=ctx.locked,affected=ctx.affected;
   const viewDate=ctx.viewDate,tableBlocks=ctx.tableBlocks,autoOptimizer=ctx.autoOptimizer,user=ctx.user;
   const histEntry=ctx.stamp||defaultHistEntry;
-  return {transform:function(b){
+  const nameOf=function(id){const hit=(ctx.bookings||[]).find(function(x){return x.id===id;});return hit?hit.name:"";};
+  const moved=(affected||[]).map(function(a){return nameOf(a.id);}).filter(Boolean);
+  const done=nameOf(bookingId)+" moved to "+tables.join("+")+(moved.length?" — "+moved.join(", ")+" reassigned.":".");
+  return {done:done,transform:function(b){
     const updated=b.map(function(x){
       if(x.id===bookingId) return Object.assign({},x,{tables:tables,_conflict:false,_manual:true,_locked:locked===true,history:(x.history||[]).concat([histEntry("tables manually assigned: "+tables.join(", "),user)])});
       // If swapping, strip taken tables from affected bookings and unlock them for re-optimization

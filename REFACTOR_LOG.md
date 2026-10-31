@@ -38664,3 +38664,58 @@ That 22px is the cost, and so is the look: open, the Summary reads as two pieces
 default, the only shape that loses the empty area and keeps the lid under the finger.
 
 **Files:** `Summary.jsx`, `App.jsx`, `useSharesLine.js`, `tests/date-row.test.js`.
+
+### H5: Undo on every move, and a warning on the row
+
+A drop, the picker's Assign and Reshuffle could each move several parties, and none could be taken back. A real
+drag onto a busy row moved two other parties, and that row looked exactly like an empty one. All three now arm the
+Undo through `saveMove`, and the row under a dragged block says what the release will do.
+
+**Undo.** Armed in `onLanded`, because a refused write must not offer one. A held write replays on a fresh `prev`,
+so the delta is read inside the transform (`withUndoDelta`, `memoByPrev`, one optimiser pass). The pill outranks
+`dragMsg` and `reshuffled`, so it carries the action's sentence, and nothing is flashed at the dispatch: a toast that
+became the pill a tenth of a second later would flicker. A landing later than the pill would have lasted offers
+nothing. The pill's column went from 360 to 480px and the button no longer wraps under the text.
+
+**The warning.** `dropPreview`, asked once per row through a `VA` wrapper. Free keeps today's blue, a party in the
+way is amber with "Swaps with Lena Brandt" or "Moves Yara, Ariadna", and a drop that will be refused is red with
+the reason. The release goes straight through, as Patryk chose: the words are the warning and Undo is the safety.
+`planDrop`'s first half moved to `dropSite` and its swap to `swapOf`, so the row and the drop read one answer.
+
+**A flaw the evening found.** Written first with no trial at all, the row said "Moves …" and the release refused.
+Past the Optimiser's cutoff nothing re-seats a displaced party, so every such drop is refused, and that is most of a
+service. The morning's drag had gone through, so the scan never saw it. With the Optimiser off the trial is a list
+copy, so `dropPreview` runs the real plan and says "Can't move Yara, Ariadna" in red.
+
+**The gap that stays.** With the Optimiser on, no trial runs, so "Moves …" can still end in a stranding refusal.
+Nothing is written and the toast says why. The approved plan took a cheap preview for this reason: a trial is 70–500ms.
+
+| Reading | Value |
+|---|---|
+| `planDrop` against its pre-refactor copy, 16,000 generated drops | 16,000 identical, written lists included |
+| Same drops, row against release | free → plain 8,238 of 8,238 · swap ↔ swap 120 of 120 · red never went through |
+| Amber "Moves …", Optimiser on | 2,329 moved others · 51 took a lower free set · 214 refused, on dense generated days |
+| Amber "Moves …" refused, Optimiser off | 0, and 534 such rows are now red |
+| Real drop on DEV, 998 × 507 and 570 | "Lena Brandt moved to 1 — Yara Domínguez, Ariadna Puig reassigned." · 3 blocks moved |
+| Its Undo, then a reload | 0 of 17 blocks differ · 0 of 17 |
+| Assign, DEV | "Lena Fischer moved to 5." · 1 moved · Undo 0 differ |
+| Assign with Swap, DEV | "Lena Fischer moved to 3 — Olga Petrova reassigned." · 2 moved · Undo 0 · reload 0 |
+| Reshuffle, with a move fed in by the rig | "Tables re-optimised." · 3 moved · Undo 0 differ |
+| Reshuffle that moves nobody | no pill, the toast as before |
+| Undo pill's text row with that sentence | 72 → 32px |
+| Preview, 3 rows walked | 3 asks, 2.5–4.7ms each on a Mac in DEV |
+| Row tint · words, in and out | 145ms · 240ms, both ways |
+| Words on their tint over the ruler's surface | 4.5:1 or better, both themes, both roles (`tests/contrast.test.js`) |
+
+**What the rig did to DEV.** A simulated Reshuffle matched guests by name across every date, so it also moved Lena
+Fischer on 1 November, and the reconciliation re-placed her on table 4. Her earlier table was not recorded anywhere
+I could read. She is unlocked on a future date, so the optimiser owns her table, and the pass that re-placed her is
+deterministic, but I cannot prove 4 is where she was. Today's three parties are back where they started. Later
+simulations were scoped to the day and to the exact bookings.
+
+**Left as it is, because it is older than this version:** a Reshuffle that moves nobody with the Optimiser off reads
+"Booking saved."
+
+**Files:** `App.jsx`, `drop-plan.js`, `delete-undo.js`, `manual-assign.js`, `TimelineView.jsx`, `StatusToasts.jsx`,
+`tests/drop-plan.test.js`, `tests/delete-undo.test.js`, `tests/manual-assign.test.js`, `tests/retry-report.test.js`,
+`tests/contrast.test.js`.

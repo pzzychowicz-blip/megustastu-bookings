@@ -46,7 +46,7 @@ import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { toMins, toTime, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf } from "../lib/booking-logic";
 import { railFlagsOf } from "./blockFlags";
 import { noShowMap, identityKey, bookingTags, tagLine } from "../lib/customers";
-import { Reveal, useFlip, SizeRing, ModalPresence } from "./atoms";
+import { Reveal, useFlip, SizeRing, ModalPresence, Presence, ALERT_TONES } from "./atoms";
 import { TimelineZoomControls } from "./TimelineZoomControls";
 import { OptimiserControls } from "./OptimiserControls";
 import { useRevealRows } from "../hooks/useRevealRows";
@@ -533,7 +533,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       d.sc.scrollTop = before + next.step;
       if (d.sc.scrollTop === before) { edgeLastRef.current = 0; d.carry = 0; return; }   // at the end
       setDragDy(dragDyOf(d));
-      if (setDragHover) setDragHover(tableAtY(d.lastY));
+      if (setDragHover) setDragHover(tableAtY(d.lastY), b.id, homeTable);
     }
     edgeRafRef.current = requestAnimationFrame(edgeFrame);
   }
@@ -619,7 +619,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       const dd = dragRef.current;
       if (!dd || !dd.active) return;
       setDragDy(dragDyOf(dd));
-      if (setDragHover) setDragHover(tableAtY(dd.lastY));
+      if (setDragHover) setDragHover(tableAtY(dd.lastY), b.id, homeTable);
     });
   }
   function endDrag(e, commit) {
@@ -1063,6 +1063,39 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   );
 }
 
+// ── DropHint — v18.14.0 (H5): the row says what the release will do ──────────
+// Sits at the row's left end and stays there as the row scrolls, and above the
+// dragged block (30), which would otherwise cover it whenever a party starts at
+// the left of the view. `aria-hidden` because a drag is pointer-only, and the
+// toast that follows the release is the announced result.
+//
+// The ruler's opaque surface under the role's tint, with the role's border as
+// the edge: the row wears the same tint, so the tint alone would leave the words
+// floating on it, and a tint over a block is unreadable.
+function hintRole(hint) {
+  return !hint || !hint.text ? null : hint.tone === "danger" ? ALERT_TONES.danger : ALERT_TONES.warn;
+}
+function DropHint({ hint, sz }) {
+  const role = hintRole(hint);
+  return (
+    <Presence
+      show={!!role}
+      inClass="mgt-appear"
+      outClass="mgt-ghost-out"
+      style={{ position: "sticky", left: SP.snug, zIndex: 31, width: "fit-content", maxWidth: "100%", height: "100%", display: "flex", alignItems: "center", pointerEvents: "none" }}
+    >
+      {role ? (
+        <div aria-hidden="true" style={{
+          padding: "4px 8px", borderRadius: R.pill, whiteSpace: "nowrap",
+          fontSize: sz.legend, fontWeight: FW.semi, color: role.tone,
+          background: "linear-gradient(" + role.tint + ", " + role.tint + "), var(--tl-ruler-bg)",
+          border: "1px solid " + (hint.tone === "danger" ? "var(--danger-border)" : "var(--warn-border)")
+        }}>{hint.text}</div>
+      ) : null}
+    </Presence>
+  );
+}
+
 // ── GridLines / BlockBar — hoisted to module scope (v17.1.0 perf) ────────────
 // These were inline components inside TimelineView, which made React see a NEW
 // component TYPE every render — so their entire subtrees (≈40 grid-line divs ×
@@ -1445,6 +1478,7 @@ export const TimelineView = memo(function TimelineView({
   setAutoOptimizer = () => {},
   currency = "€", // v17.0.0: settings/general deposit marker
   onDropOnTable = null, // v17.0.0 correction: drag&drop move/swap handler (App)
+  onDropPreview = null, // v18.14.0 (H5): what a drop on a row would do (App's previewDrop)
   onReshuffle = () => {},
   // v17.6.0: separation between bookings, in minutes (0 = feature off). A SCALAR
   // from App rather than the TURN_BUFFER live binding, because React.memo cannot
@@ -1490,6 +1524,19 @@ export const TimelineView = memo(function TimelineView({
   function handOffQuick() { setQuickHandoff(true); setQuickStatus(null); }
   // v17.0.0 correction: the table row a drag currently hovers (highlight).
   const [dragHover, setDragHover] = useState(null);
+  // v18.14.0 (H5): the booking dragged over that row, null over its own row,
+  // which is no target. Two plain values rather than one object: a block reports
+  // every frame, and a value that has not moved must not re-render the grid.
+  const [dragOver, setDragOver] = useState(null);
+  function hoverRow(table, id, home) {
+    setDragHover(table);
+    setDragOver(table == null || table === home ? null : id);
+  }
+  // Asked once per row, not per pointer frame: it changes with the row, and with
+  // nothing else, for as long as the finger stays on one.
+  const dropHint = useMemo(() => (
+    dragHover != null && dragOver != null && onDropPreview ? onDropPreview(dragOver, dragHover) : null
+  ), [dragHover, dragOver, onDropPreview]);
   const isToday = date === today;
   const totalMins = (GRID_CLOSE - OPEN) * 60;
   const gridW = Math.max(320, totalMins * zoom * 1.2);
@@ -2140,7 +2187,7 @@ export const TimelineView = memo(function TimelineView({
       <Fragment key={b.id}>
         {tail}
         {ghost}
-        <TimelineBlock sz={sz} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />
+        <TimelineBlock sz={sz} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={hoverRow} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />
       </Fragment>
     );
   }
@@ -2155,11 +2202,14 @@ export const TimelineView = memo(function TimelineView({
         style={{
           height: sz.rowH + "px", position: "relative",
           borderBottom: "2px solid var(--tl-row-border)",
-          boxSizing: "border-box", transition: "height " + M.shift,
-          // drag&drop target highlight (subtle accent tint while hovered)
-          background: dragHover === id ? "var(--bg-ac-hover)" : undefined
+          boxSizing: "border-box", transition: "height " + M.shift + ", background-color " + M.tap,
+          // drag&drop target highlight (subtle accent tint while hovered).
+          // v18.14.0 (H5): amber when the drop would move somebody, red when it
+          // would be refused, so a busy row no longer looks like an empty one.
+          backgroundColor: dragHover !== id ? undefined : hintRole(dropHint) ? hintRole(dropHint).tint : "var(--bg-ac-hover)"
         }}
       >
+        <DropHint hint={dragHover === id ? dropHint : null} sz={sz} />
         <GridLines />
         {tblBlocks.map((bl, i) => <BlockBar key={"blk" + i} bl={bl} totalMins={totalMins} sz={sz} />)}
         {/* v17.8.0: waitlist ghosts — rendered BEFORE the real blocks so a live
@@ -2230,7 +2280,7 @@ export const TimelineView = memo(function TimelineView({
       <div style={unplacedEdge}>{unplacedLine}<GridLines /></div>
       {Array.from({ length: heldLanes }, (_, li) => unplacedLanes[li] || []).map((lane, li) => (
         <div key={"ul" + li} style={{ height: sz.rowH + "px", position: "relative", boxSizing: "border-box", transition: "height " + M.shift }}>
-          {lane.map((b) => <TimelineBlock sz={sz} key={b.id} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />)}
+          {lane.map((b) => <TimelineBlock sz={sz} key={b.id} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={hoverRow} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />)}
           {/* v18.3.0 (O1): a booking that left while in THIS lane. v18.3.2
               (O4): a lane the row is easing away from is still drawn, so the
               last booking leaving it fades there while the row shrinks. */}

@@ -208,22 +208,25 @@ describe("every single-booking write in App hands saveBookings the report", () =
     // v18.5.1 (#17): reassign hands over `planReassign`'s transform too, told
     // apart by the error it clears on the next line.
     ["reassign", /saveBookings\(plan\.transform,false,goneReport\(id\)\);\s+setError\(""\);/],
-    ["the timeline drop", "saveBookings(plan.transform,false,goneReport(id))"],
+    // v18.14.0 (H5): a drop, the picker's Save and Reshuffle write through
+    // `saveMove`, which carries the report for the two with a subject.
+    ["a move", "saveBookings(move.transform,false,Object.assign(id==null?{}:goneReport(id),{onLanded:"],
+    ["the timeline drop", 'saveMove(plan.transform,id,"move",plan.done,'],
     // v18.5.0 (#17): the status tap and the cancel both hand over a plan's
     // transform, so each is told apart by the line beside the call.
     ["a status change", /saveBookings\(plan\.transform,false,goneReport\(id\)\);\s+if\(ok&&plan\.flashes\)/],
     ["the voucher carry", "saveBookings(carryTransform(c,getUser(),histEntry),false,goneReport(c.to));"],
     ["cancel and no-show", /const post=plan\.transform\(bookings\);\s+const ok=saveBookings\(plan\.transform,false,goneReport\(id\)\);\s+wa\.autoHandleCancelIntent/],
-    ["manual assign", "saveBookings(plan.transform,false,goneReport(bookingId))"],
+    ["manual assign", 'saveMove(plan.transform,bookingId,"assign",plan.done,'],
   ];
   WITH.forEach(([what, code]) => it(what, () => (
     typeof code === "string" ? expect(APP).toContain(code) : expect(APP).toMatch(code))));
   it("goneReport is goneRefusal on the list the action was taken on", () => {
     expect(APP).toContain("function goneReport(id){return {subject:id,replayRefusal:goneRefusal(id,bookings)};}");
   });
-  it("and the rest are decided: 18 calls, 7 with it, 1 with onLanded", () => {
+  it("and the rest are decided: 16 calls, 6 of them with the report", () => {
     // Without: reconciliation and recurring generation (silent, never
-    // queued), delete customer and force reshuffle (many bookings), delete
+    // queued), delete customer (many bookings), delete
     // (a booking already gone is the delete done), complete-and-seat's first
     // write (several parties), undo (it puts bookings back), add / remove
     // block (the day, not a booking). The new booking carries `onLanded`.
@@ -231,8 +234,8 @@ describe("every single-booking write in App hands saveBookings the report", () =
     // customer, not a booking: which booking holds the statement is decided
     // inside the transform (`customerTagTap`), and a replay that finds the
     // customer gone writes nothing (`setCustomerTags` returns `prev`).
-    expect(calls.length).toBe(18);
-    expect((APP.match(/goneReport\(/g) || []).length - 1, "uses, less the declaration").toBe(6);
+    expect(calls.length).toBe(16);
+    expect((APP.match(/goneReport\(/g) || []).length - 1, "uses, less the declaration").toBe(5);
   });
 });
 

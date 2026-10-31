@@ -1695,6 +1695,25 @@ shows its time.**
 - **A typed 60-minute booking at 1×** (about 79px) has less room than the chip, which
   is cut at the handle rather than dropped. It is the one place a time is cut.
 
+### The row warning (v18.14.0)
+The row under a dragged block says what the release will do. A busy row used to look
+exactly like an empty one, and a drop there moved two other parties.
+
+- **Blue, amber, red.** Blue is free, `--bg-ac-hover` as it always was. Amber is
+  `ALERT_TONES.warn`: the drop goes through and moves somebody. Red is
+  `ALERT_TONES.danger`: it will be refused. The tint is on the row and the words are
+  in a pill at the row's left end, in `sz.legend`, so Larger text carries them.
+- **The pill is the role's tint over the ruler's opaque surface**, with the role's
+  border as its edge. The row wears the same tint, so a tint alone would leave the
+  words floating, and a tint over a block is unreadable. Measured in
+  `tests/contrast.test.js`, because that surface is not the registry's `BASE`.
+- **Above the dragged block**, z 31 to its 30, because a party that starts at the
+  left of the view would otherwise cover its own warning. Sticky, so it stays in view
+  at any zoom.
+- **It never stops the drop.** Patryk chose straight through: the words are the
+  warning and Undo is the safety. The tint eases on `M.tap` and the words fade on
+  `--t-move`, both ways.
+
 ### Larger text (v18.14.0)
 A switch in Settings → App for the person on the pass who struggles with small text.
 It is this device's, like zoom: it answers one screen at one distance, so a phone must

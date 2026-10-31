@@ -10,7 +10,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { planDrop } from "../src/lib/drop-plan.js";
+import { planDrop, dropPreview } from "../src/lib/drop-plan.js";
 import { releaseSwapped } from "../src/lib/booking-save.js";
 import { ALL_TABLES } from "../src/lib/constants.js";
 import { comboCapBest } from "../src/lib/booking-logic.js";
@@ -147,18 +147,185 @@ describe("planDrop: which list it reads", () => {
   });
 });
 
+// v18.14.0 (H5): what the row says before the release. Measured against
+// `planDrop` over 16,000 generated drops when it was written, with the old
+// `planDrop` alongside (REFACTOR_LOG); the short version of that stays below.
+describe("dropPreview: the row under a dragged block", () => {
+  const see = (list, id, targetId, more) => dropPreview(Object.assign(
+    { id, targetId, liveBookings: list, viewDate: D, nowMins: 19 * 60, today: TODAY, tableBlocks: [] }, more || {}));
+
+  it("nothing to say for the party's own row, or a party that does not move", () => {
+    expect(see([bk("a", "13:00", 2, ["3"])], "a", "3")).toBe(null);
+    expect(see([bk("a", "13:00", 2, ["3"], { status: "cancelled" })], "a", "4")).toBe(null);
+  });
+  it("a free table keeps today's blue, with no words", () => {
+    expect(see([bk("a", "13:00", 2, ["3"])], "a", "4")).toEqual({ tone: "free" });
+  });
+  it("one party that can trade tables is a swap, by full name", () => {
+    const hint = see([bk("a", "13:00", 2, ["3"]), bk("b", "13:00", 2, ["4"], { name: "Lena Brandt" })], "a", "4");
+    expect(hint).toEqual({ tone: "warn", text: "Swaps with Lena Brandt" });
+  });
+  it("parties it would move are named by first name, three at most", () => {
+    const list = [
+      bk("a", "13:00", 2, ["6"], { duration: 360 }),
+      bk("b", "13:00", 2, ["7"], { name: "Yara Domínguez", duration: 60 }),
+      bk("c", "14:30", 2, ["7"], { name: "Ariadna Puig", duration: 60 }),
+    ];
+    expect(see(list, "a", "7")).toEqual({ tone: "warn", text: "Moves Yara, Ariadna" });
+    const crowd = list.concat([
+      bk("d", "16:00", 2, ["7"], { name: "Teo Vargas", duration: 60 }),
+      bk("e", "17:30", 2, ["7"], { name: "Emil Kovacs", duration: 60 }),
+    ]);
+    expect(see(crowd, "a", "7")).toEqual({ tone: "warn", text: "Moves Yara, Ariadna, Teo +1" });
+  });
+  it("a seated party says so, in red, where the drop will be refused", () => {
+    const list = [bk("a", "13:00", 2, ["3"]), bk("b", "13:00", 2, ["4"], { name: "Yara Domínguez", status: "seated" })];
+    expect(see(list, "a", "4")).toEqual({ tone: "danger", text: "Yara is seated here" });
+    expect(drop(list, "a", "4").refuse).toMatch(/is seated on/);
+  });
+  // Measured on DEV in the evening: a drag that had gone through that morning was
+  // refused, under a row that still said "Moves …". Past the cutoff nothing
+  // re-seats a displaced party, and that is most of a service.
+  it("with the Optimiser off, a party with nowhere to go is red, because the drop will be refused", () => {
+    const list = [
+      Object.assign(bk("a", "13:00", 2, ["6"], { duration: 360 }), { date: TODAY }),
+      Object.assign(bk("b", "13:00", 2, ["7"], { name: "Yara Domínguez", duration: 60 }), { date: TODAY }),
+      Object.assign(bk("c", "14:30", 2, ["7"], { name: "Ariadna Puig", duration: 60 }), { date: TODAY }),
+    ];
+    const off = { viewDate: TODAY, autoOptimizer: false, bookings: list, user: "u@x" };
+    expect(drop(list, "a", "7", off).refuse).toMatch(/stranding/);
+    expect(see(list, "a", "7", off)).toEqual({ tone: "danger", text: "Can't move Yara, Ariadna" });
+  });
+  it("with the Optimiser off, a swap is still a swap: it needs nobody re-seated", () => {
+    const list = [
+      Object.assign(bk("a", "13:00", 2, ["3"]), { date: TODAY }),
+      Object.assign(bk("b", "13:00", 2, ["4"], { name: "Lena Brandt" }), { date: TODAY }),
+    ];
+    const off = { viewDate: TODAY, autoOptimizer: false, bookings: list, user: "u@x" };
+    expect(see(list, "a", "4", off)).toEqual({ tone: "warn", text: "Swaps with Lena Brandt" });
+  });
+  it("every other refusal the drop would make is the row's own words, in red", () => {
+    const list = [bk("a", "13:00", 2, ["3"])];
+    const blocks = [{ id: "x", tableId: "4", date: D, allDay: true }];
+    const hint = see(list, "a", "4", { tableBlocks: blocks });
+    expect(hint).toEqual({ tone: "danger", text: drop(list, "a", "4", { tableBlocks: blocks }).refuse });
+  });
+  it("with the Optimiser on, no trial runs: it never reads the stored list", () => {
+    const list = [bk("a", "13:00", 2, ["6"], { duration: 360 }), bk("b", "13:00", 2, ["7"], { name: "Yara Domínguez", duration: 60 }), bk("c", "14:30", 2, ["7"], { name: "Ariadna Puig", duration: 60 })];
+    expect(see(list, "a", "7", { bookings: null, autoOptimizer: true })).toEqual({ tone: "warn", text: "Moves Yara, Ariadna" });
+  });
+
+  // The whole contract, on days dense enough to reach every branch. The seed is
+  // fixed, so a failure here reproduces.
+  it("agrees with the drop: free is plain, a swap is a swap, red is refused", () => {
+    const ids = ALL_TABLES.map((t) => t.id);
+    let x = 7919;
+    const r = () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; };
+    const pick = (a) => a[Math.floor(r() * a.length)];
+    const hits = { free: 0, swap: 0, moves: 0, red: 0 };
+    for (let day = 0; day < 160; day++) {
+      // Every second day is today with the Optimiser off, where the row is exact.
+      const off = day % 2 === 1;
+      const more = Object.assign({ nowMins: 600 }, off ? { viewDate: TODAY, autoOptimizer: false } : { autoOptimizer: true });
+      const list = Array.from({ length: 2 + Math.floor(r() * 14) }, (_, i) => Object.assign(bk("b" + i,
+        String(13 + Math.floor(r() * 8)).padStart(2, "0") + ":" + pick(["00", "15", "30", "45"]),
+        1 + Math.floor(r() * 8), r() < 0.1 ? [] : [pick(ids)],
+        { name: "Name" + i + " Sur", status: pick(["confirmed", "confirmed", "confirmed", "pending", "seated", "completed"]), duration: 90 + Math.floor(r() * 4) * 15 }), off ? { date: TODAY } : null));
+      for (let d = 0; d < 4; d++) {
+        const ctx = { id: pick(list).id, targetId: pick(ids) };
+        const plan = drop(list, ctx.id, ctx.targetId, more);
+        const hint = see(list, ctx.id, ctx.targetId, Object.assign({ bookings: list, user: "u@x" }, more));
+        expect(hint === null).toBe(plan === null);
+        if (!hint) continue;
+        if (hint.tone === "free") { hits.free++; expect(plan.done).toMatch(/ moved to [^—]*\.$/); }
+        if (hint.tone === "danger") { hits.red++; expect(plan.refuse).toBeTruthy(); }
+        if (/^Swaps/.test(hint.text)) { hits.swap++; expect(plan.done).toMatch(/tables swapped/); }
+        if (/^Moves/.test(hint.text)) {
+          hits.moves++;
+          // The one gap, Optimiser on only: no trial, so the release can take a
+          // lower set or strand. Off, the row ran the real plan.
+          if (off) expect(plan.done).toMatch(/moved to/);
+          else expect(plan.refuse || plan.done).toMatch(/moved to|stranding/);
+        }
+      }
+    }
+    for (const [k, n] of Object.entries(hits)) expect(n, k + " was never reached").toBeGreaterThan(0);
+  });
+});
+
 describe("BookingApp's dropOnTable", () => {
   const App = appCode();
-  const fn = App.slice(App.indexOf("function dropOnTable("), App.indexOf("function requestDelete("));
+  const fn = App.slice(App.indexOf("function dropOnTable("), App.indexOf("function previewDrop("));
 
   it("is the gate, the plan and the two side effects, and nothing else", () => {
     expect(fn).toMatch(/^function dropOnTable\(id,targetId\)\{if\(refused\("bookingAssign"\)\)return;/);
     expect(fn).toMatch(/planDrop\(\{/);
     expect(fn).toMatch(/liveBookings:liveBookings,bookings:bookings,/);
-    // The success toast is gated on the save's boolean (v15.4.0): a refused
-    // write is never shown as a move.
-    expect(fn).toContain("if(saveBookings(plan.transform,false,goneReport(id))) flashDragMsg(plan.done,true);");
+    // v18.14.0 (H5): the sentence comes when the write LANDS, on the Undo pill,
+    // so a refused write is never shown as a move (the v15.4.0 rule, tighter).
+    expect(fn).toContain('saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);});');
     expect(fn.split("\n").length).toBeLessThan(12);
+  });
+});
+
+// v18.14.0 (H5): the one place a move arms its Undo.
+describe("BookingApp's saveMove", () => {
+  const App = appCode();
+  const flat = App.replace(/\s+/g, "");
+  const fn = App.slice(App.indexOf("function saveMove("), App.indexOf("function dropOnTable("));
+
+  it("reads the delta inside the transform, and arms only when the write lands", () => {
+    expect(fn).toContain("withUndoDelta(transform,undoDelta)");
+    expect(fn).toContain("saveBookings(move.transform,false,");
+    expect(fn).toMatch(/onLanded:function\(\)\{/);
+    const landed = fn.slice(fn.indexOf("onLanded"));
+    expect(landed).toContain("const delta=move.delta();");
+    expect(landed).toContain("armUndo(delta,id,kind,false,sentence);");
+    expect(fn.slice(0, fn.indexOf("onLanded")), "nothing is armed at the dispatch").not.toContain("armUndo(");
+  });
+  it("a write that moved nobody still answers the press, and a late landing offers nothing", () => {
+    expect(fn).toContain("if(!delta.length){if(quiet)quiet();return;}");
+    expect(fn).toContain("if(move.age()<=(generalSettings.undoSecs||10)*1000) armUndo(");
+  });
+  it("keeps the deleted-elsewhere report, and a reshuffle has no subject", () => {
+    expect(fn).toContain("Object.assign(id==null?{}:goneReport(id),{onLanded:");
+  });
+  it("carries all three kinds of move", () => {
+    expect(flat).toContain('saveMove(plan.transform,id,"move",plan.done,');
+    expect(flat).toContain('saveMove(plan.transform,bookingId,"assign",plan.done,');
+    expect(flat).toContain('saveMove(function(b){returnapplyOpt(b,viewDate,tableBlocks);},null,"reshuffle","Tablesre-optimised.",flash);');
+  });
+  it("a sentence replaces the pill's label and leaves its note empty", () => {
+    expect(flat).toContain('note:label?"":note,label:label||""');
+    const toasts = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "StatusToasts.jsx"), "utf8")).join("\n");
+    expect(toasts).toContain('!undoInfo?"":undoInfo.label?undoInfo.label:undoInfo.noShow?');
+  });
+  it("the preview goes through a stable wrapper and the same capability", () => {
+    expect(flat).toContain("onDropPreview:function(id,targetId){returnR.current.previewDrop(id,targetId);}");
+    expect(flat).toContain('functionpreviewDrop(id,targetId){if(!can("bookingAssign"))returnnull;');
+  });
+});
+
+describe("TimelineView asks once per row", () => {
+  const View = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "TimelineView.jsx"), "utf8")).join("\n");
+
+  it("derives the hint from the row and the booking alone, not from a pointer frame", () => {
+    expect(View).toMatch(/const dropHint = useMemo\(\(\) => \([\s\S]*?onDropPreview\(dragOver, dragHover\)[\s\S]*?\), \[dragHover, dragOver, onDropPreview\]\);/);
+  });
+  it("keeps hover in two plain values, because a block reports every frame", () => {
+    expect(View).toContain("setDragHover(table);");
+    expect(View).toContain("setDragOver(table == null || table === home ? null : id);");
+    expect((View.match(/setDragHover\(tableAtY\([a-z.]+lastY\), b\.id, homeTable\)/g) || []).length).toBe(2);
+    expect((View.match(/setDragHover=\{hoverRow\}/g) || []).length).toBe(2);
+  });
+  it("tints only the hovered row, and the tint eases both ways", () => {
+    expect(View).toContain('backgroundColor: dragHover !== id ? undefined : hintRole(dropHint) ? hintRole(dropHint).tint : "var(--bg-ac-hover)"');
+    expect(View).toContain('transition: "height " + M.shift + ", background-color " + M.tap,');
+    expect(View).toContain("<DropHint hint={dragHover === id ? dropHint : null} sz={sz} />");
+  });
+  it("the words sit above a dragged block, which is at 30", () => {
+    expect(View).toMatch(/position: "sticky", left: SP\.snug, zIndex: 31,/);
+    expect(View).toMatch(/fontSize: sz\.legend,/);
   });
 });
 

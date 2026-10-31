@@ -724,6 +724,23 @@ describe("fill/ink contrast — every text-bearing fill, both themes, at rest an
   }
 });
 
+// v18.14.0 (H5): the words on a row under a dragged block. The pill is its role's
+// tint over the ruler's opaque surface, because the row under it wears the same
+// tint and a tint alone would float. The surface is the point of the test: over
+// BASE these two read like the registry's panes, and they are not on BASE.
+describe("the drop hint on its row", () => {
+  for (const theme of ["light", "dark"]) {
+    for (const role of ["warn", "danger"]) {
+      it(`--${role}-text on its tint over the ruler's surface reads in ${theme}`, () => {
+        const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+        const pane = over(parse(vars[`--${role}-bg`]), parse(vars["--tl-ruler-bg"]));
+        const got = +ratio(parse(vars[`--${role}-text`]), pane).toFixed(2);
+        expect(got, `the drop hint, ${role}, in ${theme}: ${got}:1`).toBeGreaterThanOrEqual(NEED.label);
+      });
+    }
+  }
+});
+
 describe("registry coverage", () => {
   // The guard for the NEXT fill, not this batch. The failure mode was never a
   // wrong number someone typed — it was a token added to :root, assumed to work

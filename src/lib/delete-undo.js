@@ -62,11 +62,34 @@ export function planDelete(ctx){
   return {skip:skip,transform:memoByPrev(delTransform)};
 }
 
+// ── withUndoDelta ────────────────────────────────────────────────────────────
+// v18.14.0 (H5). A move's Undo is armed when its write LANDS, and a write held by
+// the stale gate replays on a fresh `prev`, so what it moved can only be read
+// inside the transform, on the list it really ran on. `memoByPrev` keeps that to
+// one optimiser pass per list, as `planDelete` does.
+// → {transform, delta(), age()}   `delta` answers for the transform's latest run;
+//   `age` is the ms since this was made, for a landing too late to offer an Undo.
+export function withUndoDelta(transform,deltaOf){
+  const at=Date.now();
+  let delta=[];
+  return {
+    transform:memoByPrev(function(prev){const post=transform(prev);delta=deltaOf(prev,post);return post;}),
+    delta:function(){return delta;},
+    age:function(){return Date.now()-at;},
+  };
+}
+
 // ── planUndo ─────────────────────────────────────────────────────────────────
 // v17.4.0 — GENERAL undo: one pending snapshot set ({snapshots, primaryId,
 // kind: "cancel"|"delete"|"edit"}) and one restore. The exists?map:concat shape
 // of `applyUndo` covers all three kinds (delete → the booking is gone from prev
 // → it is re-added; cancel/edit → the snapshot is swapped back in).
+//
+// v18.14.0 (H5): three more kinds, "move" (a timeline drop), "assign" (the table
+// picker's Save) and "reshuffle". The same restore covers them, and every party
+// the action moved is in the snapshots, so the floor goes back as it stood. A
+// reshuffle has no primaryId: nobody was acted on, so no history entry is
+// written, the same symmetry as the others below.
 //
 // SCOPE (deliberate, v17.4.0): undo restores THE SNAPSHOTTED BOOKINGS ONLY, and
 // VERBATIM — deliberately NOT through bookingsAfterAction. Its optimiser branch
@@ -82,12 +105,13 @@ export function planDelete(ctx){
 // → null                     nothing to undo
 // → {date, transform}        `date` is the acted-on booking's, which App
 //                            navigates to once the write is dispatched.
+const UNDO_NOTES={delete:"deletion undone",edit:"edit undone",move:"move undone",assign:"table change undone"};
 export function planUndo(ctx){
   const info=ctx.info,nowMins=ctx.nowMins;
   const histEntry=ctx.stamp||defaultHistEntry;
   if(!info||!info.snapshots||!info.snapshots.length) return null;
   const user=ctx.getUser();
-  const note=info.kind==="delete"?"deletion undone":info.kind==="edit"?"edit undone":"cancellation undone";
+  const note=UNDO_NOTES[info.kind]||"cancellation undone";
   const primary=info.snapshots.find(function(s2){return s2.id===info.primaryId;})||info.snapshots[0];
   return {date:primary.date,transform:function(b){
     // Only the booking the user acted on gets a history entry — the others

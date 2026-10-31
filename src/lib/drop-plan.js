@@ -10,7 +10,12 @@
 //                                         booking, or dropped on its own row)
 //                 | { refuse }            the toast's text; nothing is written
 //                 | { transform, done }   `saveBookings(transform)`, and `done`
-//                                         is the toast when that returns true
+//                                         is the sentence the Undo pill carries
+//                                         when that lands (v18.14.0)
+//
+//   dropPreview(ctx) → null | { tone, text }   v18.14.0 (H5): what the row under
+//                                         a dragged block says before the
+//                                         release. See it below.
 //
 // `transform` is a function of the list, as before: `saveBookings` hands it the
 // fresh `prev`, so a write parked by the stale gate replays on fresh data.
@@ -42,15 +47,20 @@ import { ALL_TABLES } from "./constants.js";
 import {
   isActive, toMins, occupancyEnd, getBlockSlots, getBusy, overlaps,
   rankCombosContaining, comboExistsFor, comboCapBest, canAssign,
-  bookingsAfterAction, histEntry as defaultHistEntry,
+  bookingsAfterAction, optimizerActiveFor, histEntry as defaultHistEntry,
 } from "./booking-logic.js";
 import { releaseSwapped } from "./booking-save.js";
 
-export function planDrop(ctx){
-  const id=ctx.id,targetId=ctx.targetId,liveBookings=ctx.liveBookings,bookings=ctx.bookings;
+// ── dropSite: what stands at the target ──────────────────────────────────────
+// v18.14.0 (H5): the first half of `planDrop`, moved up here unchanged, so the
+// warning on the row and the drop it warns about read one answer to "who is in
+// the way". No trial runs in here, which is what makes it cheap enough to ask
+// during a drag.
+// → null | {refuse} | {src,cur,size,s,e,blockSlots,dayActive,candSets,occOf,desired,occ}
+function dropSite(ctx){
+  const id=ctx.id,targetId=ctx.targetId,liveBookings=ctx.liveBookings;
   const viewDate=ctx.viewDate,nowMins=ctx.nowMins,today=ctx.today;
-  const tableBlocks=ctx.tableBlocks,autoOptimizer=ctx.autoOptimizer,user=ctx.user;
-  const histEntry=ctx.stamp||defaultHistEntry;
+  const tableBlocks=ctx.tableBlocks;
   const src=liveBookings.find(function(b){return b.id===id;});
   if(!src||src.date!==viewDate||!isActive(src)) return null;
   const cur=src.tables||[];
@@ -99,7 +109,80 @@ export function planDrop(ctx){
   }
   const occOf=function(set){return dayActive.filter(function(b){return isOver(b)&&(b.tables||[]).some(function(t){return set.includes(t);});});};
   const desired=candSets[0];
-  const occ=occOf(desired);
+  return {src:src,cur:cur,size:size,s:s,e:e,blockSlots:blockSlots,dayActive:dayActive,candSets:candSets,occOf:occOf,desired:desired,occ:occOf(desired)};
+}
+
+// ── swapOf: step 3's question ────────────────────────────────────────────────
+// Can the one party in the way simply trade tables with the dragged one? Also
+// cheap: capacity both ways and two `canAssign`s.
+// → null | {other,newSrc,newOther}
+function swapOf(site,nowMins,today){
+  const cur=site.cur,size=site.size,s=site.s,e=site.e,occ=site.occ;
+  if(!(occ.length===1&&cur.length>0&&occ[0].status!=="seated")) return null;
+  const other=occ[0];
+  const newSrc=(other.tables||[]).slice(),newOther=cur.slice();
+  const otherSize=other.size||2;
+  if(!(comboCapBest(newSrc)>=size&&comboCapBest(newOther)>=otherSize)) return null;
+  const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins,today),os+1);
+  const slots=site.dayActive.filter(function(b){return b.id!==other.id&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};}).concat(site.blockSlots);
+  if(!(canAssign(newSrc,slots,s,e)&&canAssign(newOther,slots.concat([{tables:newSrc,s:s,e:e}]),os,oe))) return null;
+  return {other:other,newSrc:newSrc,newOther:newOther};
+}
+
+// ── dropPreview ──────────────────────────────────────────────────────────────
+// v18.14.0 (H5): a dragged party could land on a row that moved two other
+// parties, and that row looked exactly like an empty one. The row now says what
+// the release will do, before it happens, and the release still goes straight
+// through (Patryk): Undo is the safety, the words are the warning.
+//
+//   null                  no target here: its own row, or not a booking that moves
+//   {tone:"free"}         nobody in the way; the row keeps its blue
+//   {tone:"warn",text}    the drop goes through and moves somebody else
+//   {tone:"danger",text}  the drop will be refused, and this is why
+//
+// **With the Optimiser OFF it is exact, and that is most of a service.** Nothing
+// re-seats a displaced party past the cutoff (`computeAfterAction`'s OFF path
+// keeps everyone's tables), so a drop that would displace somebody is refused
+// unless it is a swap. The trial is a copy of the list there, cheap enough to
+// run for real, so the row says "Can't move …" in red. Written first without
+// this, the row said "Moves …" over every one of those refusals; DEV's evening
+// found it, where the same drag had gone through that morning.
+//
+// **With the Optimiser ON it has one known gap.** `planDrop` walks up to 8
+// candidates with a full optimiser trial each (70–500ms on a bad day), far too
+// heavy for a drag, so "Moves …" reads the FIRST candidate and no trial runs.
+// Where that trial would strand somebody, the release takes a lower candidate or
+// refuses with its toast, and nothing is written. Nothing else can differ: a free
+// row is always a plain move, a swap is always a swap and a red row is always
+// refused, which `tests/drop-plan.test.js` holds over generated days.
+const MAX_NAMES=3;
+function firstName(name){return String(name||"").trim().split(/\s+/)[0]||"A party";}
+export function dropPreview(ctx){
+  const site=dropSite(ctx);
+  if(!site) return null;
+  if(site.refuse) return {tone:"danger",text:site.refuse};
+  const occ=site.occ;
+  if(occ.length===0) return {tone:"free"};
+  const seated=occ.find(function(b){return b.status==="seated";});
+  if(seated) return {tone:"danger",text:firstName(seated.name)+" is seated here"};
+  const swap=swapOf(site,ctx.nowMins,ctx.today);
+  if(swap) return {tone:"warn",text:"Swaps with "+swap.other.name};
+  const names=occ.slice(0,MAX_NAMES).map(function(b){return firstName(b.name);}).join(", ")+(occ.length>MAX_NAMES?" +"+(occ.length-MAX_NAMES):"");
+  if(!optimizerActiveFor(ctx.viewDate,ctx.autoOptimizer)){
+    const plan=planDrop(ctx);
+    if(plan&&plan.refuse) return {tone:"danger",text:"Can't move "+names};
+  }
+  return {tone:"warn",text:"Moves "+names};
+}
+
+export function planDrop(ctx){
+  const id=ctx.id,targetId=ctx.targetId,bookings=ctx.bookings;
+  const viewDate=ctx.viewDate,nowMins=ctx.nowMins,today=ctx.today;
+  const tableBlocks=ctx.tableBlocks,autoOptimizer=ctx.autoOptimizer,user=ctx.user;
+  const histEntry=ctx.stamp||defaultHistEntry;
+  const site=dropSite(ctx);
+  if(!site||site.refuse) return site;
+  const src=site.src,cur=site.cur,candSets=site.candSets,occOf=site.occOf,desired=site.desired,occ=site.occ;
   // 2. Free set → plain move.
   if(occ.length===0){
     return {transform:function(prev){return prev.map(function(b){
@@ -108,38 +191,31 @@ export function planDrop(ctx){
     });},done:src.name+" moved to "+desired.join("+")+"."};
   }
   // 3. Exactly one occupant → try the straight full-set swap first.
-  if(occ.length===1&&cur.length>0&&occ[0].status!=="seated"){
-    const other=occ[0];
-    const newSrc=(other.tables||[]).slice(),newOther=cur.slice();
-    const otherSize=other.size||2;
-    if(comboCapBest(newSrc)>=size&&comboCapBest(newOther)>=otherSize){
-      const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins,today),os+1);
-      const slots=dayActive.filter(function(b){return b.id!==other.id&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};}).concat(blockSlots);
-      if(canAssign(newSrc,slots,s,e)&&canAssign(newOther,slots.concat([{tables:newSrc,s:s,e:e}]),os,oe)){
-        // v17.10.0: ONLY THE BOOKING YOU DRAGGED GETS LOCKED. This branch used
-        // to write `_manual:true,_locked:true` to BOTH sides, which pinned a
-        // party nobody asked to pin — the optimizer could then never tidy the
-        // displaced booking again, and every swap quietly grew the set of
-        // hand-placed bookings. The other two paths that move an occupant out
-        // of the way (step 4's displacement below, and manualAssign's
-        // `affected` branch) have always unlocked them; this one was the odd
-        // one out.
-        //
-        // The exception is real and is the reason these two flags are read off
-        // the CAPTURED `other` rather than being written false outright: a
-        // walk-in is `_manual+_locked` BY DEFINITION and immune to the
-        // optimizer (CLAUDE.md's Gotchas table), so force-unlocking one here
-        // would let a reshuffle move a party that is physically sitting down.
-        // An already-locked booking therefore keeps its lock on its NEW tables;
-        // an ordinary confirmed booking comes out unlocked, which is the ask.
-        const otherLocked=!!other._locked,otherManual=!!other._manual;
-        return {transform:function(prev){return prev.map(function(b){
-          if(b.id===id) return Object.assign({},b,{tables:newSrc,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+other.name+" ("+(cur.join("+")||"none")+" → "+newSrc.join("+")+")",user)])});
-          if(b.id===other.id) return Object.assign({},b,{tables:newOther,_manual:otherManual,_locked:otherLocked,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+src.name+" ("+(other.tables||[]).join("+")+" → "+newOther.join("+")+")",user)])});
-          return b;
-        });},done:src.name+" and "+other.name+" — tables swapped."};
-      }
-    }
+  const swap=swapOf(site,nowMins,today);
+  if(swap){
+    const other=swap.other,newSrc=swap.newSrc,newOther=swap.newOther;
+    // v17.10.0: ONLY THE BOOKING YOU DRAGGED GETS LOCKED. This branch used
+    // to write `_manual:true,_locked:true` to BOTH sides, which pinned a
+    // party nobody asked to pin — the optimizer could then never tidy the
+    // displaced booking again, and every swap quietly grew the set of
+    // hand-placed bookings. The other two paths that move an occupant out
+    // of the way (step 4's displacement below, and manualAssign's
+    // `affected` branch) have always unlocked them; this one was the odd
+    // one out.
+    //
+    // The exception is real and is the reason these two flags are read off
+    // the CAPTURED `other` rather than being written false outright: a
+    // walk-in is `_manual+_locked` BY DEFINITION and immune to the
+    // optimizer (CLAUDE.md's Gotchas table), so force-unlocking one here
+    // would let a reshuffle move a party that is physically sitting down.
+    // An already-locked booking therefore keeps its lock on its NEW tables;
+    // an ordinary confirmed booking comes out unlocked, which is the ask.
+    const otherLocked=!!other._locked,otherManual=!!other._manual;
+    return {transform:function(prev){return prev.map(function(b){
+      if(b.id===id) return Object.assign({},b,{tables:newSrc,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+other.name+" ("+(cur.join("+")||"none")+" → "+newSrc.join("+")+")",user)])});
+      if(b.id===other.id) return Object.assign({},b,{tables:newOther,_manual:otherManual,_locked:otherLocked,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+src.name+" ("+(other.tables||[]).join("+")+" → "+newOther.join("+")+")",user)])});
+      return b;
+    });},done:src.name+" and "+other.name+" — tables swapped."};
   }
   // 4. Displacement — the manualAssign Swap-busy recipe, with a trial gate.
   //    Round 4: walk the optimizer-ranked candidates in order and commit the

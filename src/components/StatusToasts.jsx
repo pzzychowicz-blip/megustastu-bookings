@@ -16,8 +16,11 @@
 //    empty + pointerEvents:none when idle, so it never blocks toolbar/grid
 //    taps. z<modal (1000) / <quick-status popup (300).
 //  • v17.1.2: width:fit-content — the Undo pill (and every toast) hugs its
-//    text instead of stretching the 360px column; long text still wraps at
-//    the container's maxWidth.
+//    text instead of stretching the column; long text still wraps at the
+//    container's maxWidth. v18.14.0 (H5): that column is 480px, from 360, so a
+//    move's sentence fits beside its Undo on the tablet (its row went from 72
+//    to 32px, over the ruler and first rows it covers on a short screen), and
+//    the button no longer wraps under the text at any width.
 //
 // Props (all scalars/strings/small objects — no derivations in here):
 //  bookingsReady   — usePersistence: false until the first bookings snapshot
@@ -34,7 +37,10 @@
 //  syncFix         — v15.6.1 "Resolved a table conflict after syncing."
 //  waitAddedShown  — v16.0.0 "Added to the waitlist."
 //  undoInfo        — {snapshot, kind:"cancel"|"delete"|"edit", noShow} | null
-//                    (v17.4.0 general undo); drives the Undo pill + its label
+//                    (v17.4.0 general undo); drives the Undo pill + its label.
+//                    v18.14.0 (H5): the kinds "move"|"assign"|"reshuffle" bring
+//                    `label`, the action's own sentence, because this pill
+//                    outranks `dragMsg` and `reshuffled` and would swallow them
 //  onUndo          — App's undoLastAction()
 //  undoNote        — extra clause appended to the undo label (v17.4.0). The
 //                    undo pill outranks the `reshuffled` toast in the one-slot
@@ -114,12 +120,12 @@ export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown
     // button — and a neutral dot, because "booking cancelled" states a fact
     // rather than raising an alarm. pointerEvents:auto because the layer is inert.
     {key:"undo",on:!!undoInfo,node:toast("var(--text-muted)",
-      <span style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-        <span>{(!undoInfo?"":undoInfo.noShow?"Marked no-show":undoInfo.kind==="delete"?"Booking deleted":undoInfo.kind==="edit"?"Booking updated":"Booking cancelled")+(undoInfo&&undoNote?" · "+undoNote:"")}</span>
+      <span style={{display:"flex",alignItems:"center",gap:10}}>
+        <span style={{minWidth:0}}>{(!undoInfo?"":undoInfo.label?undoInfo.label:undoInfo.noShow?"Marked no-show":undoInfo.kind==="delete"?"Booking deleted":undoInfo.kind==="edit"?"Booking updated":"Booking cancelled")+(undoInfo&&undoNote?" · "+undoNote:"")}</span>
         <button
           onClick={function(e){e.stopPropagation();onUndo();}}
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({fontSize: T.body,minHeight:H.compact,padding:"4px 12px",background:BTN.nav})}>Undo</button>
+          style={mkBtn({fontSize: T.body,minHeight:H.compact,padding:"4px 12px",background:BTN.nav,flexShrink:0})}>Undo</button>
       </span>,{pointerEvents:"auto",padding:"6px 10px 6px 14px"})},
     {key:"dragmsg",on:!!dragMsg,
       node:toast(dragMsg&&dragMsg.good?"var(--success-text)":"var(--warn-text)",dragMsg?dragMsg.text:"")},
@@ -150,5 +156,5 @@ export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown
     role="status"
     aria-live="polite"
     style={{position:"absolute",top:0,left:0,right:0,zIndex:60,display:"flex",justifyContent:"center",alignItems:"flex-start",padding:"6px 12px 0",pointerEvents:"none"}}><div
-    style={{width:"100%",maxWidth:360,display:"grid",justifyItems:"center",textAlign:"center"}}>{statusToasts.map(function(t){return <Toast key={t.key} show={t.key===topToastKey} style={{gridArea:"1 / 1",width:"fit-content",justifySelf:"center"}}>{t.node}</Toast>;})}</div></div>;
+    style={{width:"100%",maxWidth:480,display:"grid",justifyItems:"center",textAlign:"center"}}>{statusToasts.map(function(t){return <Toast key={t.key} show={t.key===topToastKey} style={{gridArea:"1 / 1",width:"fit-content",justifySelf:"center"}}>{t.node}</Toast>;})}</div></div>;
 }

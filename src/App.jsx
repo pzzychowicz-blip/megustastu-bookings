@@ -68,7 +68,7 @@ import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStac
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { dueOccurrences, withOccurrences } from "./lib/recurring";
-import { planDelete, planUndo, planCustomerDelete } from "./lib/delete-undo";
+import { planDelete, planUndo, planCustomerDelete, withUndoDelta } from "./lib/delete-undo";
 import { planSettle, settleEffects, carryTransform } from "./lib/voucher-settle";
 import { useSchemaGate } from "./hooks/useSchemaGate";
 import UpdateRequired from "./components/UpdateRequired";
@@ -102,7 +102,7 @@ import { DateField, Overlay, ModalTitle, mkBtn, mkSolidBtn, mkDangerConfirm, Rev
 import { StatusToasts } from "./components/StatusToasts";
 import { RefusalToast } from "./components/RefusalToast";
 import { toastBox } from "./lib/toast-box";
-import { planDrop } from "./lib/drop-plan";
+import { planDrop, dropPreview } from "./lib/drop-plan";
 import { planAssign, planReassign, swapSlot, liveSwap } from "./lib/manual-assign";
 import { planStatus, planCancel, completeCleared, seatClashSnap } from "./lib/status-change";
 import { appBannerSections } from "./components/AppBanners";
@@ -2314,7 +2314,9 @@ export function BookingApp({uid}){
     setConfirmKitchen(null);doSave();
   }
 
-  function forceReshuffle(){if(saveBookings(function(b){return applyOpt(b,viewDate,tableBlocks);})) flash();}
+  // v18.14.0 (H5): undoable, through `saveMove`. Nothing moved means no pill, so
+  // the toast still answers the press.
+  function forceReshuffle(){saveMove(function(b){return applyOpt(b,viewDate,tableBlocks);},null,"reshuffle","Tables re-optimised.",flash);}
   // v18.5.1 (#17): the Overlap banner's Reassign. WHICH tables, and the four
   // refusals, are `planReassign` (lib/manual-assign.js).
   function reassignBooking(id){
@@ -2358,14 +2360,40 @@ export function BookingApp({uid}){
     return true;
   }
   function flashDragMsg(text,good){setDragMsg({text:text,good:!!good});clearTimeout(dragMsgTimer.current);dragMsgTimer.current=setTimeout(function(){setDragMsg(null);},3500);}
+  // v18.14.0 (H5): a drop, the picker's Save and Reshuffle can each move several
+  // parties, and none of them could be taken back. Arming the Undo is the one
+  // thing they share, so it lives here.
+  //   It is armed when the write LANDS, not when it is dispatched: a refused
+  // write must not offer an Undo, and a held one replays on a fresh `prev`
+  // (`withUndoDelta`, which is why the delta is not taken here).
+  //   The pill carries the action's sentence, because it outranks `dragMsg` and
+  // `reshuffled` in the toast slot and would swallow them. So nothing is flashed
+  // at the dispatch either: a toast that became the pill a tenth of a second
+  // later is a flicker. `quiet` is the feedback for a write that moved nobody.
+  //   A landing later than the pill would have lasted offers nothing. It would
+  // restore snapshots taken before whatever has happened since, and it would
+  // appear long after anyone was looking.
+  function saveMove(transform,id,kind,sentence,quiet){
+    const move=withUndoDelta(transform,undoDelta);
+    return saveBookings(move.transform,false,Object.assign(id==null?{}:goneReport(id),{onLanded:function(){
+      const delta=move.delta();
+      if(!delta.length){if(quiet)quiet();return;}
+      if(move.age()<=(generalSettings.undoSecs||10)*1000) armUndo(delta,id,kind,false,sentence);
+    }}));
+  }
   // v18.4.5 (#17): WHAT a drop does is `planDrop` (lib/drop-plan.js), which
-  // returns its conclusion. App keeps the gate and the two side effects; the
-  // success toast is still gated on `saveBookings`' boolean (v15.4.0).
+  // returns its conclusion. App keeps the gate and the two side effects.
   function dropOnTable(id,targetId){if(refused("bookingAssign"))return;
     const plan=planDrop({id:id,targetId:targetId,liveBookings:liveBookings,bookings:bookings,viewDate:viewDate,nowMins:nowMins,today:today,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,user:getUser()});
     if(!plan) return;
     if(plan.refuse){flashDragMsg(plan.refuse);return;}
-    if(saveBookings(plan.transform,false,goneReport(id))) flashDragMsg(plan.done,true);
+    saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);});
+  }
+  // v18.14.0 (H5): what the row under a dragged block says. TimelineView asks once
+  // per row, through a `VA` wrapper, so this reads the list as it stands then.
+  function previewDrop(id,targetId){
+    if(!can("bookingAssign")) return null;
+    return dropPreview({id:id,targetId:targetId,liveBookings:liveBookings,bookings:bookings,viewDate:viewDate,nowMins:nowMins,today:today,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,user:getUser()});
   }
   // The confirm dialog's ONE door. `delBooking` below is the guarantee; this is
   // so a staff member is refused at the point of intent rather than after
@@ -2796,13 +2824,10 @@ export function BookingApp({uid}){
   // was taken meanwhile, the optimizer/reconciliation resolves or flags it —
   // accepted, same as v16.3.0). Gated on the save `ok`.
   //
-  // SCOPE (deliberate, v17.4.0): undo restores THE SNAPSHOTTED BOOKING ONLY.
-  // If the original action's bookingsAfterAction pass also moved OTHER
-  // bookings (a reshuffle), those moves are NOT reversed — with the optimizer
-  // ON the re-run usually re-places them, with it OFF they keep their new
-  // tables. Undo is "put this booking back", not a transactional rollback of
-  // the whole floor. The undo pill's `undoNote` says "tables re-optimised"
-  // when a reshuffle happened, so staff know the floor moved.
+  // SCOPE: undo restores the bookings the action changed (`undoDelta`), and only
+  // those, verbatim. That includes any party its bookingsAfterAction pass moved,
+  // so the floor goes back as it stood; `planUndo` has the reasoning. The undo
+  // pill's `undoNote` says "tables re-optimised" when a reshuffle happened.
   // v17.4.0 /code-review: compare like with like. bookingsAfterAction runs
   // syncLiveDurations, which rewrites `duration`/`customDur` for a SEATED
   // overstayer on today — both are in UNDO_FIELDS, so an overstayer the action
@@ -2814,7 +2839,7 @@ export function BookingApp({uid}){
     const today=todayStr();
     return undoSnapshots(syncLiveDurations(prev,today,nowMins),post);
   }
-  function armUndo(snapshots,primaryId,kind,noShow){
+  function armUndo(snapshots,primaryId,kind,noShow,label){
     if(!snapshots||!snapshots.length) return;
     if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
     // v18.0.0 session 9: the note belongs to THIS pill, so it is taken once and
@@ -2827,7 +2852,9 @@ export function BookingApp({uid}){
     // undo WITHOUT flashing must show no note rather than the previous one's.
     const note=flashNoteRef.current;
     flashNoteRef.current="";
-    setUndoInfo({snapshots:snapshots,primaryId:primaryId,kind:kind,noShow:!!noShow,note:note});
+    // v18.14.0 (H5): `label` is a whole sentence (`saveMove`), which leaves a note
+    // nothing to add.
+    setUndoInfo({snapshots:snapshots,primaryId:primaryId,kind:kind,noShow:!!noShow,note:label?"":note,label:label||""});
     undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},(generalSettings.undoSecs||10)*1000);
   }
   // v18.5.1 (#17): WHAT is restored is `planUndo` (lib/delete-undo.js), verbatim
@@ -2845,10 +2872,9 @@ export function BookingApp({uid}){
   // v18.4.7 (#17): WHAT the picker's Save writes is `planAssign`
   // (lib/manual-assign.js); this keeps the write, the close and the flash.
   function manualAssign(bookingId,tables,locked,affected){
-    const plan=planAssign({bookingId:bookingId,tables:tables,locked:locked,affected:affected,viewDate:viewDate,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,user:getUser()});
-    const ok=saveBookings(plan.transform,false,goneReport(bookingId));
+    const plan=planAssign({bookingId:bookingId,tables:tables,locked:locked,affected:affected,bookings:bookings,viewDate:viewDate,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,user:getUser()});
+    saveMove(plan.transform,bookingId,"assign",plan.done,plan.reshuffles?flash:null);
     setManualTarget(null);
-    if(ok&&plan.reshuffles) flash();
   }
 
   function addBlock(block){if(refused("tableBlock"))return;
@@ -3365,7 +3391,7 @@ export function BookingApp({uid}){
   // close over fresh state), and the props are ONE-TIME wrapper functions that
   // read the ref at event time — stable identity, always-fresh behavior.
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
+  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,previewDrop,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -3373,6 +3399,7 @@ export function BookingApp({uid}){
       onStatus:function(id,s){R.current.updateStatus(id,s);},
       onNoShow:function(id){R.current.doCancelBooking(id,true);},
       onDropOnTable:function(id,targetId){return R.current.dropOnTable(id,targetId);},
+      onDropPreview:function(id,targetId){return R.current.previewDrop(id,targetId);},
       onWalkin:function(tableId){R.current.openWalkin(tableId);},
       onManual:function(id){R.current.setManualTarget(id);},
       onBlock:function(id){R.current.setBlockTarget(id);},
@@ -3467,6 +3494,7 @@ export function BookingApp({uid}){
     onManual={VA.onManual}
     onStatus={VA.onStatus}
     onDropOnTable={VA.onDropOnTable}
+    onDropPreview={VA.onDropPreview}
     blocks={tableBlocks}
     onBlock={VA.onBlock}
     nowMins={nowMins}
