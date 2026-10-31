@@ -57,10 +57,21 @@ pinning Node 22 alone was not enough). jose 5 ships a CommonJS build, and the JW
 `jwks-rsa` uses is the same in both. **Local Node cannot reproduce the failure**,
 because it supports `require(esm)`, so a green local run proves nothing about this.
 **After any firebase-admin or `jwks-rsa` bump, call one deployed function**
-(`wa-config` with a staff token is the cheapest) and check that `npm ls jose` still
-shows 5.x. The override can go when Vercel's runtime loads ESM through `require()`,
-or when `jwks-rsa` stops requiring `jose` synchronously. Before deleting it, show one
-of those is true on a deployment, not locally.
+(`wa-config` on the SANDBOX with a staff token is the cheapest: Settings → Admin →
+Integrations, read in the Network tab) and check that `npm ls jose` still shows 5.x.
+**Production cannot answer this before go-live**: its Vercel project has no
+`FIREBASE_SERVICE_ACCOUNT`, so `ensureApp()` answers 503 before any token is read
+(measured, v18.13.0). The status says how far the call got:
+- **Any answer from the function clears the load crash.** `_lib/rtdb.js` imports
+  `firebase-admin/auth` statically, and that loads `jwks-rsa` and `jose`.
+- **A 200, or a 403 naming the allow-list, means `verifyIdToken` accepted a real
+  token**: `assertStaffAllowed` runs after it, so that 403 passes this check too, and
+  the list is the deployment's `WA_STAFF_EMAILS`.
+- **A 401 `invalid token`** shows only that the function started.
+
+The override can go when Vercel's runtime loads ESM through `require()`, or when
+`jwks-rsa` stops requiring `jose` synchronously. Before deleting it, show one of those
+is true on a deployment, not locally.
 
 **`wa-media.js` — the media proxy (v18.8.0).** One function for both directions of a
 conversation's files, to keep the count low: GET views (phase 4), POST sends (phase 5).
