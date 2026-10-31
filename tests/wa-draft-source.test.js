@@ -12,10 +12,11 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const read = (p) => stripComments(readFileSync(new URL(p, import.meta.url), "utf8")).join("\n");
 const HOOK = read("../src/hooks/useWhatsApp.js");
-const APP = read("../src/App.jsx");
+const APP = appCode();
 
 describe("an accepted draft's source lasts as long as the form it opened", () => {
   it("the hook drops it when the form closes", () => {

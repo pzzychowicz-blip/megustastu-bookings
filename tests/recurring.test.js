@@ -25,9 +25,9 @@ import { dueOccurrences, ruleStart, withOccurrences, rulesOfCustomer, sanitizeRu
 import { todayStr } from "../src/lib/day.js";
 import { setWeekHours, DEFAULT_WEEK_HOURS, EMPTY_FORM, ALL_TABLES } from "../src/lib/constants.js";
 import { buildBooking } from "../src/lib/booking-save.js";
+import { appCode } from "./app-source.js";
 
-const APP = stripComments(
-  readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+const APP = appCode();
 
 // The body of `doSaveNew`, from its declaration to the next top-level function.
 function doSaveNewBody() {

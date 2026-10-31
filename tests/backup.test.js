@@ -18,6 +18,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { buildBackup, runBackup, backupErrorText, backupReportTarget, BACKUP_OMIT, BACKUP_META_KEY } from "../src/lib/backup.js";
+import { appCode } from "./app-source.js";
 
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const RULES = JSON.parse(readFileSync(join(ROOT_DIR, "database.rules.json"), "utf8")).rules;
@@ -203,7 +204,7 @@ describe("backupReportTarget: where an outcome is shown", () => {
 describe("the hook and App are wired to the flow", () => {
   const strip = (rel) => stripComments(readFileSync(join(ROOT_DIR, "src", rel), "utf8")).join("\n");
   const hook = strip("hooks/useBackup.js");
-  const app = strip("App.jsx");
+  const app = appCode();
 
   it("the hook asks the capability first, then runs the flow with the root read and the file saver", () => {
     const body = hook.slice(hook.indexOf("function doBackup("));

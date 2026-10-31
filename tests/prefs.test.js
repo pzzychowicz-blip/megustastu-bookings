@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { PREF_SPEC, PREF_NAMES, readPrefValue, prefLocalValue, DEFAULT_USER_PREFS,
          sanitizeUserPrefs } from "../src/hooks/useUserPrefs.js";
-import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 describe("readPrefValue - an absent key is the default", () => {
   it("whenOn defaults OFF (navLocked, reduceMotion)", () => {
@@ -67,7 +67,7 @@ describe("PREF_SPEC agrees with everything that depends on it", () => {
     // hand-written setItem was invisible to it. That is the exact drift this
     // commit found in `readSplit` (a second hand-written read of
     // "mgt-split-enabled"), so the guard has to see both directions.
-    const app = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+    const app = appCode();
     const offenders = [];
     PREF_NAMES.forEach((name) => {
       const key = PREF_SPEC[name].ls;
@@ -91,7 +91,7 @@ describe("PREF_SPEC agrees with everything that depends on it", () => {
   it("splitEnabled clears the SAME key App stores the split layout under", () => {
     // Two literals for one key. Turning Split View off must forget the saved
     // layout, or it returns the moment the feature is re-enabled.
-    const app = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+    const app = appCode();
     const m = app.match(/const SPLIT_KEY="([^"]+)"/);
     expect(m).toBeTruthy();
     expect(PREF_SPEC.splitEnabled.clears).toBe(m[1]);

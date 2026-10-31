@@ -44,6 +44,31 @@ export default defineConfig([
     },
   },
   {
+    // v18.13.1: lint and build both pass over a TDZ, and a TDZ blanks the whole
+    // app. `variables: false` asks only about a read in the SAME scope, which is
+    // the shape that throws during render; a read inside a handler runs later and
+    // stays legal. A hook's argument is read at the call, so moving a handler into
+    // a hook is what turns one into the other. Reintroduced by hand, all four TDZs
+    // this app has had (`activeView`, `tagList`, `isViewToday`, `guestTags`) fail
+    // this rule. Everywhere but `src/lib/whatsapp.js`, whose two findings are an
+    // import read below its use, which ESM hoists.
+    files: ['src/**/*.{js,jsx}'],
+    ignores: ['src/lib/whatsapp.js'],
+    rules: {
+      'no-use-before-define': ['error', { functions: false, classes: false, variables: false }],
+    },
+  },
+  {
+    // v18.13.1: the compiler can stop analysing `BookingApp` silently. A `class` in
+    // the body takes all of App's warnings with it, no error, and the count simply
+    // falls; only this rule reports it. All of src/, so a new domain hook needs no
+    // entry here. `useWaSettings.js:115` already reports (ROADMAP), and leaves this
+    // list when that is fixed.
+    files: ['src/**/*.{js,jsx}'],
+    ignores: ['src/hooks/useWaSettings.js'],
+    rules: { 'react-hooks/invariant': 'error' },
+  },
+  {
     // WA sandbox: api/* are Vercel serverless FUNCTIONS, not browser code —
     // they legitimately use `process.env` and `Buffer` (Meta HMAC signature
     // verification, base64 service-account decoding). Node globals for that

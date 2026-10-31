@@ -11,6 +11,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { depositSummary, depositParts, depositLine, daySummary } from "../src/lib/booking-logic.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const D = "2026-10-08";
 const NB = " "; // `money` and `countLabel` join a number and its word with a no-break space
@@ -115,7 +116,7 @@ describe("the two surfaces read the one derivation", () => {
   const src = (rel) => stripComments(readFileSync(join(root, rel), "utf8")).join("\n");
   const summary = src("src/components/Summary.jsx");
   const sheet = src("src/components/DaySheet.jsx");
-  const app = src("src/App.jsx");
+  const app = appCode();
 
   it("the Summary panel draws depositParts of depositSummary, for the viewed date", () => {
     expect(summary).toMatch(/depositSummary\(bookings, date\)/);

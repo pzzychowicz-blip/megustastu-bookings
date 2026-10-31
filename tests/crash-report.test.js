@@ -11,6 +11,7 @@ import {
   MAX_PER_LOAD, CRASH_EMPTY, CRASH_UNREADABLE, CRASH_UNSAVED,
 } from "../src/lib/crash-report.js";
 import { ACTIVITY_KINDS } from "../src/lib/activity.js";
+import { appCode } from "./app-source.js";
 
 const CTX = { where: "render", version: "18.13.0", view: "timeline", device: "Android · Chrome" };
 const V8 = `TypeError: Cannot read properties of undefined (reading 'time')
@@ -276,7 +277,7 @@ describe("the wiring", () => {
   // An effect runs after a commit, and a view that throws as it opens never commits:
   // its crash was filed under the view before it (measured on DEV).
   it("App notes the view in the render, above the views", () => {
-    const app = read("App.jsx");
+    const app = appCode();
     expect(app).toContain("\n  noteCrashView(activeView);\n");
     expect(app).not.toMatch(/useEffect\(function\(\)\{noteCrashView/);
     expect(app.indexOf("noteCrashView(activeView);")).toBeLessThan(app.indexOf("const planView=<PlanView"));
@@ -339,7 +340,7 @@ describe("the download", () => {
     expect(log).toContain('if (k === "crash") setCrashMsg("");');
     expect(log).toMatch(/crash: "Crashes"/);
     ACTIVITY_KINDS.forEach((k) => expect(log, k).toMatch(new RegExp('"' + k + '"|' + k + ":")));
-    const app = read("App.jsx");
+    const app = appCode();
     expect(app).toContain('canDownloadCrashes={can("dataExport")}');
     expect(app).toContain('function doDownloadCrashes(){\n    if(refused("dataExport")) return Promise.resolve("");');
   });

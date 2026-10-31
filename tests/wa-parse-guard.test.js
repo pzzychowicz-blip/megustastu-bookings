@@ -26,6 +26,7 @@ import { inboundTs } from "../api/wa-inbound.js";
 import { parseThread } from "../api/_lib/gemini.js";
 import { isPhoneKey, statusWins, capOutbound, snippet, WA_MAX_TEXT_LEN, WA_SNIPPET_LEN } from "../src/lib/whatsapp.js";
 import { sanitizeParse, clampConfidence, isUsableSize, isUsableDate, isUsableTime, mergeDraft } from "../src/lib/whatsapp.js";
+import { appCode } from "./app-source.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => stripComments(readFileSync(join(ROOT, p), "utf8")).join("\n");
@@ -131,7 +132,7 @@ describe("CT-WA-01 — the boundary is actually crossed", () => {
     // v18.6.0 (#17): the check is `draftRefusal` (lib/booking-save.js), which
     // doSave calls before anything reads the time; tests/form-save.test.js
     // runs it on the measured value.
-    expect(read("src/App.jsx")).toContain("const fieldNo=draftRefusal(f,forSave.phoneRefusal);");
+    expect(appCode()).toContain("const fieldNo=draftRefusal(f,forSave.phoneRefusal);");
     const src = read("src/lib/booking-save.js");
     const body = src.slice(src.indexOf("export function draftRefusal("));
     const guard = body.indexOf("isReadableTime(f.time)");

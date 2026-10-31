@@ -586,8 +586,8 @@ export function clearedEntry(fromDay, toDay, count) {
 }
 
 // ── v18.11.0 (#17): what the Clear button says when the clear comes back ────
-// Moved out of App's `doClearActivity`, which keeps the guards, the ref and
-// the setters. `res` is `clearActivityAndLog`'s answer: `{removed, refused,
+// Moved out of `doClearActivity` (`useSettingsPanel`), which keeps the guards,
+// the ref and the setters. `res` is `clearActivityAndLog`'s answer: `{removed, refused,
 // truncated}`. FOUR outcomes and four sentences. Any two of them sharing a
 // sentence is how one situation gets mistaken for another — which is the
 // whole reason `refused` and `truncated` are separate flags rather than a

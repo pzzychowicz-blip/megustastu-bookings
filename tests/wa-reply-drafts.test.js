@@ -9,6 +9,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { sanitizeDrafts, withDraft, withoutKeys, withOnlyKeys, DRAFT_MAX, DRAFTS_KEY } from "../src/lib/wa-reply-drafts.js";
+import { appCode } from "./app-source.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => stripComments(readFileSync(join(ROOT, p), "utf8")).join("\n");
@@ -162,6 +163,6 @@ describe("a conversation that goes takes its drafts", () => {
     // /code-review: never the whole store in the panel, which re-rendered the
     // list and the open thread's bubbles on every keystroke.
     expect(read("src/components/whatsapp/InboxPanel.jsx")).not.toMatch(/useReplyDraft/);
-    expect(read("src/App.jsx")).toMatch(/draftOwner=\{uid\}/);
+    expect(appCode()).toMatch(/draftOwner=\{uid\}/);
   });
 });

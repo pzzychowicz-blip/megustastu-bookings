@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { findFreeSlot, offZone, offZoneLabel, offZoneNote, isAllIn, isAllOut } from "../src/lib/booking-logic.js";
 import { ALL_TABLES } from "../src/lib/constants.js";
+import { appCode } from "./app-source.js";
 
 const D = "2030-06-12";
 const INDOOR = ALL_TABLES.map((t) => t.id).filter((id) => isAllIn([id]));
@@ -86,7 +87,7 @@ describe("where it shows", () => {
     expect(read("components/ListView.jsx")).toMatch(/<CardFlag ink=\{zoneOff \? FLAG_WARN : FLAG_NEUTRAL\} title=\{zoneOff \? offZoneLabel\(b\) :/);
   });
   it("both saves hand the note to the toast", () => {
-    const app = read("App.jsx");
+    const app = appCode();
     // v18.3.4: each note is decided in its save's plan (`buildBooking`,
     // `applyEdit`) and handed to the toast by App's two wrappers.
     const save = read("lib/booking-save.js");

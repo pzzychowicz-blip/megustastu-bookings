@@ -2,10 +2,9 @@
 // a day's double-bookings, moved out of three memos in BookingApp. Held to the
 // old memo bodies over 40,000 generated days before the swap (REFACTOR_LOG).
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { stripComments } from "../scripts/strip-comments.mjs";
 import { clashRowId } from "../src/lib/booking-logic.js";
 import { undismissedClashes, clashByBooking, clashSpansByTable } from "../src/lib/clash-view.js";
+import { appCode } from "./app-source.js";
 
 const pair = (a, b, tables, from, to) => ({ a, b, tables, from, to });
 const P1 = pair("x", "y", ["4"], 1200, 1260);
@@ -52,7 +51,7 @@ describe("clashSpansByTable", () => {
 });
 
 describe("the wiring", () => {
-  const APP = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+  const APP = appCode();
   it("App keeps the memos and the EMPTY identities its memoised views compare", () => {
     expect(APP).toContain("return clashPairs.length?undismissedClashes(clashPairs,clashDismissed):EMPTY_ARR;");
     expect(APP).toContain("return clashPairs.length?clashByBooking(clashPairs,bookings):EMPTY_OBJ;");

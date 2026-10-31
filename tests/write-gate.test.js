@@ -41,6 +41,7 @@ import * as activitySink from "../src/lib/activitySink.js";
 import * as dbErrorLib from "../src/lib/dbError.js";
 import * as schema from "../src/lib/schema.js";
 import * as writePath from "../src/lib/write-path.js";
+import { appCode } from "./app-source.js";
 
 const HOOK = stripComments(
   readFileSync(new URL("../src/hooks/usePersistence.js", import.meta.url), "utf8")).join("\n");
@@ -905,7 +906,7 @@ describe("the hook decides nothing the gate decides", () => {
   // dialog's blur, so the sentence is the dialog's own, in a live region that is
   // mounted before it has anything to say.
   it("a block that did not go out stops short of the bookings write, and the dialog says so", () => {
-    const APP = stripComments(readFileSync("src/App.jsx", "utf8")).join("\n");
+    const APP = appCode();
     ["addBlock", "removeBlock"].forEach((name) => {
       const fn = liftFunction(APP, name);
       expect(fn).toContain("if(!saveBlocks(next)) return false;");

@@ -90,7 +90,7 @@ import { placeWaitlist } from "./lib/waitlist-match";
 // v18.4.5: "Download backup" is this hook (the flow and the file's contents are
 // lib/backup.js, tests/backup.test.js); the CSV shares its file-saving half.
 import { useBackup } from "./hooks/useBackup";
-import { saveTextFile } from "./lib/download";
+import { useSettingsPanel } from "./hooks/useSettingsPanel";
 
 
 // ── Phase B1 (v15-refactor): UI atoms extracted to ./components/atoms.jsx ──
@@ -338,9 +338,8 @@ import { useTagSettings } from "./hooks/useTagSettings";
 // v18.11.0: Book from the waitlist keeps the occasion tags the list still has.
 import { knownTagIds } from "./lib/tags";
 // v18.0.0 session 8: the activity log. `useActivityLog` installs the module-level
-// sink every writer emits into; `useActivityFeed` is the app's first Firebase
-// QUERY, and is attached only while the log is open.
-import { useActivityLog, useActivityFeed, redactGuest, pruneActivity, clearActivityAndLog, readCrashes } from "./hooks/useActivityLog";
+// sink every writer emits into.
+import { useActivityLog, redactGuest } from "./hooks/useActivityLog";
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
@@ -373,10 +372,8 @@ import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWo
 import { useWindowAtTop } from "./hooks/useWindowAtTop";
 import { todayStr, stepDate, formatDay } from "./lib/day";
 import { onPrintEnd, printOrReport, PRINT_IGNORED_TEXT } from "./lib/print-end";
-// v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
-// stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
-import { activityWindow, retentionMs, retentionLabel, clearOutcome, CLEAR_FAILED } from "./lib/activity";
-import { noteCrashView, downloadCrashes } from "./lib/crash-report";
+import { retentionLabel } from "./lib/activity";
+import { noteCrashView } from "./lib/crash-report";
 
 // ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
 // `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
@@ -426,7 +423,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.13.0"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.13.1"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -843,7 +840,7 @@ console.log(
 // ── Booking App ───────────────────────────────────────────────────────────────
 // v18.5.1: the List's tag filter with nothing chosen, one array for every mount.
 const NO_LIST_TAGS=[];
-function BookingApp({uid}){
+export function BookingApp({uid}){
   // ── Phase D1 (v14.1.8): persistence state lives in ./hooks/usePersistence ──
   // `bookings`, `tableBlocks`, write-guards (bookingsLoaded/blocksLoaded/
   // firstLoadCount/hasConnectedRef), connection-status state, saveBookings/
@@ -1082,7 +1079,6 @@ function BookingApp({uid}){
   const [blockDirty, setBlockDirty] = useState(false);
   // v18.10.0: the special-day editor (SpecialDayModal) reports its draft too.
   const [specialDirty, setSpecialDirty] = useState(false);
-  const [settingsDirty, setSettingsDirty] = useState(false);
   // v17.0.0: status override for the pending flow — set by save("pending"/
   // "confirmed") ("Save pending" / "Save&confirm" buttons) and read by doSave.
   // A ref (not an arg) because the kitchen-confirm modal + its Enter shortcut
@@ -1209,15 +1205,10 @@ function BookingApp({uid}){
   const closeInbox = useCallback(function(){
     setShowInbox(false); setReturnToInboxKey(null); setWaQuery(""); setWaNeedsAction(false);
   },[setShowInbox]);
-  // Settings tab state — which tab is active in the Settings modal.
-  // Resets to 'general' on modal close so reopens start fresh. Belongs to
-  // the Settings subsystem; lived inside the reminder state block pre-D2
-  // for historical reasons (the comment misleadingly grouped it there).
   // v17.10.1: per-device offline shell (see lib/serviceWorker.js). Default ON,
   // so only the non-default "0" is ever stored.
   const [swEnabled, setSwEnabledState] = useState(readSwEnabled);
   const swAppliedRef = useRef(false);
-  const [settingsTab, setSettingsTab] = useState("general");
   useEffect(function(){formRef.current=form;},[form]);
   // /code-review (v17.12.0): `form.name` belongs in this list and never was.
   // The dep list is what clears a stale error, and the name field was missing
@@ -1552,161 +1543,6 @@ function BookingApp({uid}){
   // the app already emits into it, and until this runs `emitActivity` is a
   // no-op.
   useActivityLog();
-  // The RANGE the log is showing. It lives HERE and not inside the modal because
-  // the feed lives here too: the listener must detach when the log closes, and a
-  // range held inside the modal would unmount with it and take the window with
-  // it.
-  //
-  // v18.0.0 session 11: two dates, and BOTH START EMPTY. The log used to open on
-  // today and could only ever be asked about one day, so a search was a search of
-  // that day — Patryk: *"Search box must search globally (as Find a booking
-  // does) not by date only. Filtering by date should be one of options."* Empty
-  // means "no bound this side", so the resting question is the whole log, newest
-  // first, and narrowing to a day is a filter you apply rather than the only
-  // thing on offer.
-  const [activityFromDay,setActivityFromDay]=useState("");
-  const [activityToDay,setActivityToDay]=useState("");
-  // /code-review: changing the window clears whatever the last clear SAID.
-  // Measured — cleared 2026-09-12 ("Cleared 27 entries."), emptied both fields
-  // to go back to all time, and the sentence was still on screen under the
-  // all-time list, where it reads as a claim about everything. The modal
-  // already disarms the confirm on the same event; this is the other half of
-  // "the confirm is a promise about a specific window".
-  function setActivityFrom(v){setActivityClearMsg("");setActivityFromDay(v);}
-  function setActivityTo(v){setActivityClearMsg("");setActivityToDay(v);}
-  // Local midnight to local midnight: `at` is a wall-clock stamp and the
-  // restaurant thinks in local days. `dayRangeMs` gives a whole day, so the FROM
-  // field takes that day's first ms and the TO field takes its last — which is
-  // what makes a one-day range the two fields holding the same date rather than
-  // a mode of its own.
-  //
-  // v18.0.0 session 10 (/code-review), and it applies to both fields now: a date
-  // input can be EMPTIED, and this query is the one place in the app where a
-  // `viewDate`-shaped string reaches Firebase instead of `lib/day.js`.
-  // `new Date("T00:00:00")` is Invalid Date, `.getTime()` is NaN, and
-  // `startAt(NaN)` THROWS rather than returning nothing — inside an effect,
-  // which the boundary catches by replacing the whole app. Measured live:
-  // clearing "Day to show" gave `startAt failed: value argument contains NaN in
-  // property 'activity'` and the error screen, from one keystroke on a shipped
-  // surface.
-  //
-  // What changed in session 11 is that EMPTY is now legal and only UNREADABLE is
-  // withheld. The two were the same condition while the field was required; they
-  // are not the same condition now, and conflating them would withhold the
-  // default view. A date is kept exactly as typed so the field stays editable
-  // while it is being retyped; it is the QUERY that waits.
-  //
-  // The arithmetic is `activityWindow` (lib/activity.js), not inline here, for
-  // the reason session 10 moved `dayRangeMs` out of this file: the one call
-  // site that must not get it wrong should not also be the only place it can
-  // be tested.
-  const activityWin=activityWindow(activityFromDay,activityToDay);
-  const activityFrom=activityWin.from;
-  const activityTo=activityWin.to;
-  // A typed-but-unreadable date, or a range that ends before it starts.
-  //
-  // The two are reachable to different degrees and it is worth saying which,
-  // because CLAUDE.md's own rule is that a qualifier on a state that cannot
-  // occur tells the next reader it CAN. `backwards` is ordinary use: two date
-  // pickers, nothing stopping you. `badDay` is NOT reachable through this
-  // surface — a `<input type="date">` holds either "" or a valid `yyyy-mm-dd`,
-  // and the quick-range chips go through `todayStr`/`addDays` — so its message
-  // is defence rather than a state anybody will see today. It is kept because
-  // these are plain STRINGS that some later caller could set the way
-  // `SearchPanel`'s onPick sets `viewDate`, and because `dayRangeMs` returning
-  // null is the one thing standing between `isReadableDate`'s looser shapes
-  // ("2026-8-3", "Sep 13 2026") and `startAt(NaN)`, which THROWS inside an
-  // effect and takes the whole app down. Withholding the query is the guard;
-  // the message only decides what is said while it is withheld.
-  const activityBadDay=activityWin.badDay;
-  const activityBackwards=activityWin.backwards;
-  const activityRangeOk=activityWin.ok;
-  const {rows:activityRows,loading:activityLoading,loadingMore:activityLoadingMore,hasMore:activityHasMore,loadOlder:activityLoadOlder}=useActivityFeed({from:activityFrom,to:activityTo,enabled:!!activityOpen&&activityRangeOk});
-  // The 12-month retention promise, kept by the app because this plan has no
-  // server-side scheduler — and kept HONEST by the rules, which refuse a delete
-  // unless the caller is an admin and the entry really is older than a year. It
-  // runs when an admin OPENS the log, which is the one moment somebody is
-  // already waiting for the node and a few deletes cost nothing.
-  //
-  // Gated on `isAdmin` client-side as well: a staff account's attempt would be
-  // refused anyway, and asking for a refusal on every open is noise in the
-  // console for a promise that was never theirs to keep.
-  // v18.0.0 session 11: clearing a range. Admin-only on the client because it is
-  // admin-only in the rules — asking for a refusal a staff account was never
-  // going to get is noise in the console for a control they cannot use.
-  //
-  // The busy flag is a ref MIRROR plus state, the `saveBookings` shape: the
-  // guard has to be read synchronously in the handler (two taps arriving faster
-  // than a render would otherwise start two clears over the same range), and
-  // the state is what the button paints with.
-  // v18.0.0 session 11: what the Customers tab should be searching for when we
-  // send somebody there. A NAME and not the `guestKey`, because `searchCustomers`
-  // matches on name or phone digits and never on a `guestId` — so seeding it
-  // with the raw key would find nothing for exactly the phone-less guests this
-  // was added to reach. Fed to `CustomersTabContent` as both `key` and
-  // `seekQuery`, so a new seek remounts that subtree and its `useState`
-  // initialiser picks the value up with no effect involved.
-  //
-  // /code-review: it is cleared when Settings CLOSES, or it outlives the jump.
-  // Nothing reset it, so one jump for "Pau Estévez" left every later visit to
-  // Settings → Customers pre-filtered by that name, with a query in the box the
-  // user never typed — and because the tab takes this as its `key`, it also
-  // remounted on the stale value each time.
-  const [customerSeek,setCustomerSeek]=useState("");
-  function openCustomerByName(name){
-    const n=String(name||"").trim();
-    if(!n) return;
-    setActivityOpen(null);
-    setSettingsTab("customers");
-    setCustomerSeek(n);
-  }
-  const [activityClearing,setActivityClearing]=useState(false);
-  // What the last clear did, so a REFUSAL is visible. Without it the button
-  // simply returns to rest and the list is unchanged, which reads as a dead
-  // control — measured on DEV, where the clear is denied because the database
-  // is still running the rules deployed before this change.
-  const [activityClearMsg,setActivityClearMsg]=useState("");
-  const activityClearingRef=useRef(false);
-  function doClearActivity(){
-    if(activityClearingRef.current) return;
-    if(!isAdmin) return;
-    // Refuses an UNBOUNDED clear here as well as in the modal, because the modal
-    // only disables a button and this is the function that does the deleting.
-    if(activityFrom==null&&activityTo==null) return;
-    if(!activityRangeOk) return;
-    activityClearingRef.current=true;
-    setActivityClearing(true);
-    setActivityClearMsg("");
-    clearActivityAndLog(activityFrom,activityTo,activityFromDay,activityToDay)
-      // v18.11.0 (#17): the sentence for each outcome is `clearOutcome`
-      // (lib/activity.js), with why there are four.
-      .then(function(res){setActivityClearMsg(clearOutcome(res));})
-      .catch(function(){setActivityClearMsg(CLEAR_FAILED);})
-      .then(function(){activityClearingRef.current=false;setActivityClearing(false);});
-  }
-  // v18.0.0 session 11: the CSV. Gated on `dataExport` and NOT on `isAdmin`,
-  // because it is the same act as "Download backup" — a file of the
-  // restaurant's data leaving the building — and one capability should mean one
-  // thing wherever it appears. The BUILDING of the file is pure and lives in
-  // lib/activity.js; this is only the part that needs a DOM.
-  function doDownloadActivity(text,filename){
-    if(refused("dataExport")) return;
-    try{saveTextFile(text,filename,"text/csv;charset=utf-8");}
-    catch{setWriteWarning("Couldn't create the file on this device.");}
-  }
-  // v18.13.0 (#28): the same capability, the same reasoning. Resolves to what the log
-  // should say, in the log: the banner cannot be read under a modal (measured, v18.13.0).
-  function doDownloadCrashes(){
-    if(refused("dataExport")) return Promise.resolve("");
-    return downloadCrashes({read:readCrashes,save:saveTextFile,today:todayStr()});
-  }
-  const prunedRef=useRef(false);
-  useEffect(function(){
-    if(!activityOpen||!isAdmin){ if(!activityOpen) prunedRef.current=false; return; }
-    if(prunedRef.current) return;   // once per opening, not once per render
-    prunedRef.current=true;
-    pruneActivity(retentionMs(activityRetentionDays));
-  },[activityOpen,isAdmin,activityRetentionDays]);
   // v17.14.0: joins the stack, which is how it gains Esc, the shortcut
   // suppression and `inert` — all three of which it had silently never had.
   const showWaitlist = !!modalOpen.waitlist;
@@ -2488,6 +2324,19 @@ function BookingApp({uid}){
   // (ROADMAP #17): the flow is `runBackup` in lib/backup.js and the state is
   // this hook's; App passes what is App's and renders the status in Settings.
   const {backupStatus,doBackup,endBackupOpen}=useBackup({readDatabaseRoot:readDatabaseRoot,refused:refused,setWriteWarning:setWriteWarning,appVersion:__APP_SIGNATURE__.version});
+  // v18.13.1: the Settings panel and the activity log's window, out of this body.
+  // Below `useBackup` for `endBackupOpen`, above `anyDirty` for `settingsDirty`:
+  // a hook's arguments are read at the call, and its outputs are not hoisted.
+  const {
+    settingsDirty,setSettingsDirty,settingsTab,setSettingsTab,customerSeek,
+    activityFromDay,activityToDay,setActivityFrom,setActivityTo,activityBadDay,activityBackwards,
+    activityRows,activityLoading,activityLoadingMore,activityHasMore,activityLoadOlder,
+    openCustomerByName,activityClearing,activityClearMsg,doClearActivity,
+    doDownloadActivity,doDownloadCrashes,closeSettings,requestCloseSettings,
+  }=useSettingsPanel({
+    activityOpen,activityRetentionDays,endBackupOpen,isAdmin,refused,
+    setActivityOpen,setConfirmDiscard,setShowSettings,setWriteWarning,
+  });
   // v17.0.0: "Delete customer" now ANONYMIZES instead of deleting — the
   // bookings remain for statistics (covers, day/range stats, phone-less
   // no-show tile) as name "Data removed" with phone/notes/history wiped and
@@ -2648,15 +2497,10 @@ function BookingApp({uid}){
   function requestCloseForm(){if(formDirty) setConfirmDiscard("form");else setShowForm(false);}
   function requestCloseWalkin(){if(walkinDirty) setConfirmDiscard("walkin");else setShowWalkin(false);}
   function requestCloseManual(){if(manualDirty) setConfirmDiscard("manual");else setManualTarget(null);}
-  // v17.8.0: the remaining three drafting surfaces (ROADMAP "Ideas"). Settings
-  // keeps its tab reset on BOTH paths — the clean close here and the discard
-  // below — because that was part of the close behaviour before the guard, not
-  // part of the guard.
-  function closeSettings(){setShowSettings(false);setSettingsTab("general");setCustomerSeek("");endBackupOpen();}
+  // v17.8.0: the remaining three drafting surfaces (ROADMAP "Ideas").
   function requestCloseReminderEditor(){if(reminderDirty) setConfirmDiscard("reminder");else setReminderEditor(null);}
   function requestCloseBlock(){if(blockDirty) setConfirmDiscard("block");else setBlockTarget(null);}
   function requestCloseSpecialDay(){if(specialDirty) setConfirmDiscard("specialday");else setSpecialDay(null);}
-  function requestCloseSettings(){if(settingsDirty) setConfirmDiscard("settings");else closeSettings();}
   // Commit the discard: shut the surface the modal was asked about.
   function doDiscard(){
     const which=confirmDiscard;
@@ -3057,15 +2901,14 @@ function BookingApp({uid}){
     // the FOCUSED pane, not on the stale single-view `view`. Passing activeView
     // here means the whole hook is split-aware without touching each branch.
     view:activeView,setView:setView,goView:pickView,
-    viewDate:viewDate,setViewDate:setViewDate,
+    viewDate:viewDate,
     timelineZoom:timelineZoom,setTimelineZoom:setTimelineZoomManual,tlFollowZoom:tlSettings.followZoom,tlMaxZoom:tlSettings.maxZoom,
     followNow:followNow,setFollowNow:setFollowNow,
     autoOptimizer:autoOptimizer,setAutoOptimizer:setAutoOptimizer,
-    showForm:showForm,setShowForm:setShowForm,editId:editId,form:form,setForm:setForm,setSwapAffected:setSwapAffected,
-    showWalkin:showWalkin,setShowWalkin:setShowWalkin,
-    showHistory:showHistory,setShowHistory:setShowHistory,
-    showSettings:showSettings,setShowSettings:setShowSettings,
-    showSearch:showSearch,setShowSearch:setShowSearch, // v16.3.0: "/" opens global search
+    editId:editId,form:form,setForm:setForm,setSwapAffected:setSwapAffected,
+    setShowHistory:setShowHistory,
+    setShowSettings:setShowSettings,
+    setShowSearch:setShowSearch, // v16.3.0: "/" opens global search
     // v14 p7: settingsTab for ←/→ tab-cycle shortcut inside Settings modal.
     settingsTab:settingsTab,setSettingsTab:setSettingsTab,
     // v18.0.0 phase 3: the ←/→ cycle runs over visibleTabs(can), not the raw
@@ -3074,23 +2917,22 @@ function BookingApp({uid}){
     // the capability grid.
     can:can,hasModule:hasModule,setRolesFor:setRolesFor,setActivityOpen:setActivityOpen,requestDelete:requestDelete,
     // v14 p7: reminder editor state for Esc/Enter handling.
-    reminderEditor:reminderEditor,setReminderEditor:setReminderEditor,
+    reminderEditor:reminderEditor,
     saveReminderFromEditor:saveReminderFromEditor,
     // v14 p7 fix: reminder-delete confirm state.
     confirmReminderDel:confirmReminderDel,setConfirmReminderDel:setConfirmReminderDel,
     doDeleteReminder:doDeleteReminder,
-    manualTarget:manualTarget,setManualTarget:setManualTarget,
+    setManualTarget:setManualTarget,
     showPrefPicker:showPrefPicker,setShowPrefPicker:setShowPrefPicker,
     confirmDel:confirmDel,setConfirmDel:setConfirmDel,
-    confirmReshuffle:confirmReshuffle,setConfirmReshuffle:setConfirmReshuffle,
-    confirmCancel:confirmCancel,setConfirmCancel:setConfirmCancel,
+    setConfirmReshuffle:setConfirmReshuffle,
+    setConfirmCancel:setConfirmCancel,
     confirmKitchen:confirmKitchen,setConfirmKitchen:setConfirmKitchen,
     setVoucherAsk:setVoucherAsk,
     setVoucherBack:setVoucherBack,
     setSeatNote:setSeatNote,
     setSeatClash:setSeatClash,
     setVoucherCarry:setVoucherCarry,
-    blockTarget:blockTarget,setBlockTarget:setBlockTarget,
     bookings:bookings,
     // v14.4.0: List-view selection + the handlers its A/E/S/C/Delete shortcuts call.
     listDay:listDaySorted,selectedListId:selectedListId,setSelectedListId:setSelectedListId,
@@ -3104,14 +2946,13 @@ function BookingApp({uid}){
     openNew:openNew,openWalkin:openWalkin,
     // v14.6.0: Summary panel toggle (the g shortcut).
     setSummaryOpen:setSummaryOpen,
-    showWeek:showWeek,setShowWeek:setShowWeek,
+    setShowWeek:setShowWeek,
     setPrintAsk:setPrintAsk,
     // WhatsApp sandbox: the I shortcut's opener, and the four setters
-    // `escapeAction` names. `showInbox` is still read directly — the I key must
-    // not re-open a panel that is already up.
-    showInbox:showInbox,setShowInbox:setShowInbox,closeInbox:closeInbox,
+    // `escapeAction` names.
+    setShowInbox:setShowInbox,closeInbox:closeInbox,
     setConfirmArchive:setConfirmArchive,setConfirmDeleteConv:setConfirmDeleteConv,setWaPhoto:setWaPhoto,
-    showSim:showSim,setShowSim:setShowSim,
+    setShowSim:setShowSim,
     // v17.14.0 (/code-review): the waitlist panel's Escape close. It is here and
     // not merely in `escapeAction` because the OLD chain had no waitlist branch,
     // so this setter had never been needed in the ctx — adding the `case` without
@@ -3132,8 +2973,8 @@ function BookingApp({uid}){
     // would otherwise be a silent back door past the guard), and the discard
     // confirm needs its own Esc (dismiss) / Enter (discard) branches.
     // v17.5.0 correction: Esc closes the split-setup popup (it has no Cancel).
-    splitMenuFor:splitMenuFor,setSplitMenuFor:setSplitMenuFor,
-    confirmDiscard:confirmDiscard,setConfirmDiscard:setConfirmDiscard,doDiscard:doDiscard,
+    setSplitMenuFor:setSplitMenuFor,
+    setConfirmDiscard:setConfirmDiscard,doDiscard:doDiscard,
     requestCloseForm:requestCloseForm,requestCloseWalkin:requestCloseWalkin,requestCloseManual:requestCloseManual,
     // v17.8.0: the three surfaces added to the guard — same reason as above.
     requestCloseReminderEditor:requestCloseReminderEditor,requestCloseBlock:requestCloseBlock,requestCloseSettings:requestCloseSettings,

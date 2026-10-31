@@ -6,13 +6,12 @@
 // generated sources with the same calls and the same draft every time; that
 // comparison is in REFACTOR_LOG. These are the cases that stay.
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
 import { againDraft } from "../src/lib/booking-save.js";
 import { getDur } from "../src/lib/booking-logic.js";
 import { sanitizeVoucher } from "../src/lib/vouchers.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
-import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const TODAY = todayStr();
 const NOW = Date.now();
@@ -92,7 +91,7 @@ describe("againDraft", () => {
 });
 
 describe("the wiring", () => {
-  const APP = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n").replace(/\s+/g, "");
+  const APP = appCode().replace(/\s+/g, "");
   it("bookAgain opens the form with againDraft, through openForm, and builds no draft itself", () => {
     const i = APP.indexOf("functionbookAgain(");
     const body = APP.slice(i, APP.indexOf("useWalkin(", i));
@@ -106,7 +105,7 @@ describe("the wiring", () => {
 // new-booking form. Measured on DEV with it denied: "+ New" refused, Book again
 // opened the form and Save wrote a booking.
 describe("a new booking needs bookingCreate, whichever door it came through", () => {
-  const APP = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n").replace(/\s+/g, "");
+  const APP = appCode().replace(/\s+/g, "");
   const GATE = 'if(refused("bookingCreate"))return';
   // The function a position in App sits in: the nearest `function name(` before it.
   const ownerOf = (at) => { const m = [...APP.slice(0, at).matchAll(/function([A-Za-z0-9_]+)\(/g)]; return m[m.length - 1][1]; };

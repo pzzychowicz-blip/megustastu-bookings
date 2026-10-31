@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { applyModal, topModal, modalMap, MODAL_Z } from "../src/hooks/useModalStack.js";
 import { escapeAction } from "../src/lib/modal-keys.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const open = (stack, id, v) => applyModal(stack, id, v === undefined ? true : v);
 
@@ -129,7 +130,7 @@ describe("MODAL_Z covers every surface App can open", () => {
     // are generated FROM MODAL_Z; generated setters make that direction
     // tautological, so the check that still bites is the READ side:
     // `modalOpen.<id>` with no rank yields no setter and no Escape action.
-    const app = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+    const app = appCode();
     const ids = new Set([
       ...[...app.matchAll(/\bmodalOpen\.([A-Za-z0-9_$]+)/g)].map((m) => m[1]),
       ...[...app.matchAll(/\bsetModalFns\.([A-Za-z0-9_$]+)/g)].map((m) => m[1]),
@@ -154,7 +155,7 @@ describe("MODAL_Z covers every surface App can open", () => {
     // v18.13.0 (#31): and the two modal tables, in lib/modal-keys.js.
     const kb = ["../src/hooks/useKeyboardShortcuts.js", "../src/lib/shortcuts.js", "../src/lib/modal-keys.js"]
       .map((f) => stripComments(readFileSync(new URL(f, import.meta.url), "utf8")).join("\n")).join("\n");
-    const app = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+    const app = appCode();
     const used = [...new Set([...kb.matchAll(/\bK2?\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]))];
     expect(used.length, "the K.* pattern still matches").toBeGreaterThan(60);
 

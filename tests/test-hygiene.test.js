@@ -37,6 +37,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { APP_FILES, appCode, appSource } from "./app-source.js";
 
 const TESTS = dirname(fileURLToPath(import.meta.url));
 
@@ -122,6 +123,57 @@ describe("a test that greps JS source strips comments first", () => {
       expect(files.some(([n]) => n === f)).toBe(true);
       expect(typeof why === "string" && why.length > 10).toBe(true);
     });
+  });
+});
+
+// v18.13.1: `tests/app-source.js` is the one reader of App.jsx, so a hook joining
+// its list widens every pin at once. A test that goes round it still passes, which
+// is the defect: once its subject moves, a negative or an order pin passes while
+// checking nothing. A bare "App.jsx" is left alone: it is a label, or a row in a
+// table of positive pins, and a positive pin reports a move by failing. An
+// `import(` is module resolution, not a source read: `first-render` runs App.
+const READS_APP = /["'`](?:\.{1,2}\/)*(?:src)?\/App\.jsx["'`]|(?:(?<!\.push)\(|,\s*)["'`]App\.jsx["'`]\s*\)/;
+const readsApp = (line) => !line.trim().startsWith("//") && !/\bimport\(/.test(line) && READS_APP.test(line);
+
+describe("a test reads App's source through tests/app-source.js", () => {
+  it("names App.jsx in no read of its own", () => {
+    const offenders = files
+      .filter(([, src]) => src.split("\n").some(readsApp))
+      .map(([f]) => f);
+    expect(offenders).toEqual([]);
+  });
+
+  it("the detector knows each shape a read has taken", () => {
+    // The guard against the guard: these are the spellings the v18.13.1 sweep
+    // replaced, and one it stopped seeing would report green over all of them.
+    [
+      'read("App.jsx")',
+      'read("src/App.jsx")',
+      'read("src", "App.jsx")',
+      'read("../src/App.jsx")',
+      'new URL("../src/App.jsx", import.meta.url)',
+      'join(HERE, "..", "src", "App.jsx")',
+      'readFileSync("src/App.jsx", "utf8")',
+      // /code-review: spellings no test has used yet, and a new test could.
+      "read('src/App.jsx')",
+      "read(`src/App.jsx`)",
+      'read("./src/App.jsx")',
+      'readFileSync(join(SRC, "App.jsx"), "utf8")',
+      'readFileSync(SRC + "/App.jsx", "utf8")',
+    ].forEach((read) => expect(readsApp(read), read).toBe(true));
+    [
+      'hasnt(App, "App.jsx", X)',
+      'offenders.push("App.jsx")',
+      '"/src/App.jsx"',
+      '["App.jsx", /x/]',
+      'await import("../src/App.jsx")',
+    ].forEach((label) => expect(readsApp(label), label).toBe(false));
+  });
+
+  it("the helper answers with App's source, imports included", () => {
+    expect(appSource()).toMatch(/^import /m);
+    expect(appCode()).toContain("function BookingApp(");
+    expect(APP_FILES[0]).toBe("App.jsx");
   });
 });
 

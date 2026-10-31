@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { loginOptions, signupMessage, CONNECT_STEPS, mergeSteps, resultHeadline, retryAnnouncement, FB_SDK_URL } from "../src/lib/wa-connect.js";
 import { connectionLines } from "../src/lib/wa-coexist.js";
+import { appCode } from "./app-source.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => stripComments(readFileSync(join(ROOT, p), "utf8")).join("\n");
@@ -249,7 +250,7 @@ describe("Settings → WhatsApp shows the connection to admins only", () => {
   it("renders the section behind isAdmin, from the waLink App hands down", () => {
     expect(settings).toContain("{isAdmin ? <BusinessAppSection waLink={waLink} /> : null}");
     expect(settings).toContain("content = <WhatsAppTabContent waSettings={waSettings} onSaveWaSettings={onSaveWaSettings} isAdmin={isAdmin} waLink={waLink} can={can} />;");
-    expect(read("src/App.jsx")).toContain("waLink={wa.waLink} /></Suspense>");
+    expect(appCode()).toContain("waLink={wa.waLink} /></Suspense>");
   });
   it("links to the page, and warns only on a definite mismatch from wa-config", () => {
     expect(settings).toContain('href="/wa-connect"');

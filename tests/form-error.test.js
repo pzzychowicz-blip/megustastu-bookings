@@ -8,11 +8,9 @@
 // effect's dependency list is read from App.jsx with its comments stripped.
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
-const APP = stripComments(
-  readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+const APP = appCode();
 
 function clearDeps() {
   const m = APP.match(/useEffect\(function\(\)\{if\(error\)\{setError\(""\);setErrorField\(null\);\}\},\[([^\]]*)\]\)/);

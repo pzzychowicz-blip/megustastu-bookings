@@ -5,6 +5,7 @@ import { bookingTagIds, liveTagIds, filterByTags, onlyFinishedMatch, dayTagChips
 import { guestTagMap, customerIndex } from "../src/lib/customers.js";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const read = (rel) => stripComments(readFileSync(new URL("../src/" + rel, import.meta.url), "utf8")).join("\n");
 
@@ -81,14 +82,14 @@ describe("onlyFinishedMatch", () => {
     expect(onlyFinishedMatch(null, map, LIST, ["g-allergy"])).toBe(false);
   });
   it("App asks it where a tag is chosen and where the day changes, and only ever opens the fold from the first", () => {
-    const APP = read("App.jsx");
+    const APP = appCode();
     const fn = APP.slice(APP.indexOf("function changeListTags(next){"), APP.indexOf("function toggleShowFinished(next){"));
     expect(fn).toContain("if(onlyFinishedMatch(bookings.filter(function(b){return b.date===viewDate;}),guestTags,tagList,next)) setShowFinished(true);");
     expect(fn).not.toContain("setShowFinished(false)");
     expect(APP).toContain("setSelectedListId(null);setShowFinished(onlyFinishedMatch(bookings.filter(function(x){return x.date===viewDate;}),guestTags,tagList,listTagFilter));");
   });
   it("App opens the fold when the answer BECOMES true (the last match finished under the filter), and never closes it from there", () => {
-    const APP = read("App.jsx");
+    const APP = appCode();
     const at = APP.indexOf("const tagOnlyFinished=useMemo(");
     expect(at).toBeGreaterThan(-1);
     const fn = APP.slice(at, at + 600);
@@ -149,7 +150,7 @@ describe("the chosen set", () => {
 // `listDaySorted`, and a card the filter hides must not be a keyboard target.
 describe("the List is wired to it", () => {
   const LISTVIEW = read("components/ListView.jsx");
-  const APP = read("App.jsx");
+  const APP = appCode();
   it("ListView narrows the day and builds its chips from the WHOLE day", () => {
     expect(LISTVIEW).toContain("const day = useMemo(() => filterByTags(dayAll, guestTags, tagList, tagFilter), [dayAll, guestTags, tagList, tagFilter]);");
     expect(LISTVIEW).toMatch(/dayTagChips\(dayAll, guestTags, tagList, tagFilter\)/);

@@ -26,6 +26,7 @@ import {
 import { sanitizeAdminSettings, DEFAULT_ADMIN_SETTINGS, inviteIdFor } from "../src/hooks/useRoles.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { resolveShortcut } from "../src/lib/shortcuts";
+import { appCode } from "./app-source.js";
 
 const entry = (o = {}) => sanitizeRole(Object.assign({ uid: "u1", email: "a@b.c" }, o), "u1");
 
@@ -423,7 +424,7 @@ describe("inviteIdFor — an email is not a legal RTDB key", () => {
 describe("GATED_CAPS — the capabilities a person can actually lack", () => {
   const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
   const read = (p) => stripComments(readFileSync(join(ROOT, p), "utf8")).join("\n");
-  const App = read("src/App.jsx");
+  const App = appCode();
   const Chrome = read("src/components/SettingsChrome.jsx");
 
   it("is EVERY capability, because a deny can remove any of them", () => {

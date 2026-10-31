@@ -18,6 +18,7 @@ import { findTimes } from "../src/lib/booking-logic.js";
 import { dueOccurrences } from "../src/lib/recurring.js";
 import { specialDayEntry } from "../src/lib/activity.js";
 import { addDays } from "../src/lib/day.js";
+import { appCode } from "./app-source.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => stripComments(readFileSync(join(ROOT, p), "utf8")).join("\n");
@@ -160,7 +161,7 @@ describe("the hook carries both halves on every write", () => {
     expect(H).toMatch(/setHourExceptions\(exceptionIndex\(next\.exceptions\)\)/);
   });
   it("App hands the views one repaint key for both halves", () => {
-    const A = read("src/App.jsx");
+    const A = appCode();
     expect(A).not.toMatch(/hoursSig=\{weekHours\}/);
     expect((A.match(/hoursSig=\{hoursSig\}/g) || []).length).toBe(3);
   });

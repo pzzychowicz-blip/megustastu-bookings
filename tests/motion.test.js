@@ -42,6 +42,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { join } from "node:path";
 import { M, EXIT_MS, REVEAL_EXIT_MS, exitHold } from "../src/lib/constants.js";
+import { appCode } from "./app-source.js";
 
 const ROOT = join(import.meta.dirname, "..");
 // v17.15.1: duration tokens now live in src/index.css (moved out of the
@@ -290,7 +291,7 @@ describe("no hand-typed exit delays", () => {
       if (!/\.jsx?$/.test(f)) continue;
       if (/outMs=\{\d+\}/.test(code(join(dir, f), "utf8"))) offenders.push(f);
     }
-    const app = code(join(ROOT, "src/App.jsx"), "utf8");
+    const app = appCode();
     if (/outMs=\{\d+\}/.test(app)) offenders.push("App.jsx");
     expect(offenders, "pass no outMs and take the EXIT_MS default").toEqual([]);
   });

@@ -19,6 +19,7 @@ import { stripComments } from "../scripts/strip-comments.mjs";
 import { placeWaitlist, withoutHeld } from "../src/lib/waitlist-match.js";
 import { genId, isAllIn, isAllOut, offZone } from "../src/lib/booking-logic.js";
 import { ALL_TABLES, INDOOR } from "../src/lib/constants.js";
+import { appCode } from "./app-source.js";
 
 // ALL_TABLES holds {id, capacity} objects, not ids — a booking's `tables` is a
 // string array, so a fixture built straight from it silently occupies nothing.
@@ -299,7 +300,7 @@ describe("phase 68 — the entry carries the zone, and the row says it", () => {
     expect(read("hooks/useWaitlist.js")).toMatch(/if\(preference==="indoor"\|\|preference==="outdoor"\) entry\.preference=preference;/);
   });
   it("the booking form passes it, and Book brings it back", () => {
-    const App = read("App.jsx");
+    const App = appCode();
     // v18.11.0: through `waitlistEntry`, which carries the draft's zone, and the
     // form's door hands it the draft as it is (the walk-in's passes none).
     expect(App).toMatch(/const w=waitlistEntry\(formRef\.current,\{checkPhone:true,/);
@@ -348,8 +349,7 @@ describe("useWaitlist returns the list without the held entries, and keeps the s
 });
 
 describe("a new booking from the waitlist (App)", () => {
-  const APP = stripComments(readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), "../src/App.jsx"), "utf8")).join("\n");
+  const APP = appCode();
   const fn = APP.slice(APP.indexOf("function doSaveNew("), APP.indexOf("function doSave("));
   it("holds the entry before the dispatch, so nothing can land first", () => {
     const hold = fn.indexOf("holdWaitlistEntry(wlId)"), save = fn.indexOf("saveBookings(plan.next");

@@ -17,6 +17,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { APP_FILES, appCode } from "./app-source.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
@@ -252,7 +253,7 @@ describe("phase 62 — one red for every destructive control, and the trash mark
   const files = [
     ...readdirSync(join(SRC, "components")).filter((f) => f.endsWith(".jsx")).map((f) => "components/" + f),
     ...readdirSync(join(SRC, "components", "whatsapp")).filter((f) => f.endsWith(".jsx")).map((f) => "components/whatsapp/" + f),
-    "App.jsx",
+    ...APP_FILES,
   ];
 
   // What may still paint an old red, and why. Everything else is a failure.
@@ -286,7 +287,7 @@ describe("phase 62 — one red for every destructive control, and the trash mark
   });
 
   it("the confirm dialogs: one red on the dialog's geometry, the mark on Delete, not on Discard", () => {
-    const App = read("App.jsx");
+    const App = appCode();
     for (const title of ["Delete booking?", "Delete reminder?", "Delete conversation?"]) {
       const at = App.indexOf(">" + title + "<");
       expect(at, title).toBeGreaterThan(-1);

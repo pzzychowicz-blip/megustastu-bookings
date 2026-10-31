@@ -13,11 +13,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { tabColumns } from "../src/lib/tab-rows.js";
+import { appCode } from "./app-source.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
 const Settings = read("components/Settings.jsx");
-const App = read("App.jsx");
+const App = appCode();
 const Atoms = read("components/atoms.jsx");
 
 // The nine labels' text widths at 12px SF Pro, read on DEV with TabBar's own

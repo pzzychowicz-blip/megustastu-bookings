@@ -9,6 +9,7 @@ import { nextBusyAt, freeWindow } from "../src/lib/plan-avail.js";
 import { firstStartOf } from "../src/lib/booking-logic.js";
 import { PREF_SPEC, DEFAULT_USER_PREFS, sanitizeUserPrefs, readPrefValue } from "../src/hooks/useUserPrefs.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const read = (...p) => stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", ...p), "utf8")).join("\n");
 const m = (hhmm) => { const [h, mm] = hhmm.split(":").map(Number); return h * 60 + mm; };
@@ -74,7 +75,7 @@ describe("the per-person switch (Settings → App)", () => {
 
 describe("the wiring", () => {
   const Plan = read("src", "components", "PlanView.jsx");
-  const App = read("src", "App.jsx");
+  const App = appCode();
   const Settings = read("src", "components", "Settings.jsx");
 
   it("the rim and the Walk-in offer read ONE answer, for the default walk-in size", () => {

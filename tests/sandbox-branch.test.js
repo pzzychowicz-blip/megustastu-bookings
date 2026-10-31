@@ -23,6 +23,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => readFileSync(join(ROOT, p), "utf8");
@@ -82,7 +83,7 @@ describe("the generated sandbox branch", () => {
 
   it("the version is ONE literal, suffixed by the build and not by an edit", () => {
     // Stripped: both files explain the version line in prose beside it.
-    const app = stripComments(read("src/App.jsx")).join("\n");
+    const app = appCode();
     const versions = app.match(/^\s*version:.*$/gm) || [];
     expect(versions.length, "more than one version line in App.jsx").toBe(1);
     expect(versions[0].trim()).toMatch(/^version:"\d+\.\d+\.\d+"\+\(SANDBOX_DEPLOY\?"-sandbox":""\),$/);

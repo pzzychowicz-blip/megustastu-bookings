@@ -38203,3 +38203,133 @@ disproved. `downloadCrashes` could reject only on an `at` past `Date`'s range, a
 on `activity/$eid` holds `at` to `now`. `saveBlocks` answers true while `writeWithRev`'s schema
 gate writes nothing, but no press reaches it: `UpdateRequired` cannot be dismissed and
 `anyModal` takes `schemaBlocked`, so the page is inert. Nothing was deferred.
+
+## v18.13.1 — `BookingApp` V1: the guards, the test helper and `useSettingsPanel`
+
+**Date:** 2026-10-31 · **Branch:** `refactor/v18.13.1-settings-panel-hook`
+
+**Behaviour change:** none.
+
+**Files:** 69 changed, of which `tests/` is 61 (+299 −125). New: `src/hooks/useSettingsPanel.js`
+(209 lines), `tests/app-source.js`, `tests/first-render.test.js`. `src/App.jsx` is +36 −195.
+
+The pilot of the state-by-domain design (`MGT_Bookings_State_By_Domain_Design.md` in the
+context folder, Phase 3 of the 2026-10-30 tech-debt plan). Patryk approved V1 on 2026-10-31;
+V2–V5 wait for WhatsApp go-live and each needs its own approval.
+
+### The test helper
+
+57 test files assert over `App.jsx`'s text. A positive pin reports a move by failing, but a
+negative or an order pin cannot: `indexOf` answers -1 and `not.toContain` is satisfied, so
+the 118 of those (98 negative, 20 order, in 28 files) would have gone on passing while
+checking nothing. Every read now goes through `tests/app-source.js`, and a hook joins by
+adding one line to `APP_FILES`.
+
+The sweep edited no pin: with App alone in the list the text is
+identical. **Measured:** 3,888 tests passing before; 3,888 of those still passing after, plus
+3 new ones. Two reads stay raw because they were (`appSource`, in `booking-logic` and
+`plan-gestures`), and three file lists spread `APP_FILES` instead of naming App.
+`tests/test-hygiene.test.js` now fails a test that reads App.jsx directly. On its first run
+it reported `motion.test.js`, a false positive on `offenders.push("App.jsx")`, which is a
+label; the detector now skips `.push(` and pins that case.
+
+### The lint guards
+
+Lint and build both pass over a TDZ, and a TDZ blanks the whole app. `no-use-before-define`
+with `variables: false` now runs on all of `src/`: it asks only about a read in the same
+scope, which is what throws during render. It has 0 findings there today. `src/lib/whatsapp.js`
+is left out by name: its two findings (lines 182-183) are an import read below its use, which
+ESM hoists.
+
+`react-hooks/invariant` is an error on all of `src/`, so a new domain hook needs no entry. The
+compiler can stop analysing `BookingApp` silently: a `class` in the body removes all of App's
+warnings with no error, and only this rule says so. `src/hooks/useWaSettings.js` is left out by
+name, because line 115 already reports; that fix is on the ROADMAP.
+
+**Proved by planting each fault in `npm run lint`'s config, then restoring the file:**
+`activeView` below the `useKeyboardShortcuts` call fails `no-use-before-define`, and a
+`class` in the body fails `react-hooks/invariant`.
+
+### The first-render test
+
+`tests/first-render.test.js` is the first time `App.jsx` runs under test. It renders the real
+`BookingApp` once through React's server renderer with Firebase mocked whole, which needed
+`export function BookingApp`. A TDZ is a render-time throw, so one pass of the body with no
+throw means no const was read above itself on that path.
+
+It keeps to `tests/CLAUDE.md`'s bar: no jsdom, nothing mounted. Because effects do not run
+on the server renderer, it says nothing about effect order, and that stays a walk on DEV.
+
+**Proved by planting:** with `activeView` moved below the `useKeyboardShortcuts` call it
+fails with `ReferenceError: Cannot access 'activeView' before initialization`. The
+hygiene guard learned that `import(` is module resolution, not a source read.
+
+### The keyboard ctx
+
+19 of the ctx's 111 keys were read by nothing: not `useKeyboardShortcuts.js`, not
+`lib/shortcuts.js`, not `lib/modal-keys.js`, and nothing reads the ctx dynamically. They are
+gone, leaving 92: `setViewDate` `showForm` `setShowForm` `showWalkin` `setShowWalkin`
+`showHistory` `showSettings` `showSearch` `setReminderEditor` `manualTarget`
+`confirmReshuffle` `confirmCancel` `blockTarget` `setBlockTarget` `showWeek` `showInbox`
+`showSim` `splitMenuFor` `confirmDiscard`. The comment saying the I key reads `showInbox`
+went with them; it had stopped being true. The ctx stays one flat literal on purpose:
+`tests/modal-stack.test.js` reads its keys from the text, so a spread would blind that test
+without failing it.
+
+### `useSettingsPanel`
+
+25 statements leave `BookingApp`, moved verbatim and in their original order: 163 of the 171
+lines removed from App are in the hook word for word, and the other 8 are 4 import lines and
+one comment split on purpose. No save or write path moved.
+
+| | Before | After | Design |
+|---|---:|---:|---:|
+| Code lines in `BookingApp` | 1,924 | 1,877 | about 1,874 |
+| Statements | 400 | 376 | 376 |
+| `useState` | 54 | 47 | 47 |
+| `useEffect` | 22 | 21 | 21 |
+| `useRef` | 31 | 29 | 29 |
+| Functions | 98 | 90 | 90 |
+| Lint, total / App | 63 / 7 | 63 / 7 | 63 / 7 |
+
+The hook has no warnings. Code lines are 3 over the estimate because the call is 12 lines.
+
+**Gate:** 435.52 kB, 127.44 kB gz (127.59 on v18.13.0) · 3,892 tests passed (3,888) · lint 63
+problems, 0 errors · `check:style` OK. `save-path` and `write-gate`: 164 passed under `CI=1`,
+no snapshot changed, no `-u`.
+
+**Walked on DEV after a reload, with no console error:** open, tabs by click and by →, a draft
+guarded on Escape (Keep editing and Discard), the tab reset on close, a saved name, the log's
+range and its backwards refusal, Clear with its sentence reset by changing the range, the CSV
+and crash downloads (intercepted, no file written), the jump to a customer, and that search
+cleared on close. Not checked on a device.
+
+### `/code-review` fixes
+
+Fifteen raised, eleven fixed, four disproved. No shipped code changed: the fixes are guards,
+comments and docs. The gate numbers above still hold.
+
+- **The App-read guard** missed five spellings (single quotes, a template literal,
+  `"./src/App.jsx"`, `join(SRC, "App.jsx")`, `SRC + "/App.jsx"`). It catches them now, and the
+  detector's own list pins each.
+- **Both lint guards went from a chosen scope to all of `src/`**, with one file left out by name
+  in each. `no-use-before-define` gained `src/components`, with 0 findings there.
+  `react-hooks/invariant` needs no entry for a new hook any more. `useWaSettings.js` has no
+  roadmap entry until now; it has one.
+- **The count of files reading App** is 57; this entry said 49 one paragraph above saying 57.
+- **Notes that still placed moved code in App**, two import comments and two notes elsewhere,
+  and the retention and clear comments, which the verbatim move left far from their code. The
+  hook is identical once comments are stripped.
+
+**Disproved, by measurement:**
+
+| Candidate | What settled it |
+|---|---|
+| A dropped ctx key is still read | All 80 distinct `K.x` reads, in `useKeyboardShortcuts.js`, `shortcuts.js` and `modal-keys.js`, are still passed |
+| An order pin now spans two files | No `indexOf` pin names a moved subject; `refusal-toast`'s `</main>` has no copy in the hook, which holds no JSX |
+| First-render's stubbed globals leak | `vite.config.js` sets neither `isolate` nor `pool`, so each file gets its own globals |
+| `appCode()` needs a cache | 2.4 ms a call (median of 20), 82 calls across 58 files, and each file loads the helper fresh |
+
+**A plant has to be compiled before its silence means anything.** A `class` planted in a hook
+that called no hook reported nothing, which read as the widened rule not working. The compiler
+skips such a function; the same `class` beside a `useState` is an error.

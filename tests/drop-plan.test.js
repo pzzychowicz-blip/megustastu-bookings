@@ -16,6 +16,7 @@ import { ALL_TABLES } from "../src/lib/constants.js";
 import { comboCapBest } from "../src/lib/booking-logic.js";
 import { todayStr, addDays } from "../src/lib/day.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const TODAY = todayStr();
 // A day that is not today: no party is live, and the optimiser is always on.
@@ -147,7 +148,7 @@ describe("planDrop: which list it reads", () => {
 });
 
 describe("BookingApp's dropOnTable", () => {
-  const App = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "App.jsx"), "utf8")).join("\n");
+  const App = appCode();
   const fn = App.slice(App.indexOf("function dropOnTable("), App.indexOf("function requestDelete("));
 
   it("is the gate, the plan and the two side effects, and nothing else", () => {

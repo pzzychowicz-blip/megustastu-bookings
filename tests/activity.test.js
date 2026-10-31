@@ -36,6 +36,7 @@ import { sanitizeAdminSettings } from "../src/hooks/useRoles.js";
 // raw read would match the explanation instead of the code.
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { conversationDeletePatch, contactDeletePatch } from "../src/lib/whatsapp.js";
+import { appCode } from "./app-source.js";
 
 const RULES = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "..", "database.rules.json"), "utf8"
@@ -374,7 +375,7 @@ describe("voucherWriteEntries", () => {
     const hook = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "hooks", "useVouchers.js"), "utf8")).join("\n");
     expect(hook).toMatch(/voucherWriteEntries\(prev, computed, \{ auto: isSilent === true, currency: currency \}\)/);
     expect(hook).toMatch(/\}, \[setWriteWarning, currency\]\);/);
-    const app = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "App.jsx"), "utf8")).join("\n");
+    const app = appCode();
     expect(app).toMatch(/useVouchers\(\{[\s\S]{0,160}currency: generalSettings\.currency,/);
   });
 });
@@ -567,9 +568,7 @@ describe("the writer hook points", () => {
     // happening: the booking anonymisation is visible on screen, and a log
     // entry nobody redacted looks exactly like one that was never there. So the
     // call is pinned rather than trusted to survive a later refactor.
-    const app = stripComments(
-      readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")
-    ).join("\n");
+    const app = appCode();
     const at = app.indexOf("function deleteCustomer");
     expect(at, "deleteCustomer was renamed or removed").toBeGreaterThan(-1);
     const end = app.indexOf("\n  function ", at + 1);

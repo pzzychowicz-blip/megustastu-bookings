@@ -2,12 +2,9 @@
 // a fixed bottom bar instead of wrapping onto a second header row.
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
-const App = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "App.jsx"), "utf8")).join("\n");
+const App = appCode();
 const header = App.slice(App.indexOf("<header"), App.indexOf("</header>"));
 
 describe("the phone's bottom bar", () => {

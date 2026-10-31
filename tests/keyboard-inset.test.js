@@ -13,11 +13,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { keyboardInsetOf, coveredTopOf } from "../src/hooks/useKeyboardInset.js";
+import { appCode } from "./app-source.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (...p) => readFileSync(join(ROOT, ...p), "utf8");
 const Atoms = stripComments(read("src", "components", "atoms.jsx")).join("\n");
-const App = stripComments(read("src", "App.jsx")).join("\n");
+const App = appCode();
 const Overlay = Atoms.slice(Atoms.indexOf("export function Overlay("), Atoms.indexOf("\n}\n", Atoms.indexOf("export function Overlay(")));
 
 // `full` is the root element's clientHeight, which the keyboard does not move
