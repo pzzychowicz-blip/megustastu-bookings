@@ -38210,6 +38210,9 @@ gate writes nothing, but no press reaches it: `UpdateRequired` cannot be dismiss
 
 **Behaviour change:** none.
 
+**Files:** 69 changed, of which `tests/` is 61 (+299 −125). New: `src/hooks/useSettingsPanel.js`
+(209 lines), `tests/app-source.js`, `tests/first-render.test.js`. `src/App.jsx` is +36 −195.
+
 The pilot of the state-by-domain design (`MGT_Bookings_State_By_Domain_Design.md` in the
 context folder, Phase 3 of the 2026-10-30 tech-debt plan). Patryk approved V1 on 2026-10-31;
 V2–V5 wait for WhatsApp go-live and each needs its own approval.
@@ -38300,3 +38303,33 @@ guarded on Escape (Keep editing and Discard), the tab reset on close, a saved na
 range and its backwards refusal, Clear with its sentence reset by changing the range, the CSV
 and crash downloads (intercepted, no file written), the jump to a customer, and that search
 cleared on close. Not checked on a device.
+
+### `/code-review` fixes
+
+Fifteen raised, eleven fixed, four disproved. No shipped code changed: the fixes are guards,
+comments and docs. The gate numbers above still hold.
+
+- **The App-read guard** missed five spellings (single quotes, a template literal,
+  `"./src/App.jsx"`, `join(SRC, "App.jsx")`, `SRC + "/App.jsx"`). It catches them now, and the
+  detector's own list pins each.
+- **Both lint guards went from a chosen scope to all of `src/`**, with one file left out by name
+  in each. `no-use-before-define` gained `src/components`, with 0 findings there.
+  `react-hooks/invariant` needs no entry for a new hook any more. `useWaSettings.js` has no
+  roadmap entry until now; it has one.
+- **The count of files reading App** is 57; this entry said 49 one paragraph above saying 57.
+- **Notes that still placed moved code in App**, two import comments and two notes elsewhere,
+  and the retention and clear comments, which the verbatim move left far from their code. The
+  hook is identical once comments are stripped.
+
+**Disproved, by measurement:**
+
+| Candidate | What settled it |
+|---|---|
+| A dropped ctx key is still read | All 80 distinct `K.x` reads, in `useKeyboardShortcuts.js`, `shortcuts.js` and `modal-keys.js`, are still passed |
+| An order pin now spans two files | No `indexOf` pin names a moved subject; `refusal-toast`'s `</main>` has no copy in the hook, which holds no JSX |
+| First-render's stubbed globals leak | `vite.config.js` sets neither `isolate` nor `pool`, so each file gets its own globals |
+| `appCode()` needs a cache | 2.4 ms a call (median of 20), 82 calls across 58 files, and each file loads the helper fresh |
+
+**A plant has to be compiled before its silence means anything.** A `class` planted in a hook
+that called no hook reported nothing, which read as the widened rule not working. The compiler
+skips such a function; the same `class` beside a `useState` is an error.
