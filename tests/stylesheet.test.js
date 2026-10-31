@@ -461,3 +461,13 @@ describe("the install card names the tenant, and the source names nobody", () =>
     expect(built.short_name).toBe(JSON.parse(SRC).short_name);
   });
 });
+
+// v18.14.0 (L3): on `html` as well as App's inline rule on `body`: the viewport takes
+// its overscroll from the root, and a pull in a Chrome tab reloads over an open form.
+describe("the page does not pull to refresh", () => {
+  it("is set on the root element, in the stylesheet", () => {
+    const css = readFileSync(new URL("../src/index.css", import.meta.url), "utf8");
+    expect(css).toMatch(/html, body \{ overscroll-behavior: none; \}/);
+  });
+});
+

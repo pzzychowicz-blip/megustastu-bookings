@@ -38611,3 +38611,18 @@ for its ring the ladder drops it first, as at the normal size (Ingrid Sanz below
 **Files:** `TimelineView.jsx`, `useShellPrefs.js`, `Settings.jsx`, `App.jsx`, new `tests/large-text.test.js`,
 `tests/a11y.test.js`, `tests/block-layout.test.js`, `tests/grid-extend.test.js`, `tests/unplaced.test.js`.
 
+### L3: pull-to-refresh
+
+The scan said neither `html` nor `body` had `overscroll-behavior`, which was half right. App's mount effect has
+set it on `body` inline for years, and every inner scroller has `contain`. Only `html` lacked it, and that is the
+one the viewport reads. It is on both now, in the stylesheet, so it also holds before the app mounts.
+
+| Reading | Before | After |
+|---|---|---|
+| `overscroll-behavior-y`, computed on `html` | auto | **none** |
+| Same on `body` | none | none |
+
+Whether a pull in a Chrome tab now does nothing is on the hardware list: a synthetic touch cannot raise it.
+
+**Files:** `index.css`, `tests/stylesheet.test.js`.
+

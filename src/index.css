@@ -917,6 +917,12 @@
   }
 }
 html, body { margin: 0; }
+/* v18.14.0 (L3): a downward pull at the top of a Chrome tab reloads the page, which
+   mid-service throws away an open form. `html` is the one that counts: it is what
+   the viewport takes its overscroll from. `body` has had this since App's mount
+   effect set it inline, and every inner scroller has `contain`. The installed app
+   has no pull-to-refresh to stop. */
+html, body { overscroll-behavior: none; }
 /* v18.3.0 (N8): iPhone Safari may inflate text when the phone turns to
    landscape; 100% keeps the type scale as written. */
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
