@@ -1,8 +1,8 @@
 // The one place a test reads `BookingApp`'s source (v18.13.1).
 //
-// `BookingApp` is being split into domain hooks, a version at a time, and 49 test
-// files assert over its text. A positive pin reports a move by failing. A negative
-// or an order pin cannot: `expect(APP).not.toContain(x)` and
+// `BookingApp` is being split into domain hooks, a version at a time, and the suite
+// asserts over its text. A positive pin reports a move by failing. A negative or an
+// order pin cannot: `expect(APP).not.toContain(x)` and
 // `expect(APP.indexOf(a)).toBeLessThan(APP.indexOf(b))` both pass the day `x` or `a`
 // leaves the file, because `indexOf` then answers -1. There were 118 of those, in 28
 // files, and each would have gone on passing while checking nothing.

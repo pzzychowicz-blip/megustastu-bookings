@@ -38216,13 +38216,13 @@ V2–V5 wait for WhatsApp go-live and each needs its own approval.
 
 ### The test helper
 
-49 test files assert over `App.jsx`'s text. A positive pin reports a move by failing, but a
+57 test files assert over `App.jsx`'s text. A positive pin reports a move by failing, but a
 negative or an order pin cannot: `indexOf` answers -1 and `not.toContain` is satisfied, so
 the 118 of those (98 negative, 20 order, in 28 files) would have gone on passing while
 checking nothing. Every read now goes through `tests/app-source.js`, and a hook joins by
 adding one line to `APP_FILES`.
 
-The sweep touched 57 test files and edited no pin: with App alone in the list the text is
+The sweep edited no pin: with App alone in the list the text is
 identical. **Measured:** 3,888 tests passing before; 3,888 of those still passing after, plus
 3 new ones. Two reads stay raw because they were (`appSource`, in `booking-logic` and
 `plan-gestures`), and three file lists spread `APP_FILES` instead of naming App.
