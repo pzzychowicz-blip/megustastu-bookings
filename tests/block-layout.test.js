@@ -143,7 +143,7 @@ describe("the fixture matches the component (v18.2.0 phase 22)", () => {
   });
 
   it("the chip's room is counted from the SAME list the rail draws", () => {
-    expect(tv).toMatch(/function chipRoomFor\(b, noShows, warn, clash\) \{\s*const flags = railFlagsOf\(b, noShows, warn, ""\)\.length;/);
+    expect(tv).toMatch(/function chipRoomFor\(b, noShows, warn, clash, sz\) \{\s*const flags = railFlagsOf\(b, noShows, warn, ""\)\.length;/);
     expect(tv).toMatch(/const allFlags = railFlagsOf\(b, noShows, warn, currency\);/);
   });
 
@@ -174,7 +174,7 @@ describe("two-line blocks", () => {
     expect(tv).toMatch(/chip: chipsOn && \(b\.status === "confirmed" \|\| b\.status === "pending"\)/);
   });
   it("line 2's start takes the name's place in the budget, and only there", () => {
-    expect(tv).toMatch(/HANDLE_PX \+ \(twoLine \? LINE_TWO_PX : NAME_MIN_PX \+ \(showChip \? CHIP_PX : 0\)\)/);
+    expect(tv).toMatch(/HANDLE_PX \+ \(twoLine \? sz\.lineTwoPx : sz\.nameMinPx \+ \(showChip \? sz\.chipPx : 0\)\)/);
   });
   it("the status mark and the flags are on one of the two lines, never neither", () => {
     expect(tv).toMatch(/<Reveal show=\{twoLine\}>[\s\S]*?\{marks\}[\s\S]*?<\/Reveal>/);

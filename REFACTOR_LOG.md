@@ -38575,3 +38575,39 @@ the handle. The old layout showed no time there at all, and the default lengths 
 | Ink insets on the 36px block, from pixels: above the capitals, under the chip, under the ring | | 4.5 · 4.5 · 3 |
 
 **Files:** `TimelineView.jsx`, `lib/block-layout.js`, `tests/block-layout.test.js`, `tests/contrast.test.js`.
+
+### H2: Larger text
+
+One switch in Settings → App, Timeline group, renamed from "Timeline zoom" because it is no longer only zoom.
+Per device and `localStorage` only, so no `SCHEMA` raise and no field in `settings/users/{uid}/prefs`. Default
+off, stored only when on.
+
+Names, times and table numbers go up two steps, the rest one, on 52px rows. `TimelineView` takes a scalar
+`largeText` and makes one geometry object, `sz`, which the block, the ghost and the blocked bar are handed.
+Every `*_PX` width in `TL_LARGE` was measured off the live DOM at that size, as the normal ones were:
+
+| Measured at Larger text | Normal | Large |
+|---|---|---|
+| Time chip, width × height | 37.5 × 16 | 42.7 × 18 |
+| Hour pill · now-pill, width | 38.2 · 36.6 | 43.5 · 40.7 |
+| `NOW_PILL_CLEAR` (the two pills' half-widths, plus 2) | 38 | 44 |
+| Size ring | 18 | 22 |
+| The word "Unplaced", in a 52px room | 47.6 | 51.8 |
+
+D1's arrangement carries over without a new number: the fold's 11 and 8 clear the 14px name, the clash band
+clears the 12px digits, and 22 less 17 is the same 5px the ring's margin was written for. On a block too narrow
+for its ring the ladder drops it first, as at the normal size (Ingrid Sanz below, 162px with a clash).
+
+| Reading | Value |
+|---|---|
+| Names cut of 17 at 1.5× / 1× | 1 / 12, against 0 / 8 at the normal size; more letters shown either way |
+| Tables on opening, 998 × 507 / 998 × 570 | 4 / 5, against 5 / 6 |
+| Through the real switch, on: block · row · Unplaced box | 36 → 44 · 44 → 52 · 92 → 108, eased over 41 frames |
+| Off | 44 → 36 · 52 → 44 · 108 → 92, eased over 40 frames |
+| Paced touch drag from table 1 to 2, 4, 6 (writes dropped by the rig) | each row lit under the finger, block lands 3px inside it |
+| `localStorage` after on / off | `"1"` / no key |
+| Frames written to Firebase by the switch, both ways | 0 |
+
+**Files:** `TimelineView.jsx`, `useShellPrefs.js`, `Settings.jsx`, `App.jsx`, new `tests/large-text.test.js`,
+`tests/a11y.test.js`, `tests/block-layout.test.js`, `tests/grid-extend.test.js`, `tests/unplaced.test.js`.
+

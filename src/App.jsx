@@ -1425,6 +1425,7 @@ export function BookingApp({uid}){
     splitEnabled,onToggleSplitEnabled,
     swEnabled,onToggleSw,
     tlSettings,onSetTlSetting,
+    largeText,onToggleLargeText,
     split,focusedPane,setFocusedPane,applySplit,fitTimeline,
     confirmSplit,swapSides,toggleSplitDir,exitSplit,setSplitRatio,
     splitSideBySideOk,shellFixed,
@@ -3486,6 +3487,7 @@ export function BookingApp({uid}){
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={VA.onReshuffle}
     toolbarFolded={toolbarFolded}
+    largeText={largeText}
     turnBuffer={turnBuffer}
     waitGhosts={waitGhosts}
     onBookWait={VA.onBookWait}
@@ -4112,6 +4114,8 @@ export function BookingApp({uid}){
             onTogglePlanGestures={onTogglePlanGestures}
             tlSettings={tlSettings}
             onSetTlSetting={onSetTlSetting}
+            largeText={largeText}
+            onToggleLargeText={onToggleLargeText}
             weekHours={weekHours}
             onSaveDayHours={function(i,p){if(refused("hoursEdit"))return;saveDayHours(i,p);}}
             onSaveAllDays={function(d){if(refused("hoursEdit"))return;saveAllDays(d);}}

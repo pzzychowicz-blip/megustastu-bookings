@@ -11,6 +11,7 @@
 //   splitEnabled, and their onToggle*                       the five PREF_SPEC booleans
 //   swEnabled, onToggleSw                                   the offline shell's switch
 //   tlSettings, onSetTlSetting                              Timeline zoom and follow
+//   largeText, onToggleLargeText                            Larger text on the Timeline
 //   split, focusedPane, setFocusedPane, applySplit,
 //   fitTimeline, confirmSplit, swapSides, toggleSplitDir,
 //   exitSplit, setSplitRatio, splitSideBySideOk             Split View
@@ -179,6 +180,13 @@ function readTlNum(b){
   }catch{/* ignore */}
   return b.def;
 }
+// v18.14.0 (H2): per-device "Larger text" on the Timeline. The same reasoning as
+// zoom: it answers this screen at this distance, so a phone must not inherit the
+// tablet's. Default off, so only "1" is ever stored.
+const LARGE_TEXT_KEY="mgt-tl-largetext";
+function readLargeText(){
+  try{return localStorage.getItem(LARGE_TEXT_KEY)==="1";}catch{return false;}
+}
 export function readTlSettings(){
   const B=TL_SETTING_BOUNDS;
   const maxZoom=readTlNum(B.maxZoom);
@@ -264,6 +272,14 @@ export function useShellPrefs({
       setThemePref(undefined);
       if(!DEV_THEME_FORCED) saveUserPrefs({theme:"auto"});
     }
+  }
+  const [largeText,setLargeText]=useState(readLargeText);
+  function onToggleLargeText(){
+    const next=!largeText;
+    try{
+      if(next) localStorage.setItem(LARGE_TEXT_KEY,"1"); else localStorage.removeItem(LARGE_TEXT_KEY);
+    }catch{/* ignore */}
+    setLargeText(next);
   }
   // v17.0.0 correction: per-device app width (see readAppWidth above).
   const [appWidth,setAppWidth]=useState(readAppWidth);
@@ -541,6 +557,7 @@ export function useShellPrefs({
     splitEnabled, onToggleSplitEnabled,
     swEnabled, onToggleSw,
     tlSettings, onSetTlSetting,
+    largeText, onToggleLargeText,
     split, focusedPane, setFocusedPane, applySplit, fitTimeline,
     confirmSplit, swapSides, toggleSplitDir, exitSplit, setSplitRatio,
     splitSideBySideOk, shellFixed,

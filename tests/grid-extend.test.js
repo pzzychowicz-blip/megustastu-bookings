@@ -110,7 +110,8 @@ describe("the hour label under the now-pill steps aside (v18.2.0)", () => {
 
   it("hides a label whose centre is within one pill of now, measured in px", () => {
     expect(Timeline).toMatch(/const covered = nowShown && Math\.abs\(m \+ 30 - nowMins\) \* pxPerMin < NOW_PILL_CLEAR;/);
-    expect(Timeline).toMatch(/const NOW_PILL_CLEAR = 38;/);
+    expect(Timeline).toMatch(/const NOW_PILL_CLEAR = sz\.nowClear;/);
+    expect(Timeline).toMatch(/const TL_NORMAL = \{[\s\S]*?nowClear: 38\s*\};/);
   });
 
   it("fades BOTH ways (an opacity transition, never an unmount) and leaves the a11y tree while hidden", () => {

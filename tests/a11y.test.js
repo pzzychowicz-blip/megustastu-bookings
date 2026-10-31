@@ -531,7 +531,7 @@ describe("the bookings themselves are reachable (WCAG 2.1.1, 4.1.2)", () => {
       "Tab must not land on a booking that has left the day");
     has(Timeline, "the handle is not tabbable", /tabIndex=\{leaving \? -1 : undefined\}\n\s*onClick=\{leaving \? undefined :/,
       "a real <button> inside an aria-hidden block would still take focus");
-    expect(count(Timeline, /<TimelineBlock (?:key=\{"leaving-" \+ s\.b\.id\} )?leaving b=\{s?\.?b\} pxPerMin=\{pxPerMin\} anim=\{null\} flipId=\{null\}/g),
+    expect(count(Timeline, /<TimelineBlock sz=\{sz\} (?:key=\{"leaving-" \+ s\.b\.id\} )?leaving b=\{s?\.?b\} pxPerMin=\{pxPerMin\} anim=\{null\} flipId=\{null\}/g),
       "both leaving sites (a table row, an Unplaced lane) pass no flip id and no status overlay").toBe(2);
   });
 

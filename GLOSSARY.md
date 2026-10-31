@@ -147,6 +147,7 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | Two overlapping squares | **double-booked marker** (`ClashIcon`) | Another booking claims this table now. Outranks the overstay warning. |
 | 5px stripe inside a red-bordered block | **clash band** (`ClashBand`) | Spans the exact minutes both bookings claim. Its right edge is the minute the earlier booking ends. Sits lower on a two-line day, clear of the time. |
 | The dark "20:30" pill on a block | **start-time chip** | Always shown on a confirmed or pending block: beside the name when *every* such block that day has room (`chipRoomFor`), on line 2 when not. |
+| "Larger text" in Settings → App | **Larger text** (`largeText`, `TL_LARGE`) | v18.14.0. This device only. Bigger names, times and table numbers on the Timeline, with 52px rows in place of 44. The print sheet is not affected. |
 | A block with the name above and the time under it | **two-line block** (`twoLineBlock`) | v18.14.0. A confirmed or pending block on a day that cannot fit the chip beside every name. The name gets the whole line. Seated and completed blocks stay on one line. |
 | The `=` handle at the block's right edge | **assign handle** (`AssignIcon`) | Opens manual table assignment. A real `<button>`, sibling to the block's button wrapper. |
 | Dimmed, semi-transparent block | **waitlist ghost** (`WaitGhost`, `waitGhosts`) | A waiting party a table would fit. Tap to book. Dashed at 0.4 when it needs a re-optimise. |

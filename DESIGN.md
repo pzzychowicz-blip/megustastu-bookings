@@ -1687,6 +1687,24 @@ shows its time.**
 - **A typed 60-minute booking at 1×** (about 79px) has less room than the chip, which
   is cut at the handle rather than dropped. It is the one place a time is cut.
 
+### Larger text (v18.14.0)
+A switch in Settings → App for the person on the pass who struggles with small text.
+It is this device's, like zoom: it answers one screen at one distance, so a phone must
+not inherit it from the tablet, and no field joins the stored prefs.
+
+- **Names, times and table numbers go up two steps** (11 → 14, 10 → 12, 11 → 14), and
+  the rest of the Timeline one (the "Unplaced" word, BLOCKED, the legend). Icons stay:
+  they are read by shape, and they are what the `FLAG_PX` budget is counted in.
+- **Rows are 52px, a block 44.** That is Patryk's trade, a table fewer on screen for
+  it: 4 at 507 where normal size shows 5, 5 at 570 where it shows 6.
+- **One geometry, `sz`,** so a block cannot disagree with its row: both sets in one
+  place, and every width in the large one measured, not scaled.
+- **The ring grows with its digits** (22px). The negative margin that keeps the name's
+  row its own height still holds, because 22 less the name's 17 is the same 5px.
+- **The change eases both ways**, on the rows' `height`. The Settings sheet is over it,
+  so what is seen is the page settling behind the blur. The type steps, because text
+  cannot ease without reflowing every name for 385ms.
+
 ### The compact layout (v18.14.0)
 Below 640px tall on anything that is not a phone (`isCompact`, `lib/compact-shell.js`)
 the shell gives its height to the grid. The tablet on the pass is 998 × 507 with
