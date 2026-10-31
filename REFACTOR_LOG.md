@@ -38401,3 +38401,13 @@ device.**
 
 **Gate:** 436.70 kB, 128.04 kB gz · 3,892 tests passed · lint 63 problems, 0 errors · `check:style`
 OK. `save-path` and `write-gate`: 164 passed under `CI=1`, no snapshot changed, no `-u`.
+
+### `useWaSettings` goes back under the compiler
+
+`react-hooks/invariant` reported `PruneHoistedContexts: Unexpected hoisted function` on
+`saveWaSettings`, so the compiler said nothing about that hook, and v18.13.1 left the file out of
+the rule by name. Declaring the function above the epoch effect that calls it clears the report:
+the same statements in another order, no behaviour change, and the file leaves the rule's `ignores`.
+Every file in `src/` is now under `invariant`. The hook has no new advisory, so the total stays 63.
+**The cause is narrowed, not explained:** this hook's order is what triggers it here, and v18.13.1's
+small hook with the same shape did not reproduce it, so nothing here says when the compiler does this.
