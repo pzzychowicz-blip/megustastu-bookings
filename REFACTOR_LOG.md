@@ -38626,3 +38626,17 @@ Whether a pull in a Chrome tab now does nothing is on the hardware list: a synth
 
 **Files:** `index.css`, `tests/stylesheet.test.js`.
 
+### L4: "Whole day"
+
+The reset button read "1.5x → 1x", which is the sum rather than what it does. It reads "Whole day" while zoomed and
+"1x" at 1×. Each word rides its own horizontal `Reveal`, so the button still eases rather than shoving the group
+beside it. Its `aria-label` leads with the same words.
+
+| Reading, 998 × 507, 570 and 720 alike | Value |
+|---|---|
+| Text · accessible name, zoomed | Whole day · Whole day (reset zoom) |
+| Width to 1×, and back on a zoom in | 80.1 → 34 · 34 → 80.1 |
+| Biggest step per frame | 5.5px · 4.5px |
+
+**Files:** `TimelineZoomControls.jsx`, `tests/a11y.test.js`.
+

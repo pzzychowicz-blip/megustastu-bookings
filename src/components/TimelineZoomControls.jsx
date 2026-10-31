@@ -56,25 +56,29 @@ export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, follo
       >
         −
       </button>
-      {/* v17.2.0 follow-up: the reset label grows "1x" → "Nx → 1x" when zoomed —
-          the widening used to SNAP and shove the whole toolbar group sideways.
-          The "Nx → " prefix now rides a horizontal Reveal (the start-time-chip
-          pattern) so the button width eases in/out instead of jumping. The
-          constant "1x" tail keeps the button's identity while collapsed. */}
+      {/* v18.14.0 (L4): "Whole day" while zoomed, because that is what a press does.
+          "1.5x → 1x" was the arithmetic of it, in the one place staff reach for
+          when they have lost the evening off the side of the screen. At 1x the
+          day is already whole, so it says the zoom instead.
+          v17.2.0 follow-up: the label's change used to SNAP and shove the whole
+          toolbar group sideways, so each word rides a horizontal Reveal (the
+          start-time-chip pattern) and the button's width eases. */}
       <button
         onClick={() => { setZoom(1); setFollowNow(false); }}
-        aria-label={(zoom !== 1 ? zoom + "x → " : "") + "1x (reset zoom)"}
+        aria-label={(zoom !== 1 ? "Whole day" : "1x") + " (reset zoom)"}
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 36, padding: "4px 10px", fontSize: T.small, background: zoom === 1 ? "var(--btn-default)" : BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
       >
-        {/* NB the child must be NULL (not an empty span) at 1× — Reveal caches its
-            last truthy children for the exit ease; an always-mounted span would
-            overwrite that cache with empty text and the collapse would animate a
-            blank box (the text snapping away instead of easing out). */}
+        {/* NB each child must be NULL (not an empty span) when closed — Reveal
+            caches its last truthy children for the exit ease; an always-mounted
+            span would overwrite that cache with empty text and the collapse would
+            animate a blank box (the text snapping away instead of easing out). */}
         <Reveal horizontal show={zoom !== 1}>
-          {zoom !== 1 ? <span style={{ whiteSpace: "pre" }}>{zoom + "x → "}</span> : null}
+          {zoom !== 1 ? <span style={{ whiteSpace: "pre" }}>Whole day</span> : null}
         </Reveal>
-        1x
+        <Reveal horizontal show={zoom === 1}>
+          {zoom === 1 ? <span style={{ whiteSpace: "pre" }}>1x</span> : null}
+        </Reveal>
       </button>
       <button
         onClick={() => setZoom((z) => Math.min(maxZoom, z + 0.5))}
