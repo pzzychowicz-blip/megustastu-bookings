@@ -37893,8 +37893,18 @@ the address in both languages, with no "[to be confirmed]" left.
 
 ## v18.13.0 — the write gate under test, and a crash on a device leaves a trace
 
-**Date:** 2026-10-30 · **Branch:** `feat/v18.13.0-write-gate-crash-trace` · **Behaviour
-change:** extended by each commit below.
+**Date:** 2026-10-30 to 2026-10-31 · **Branch:** `feat/v18.13.0-write-gate-crash-trace`
+
+**Behaviour change:** three things. A refused bookings write no longer changes the screen. A
+block that did not go out keeps its dialog and says so. A crash on a device leaves one
+`activity` entry, and the log gains a Crashes chip and Download crash data. The rest is CI,
+dependencies, and code moved to where a test can run it.
+
+**Files:** 58 changed, +3192 −561, of which `tests/` is 18 files, +1879 −121. New:
+`src/lib/crash-report.js` · `src/lib/modal-keys.js` · `src/lib/operating-hours.js` ·
+`scripts/decode-stack.mjs` · `tests/lift.js` · `tests/write-gate.test.js` ·
+`tests/crash-report.test.js` · `tests/decode-stack.test.js` · `tests/modal-keys.test.js` ·
+`tests/operating-hours.test.js`.
 
 Phase 2 of the 2026-10-30 tech-debt scan (`MGT_Bookings_Tech_Debt_Scan_2026-10-30.md` in
 the context folder), which numbers its register #25–#42. Every code, CI and dependency
@@ -38151,12 +38161,45 @@ finds nothing.
 
 ### /code-review
 
-- **A crash's `view` was the view before it.** `noteCrashView` sat in an effect, and a view that throws as it opens never commits: with a temporary throw in PlanView, tapping Plan filed `crash in timeline`. Written in the render now, above the views, the same tap files `crash in plan`. One reading on the way: a reload sent straight after the edit raced Vite's file watcher and repeated the old answer, so a console trace had to settle it.
-- **The mask paired its quotes.** V8 prints a short text it could not parse whole, quotes included, so `"x{"n":"Ana"}"` masked as `"#"n"#"Ana"#"`: the value sat between the pairs, in a node every account reads and past the reach of Delete customer. A quote that never closed was not masked at all. A quoted value now runs from the first quote to the last, a lone quote to the end. Two quoted runs in one message become one, which costs the words between them and nothing else.
-- **The mask read a message of any length, before the gate.** Its address pattern is quadratic on a long token: 50 KB took 2.5 s and 200 KB 39 s in Node, on the main thread, inside an error handler, and a repeat paid again before the gate turned it away. It reads the first 1,200 characters now, four times the cap, because a mask shortens what it matches.
-- **The gate spent a signature on a crash nobody could sign.** `admitCrash` records what it admits, and `logActivity` then returned without an account, so a crash on the sign-in screen wrote nothing and the same crash after signing in was turned away as a repeat. `main.jsx` asks `hasLogAuthor` first.
-- **One extension frame anywhere dropped an app crash.** The test ran over the whole stack, so a TypeError thrown by the app, with a `chrome-extension://` wrapper below it, came back as noise. It asks the frame that threw now.
-- **The decoder printed nothing through a symlink.** Its main-module check compared argv, which is not resolved, with `import.meta.url`, which is. /tmp on a Mac is a symlink and the runbook leaves the shell in /tmp/mgt-rebuild, where the command printed nothing and exited 0. Both sides are resolved now, and a test runs it through a link.
-- **The decoder printed a 0-based column.** It took one off to look a frame up, and printed the map's answer as it stood, a column to the left of the token in any editor. It adds the one back.
-- **The header said a thrown value that is not an Error is never described.** A thrown string is, through the mask: that is the shape `event.message` arrives in, and a test pins it. No site in `src/` rejects with a string (grep), so nothing leaks today, and the header and `src/lib/CLAUDE.md` now say what happens and what not to do. No code changed.
-- **Download's answer came back with the chip.** Its sentence survived the Crashes chip going off, so turning it on again showed the answer to an earlier press. Measured on DEV with the file refused: the sentence shows after the press, and is gone once the chip has been off.
+- **A crash's `view` was the view before it.** `noteCrashView` sat in an effect, and a view that
+  throws as it opens never commits: with a temporary throw in PlanView, tapping Plan filed
+  `crash in timeline`. Written in the render now, above the views, the same tap files `crash in
+  plan`. One reading on the way: a reload sent straight after the edit raced Vite's file watcher
+  and repeated the old answer, so a console trace had to settle it.
+- **The mask paired its quotes.** V8 prints a short text it could not parse whole, quotes
+  included, so `"x{"n":"Ana"}"` masked as `"#"n"#"Ana"#"`: the value sat between the pairs, in a
+  node every account reads and past the reach of Delete customer. A quote that never closed was
+  not masked at all. A quoted value now runs from the first quote to the last, a lone quote to
+  the end. Two quoted runs in one message become one, which costs the words between them and
+  nothing else.
+- **The mask read a message of any length, before the gate.** Its address pattern is quadratic
+  on a long token: 50 KB took 2.5 s and 200 KB 39 s in Node, on the main thread, inside an error
+  handler, and a repeat paid again before the gate turned it away. It reads the first 1,200
+  characters now, four times the cap, because a mask shortens what it matches.
+- **The gate spent a signature on a crash nobody could sign.** `admitCrash` records what it
+  admits, and `logActivity` then returned without an account, so a crash on the sign-in screen
+  wrote nothing and the same crash after signing in was turned away as a repeat. `main.jsx` asks
+  `hasLogAuthor` first.
+- **One extension frame anywhere dropped an app crash.** The test ran over the whole stack, so a
+  TypeError thrown by the app, with a `chrome-extension://` wrapper below it, came back as
+  noise. It asks the frame that threw now.
+- **The decoder printed nothing through a symlink.** Its main-module check compared argv, which
+  is not resolved, with `import.meta.url`, which is. /tmp on a Mac is a symlink and the runbook
+  leaves the shell in /tmp/mgt-rebuild, where the command printed nothing and exited 0. Both
+  sides are resolved now, and a test runs it through a link.
+- **The decoder printed a 0-based column.** It took one off to look a frame up, and printed the
+  map's answer as it stood, a column to the left of the token in any editor. It adds the one
+  back.
+- **The header said a thrown value that is not an Error is never described.** A thrown string
+  is, through the mask: that is the shape `event.message` arrives in, and a test pins it. No
+  site in `src/` rejects with a string (grep), so nothing leaks today, and the header and
+  `src/lib/CLAUDE.md` now say what happens and what not to do. No code changed.
+- **Download's answer came back with the chip.** Its sentence survived the Crashes chip going
+  off, so turning it on again showed the answer to an earlier press. Measured on DEV with the
+  file refused: the sentence shows after the press, and is gone once the chip has been off.
+
+Twelve findings: ten fixed, nine above and this entry's header, one commit each, and two
+disproved. `downloadCrashes` could reject only on an `at` past `Date`'s range, and the `.write`
+on `activity/$eid` holds `at` to `now`. `saveBlocks` answers true while `writeWithRev`'s schema
+gate writes nothing, but no press reaches it: `UpdateRequired` cannot be dismissed and
+`anyModal` takes `schemaBlocked`, so the page is inert. Nothing was deferred.
