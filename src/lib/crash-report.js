@@ -85,6 +85,12 @@ export function framesOf(stack) {
   return String(stack == null ? "" : stack).split("\n").map(frameOf).filter(Boolean).slice(0, FRAMES_MAX);
 }
 
+// Whose error it is: the frame that threw. An extension that wraps fetch, a timer or
+// addEventListener sits further down an app crash's stack without having caused it.
+function thrownByExtension(stack) {
+  return EXTENSION_RE.test(stack.split("\n").find(frameOf) || "");
+}
+
 // What a throw can be: anything. Only an Error is believed about itself.
 function describe(thrown) {
   if (thrown instanceof Error) {
@@ -104,7 +110,7 @@ function describe(thrown) {
 export function crashEntry(thrown, ctx) {
   const c = ctx || {};
   const d = describe(thrown);
-  if (NOISE.some((re) => re.test(d.message)) || EXTENSION_RE.test(d.stack)) return null;
+  if (NOISE.some((re) => re.test(d.message)) || thrownByExtension(d.stack)) return null;
   const message = cap(maskText(String(d.message).slice(0, MESSAGE_SCAN)), MESSAGE_MAX);
   const frames = framesOf(d.stack);
   const crash = {

@@ -195,6 +195,14 @@ describe("noise", () => {
     const moz = boom("x", "f@moz-extension://abcdef/content.js:1:2", Error);
     expect(crashEntry(moz, CTX)).toBe(null);
   });
+  it("an extension's wrapper further down is not the thrower: the crash is ours", () => {
+    const e = boom("x", "Error: x\n    at f (https://x.app/assets/a.js:1:2)\n    at g (chrome-extension://abcdef/inject.js:3:4)", Error);
+    expect(crashEntry(e, CTX)).not.toBe(null);
+  });
+  it("a message that names an extension is not its stack", () => {
+    const e = boom("chrome-extension://a/b.js is gone", "Error: chrome-extension://a/b.js is gone\n    at f (https://x.app/assets/a.js:1:2)", Error);
+    expect(crashEntry(e, CTX)).not.toBe(null);
+  });
 });
 
 describe("crashGate", () => {
