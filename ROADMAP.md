@@ -99,9 +99,10 @@ and `MGT_Bookings_Tech_Debt_Scan_2026-10-30.md`.
 - **Make `InboxPanel.onKey` a table (#32).** Complexity 56 on 2026-10-30. The `lib/shortcuts.js`
   pattern, after go-live.
 
-- **Sweep merged branches and stale worktrees (#37).** 133 merged remote branches and 20
-  worktrees (5.1 GB) on 2026-10-30, in one pass, checking each first. New merges have
-  deleted their own branch since that date.
+- **Two June worktrees are left from the #37 sweep.** `awesome-meninsky-14260e` and
+  `trusting-sutherland-89fdb5` hold uncommitted WhatsApp prototypes that v18 superseded. 11 files in
+  each are evicted by iCloud, so they could not be archived and were not removed. Download them or
+  decide they can go. Their `.env.local` files differ from the main checkout's.
 
 - **Refresh the `.design-sync` snapshot (#39).** It is behind `atoms.jsx`.
 
