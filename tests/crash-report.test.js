@@ -157,6 +157,17 @@ describe("crashEntry", () => {
     expect(r.entry.crash.device).toHaveLength(60);
     Object.values(r.entry.crash).forEach((v) => expect(typeof v).toBe("string"));
   });
+  // Unbounded this took 39 s, on the main thread, inside an error handler.
+  it("reads only the start of a very long message", () => {
+    const started = performance.now();
+    const r = crashEntry(boom("x".repeat(200000), V8), CTX);
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(r.entry.crash.message).toHaveLength(300);
+  });
+  it("a value cut by that reading is still masked", () => {
+    const r = crashEntry(boom('at "' + "Ana Garcia ".repeat(30000)), CTX);
+    expect(r.entry.crash.message).toBe('at "#"');
+  });
   it("stays inside the rule's bound with the longest stack it can keep", () => {
     const fn = "f".repeat(80);
     const long = Array.from({ length: 40 }, () => "at " + fn + " (https://x.app/" + "p".repeat(300) + ".js:1:2)").join("\n");

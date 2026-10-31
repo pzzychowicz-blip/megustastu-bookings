@@ -29,6 +29,11 @@
 
 export const MAX_PER_LOAD = 5;
 const MESSAGE_MAX = 300;
+// How much of a message the mask reads. Its address pattern is quadratic on a long token
+// (50 KB took 2.5 s, measured), this runs on the main thread inside an error handler, and
+// it runs before the gate, so a repeat pays too. A mask shortens what it matches, so it
+// needs more than the cap; nothing past the cap is kept.
+const MESSAGE_SCAN = MESSAGE_MAX * 4;
 const TEXT_MAX = 160;
 const FRAMES_MAX = 12;
 const STACK_MAX = 1500;
@@ -100,7 +105,7 @@ export function crashEntry(thrown, ctx) {
   const c = ctx || {};
   const d = describe(thrown);
   if (NOISE.some((re) => re.test(d.message)) || EXTENSION_RE.test(d.stack)) return null;
-  const message = cap(maskText(d.message), MESSAGE_MAX);
+  const message = cap(maskText(String(d.message).slice(0, MESSAGE_SCAN)), MESSAGE_MAX);
   const frames = framesOf(d.stack);
   const crash = {
     where: cap(c.where || "error", LABEL_MAX),
