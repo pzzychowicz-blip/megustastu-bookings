@@ -11,7 +11,7 @@
 // `@jridgewell/trace-mapping` comes in through @babel/core, not package.json. If it ever
 // stops, tests/decode-stack.test.js fails on the import.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { basename, join } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -57,7 +57,10 @@ function mapsIn(dist) {
   };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// Resolved, because `import.meta.url` is and argv is not. /tmp on a Mac is a symlink, and
+// the runbook leaves the shell there: a plain compare ends the run with nothing printed
+// and exit 0, which reads as nothing to decode.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [file, dist] = process.argv.slice(2);
   if (!file || !dist) {
     console.error("usage: node scripts/decode-stack.mjs <mgt-crashes-….json> <rebuild>/dist");

@@ -5,6 +5,12 @@
 // column and a map's, and that a frame from another build is said and never decoded.
 
 import { describe, it, expect } from "vitest";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { TraceMap } from "@jridgewell/trace-mapping";
 import { decodeFrame, decodeCrash } from "../scripts/decode-stack.mjs";
 
@@ -30,6 +36,18 @@ describe("decodeFrame", () => {
   });
   it("leaves alone what is not a frame", () => {
     expect(decodeFrame("something else", mapFor)).toBe("something else");
+  });
+});
+
+describe("the command", () => {
+  it("runs through a symlink, as a checkout under /tmp on a Mac is", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mgt-decode-"));
+    const link = join(dir, "decode-stack.mjs");
+    symlinkSync(fileURLToPath(new URL("../scripts/decode-stack.mjs", import.meta.url)), link);
+    const run = spawnSync(process.execPath, [link], { encoding: "utf8" });
+    rmSync(dir, { recursive: true });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("usage:");
   });
 });
 
