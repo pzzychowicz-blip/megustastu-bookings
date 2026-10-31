@@ -38271,3 +38271,31 @@ gone, leaving 92: `setViewDate` `showForm` `setShowForm` `showWalkin` `setShowWa
 went with them; it had stopped being true. The ctx stays one flat literal on purpose:
 `tests/modal-stack.test.js` reads its keys from the text, so a spread would blind that test
 without failing it.
+
+### `useSettingsPanel`
+
+25 statements leave `BookingApp`, moved verbatim and in their original order: 163 of the 171
+lines removed from App are in the hook word for word, and the other 8 are 4 import lines and
+one comment split on purpose. No save or write path moved.
+
+| | Before | After | Design |
+|---|---:|---:|---:|
+| Code lines in `BookingApp` | 1,924 | 1,877 | about 1,874 |
+| Statements | 400 | 376 | 376 |
+| `useState` | 54 | 47 | 47 |
+| `useEffect` | 22 | 21 | 21 |
+| `useRef` | 31 | 29 | 29 |
+| Functions | 98 | 90 | 90 |
+| Lint, total / App | 63 / 7 | 63 / 7 | 63 / 7 |
+
+The hook has no warnings. Code lines are 3 over the estimate because the call is 12 lines.
+
+**Gate:** 435.52 kB, 127.44 kB gz (127.59 on v18.13.0) · 3,892 tests passed (3,888) · lint 63
+problems, 0 errors · `check:style` OK. `save-path` and `write-gate`: 164 passed under `CI=1`,
+no snapshot changed, no `-u`.
+
+**Walked on DEV after a reload, with no console error:** open, tabs by click and by →, a draft
+guarded on Escape (Keep editing and Discard), the tab reset on close, a saved name, the log's
+range and its backwards refusal, Clear with its sentence reset by changing the range, the CSV
+and crash downloads (intercepted, no file written), the jump to a customer, and that search
+cleared on close. Not checked on a device.

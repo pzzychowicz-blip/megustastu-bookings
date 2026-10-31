@@ -18,7 +18,10 @@ import { stripComments } from "../scripts/strip-comments.mjs";
 
 // Relative to src/. App.jsx stays first: a lookup that matches in two files finds
 // App's copy, which is what it found before the hook existed.
-export const APP_FILES = ["App.jsx"];
+export const APP_FILES = [
+  "App.jsx",
+  "hooks/useSettingsPanel.js",
+];
 
 const raw = (rel) => readFileSync(new URL("../src/" + rel, import.meta.url), "utf8");
 

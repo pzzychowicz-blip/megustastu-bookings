@@ -62,7 +62,7 @@ export default defineConfig([
     // the body takes all of App's warnings with it, no error, and the count simply
     // falls; only this rule reports it. A new domain hook joins this list. Not all
     // of src/hooks/: `useWaSettings.js:115` already reports here, a separate fix.
-    files: ['src/App.jsx'],
+    files: ['src/App.jsx', 'src/hooks/useSettingsPanel.js'],
     rules: { 'react-hooks/invariant': 'error' },
   },
   {
