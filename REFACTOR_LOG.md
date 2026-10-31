@@ -39105,3 +39105,43 @@ the table's three handlers, once, so a box cannot answer differently from its ta
 
 **Files:** `src/lib/plan-hit.js` (new), `PlanView.jsx`, `src/index.css`,
 `tests/plan-hit.test.js` (new), `src/lib/CLAUDE.md`, `DESIGN.md`.
+
+### Closing the version
+
+**The scan's own audit, on the final tree**, at 998 × 507 and 570 in Light and 507 in Dark, across the main card,
+the form, the walk-in, List, Plan and Settings: no sideways overflow, `overscroll-behavior` none. In Light the only
+real text under 4.5:1 is amber 2.93 and yellow 1.84–1.86, Patryk's two exemptions, and "Tables: 3 / 4 / 5" at 4.46,
+which is in ROADMAP. Dark's lows are the values it already had, and Dark was not part of the decision: its accent
+3.65 and 4.1, its faint 3.51–4.35.
+
+The audit also prints readings that are the rig's. Clipped text samples as whatever is behind it. "23:00" at 1:1
+sits past the ruler's clip (x 993, the clip ends at 969), and "Daily cutoff", "Auto-optimiser" and the walk-in's 11,
+12 and 13, at 1.01–1.25, sit under a sheet's bottom edge. Scrolled into view those read 7.16–16.72. The one target
+under 24px on any screen is the date field's inner `<input>`, and the pill round it is what a finger hits.
+
+**Every fix's rig again, on the final tree**, H7 to M4 at the heights each takes: 17 runs, 16 exit 0 with the readings
+above. M1 to L2 ran last, and the audit covers their colours. The 17th is `h5undo.py`, and there the app was right.
+Its drop, Lena Brandt onto row 1 today, was refused with "Can't re-seat the parties there without stranding one"
+because the pass ran in the evening: from 15:00 the Optimiser is off for today, the flaw H5 already records. Replayed
+with a page clock and writes blocked, nothing refuses at 9:00, 12:00 or 14:00, and it refuses at 15:00, 16:00, 16:20,
+16:50, 17:00 and 18:50. `drop-plan.js` has not changed since H5's commit, and `booking-logic.js` gained only
+`newBookingTime` and `nearestTimes`.
+
+Undo was proved again on a drop that is legal in the evening: tomorrow's lunch, where the Optimiser is on, with real
+DEV writes at 507 and 570. "Lena Fischer and Olga Petrova — tables swapped.", 2 blocks moved, 0 differ after Undo, 0
+after a reload.
+
+**Two things on the record.** Phase 1's commit, `c1ddb470`, went in with 2 lint errors, because its command did not
+stop on the gate. `84dc5227` fixed them, and every commit since has had the gate chained to it, so only a bisect
+landing on phase 1 itself sees red. And DEV's Activity log holds two crash entries, `ReferenceError: Presence is not
+defined` in `DropHint`, from a missing import while H5 was being built. Its commit imports `Presence`, so neither
+entry is a defect in any commit.
+
+**Only the hardware can settle these, for Patryk after merge:** a finger on the sticky ruler during a fast swipe, and
+edge scroll · Undo after a real drag · the pinned line with Android's keyboard up · time-picker speed with M5 ·
+pull-to-refresh in a Chrome tab · whether the tablet vibrates, and the switch · Larger text at arm's length on the
+pass · automatic dark mode at sunset.
+
+**Size:** main entry 448.85 kB (131.85 gz).
+
+**Files:** `REFACTOR_LOG.md`, `ROADMAP.md`, `GLOSSARY.md`, `DESIGN.md`, `CLAUDE.md`.

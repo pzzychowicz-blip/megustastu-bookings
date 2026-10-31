@@ -19,6 +19,40 @@ session and keeping it in sync.
 
 ## Deferred
 
+- **`Reveal` can open at once instead of easing, after a slow click.** Found building
+  v18.14.0's H4, and not new: `Reveal` itself is unchanged from `main`. The double
+  `requestAnimationFrame` that starts the ease can run before the `mounted` commit when
+  the click's render is slow, so the refusal pane, and a plain "Customer name is
+  required.", appear with no ease (measured: 38–67ms DEV renders, the two ticks 1ms
+  apart, headless Chromium). Not measured on the tablet. A likely fix is a second effect
+  keyed on `[show, mounted]`. It touches every `Reveal` in the app, so it wants its own
+  version and an in-and-out check across them.
+
+- **The row warning with the Optimiser on.** `dropPreview` is deliberately cheap, because
+  `planDrop`'s trial is far too heavy for every hover. With the Optimiser on, a row can
+  say "Moves …" and the release can still refuse. A trial run once the finger has settled
+  on a row, off the frame path, would close the gap.
+
+- **Walk-in's "no tables" banner is under the picker.** On a full evening at 998 × 507 it
+  sits off screen. M4 reordered the form to get the picker on screen, and moving the
+  banner was not in that fix.
+
+- **Two wordings the availability work left.** The line says "No table" when only a
+  chosen zone is full, and a Reshuffle that moves nobody with the Optimiser off reads
+  "Booking saved." Both are older than v18.14.0.
+
+- **The worker's offline page keeps `#007AFF`** (`OFFLINE_HTML`, `public/sw.js`), 4.02:1
+  under white. A byte change there ships a new worker to every device, so it waits for
+  a version that changes the worker anyway. Change it then.
+
+- **"Tables: 3 / 4 / 5" reads 4.46:1 on a dialog's sheet.** The outdoor group label in
+  the table picker, `--tbl-out-text` on `#fdfdfd`, 0.04 under the bar. It read lower on
+  the old glass, and it was not one of the scan's findings, so it was left alone.
+
+- **Dark's quiet edges.** v18.14.0's contrast work was decided for Light. In Dark,
+  `--text-faint` reads 3.19:1 on a Section and 4.05 on the sheet, and a field's rim 1.44
+  (its fill 1.25, which is what shows it). A Dark pass would start here.
+
 - **`BookingApp` V2, V3 and V5** (`useInboxEntry`, `useWaitlistOffers`, `useBookingForm`). Designed in `MGT_Bookings_State_By_Domain_Design.md`, context folder. After WhatsApp go-live settles; each version needs its own approval and a fresh census first.
 
 - **WhatsApp coexistence: the rehearsal, then the restaurant's number.** The code

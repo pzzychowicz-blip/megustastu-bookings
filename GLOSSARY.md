@@ -75,7 +75,7 @@ they cannot drift.
 | "Cancelled", ✕, muted | **cancelled** | Called off. Folds into the finished section. |
 | Amber "no-show ×N" tag | **no-show** (`noShow` flag, `isNoShow()`) | A **flag on a cancelled booking**, not a sixth status. Counted per phone number. |
 | The single-word status word on a List card | **status badge** (`SBadge`) | A solid tag carrying the status. |
-| Row of status buttons on a card or popup | **status changers** | Move a booking one step. Each carries its own `StatusIcon`. |
+| Row of status buttons on a card or popup | **status changers** (`STATUS_BTN_BG`) | Move a booking one step. Each carries its own `StatusIcon`. Since v18.14.0 Completed wears the button grey here, and its pale fill stays on blocks. |
 
 ---
 
