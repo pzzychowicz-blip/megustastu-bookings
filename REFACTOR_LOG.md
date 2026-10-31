@@ -38233,9 +38233,10 @@ label; the detector now skips `.push(` and pins that case.
 ### The lint guards
 
 Lint and build both pass over a TDZ, and a TDZ blanks the whole app. `no-use-before-define`
-with `variables: false` now runs on `src/App.jsx` and `src/hooks/`: it asks only about a read
-in the same scope, which is what throws during render. It has 0 findings there today.
-Scoped because `src/lib/whatsapp.js:182-183` holds two findings that do not run in render.
+with `variables: false` now runs on all of `src/`: it asks only about a read in the same
+scope, which is what throws during render. It has 0 findings there today. `src/lib/whatsapp.js`
+is left out by name: its two findings (lines 182-183) are an import read below its use, which
+ESM hoists.
 
 `react-hooks/invariant` is an error on `src/App.jsx`, and each domain hook joins it. The
 compiler can stop analysing `BookingApp` silently: a `class` in the body removes all of App's
