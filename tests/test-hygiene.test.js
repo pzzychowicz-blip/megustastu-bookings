@@ -132,7 +132,7 @@ describe("a test that greps JS source strips comments first", () => {
 // checking nothing. A bare "App.jsx" is left alone: it is a label, or a row in a
 // table of positive pins, and a positive pin reports a move by failing. An
 // `import(` is module resolution, not a source read: `first-render` runs App.
-const READS_APP = /"(?:\.\.\/)?src\/App\.jsx"|"src",\s*"App\.jsx"|(?<!\.push)\("App\.jsx"\)/;
+const READS_APP = /["'`](?:\.{1,2}\/)*(?:src)?\/App\.jsx["'`]|(?:(?<!\.push)\(|,\s*)["'`]App\.jsx["'`]\s*\)/;
 const readsApp = (line) => !line.trim().startsWith("//") && !/\bimport\(/.test(line) && READS_APP.test(line);
 
 describe("a test reads App's source through tests/app-source.js", () => {
@@ -154,6 +154,12 @@ describe("a test reads App's source through tests/app-source.js", () => {
       'new URL("../src/App.jsx", import.meta.url)',
       'join(HERE, "..", "src", "App.jsx")',
       'readFileSync("src/App.jsx", "utf8")',
+      // /code-review: spellings no test has used yet, and a new test could.
+      "read('src/App.jsx')",
+      "read(`src/App.jsx`)",
+      'read("./src/App.jsx")',
+      'readFileSync(join(SRC, "App.jsx"), "utf8")',
+      'readFileSync(SRC + "/App.jsx", "utf8")',
     ].forEach((read) => expect(readsApp(read), read).toBe(true));
     [
       'hasnt(App, "App.jsx", X)',
