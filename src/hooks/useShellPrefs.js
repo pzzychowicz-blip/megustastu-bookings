@@ -12,6 +12,7 @@
 //   swEnabled, onToggleSw                                   the offline shell's switch
 //   tlSettings, onSetTlSetting                              Timeline zoom and follow
 //   largeText, onToggleLargeText                            Larger text on the Timeline
+//   vibrateOnDrag, onToggleVibrate                          Vibrate on drag (lib/haptics.js)
 //   split, focusedPane, setFocusedPane, applySplit,
 //   fitTimeline, confirmSplit, swapSides, toggleSplitDir,
 //   exitSplit, setSplitRatio, splitSideBySideOk             Split View
@@ -30,6 +31,7 @@
 import { useState, useRef, useEffect } from "react";
 import { VIEW_ORDER, SPLIT_DIVIDER_PX } from "../lib/constants";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "../lib/serviceWorker";
+import { readVibrate, setVibrate } from "../lib/haptics";
 import { useThemeMode } from "./useThemeMode";
 import { PREF_SPEC, PREF_NAMES, readPrefValue, prefLocalValue } from "./useUserPrefs";
 
@@ -272,6 +274,12 @@ export function useShellPrefs({
       setThemePref(undefined);
       if(!DEV_THEME_FORCED) saveUserPrefs({theme:"auto"});
     }
+  }
+  const [vibrateOnDrag,setVibrateOnDrag]=useState(readVibrate);
+  function onToggleVibrate(){
+    const next=!vibrateOnDrag;
+    setVibrate(next);
+    setVibrateOnDrag(next);
   }
   const [largeText,setLargeText]=useState(readLargeText);
   function onToggleLargeText(){
@@ -558,6 +566,7 @@ export function useShellPrefs({
     swEnabled, onToggleSw,
     tlSettings, onSetTlSetting,
     largeText, onToggleLargeText,
+    vibrateOnDrag, onToggleVibrate,
     split, focusedPane, setFocusedPane, applySplit, fitTimeline,
     confirmSplit, swapSides, toggleSplitDir, exitSplit, setSplitRatio,
     splitSideBySideOk, shellFixed,

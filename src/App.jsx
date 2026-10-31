@@ -1430,6 +1430,7 @@ export function BookingApp({uid}){
     swEnabled,onToggleSw,
     tlSettings,onSetTlSetting,
     largeText,onToggleLargeText,
+    vibrateOnDrag,onToggleVibrate,
     split,focusedPane,setFocusedPane,applySplit,fitTimeline,
     confirmSplit,swapSides,toggleSplitDir,exitSplit,setSplitRatio,
     splitSideBySideOk,shellFixed,
@@ -4149,6 +4150,8 @@ export function BookingApp({uid}){
             onSetTlSetting={onSetTlSetting}
             largeText={largeText}
             onToggleLargeText={onToggleLargeText}
+            vibrateOnDrag={vibrateOnDrag}
+            onToggleVibrate={onToggleVibrate}
             weekHours={weekHours}
             onSaveDayHours={function(i,p){if(refused("hoursEdit"))return;saveDayHours(i,p);}}
             onSaveAllDays={function(d){if(refused("hoursEdit"))return;saveAllDays(d);}}

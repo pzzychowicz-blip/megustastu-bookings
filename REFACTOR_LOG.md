@@ -38719,3 +38719,23 @@ simulations were scoped to the day and to the exact bookings.
 **Files:** `App.jsx`, `drop-plan.js`, `delete-undo.js`, `manual-assign.js`, `TimelineView.jsx`, `StatusToasts.jsx`,
 `tests/drop-plan.test.js`, `tests/delete-undo.test.js`, `tests/manual-assign.test.js`, `tests/retry-report.test.js`,
 `tests/contrast.test.js`.
+
+### L7: Vibrate on drag
+
+A finger on the tablet covers the block it is dragging. `lib/haptics.js` gives a 25ms pulse when the block lifts and
+when it lands on another row, with a switch in Settings → App, under the Timeline group's "This device only". It is
+on by default and stored only when off. The pulse reads the switch as it fires, so no prop reaches a block.
+
+| Reading, 998 × 507 and 570 alike, `navigator.vibrate` spied on | Value |
+|---|---|
+| Hold, then release on its own row | 1 pulse, at 820–828ms |
+| Drop on another row | 2 pulses, 805ms and 1866ms in |
+| Same drop with the switch off | 0 pulses |
+| Stored, on · off · on again | nothing · `"1"` · nothing |
+| With `navigator.vibrate` removed, as on iOS | the row is not drawn |
+
+Whether the restaurant's tablet has a motor, and whether Chrome lets the first pulse through before a tap, can only
+be read on the tablet, so both are on the hardware list.
+
+**Files:** new `lib/haptics.js`, `useShellPrefs.js`, `App.jsx`, `Settings.jsx`, `TimelineView.jsx`, new
+`tests/haptics.test.js`.

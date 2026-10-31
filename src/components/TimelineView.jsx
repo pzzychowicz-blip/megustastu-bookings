@@ -56,6 +56,7 @@ import { useEnterLeave } from "../hooks/useEnterLeave";
 import { WaitIcon, ClashIcon, AssignIcon, StatusIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
+import { pulse } from "../lib/haptics";
 import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail, twoLineBlock } from "../lib/block-layout";
@@ -591,6 +592,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         // release without moving lands on the home row (no drop) and the
         // phase 4 settle lowers it again.
         setDragDy(0);
+        pulse();                           // v18.14.0 (L7): the finger is on the block, so tell the hand
         // React 17+ roots attach touchmove passively — a native non-passive
         // listener is the only way to stop the page scrolling mid-drag.
         const prevent = (ev) => { ev.preventDefault(); };
@@ -663,6 +665,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       if (c) seedFlip(b.id, d.el.getBoundingClientRect().top - c.getBoundingClientRect().top);
     }
     if (target && target !== homeTable) {
+      pulse();                             // v18.14.0 (L7)
       // Swallowed deliberately, and only here: the teardown above has already
       // run, so the block recovers either way, and an uncaught handler error
       // would be just as silent in production while risking the batch these
