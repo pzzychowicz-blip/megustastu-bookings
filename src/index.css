@@ -271,7 +271,10 @@
   --toggle-off: rgba(180, 180, 190, 0.4);
   /* Semantic text (on the sheet, or on the matching banner below) */
   --text-secondary: #4a5568;
-  --text-faint: #8a94a3;
+  /* v18.14.0 (M3): was #8a94a3, 2.7–3.0:1 on the cards it sits on, and every Settings
+     tab's help text is this ink. Solved to 4.5:1 on the darkest of them (the main
+     card, 4.56), and still a steady step under --text-muted. */
+  --text-faint: #646e7e;
   --text-required: #dc2626;
   /* v17.15.2 — the warn ink was #9a3412 and read RED in light while its dark
      twin reads ORANGE, which is what was reported ("No-shows is orange in dark

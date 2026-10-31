@@ -38964,7 +38964,8 @@ uses: 0.72 to 0.98 in Light, 0.85 to 0.98 in Dark. Same hues, and the blur stays
 | The same gutter on the left, over nothing | 220–222 | 253 |
 | Blurred surfaces while a form is up | 2 | 2 |
 
-998 × 570 reads the same as 507, and Dark's footer is one flat `rgba(44, 44, 46, 0.98)`.
+998 × 570 reads the same as 507. Dark's gutter over the same blocks reads 43–45 in every
+channel, against 43–45 over nothing.
 
 **Two things the token took with it.**
 
@@ -38979,3 +38980,31 @@ uses: 0.72 to 0.98 in Light, 0.85 to 0.98 in Dark. Same hues, and the blur stays
 
 **Files:** `src/index.css`, `atoms.jsx`, `ManualModal.jsx`, `PrefPickerModal.jsx`,
 `WalkinForm.jsx`, `App.jsx` (comment), `tests/contrast.test.js`, `DESIGN.md`.
+
+### M3: the help text can be read
+
+`--text-faint` went from `#8a94a3` to `#646e7e` in Light. It is no fill's partner, so the
+registry never measured it, and it is the ink of every Settings tab's help text. Found by
+walking the Timeline, the opened Summary, List, Plan and all nine Settings tabs with every
+section open (86 sites):
+
+| Surface | Sites | Before | After | `--text-muted` |
+|---|---|---|---|---|
+| The main card, `#eef1f7` (Plan's hint) | 1 | 2.71 | 4.56 | 5.29 |
+| A Section in a dialog, `#f8fafd` | 70 | 2.93 | 4.93 | 5.72 |
+| The Summary's cells, `#fbfcfe` | 2 | 2.99 | 5.03 | 5.83 |
+| A dialog's sheet, `#fdfdfd` | 3 | 3.02 | 5.07 | 5.88 |
+
+Solved to the darkest surface, so the rest clear it with room. The scan's 2.28–2.32 on
+modal glass was L6's tint, and it went with L6. Three sites first read about 2 on a grey:
+that was the scrim, at the sheet's clipped bottom edge in the rig's 1500px window.
+Scrolled into view at 507, each one reads 4.93 on `#f8fafd`.
+
+A step under `--text-muted` on every surface, 1.16 throughout, and a test holds both the
+4.5 and the step. Nothing else moved: the same 86 sites, on the same 8 sampled colours,
+before and after.
+
+**Dark was not part of this decision.** Its `#8a8a8e` stays, and reads 3.19 on a Section
+and 4.05 on the sheet. The scan measured Light, and the plan says Light.
+
+**Files:** `src/index.css`, `tests/contrast.test.js`, `DESIGN.md`.

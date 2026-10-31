@@ -886,6 +886,29 @@ describe("registry coverage", () => {
   });
 });
 
+// v18.14.0 (M3): the faint ink is not a fill's partner, so the registry has no row for
+// it, and it read 2.7–3.0:1 for as long as nothing asked. These are the surfaces it was
+// found on, walking every view and Settings tab. Light only: Dark's was not part of the
+// decision (REFACTOR_LOG). The second assertion is the point of having two inks: a
+// faint that reaches the bar by turning into --text-muted has stopped being a level.
+describe("--text-faint on the cards it sits on, in Light", () => {
+  const app = parse(LIGHT_VARS["--bg-app"]);
+  const sheet = over(parse(LIGHT_VARS["--bg-sheet"]), app);
+  const SURFACES = {
+    "a Section in a dialog": over(parse(LIGHT_VARS["--bg-soft"]), sheet),
+    "the main card": over(parse(LIGHT_VARS["--tl-card-bg"]), app),
+    "a dialog's sheet": sheet,
+  };
+  for (const [what, bg] of Object.entries(SURFACES)) {
+    it(`reads on ${what}, a step under --text-muted`, () => {
+      const faint = ratio(parse(LIGHT_VARS["--text-faint"]), bg);
+      const muted = ratio(parse(LIGHT_VARS["--text-muted"]), bg);
+      expect(faint).toBeGreaterThanOrEqual(4.5);
+      expect(muted / faint).toBeGreaterThanOrEqual(1.1);
+    });
+  }
+});
+
 // v18.14.0 (L6): at 0.72 an amber block behind a dialog moved the sheet's blue channel
 // by 34 levels, and everything on the sheet read against that. Two facts hold the fix:
 // a dialog's sheet stays as opaque as the phone sheet, and each Increase Contrast value

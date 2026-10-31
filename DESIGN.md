@@ -251,6 +251,10 @@ explaining why is usually the one to read.
   left it beside Following at 5.74:1. `--app-btn-dark` moved with it, and
   `tests/contrast.test.js` holds the step between the two, not either number. Any
   pair that signals a state by darkness alone needs the same pin.
+  **`--text-faint` is held to 4.5:1 on the cards it sits on, in Light (v18.14.0).**
+  It is the ink of every Settings tab's help text and it read 2.7–3.0:1, because
+  it is no fill's partner and the registry enumerates fills. It has its own test,
+  which also holds it a step under `--text-muted`: two inks at one level are one ink.
   **The amber pair is a RECORDED EXEMPTION, not a pass**, and the 2026-10-31 scan
   did not change that: it raised white on amber (H1) and on yellow (M2), and Patryk
   kept both exactly as they are. Do not re-raise them. Confirmed sits at
