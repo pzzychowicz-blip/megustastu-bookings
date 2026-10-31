@@ -104,7 +104,7 @@ Two of Timeline / List / Plan at once, per device; tablet and up (`winW >= 600`,
 - All three views are built unconditionally (`viewEl`). The keyboard follows the focused pane (`view: activeView`). **`activeView` must stay declared ABOVE the `useKeyboardShortcuts` call** (a TDZ blanked the app once).
 
 ### Hook order in `BookingApp`
-Lint alone would pass a wrong order only without its guards: `no-use-before-define` (all of `src/`) and `tests/first-render.test.js` hold it. Design: `MGT_Bookings_State_By_Domain_Design.md`, context folder.
+A wrong order throws during render and the build passes over it. `no-use-before-define` (all of `src/`) and `tests/first-render.test.js` hold it. Design: `MGT_Bookings_State_By_Domain_Design.md`, context folder.
 - **A hook's arguments are read at the call**, so every const it takes sits above the call, even one only a handler reads today.
 - **A function a hook returns is no longer hoisted**: anything using it in render, or passing it on, sits below that hook.
 - **`useKeyboardShortcuts` and `viewActionsRef.current=` stay below every domain hook**, and `useTagSettings` above `useWhatsApp`.
