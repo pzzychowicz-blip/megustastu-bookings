@@ -17,10 +17,10 @@
 //   • A value that is not an Error is never described. A promise can reject with a
 //     booking, and a booking's `.name` is a guest's, so `name` is read from a real Error
 //     only and an object contributes nothing at all.
-//   • A double-quoted run in a message is masked, because that is where a built-in error
-//     quotes its input: V8's JSON.parse puts the start of the text it could not read
-//     there. Single quotes stay, because `(reading 'time')` is the useful half of a
-//     TypeError and they only ever hold a property name.
+//   • A double-quoted run in a message is masked, first quote to last, because that is
+//     where a built-in error quotes its input: V8's JSON.parse puts the text it could
+//     not read there. Single quotes stay, because `(reading 'time')` is the useful half
+//     of a TypeError and they only ever hold a property name.
 //
 // ── ONE ENTRY, NOT A FLOOD ──────────────────────────────────────────────────
 // An effect that throws on every 15s tick would otherwise write a row for each one, for
@@ -53,10 +53,15 @@ function cap(s, max) {
 
 // An address, a quoted value, and six digits or more, counted through a phone's own
 // spaces and dashes: "+34 600 123 456" is three runs of three, and still one number.
+//
+// A quoted value runs from the FIRST quote to the LAST, and a lone quote to the end.
+// V8 prints a short text it could not parse whole, its own quotes included, so masking
+// in pairs turned `"x{"n":"Ana"}"` into `"#"n"#"Ana"#"` and left the value standing.
 export function maskText(s) {
   return String(s == null ? "" : s)
     .replace(/[^\s@"']+@[^\s@"']+\.[^\s@"']+/g, "#")
-    .replace(/"[^"]*"/g, '"#"')
+    .replace(/"[\s\S]*"/, '"#"')
+    .replace(/^([^"]*)"[^"]*$/, '$1"#"')
     .replace(/\+?\(?\d(?:[\s().-]*\d){5,}/g, "#");
 }
 

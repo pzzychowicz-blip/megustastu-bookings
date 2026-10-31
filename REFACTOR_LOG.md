@@ -38152,3 +38152,4 @@ finds nothing.
 ### /code-review
 
 - **A crash's `view` was the view before it.** `noteCrashView` sat in an effect, and a view that throws as it opens never commits: with a temporary throw in PlanView, tapping Plan filed `crash in timeline`. Written in the render now, above the views, the same tap files `crash in plan`. One reading on the way: a reload sent straight after the edit raced Vite's file watcher and repeated the old answer, so a console trace had to settle it.
+- **The mask paired its quotes.** V8 prints a short text it could not parse whole, quotes included, so `"x{"n":"Ana"}"` masked as `"#"n"#"Ana"#"`: the value sat between the pairs, in a node every account reads and past the reach of Delete customer. A quote that never closed was not masked at all. A quoted value now runs from the first quote to the last, a lone quote to the end. Two quoted runs in one message become one, which costs the words between them and nothing else.

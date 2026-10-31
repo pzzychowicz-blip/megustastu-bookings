@@ -37,6 +37,16 @@ describe("maskText", () => {
     expect(maskText("no such user ana.g@example.com here")).toBe("no such user # here");
     expect(maskText(`Unexpected token 'A', "Ana Garcia" is not valid JSON`)).toBe(`Unexpected token 'A', "#" is not valid JSON`);
   });
+  // The engine's own sentence, so a change in what V8 prints fails here.
+  it("masks a quoted run whole, when the text it quotes holds quotes of its own", () => {
+    let said = "";
+    try { JSON.parse('x{"n":"Ana Garcia"}'); } catch (e) { said = e.message; }
+    expect(said).toContain("Ana Garcia");
+    expect(maskText(said)).toBe(`Unexpected token 'x', "#" is not valid JSON`);
+  });
+  it("masks a quote that never closes, to the end", () => {
+    expect(maskText('could not read "Ana Garcia')).toBe('could not read "#"');
+  });
   it("keeps a single-quoted property name, which is the useful half of a TypeError", () => {
     expect(maskText("Cannot read properties of undefined (reading 'time')")).toContain("'time'");
   });
