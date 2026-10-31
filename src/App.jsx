@@ -80,6 +80,7 @@ import { draftFromBooking } from "./lib/booking-fields";
 // transform shares.
 import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal, draftForSave, draftRefusal, formSeatClash, kitchenAsk, waitlistEntry } from "./lib/booking-save";
 import { normalizePhone, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
+import { joinPhone } from "./lib/phone-countries";
 import { sameDraft } from "./lib/drafts";
 import { draftPrefill } from "./lib/draft-check";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
@@ -931,6 +932,10 @@ export function BookingApp({uid}){
   // A ref (not an arg) because the kitchen-confirm modal + its Enter shortcut
   // call doSave() with no args after the modal round-trip.
   const statusOverrideRef=useRef(null);
+  // v18.14.0 (H4): which of the form's two doors asked for the phone last ("save"
+  // or "waitlist"), and the door a tapped country code is to resume.
+  const phoneDoorRef=useRef(null);
+  const resumeDoorRef=useRef(null);
   // v18.4.9: the swap the picker handed the form, and the slot it was picked
   // for. `swapAffected` is what the saves read: null once the draft has left
   // that slot (`liveSwap`, lib/manual-assign.js).
@@ -1845,6 +1850,7 @@ export function BookingApp({uid}){
   // draft's fields as a waiting entry, close the form, flash the toast.
   function addFormToWaitlist(){
     if(refused("waitlistManage"))return;
+    phoneDoorRef.current="waitlist";
     // v18.2.0 phase 80 (round 2's loose end): the waitlist takes the phone the
     // way Save does (phase 19 · 20 · 66). A code typed without its plus, or a
     // UK mobile typed the home way, becomes the code — the button is pressed
@@ -2237,6 +2243,7 @@ export function BookingApp({uid}){
     // lands on a live Save button — see src/lib/submitGuard.js. Checked before
     // validation: a refused save must not depend on the draft being valid.
     if(!mayDispatch(saveGuardRef.current)) return;
+    phoneDoorRef.current="save";
     // v18.6.0 (#17): the draft this save works on is `draftForSave`
     // (lib/booking-save.js): the pending/confirm status override on a clone,
     // and the phone rule's rewrite. It goes into `f`, never into the form
@@ -2309,6 +2316,15 @@ export function BookingApp({uid}){
     try{
       return !!(editId?planEdit(f,withClearedSeats(bookings),withClearedSeats(liveBookings)):planNew(f)).refusal;
     }catch{return true;}
+  }
+  // v18.14.0 (H4): a pinned code tapped in Save's phone refusal. The number takes
+  // the code the way the picker writes it, and the resume effect further down
+  // (above `viewActionsRef`) resumes whichever door was refused. That is `doSave` and
+  // not `save` for a save: the refusal comes after the kitchen question, so it is
+  // answered.
+  function pickPhoneCode(iso){
+    resumeDoorRef.current=phoneDoorRef.current;
+    setForm(function(f){return Object.assign({},f,{phone:joinPhone(iso,f.phone)});});
   }
   function save(statusOverride){
     // v17.16.0: the guard is checked HERE as well as in doSave, because this is
@@ -3414,6 +3430,16 @@ export function BookingApp({uid}){
   // per-render handlers live on a ref (refreshed every render, so they always
   // close over fresh state), and the props are ONE-TIME wrapper functions that
   // read the ref at event time — stable identity, always-fresh behavior.
+  // v18.14.0 (H4): `pickPhoneCode`'s resume. It is an effect, and it must stay below
+  // the stale-error effect. The code changes `form.phone`, and that effect then
+  // clears the error: resumed in the tap's own handler, a save refused for something
+  // else ("no table") set its message first and lost it a frame later, so the press
+  // would have done nothing at all (the trap `doSave` records at its draft). Here the
+  // form is committed, `formRef` included, and the clear has run. It sits this far
+  // down because the React Compiler refuses an effect that closes over a function
+  // whose own closure is declared below it (`doSave` reaches `armUndo`).
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only the code's own change resumes; the door is read from its ref, and both doors read the form from formRef
+  useEffect(function(){const door=resumeDoorRef.current;if(!door)return;resumeDoorRef.current=null;if(door==="waitlist") addFormToWaitlist();else doSave();},[form.phone]);
   const viewActionsRef=useRef({});
   viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,previewDrop,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
   const [VA]=useState(function(){
@@ -4079,6 +4105,7 @@ export function BookingApp({uid}){
               vouchersOn={vouchersOn}
               regularMin={generalSettings.regularMin}
               pinnedCountries={generalSettings.pinnedCountries}
+              onPickCode={pickPhoneCode}
               today={today}
               nowMins={nowMins}
               swap={swapAffected}

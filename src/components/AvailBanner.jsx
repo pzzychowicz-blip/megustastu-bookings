@@ -34,8 +34,10 @@ import { AlertIcon } from "./Icons";
 // span's, declaration for declaration: `index.css` gives a button the app's
 // font, and every property a button's UA style would change is set inline.
 // `style` (v18.14.0): the availability line sizes its chips to the row they sit
-// in; everywhere else the chip is its own size.
-export function TimeChip({ time, onPick, style }) {
+// in; everywhere else the chip is its own size. `label` (v18.14.0, H4): the same
+// pill for another one-tap answer, Save's country codes, which pick a code by its
+// `time` and read as its flag and number.
+export function TimeChip({ time, label, onPick, style }) {
   return (
     <button
       type="button"
@@ -51,7 +53,7 @@ export function TimeChip({ time, onPick, style }) {
         ...(style || null)
       }}
     >
-      {time}
+      {label || time}
     </button>
   );
 }

@@ -58,8 +58,11 @@ import {
   // v18.2.0 (C2): "4 guests", never "4 pax".
   guestsLabel,
   // v18.2.0 phase 77: any other count and its word, joined the same way.
-  countLabel
+  countLabel,
+  // v18.14.0 (H4): the refusal that carries the pinned codes.
+  NO_CODE_REFUSAL
 } from "../lib/booking-logic";
+import { pinnedCodes } from "../lib/phone-countries";
 // v18.3.3: and what the save will say about the tables it keeps — v18.3.4 moved
 // it beside the save, where it reads the save's own window (`editWindow`).
 import { keptRefusal, pickedRefusal } from "../lib/booking-save";
@@ -69,6 +72,7 @@ import { stepPress } from "../lib/keyboard";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
 import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, mkDangerBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AvailLine } from "./AvailLine";
+import { TimeChip } from "./AvailBanner";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon, TrashIcon } from "./Icons";
@@ -106,6 +110,7 @@ export function BookingFormModal({
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel, onRequestDelete,
   onAddToWaitlist, standingEnabled,
   currency = "€", regularMin = DEFAULT_REGULAR_MIN, // v17.0.0: settings/general
+  onPickCode,       // v18.14.0 (H4): a pinned code tapped in Save's phone refusal
   pinnedCountries,  // v18.1.0: settings/general — the codes pinned to the top of the phone field's list (v18.2.0: no default country any more)
   vouchers, vouchersByCode,       // v18.0.0: the list (for suggestions) + the index
   vouchersOn = true,              // v18.0.0 phase 4: settings/admin.modules.vouchers
@@ -931,8 +936,14 @@ export function BookingFormModal({
   // once `error` is already null. The `role="alert"` div stays OUTSIDE it and
   // permanently mounted: a live region announces a change to its CONTENT, so a
   // region that arrives holding its message says nothing.
+  // v18.14.0 (H4): Save refuses a number with no country, and fixing that was
+  // Code, Spain, Save again, with the guest on the line. The pinned codes sit in
+  // the refusal: a tap writes the code and carries on with what was refused
+  // (`onPickCode`, App's `pickPhoneCode`). Nothing is assumed until the tap, so
+  // v18.1.0's no-default-country decision stands. No pins means the sentence alone.
+  const codes=error===NO_CODE_REFUSAL?pinnedCodes(pinnedCountries):[];
   const errorEl=<div role="alert"><Reveal show={!!error}>{error?
-    <InlineAlert id={FORM_ERROR_ID} style={{marginBottom:14}}>{error}</InlineAlert>
+    <InlineAlert id={FORM_ERROR_ID} style={{marginBottom:14,...(codes.length?{padding:"10px 4px 4px 14px",alignItems:"flex-start"}:null)}}>{codes.length?<span style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:SP.snug}}><span style={{flex:"1 1 auto",minWidth:0}}>{error}</span><span style={{display:"inline-flex",flexWrap:"wrap",gap:SP.tight}}>{codes.map(function(c){return <TimeChip key={c.iso} time={c.iso} label={c.label} onPick={onPickCode} style={{minHeight:H.control,padding:"0 8px"}} />;})}</span></span>:error}</InlineAlert>
   :null}</Reveal></div>;
   // Gated on `error` as well as the field name, so the id handed to
   // aria-describedby can only ever name an element that is on screen.

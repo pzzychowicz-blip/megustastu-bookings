@@ -38792,3 +38792,38 @@ never shows a stale answer (Patryk's choice). Between two refused times it dips 
 **Files:** new `AvailLine.jsx`, `AvailBanner.jsx`, `BookingFormModal.jsx`, `App.jsx`, `booking-logic.js`,
 `tests/booking-logic.test.js`, `tests/save-path.test.js`.
 
+### H4: one-tap country codes in the refusal
+
+Every Spanish number typed the way it is said was refused at Save, and the fix was Code, Spain, Save again, with the
+guest on the line. "Choose the country code for this phone number." now carries the pinned countries as buttons,
+flag and code. A tap writes the number the way the picker does (`joinPhone`) and carries on with what was refused,
+Save or Add to waitlist. Nothing is assumed until the tap, so v18.1.0's no-default-country decision stands. With no
+pins it is the sentence alone.
+
+**The trap, and why the resume is an effect.** The tap changes `form.phone`, which fires the stale-error effect.
+Resumed in the tap's own handler, a save refused for something else would set its message first and lose it a frame
+later, so the press would do nothing at all, which is what `doSave`'s own note warns of. `pickPhoneCode` only arms a
+ref and writes the number, and an effect declared BELOW the stale-error effect resumes. A save resumes `doSave`, not
+`save`: the phone refusal comes after the kitchen question, so that is already answered, and `save` would ask it twice.
+
+| Reading | 998 × 507 | 998 × 570 |
+|---|---|---|
+| The refusal, DEV's six pins | 75px pane, sentence then a row of six 40px chips, 58–60px wide | same |
+| Save on screen with it up | y 421 | y 481 |
+| A free table, "612345678", tap +34 | the form closes, "Booking saved" (writes blocked) | not rerun |
+| 8 at 21:45, tap +34, no table | "Could not assign a table — try manual assignment." still there at 60, 200, 500 and 1000ms, the picker on +34 | not rerun |
+| Add to waitlist refused, tap +44 | the form closes, "Added to the waitlist." | not rerun |
+| No pins | the sentence alone, 35px pane, as before | n/a |
+| Out, the number edited | 89 → 0 in about 500ms, opacity 1 → 0 | same |
+
+**A finding, left as it is.** The refusal opens at once rather than easing in, and a plain "Customer name is
+required." does the same, so it is older than this version and not this fix: `Reveal` runs its double
+`requestAnimationFrame` from the effect that sets `mounted`, and after a slow click (38–67ms of DEV render here) two
+ticks ran 1ms apart before the `mounted` render committed, so `mounted` and `open` landed in one commit and nothing
+transitioned. A Reveal opened from a timer, such as the availability line, is not affected. It was measured in
+headless Chromium in DEV, so whether the tablet does it is not established. `atoms.jsx`'s `Reveal` is unchanged from
+`main`. It is outside the scan's 20 fixes, so it does not ship here.
+
+**Files:** `App.jsx`, `BookingFormModal.jsx`, `AvailBanner.jsx`, `phone-countries.js`, `tests/save-path.test.js`,
+`tests/phone-countries.test.js`.
+

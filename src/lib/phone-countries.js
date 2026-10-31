@@ -135,6 +135,18 @@ export function dialLabel(c) {
   return "+" + d;
 }
 
+// v18.14.0 (H4): the pinned countries as one-tap fixes for Save's "Choose the
+// country code", in the order Settings holds them. A pin that names no country
+// is dropped: a chip for it would write a number with nothing to go on.
+export function pinnedCodes(pinned) {
+  const out = [];
+  (pinned || []).forEach(function (iso) {
+    const c = countryByIso(iso);
+    if (c) out.push({ iso: c.iso, label: flagOf(c.iso) + " " + dialLabel(c) });
+  });
+  return out;
+}
+
 // ── Every dial code, longest first ───────────────────────────────────────────
 // So "+1876…" matches Jamaica (1876) before the USA (1), and "+441481…"
 // Guernsey before the UK.

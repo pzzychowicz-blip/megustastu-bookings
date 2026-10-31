@@ -127,6 +127,8 @@ Six surfaces hold drafts: the booking form, the walk-in form, `ManualModal`'s pi
 ### `formRef.current` vs `form`
 Event handlers and async callbacks read `formRef.current` (always fresh), not `form`; the mirror is kept by an effect on `[form]`.
 
+**A handler that changes a form field and then saves must not save in the same breath (v18.14.0, H4).** The field change fires the stale-error effect a commit later, which would clear whatever that save refused with. `pickPhoneCode` writes the number and arms a ref; an effect declared BELOW the stale-error effect resumes `doSave` or `addFormToWaitlist`. Effects run in declaration order, so that order is load-bearing, and `tests/save-path.test.js` pins it.
+
 ### The app's name and the restaurant's name
 The APP is MGT Bookings (`APP_NAME`, `src/lib/constants.js`); the RESTAURANT is configurable (`settings/general.restaurantName`, seeded from the tenant's `profile.name`). **Never compose one out of the other** (a FALLBACK from restaurant name to app name is fine). Four hand-typed copies of the app's name had drifted with no gate able to see it. The seven copies that cannot import the constant (`index.html` ×3, the manifest ×2, `public/sw.js` ×2) are pinned by site AND count in `tests/stylesheet.test.js`, because the first guard's prose claimed coverage it did not have: count, don't claim.
 

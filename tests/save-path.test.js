@@ -61,6 +61,7 @@ import * as submitGuard from "../src/lib/submitGuard.js";
 import * as recurringLib from "../src/lib/recurring.js";
 import * as drafts from "../src/lib/drafts.js";
 import * as statusChange from "../src/lib/status-change.js";
+import * as phoneCountries from "../src/lib/phone-countries.js";
 import { appCode } from "./app-source.js";
 
 // ── The lib modules the lifted code may bind, by basename ───────────────────
@@ -68,6 +69,7 @@ import { appCode } from "./app-source.js";
 // hook, firebase) fails the scope build loudly rather than running without it.
 const LIB = {
   "booking-logic": bookingLogic,
+  "phone-countries": phoneCountries,
   "booking-fields": bookingFields,
   "booking-save": bookingSave,
   "constants": constants,
@@ -307,6 +309,7 @@ function appEnv(opts) {
     setShowHistory: rec("setShowHistory"),
     confirmKitchen: opts.confirmKitchen || null,
     setConfirmKitchen: rec("setConfirmKitchen"),
+    phoneDoorRef: { current: null },
   }, opts.env);
   return h;
 }
@@ -2969,5 +2972,65 @@ describe("the form's Save puts the kitchen question only to a save that can go t
     const out = runPress(Object.assign(busyKitchen(), { env: { getUser: boom } }));
     expect(asked(out)).toBe(false);
     expect(out.calls).toContain('setError("Error: boom")');
+  });
+});
+
+// v18.14.0 (H4): "Choose the country code" with the codes inside it. The tap
+// changes `form.phone`, which fires the stale-error effect, so the refused action
+// resumes in the effect BELOW that one. Resumed in the tap's handler, a second
+// refusal is set first and cleared a frame later: the press does nothing at all.
+describe("a tapped country code resumes the door that was refused", () => {
+  const LIFTED = [liftFunction(APP, "pickPhoneCode"), liftEffect(APP, "const door=resumeDoorRef.current", "resume")];
+  function tap(door, phone, iso) {
+    const calls = [];
+    let form = { phone };
+    const env = {
+      phoneDoorRef: { current: door }, resumeDoorRef: { current: null },
+      setForm: (fn) => { form = fn(form); calls.push("setForm"); },
+      doSave: () => calls.push("doSave"),
+      addFormToWaitlist: () => calls.push("addFormToWaitlist"),
+    };
+    const fns = compile(APP, LIFTED, env);
+    fns.pickPhoneCode(iso);
+    const inHandler = calls.slice();
+    fns.resume();
+    fns.resume(); // a later change of the phone resumes nothing
+    return { inHandler, calls, phone: form.phone, armed: env.resumeDoorRef.current };
+  }
+
+  it("writes the code the way the picker does, and resumes only once it is committed", () => {
+    const r = tap("save", "612345678", "ES");
+    expect(r.phone).toBe("+34 612345678");
+    expect(r.inHandler, "nothing resumes inside the tap").toEqual(["setForm"]);
+    expect(r.calls).toEqual(["setForm", "doSave"]);
+    expect(r.armed).toBe(null);
+  });
+
+  it("Add to waitlist is resumed as Add to waitlist", () => {
+    expect(tap("waitlist", "07700900123", "GB").calls).toEqual(["setForm", "addFormToWaitlist"]);
+  });
+
+  it("each door says so before it asks for the phone", () => {
+    const h = appEnv({ form: newDraft({ phone: "612345678" }) });
+    compile(APP, APP_SAVE, h.env).doSave();
+    expect(h.env.phoneDoorRef.current).toBe("save");
+    expect(APP.slice(APP.indexOf("function addFormToWaitlist()"), APP.indexOf("waitlistEntry(formRef.current"))).toContain('phoneDoorRef.current="waitlist";');
+  });
+
+  it("the resume sits below the stale-error effect, which would otherwise clear a second refusal", () => {
+    const stale = APP.indexOf('useEffect(function(){if(error){setError("");setErrorField(null);}}');
+    const resume = APP.indexOf("useEffect(function(){const door=resumeDoorRef.current");
+    expect(stale).toBeGreaterThan(-1);
+    expect(resume).toBeGreaterThan(stale);
+  });
+
+  it("a save resumes doSave, not save: the refusal comes after the kitchen question, so it is answered", () => {
+    expect(LIFTED[1]).toMatch(/else doSave\(\);/);
+    expect(LIFTED[1]).not.toMatch(/\bsave\(/);
+  });
+
+  it("the form offers the codes on that refusal alone", () => {
+    const FORM = read("src/components/BookingFormModal.jsx");
+    expect(FORM).toContain("const codes=error===NO_CODE_REFUSAL?pinnedCodes(pinnedCountries):[];");
   });
 });

@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   COUNTRIES, countryByIso, splitPhone, joinPhone, dialLabel, cleanPinned,
-  matchesCountry, flagOf, DEFAULT_PINNED, phoneHasCode, withTypedCode, numberCleared,
+  matchesCountry, flagOf, DEFAULT_PINNED, phoneHasCode, withTypedCode, numberCleared, pinnedCodes,
 } from "../src/lib/phone-countries";
 import * as phoneLib from "../src/lib/phone-countries";
 import { normalizePhone } from "../src/lib/customers";
@@ -504,3 +504,25 @@ describe("phoneForSave — the phone rule, in one place (v18.3.2)", () => {
     }
   });
 });
+
+// v18.14.0 (H4): the refusal's one-tap fixes.
+describe("pinnedCodes", () => {
+  it("is each pin's flag and code, in the order Settings holds them", () => {
+    expect(pinnedCodes(["ES", "GB"])).toEqual([
+      { iso: "ES", label: flagOf("ES") + " +34" },
+      { iso: "GB", label: flagOf("GB") + " +44" },
+    ]);
+  });
+  it("offers nothing with no pins, which leaves the sentence as it was", () => {
+    expect(pinnedCodes([])).toEqual([]);
+    expect(pinnedCodes(undefined)).toEqual([]);
+  });
+  it("drops a pin that names no country", () => {
+    expect(pinnedCodes(["ZZ", "ES"]).map((c) => c.iso)).toEqual(["ES"]);
+  });
+  it("writes through the same join as the picker, and invents nothing for a number with a code", () => {
+    expect(joinPhone("ES", "612345678")).toBe("+34 612345678");
+    expect(joinPhone("ES", "+44 7700 900123")).toBe("+44 7700 900123");
+  });
+});
+
