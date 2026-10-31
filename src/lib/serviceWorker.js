@@ -61,7 +61,7 @@ export async function unregisterAll() {
 
 // Register, or tear down if disabled. Idempotent — safe to call on every change.
 //
-// The CALLER decides when. App.jsx waits until the first bookings snapshot has
+// The CALLER decides when. useShellPrefs waits until the first bookings snapshot has
 // landed, and that gate is the point: a worker only ever installs on a device
 // where the app has demonstrably booted AND reached Firebase. A build that
 // cannot load its data can therefore never persist itself into a cache, which

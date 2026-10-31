@@ -460,7 +460,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
   return (
     <div>
       {/* v14.2.0: Dark-mode toggle. Per-device (localStorage) — flips
-          <html data-theme> via useThemeMode in BookingApp. `Toggle` is the
+          <html data-theme> via useThemeMode in useShellPrefs. `Toggle` is the
           atom: signature { on, onClick } (NOT checked/onChange).
           v17.11.0: this comment was left behind in General when the row moved
           here, describing a control that was no longer under it. */}
@@ -589,8 +589,8 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
           <Toggle label="Split view" on={splitEnabled} onClick={onToggleSplitEnabled} />
         </div>
         {/* v17.2.0: per-device Timeline zoom/follow settings (localStorage,
-            theme pattern — App's tlSettings/onSetTlSetting). Zoom values step
-            0.5; the Follow/default zooms are capped by Max zoom (App clamps
+            theme pattern — useShellPrefs' tlSettings/onSetTlSetting). Zoom values step
+            0.5; the Follow/default zooms are capped by Max zoom (useShellPrefs clamps
             them down when Max zoom is lowered). */}
         <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
           <div style={{ textAlign: "left", marginBottom: 10 }}>
