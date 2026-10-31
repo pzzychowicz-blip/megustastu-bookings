@@ -38148,3 +38148,7 @@ was masked. Before the rules went out the same press said it could not read, so 
 answers have now been seen live. One reading to know about: a test label holding `Date.now()` is
 masked too, thirteen digits being a number like any other, so filtering stored entries on it
 finds nothing.
+
+### /code-review
+
+- **A crash's `view` was the view before it.** `noteCrashView` sat in an effect, and a view that throws as it opens never commits: with a temporary throw in PlanView, tapping Plan filed `crash in timeline`. Written in the render now, above the views, the same tap files `crash in plan`. One reading on the way: a reload sent straight after the edit raced Vite's file watcher and repeated the old answer, so a console trace had to settle it.

@@ -1965,7 +1965,10 @@ function BookingApp({uid}){
   // handlers below are function declarations, so those genuinely do hoist).
   const activeView=split?split[focusedPane]:view;
   // v18.13.0 (#28): which view a crash happened in, kept where it outlives this tree.
-  useEffect(function(){noteCrashView(activeView);},[activeView]);
+  // In the render and not an effect: a view that throws as it opens never commits, so
+  // an effect files its crash under the view before it (measured on DEV). The children
+  // render after this line, and the write is the same string however often it runs.
+  noteCrashView(activeView);
   // One writer for both the state and the key, so they can't drift.
   function applySplit(next){
     setSplit(next);

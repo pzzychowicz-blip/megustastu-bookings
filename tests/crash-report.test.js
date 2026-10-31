@@ -237,8 +237,13 @@ describe("the wiring", () => {
     expect(MAIN).not.toContain("emitActivity");
     expect(read("hooks/useActivityLog.js")).toContain("export function logActivity(entries) {");
   });
-  it("App keeps the view noted", () => {
-    expect(read("App.jsx")).toContain("useEffect(function(){noteCrashView(activeView);},[activeView]);");
+  // An effect runs after a commit, and a view that throws as it opens never commits:
+  // its crash was filed under the view before it (measured on DEV).
+  it("App notes the view in the render, above the views", () => {
+    const app = read("App.jsx");
+    expect(app).toContain("\n  noteCrashView(activeView);\n");
+    expect(app).not.toMatch(/useEffect\(function\(\)\{noteCrashView/);
+    expect(app.indexOf("noteCrashView(activeView);")).toBeLessThan(app.indexOf("const planView=<PlanView"));
   });
 });
 
