@@ -38138,7 +38138,13 @@ plan: without it the runbook ended at "and then read the map". It refuses to gue
 from another build, and three strings located in a production rebuild came back as the exact
 lines holding them. CI's entry for this branch's own tip cannot be read until it is pushed.
 
-**Not verified here, and why.** DEV keeps the old rules until Patryk runs `firebase login` and
-deploys them, so on DEV a crash entry is refused and the download says it could not read. The
-write's bytes were read off the wire and the server's half is the emulator's, against the real
-rules, but a crash entry landing on DEV and the file downloading from it have not been seen.
+**End to end on DEV, once Patryk had deployed the rules** (2026-10-31). A timer's throw, a
+rejection and a temporary render throw, reverted before this commit, each stored one entry,
+the last after `BookingApp` had unmounted, which is what the direct `logActivity` is for. The
+phone and the quoted name were masked in all three. The Crashes chip read "3 of 500 shown", each
+row carrying the Automatic chip, and the press handed over `mgt-crashes-2026-10-31.json`, typed
+`application/json`: those three entries and nothing else, oldest first, with no trace of what
+was masked. Before the rules went out the same press said it could not read, so both of its
+answers have now been seen live. One reading to know about: a test label holding `Date.now()` is
+masked too, thirteen digits being a number like any other, so filtering stored entries on it
+finds nothing.
