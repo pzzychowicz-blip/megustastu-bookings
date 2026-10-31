@@ -927,6 +927,17 @@ export function formatSugg(sugg,around){
   var after=sugg.filter(function(s){return s>around;}).slice(0,10).map(toTime);
   return {earlier:before,later:after};
 }
+// v18.14.0 (H3): the times the booking form's availability line offers, in
+// clock order: half each side of the time asked for, and where one side runs
+// short the other makes up the number. `sugg` is `formatSugg`'s, each side
+// ascending, so the nearest are the END of `earlier` and the START of `later`.
+export function nearestTimes(sugg,count){
+  const earlier=sugg?sugg.earlier:[];
+  const later=sugg?sugg.later:[];
+  const fromLater=Math.min(later.length,Math.max(Math.ceil(count/2),count-earlier.length));
+  const fromEarlier=Math.min(earlier.length,count-fromLater);
+  return earlier.slice(earlier.length-fromEarlier).concat(later.slice(0,fromLater));
+}
 
 // ── Kitchen-load helpers ──────────────────────────────────────────────────────
 export function getKitchenLoad(bookings,date,time,dur,excludeId){

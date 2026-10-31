@@ -68,7 +68,7 @@ import { WEEKDAY_LONG, formatDay } from "../lib/day";
 import { stepPress } from "../lib/keyboard";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
 import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, mkDangerBtn, AutoHeight, Reveal, Presence } from "./atoms";
-import { AvailBanner } from "./AvailBanner";
+import { AvailLine } from "./AvailLine";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon, TrashIcon } from "./Icons";
@@ -679,18 +679,17 @@ export function BookingFormModal({
   // the other zone is tried too, and a refusal means no zone had room.
   // v18.3.3: a refusal of kept tables (`keptRefusal`) is Save's own sentence,
   // in the warning colour, with no times offered: its way out is the sentence's
-  // own ("Assign different tables"), not another time.
+  // own ("Assign different tables").
   // v18.4.10: a refused PICK (`pickedRefusal`) is shown the same way, for a new
   // booking too, and offers no waitlist: its way out is Clear or Assign.
-  const availBanner=formAvail&&!formAvail.ok?<><AvailBanner
-    msg={formAvail.refusal||"No tables available."}
+  // v18.14.0 (H3): this is the footer's availability line now (`AvailLine`, whose
+  // header says why), and the body's banner is gone.
+  const availLine=formAvail&&!formAvail.ok?<AvailLine
+    text={formAvail.refusal||"No table for "+(Number(form.size)||2)+" at "+form.time}
     warn={!!formAvail.refusal}
     sugg={formAvail.sugg}
-    onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}} />{!editId&&onAddToWaitlist&&!formAvail.refusal?<div style={{display:"flex",justifyContent:"center",marginTop:-4,marginBottom:12}}><button
-      className="mgt-hover-scale"
-      /* v17.10.0: pending amber — the waitlist's colour, see App's badge. */
-      style={mkBtn({fontSize: T.body,background:BLOCK_BG.pending,minHeight:40,padding:"8px 16px",display:"inline-flex",alignItems:"center",gap:6})}
-      onClick={function(){onAddToWaitlist();}}><WaitIcon size={IC.control} />Add to waitlist</button></div>:null}</>:null;
+    onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}}
+    onAddToWaitlist={!editId&&onAddToWaitlist&&!formAvail.refusal?onAddToWaitlist:null} />:null;
   // v15.0.0: closed-day notice — the chosen date falls on a weekday marked Closed
   // (Settings → General → Opening hours). doSave blocks the write; this explains why.
   // v17.15.2: an AlertPanel, and it takes ClosedIcon — the same mark the strip's
@@ -962,6 +961,11 @@ export function BookingFormModal({
   const footerEl=(
     <>
       {errorEl}
+      {/* v18.14.0 (H3): the live region stays mounted for the reason `errorEl`'s
+          does: a region that arrives holding its message says nothing. A named
+          refusal yields to Save's, which is the same sentence: two panes saying
+          one thing read as a fault. */}
+      <div role="status"><Reveal show={!!availLine&&!(formAvail.refusal&&formAvail.refusal===error)}>{availLine}</Reveal></div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}{deleteBtn}{(function(){
         if(editId) return null;
         const canSave=!!form.date;
@@ -1101,7 +1105,7 @@ export function BookingFormModal({
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               aria-label="Increase duration"
-              {...stepPress(function(){const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});})}>+</button><span style={{fontSize: T.body,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={availChecking}>{checkingRow}</Reveal><Reveal show={!!(formAvail&&!formAvail.ok)}>{availBanner}</Reveal>{quickStatusBtns}<Section><Fld label="Notes">{function(fid){return <textarea
+              {...stepPress(function(){const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});})}>+</button><span style={{fontSize: T.body,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={availChecking}>{checkingRow}</Reveal>{quickStatusBtns}<Section><Fld label="Notes">{function(fid){return <textarea
           id={fid}
           value={form.notes}
           onChange={function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});}}

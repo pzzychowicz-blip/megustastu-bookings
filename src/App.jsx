@@ -2119,8 +2119,16 @@ export function BookingApp({uid}){
   // the closure value on every save except one: the seat resumed from
   // "Complete them & seat", where the completion has been dispatched but this
   // render has not happened yet. See `withClearedSeats` for what that cost.
+  // v18.14.0 (H3): the two plans are named so `planRefused` asks the very one
+  // the save runs.
+  function planEdit(f,bookings,liveBookings){
+    return applyEdit({list:bookings,live:liveBookings,id:editId,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,today:today,nowMins:nowMins,phonePrefix:generalSettings.phonePrefix,getUser:getUser,tagList:tagList});
+  }
+  function planNew(f){
+    return buildBooking({list:bookings,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,phonePrefix:generalSettings.phonePrefix,getUser:getUser});
+  }
   function doSaveEdit(f,bookings,liveBookings){
-    const plan=applyEdit({list:bookings,live:liveBookings,id:editId,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,today:today,nowMins:nowMins,phonePrefix:generalSettings.phonePrefix,getUser:getUser,tagList:tagList});
+    const plan=planEdit(f,bookings,liveBookings);
     // A refusal leaves the form open with its message (only the date's names
     // its field) and the guard READY, so Save still works.
     if(plan.refusal){if(plan.refusal.field) setErrorField(plan.refusal.field);setError(plan.refusal.message);return;}
@@ -2174,7 +2182,7 @@ export function BookingApp({uid}){
     // `delBooking` are the same pair).
     if(refused("bookingCreate")) return;
     const f=f0.repeatWeekly&&!standingOn()?Object.assign({},f0,{repeatWeekly:false}):f0;
-    const plan=buildBooking({list:bookings,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,phonePrefix:generalSettings.phonePrefix,getUser:getUser});
+    const plan=planNew(f);
     if(plan.refusal){setError(plan.refusal.message);return;}
     // v15.7.0: dispatch the function form (see the edit path). Held → optimistic
     // show + auto-retry; flash only on a real save.
@@ -2287,6 +2295,21 @@ export function BookingApp({uid}){
       else doSaveNew(f);
     }catch(err){setError("Error: "+err.message);}
   }
+  // v18.14.0 (H3): would this save's own plan refuse it? `save()` asks before it
+  // raises the kitchen question. The path was Save → "Kitchen may be busy" →
+  // Confirm → only then "Not enough capacity… would displace 2 existing
+  // bookings", a question answered for a save that could not go through
+  // (measured: 8 guests at 21:00). It asks the plan and not the form's line
+  // because the line is a preview, which can be re-checking as Save is pressed
+  // and can differ from the save, and the save is the final check. A throw
+  // answers yes: `doSave` runs the same plan inside the try that reports it.
+  function planRefused(){
+    const origB=editId?bookings.find(function(x){return x.id===editId;}):null;
+    const f=draftForSave(formRef.current,statusOverrideRef.current,origB,generalSettings.pinnedCountries,generalSettings.phonePrefix).draft;
+    try{
+      return !!(editId?planEdit(f,withClearedSeats(bookings),withClearedSeats(liveBookings)):planNew(f)).refusal;
+    }catch{return true;}
+  }
   function save(statusOverride){
     // v17.16.0: the guard is checked HERE as well as in doSave, because this is
     // the button's handler and it can return before doSave is ever reached. On a
@@ -2309,7 +2332,7 @@ export function BookingApp({uid}){
     if(pickedRefusal(withClearedSeats(liveBookings),f,editId,tableBlocks,swapAffected,nowMins,today)){setConfirmKitchen(null);return doSave();}
     // v18.6.0 (#17): whether to ask is `kitchenAsk` (lib/booking-save.js).
     const kitchenOrig=editId?bookings.find(function(b){return b.id===editId;}):null;
-    if(kitchenAsk(f,kitchenOrig,bookings,editId)&&!confirmKitchen){
+    if(kitchenAsk(f,kitchenOrig,bookings,editId)&&!confirmKitchen&&!planRefused()){
       setConfirmKitchen("form");return;
     }
     setConfirmKitchen(null);doSave();
@@ -4093,7 +4116,7 @@ export function BookingApp({uid}){
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
               className="mgt-hover-scale"
-              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,todayStr(),t,d,null);return countLabel(l.starts,"booking","bookings")+" with "+guestsLabel(l.guests);})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return countLabel(l.starts,"booking","bookings")+" with "+guestsLabel(l.guests);})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!voucherAsk}>{voucherAsk&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]?<VoucherRedeemModal
+              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,todayStr(),t,d,null);return countLabel(l.starts,"booking","bookings")+" with "+guestsLabel(l.guests);})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return countLabel(l.starts,"booking","bookings")+" with "+guestsLabel(l.guests);})())+" starting at this time. Go back to pick another time, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!voucherAsk}>{voucherAsk&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]?<VoucherRedeemModal
               voucher={vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]}
               booking={bookings.find(function(x){return x.id===voucherAsk.id;})}
               currency={generalSettings.currency}

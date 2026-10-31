@@ -38739,3 +38739,56 @@ be read on the tablet, so both are on the hardware list.
 
 **Files:** new `lib/haptics.js`, `useShellPrefs.js`, `App.jsx`, `Settings.jsx`, `TimelineView.jsx`, new
 `tests/haptics.test.js`.
+
+### H3: the availability line
+
+A phone booking learned "no table" last. The answer was a banner in the form's body, at y=694 on a 570-tall screen,
+and the path ran Save → "Kitchen may be busy", which pointed at "alternatives below" that were not on screen →
+Confirm → only then the refusal. The answer is now a line in the form's footer, above the buttons, because the footer
+is what stays on screen with the keyboard up: "No table for 8 at 21:00", the four nearest times to tap, and Add to
+waitlist on a new booking. It replaces the body's list. A picked or kept table that Save will refuse shows Save's own
+sentence instead, in amber, with no times and no waitlist.
+
+`save()` now asks the save's own plan (`planRefused`) before it raises the kitchen question, so a save that cannot go
+through is refused at once. It asks the plan rather than the line because the line is a preview, which can be
+re-checking as Save is pressed. A throw in that dry run answers yes, so `doSave` reaches it inside the try that
+reports it. `planEdit` and `planNew` were named for this, and every `save-path` snapshot is unchanged.
+
+| Reading | 998 × 507 | 998 × 570 |
+|---|---|---|
+| The line, 8 at 21:00 | y 365–413, 48px | y 425–473, 48px |
+| The form's body, without it · with it · with the old list shape | 377 · 321 · 273 (a wrapped line, 96px) | 435 · 378 |
+| Save with the line up | stays at y 421, on screen | stays at y 481 |
+| In, 2 guests at 13:00 to 21:00 | 0 → 56px in about 530ms, opacity 0 → 1 | same |
+| Out, a tap on 18:45 | 56 → 0 in about 500ms, opacity 1 → 0 | same |
+| A chip with the name field focused | time 18:45, focus stays in the field | same |
+| Save, 8 at 21:45, kitchen busy, no table | no dialog, "Could not assign a table — try manual assignment." above the line | same |
+| Save pending, same draft | same refusal, no dialog | not rerun |
+| Save, tomorrow 2 at 14:00, kitchen busy, a table free | "Kitchen may be busy" is still asked | not rerun |
+| Keyboard, simulated as Android does it, 998 × 298 with the name field focused | body 153px, field at y 43–87, line and Save on screen | n/a |
+| 375 × 812 | the line wraps to three rows, 117px, no overflow | n/a |
+| Dark | same geometry, read from the screenshot | n/a |
+| A picked table taken at the new time | 37px pane, amber; after Save it yields to the same sentence; a time change brings it back | same |
+| 14 and 20 guests | still one row | same |
+
+The kitchen confirm now says "Go back to pick another time, or confirm to proceed anyway", because the dialog covers
+the form and nothing is below it.
+
+**Decisions.**
+- To hold one row in the form's 530px, the line goes without the notice's mark, and the chips and the button take
+  narrower insets (6px and 8px) than they have elsewhere. Their height stays 40px. A wrapped line was 96px.
+- Save's refusal sits above the line, so `applyEdit`'s "see suggestions below" stays true and needed no change.
+- The line can stand under a red refusal that says much the same. Save's sentence adds the way out ("try manual
+  assignment"), so both stay. Only an identical sentence yields.
+- A tap on a time keeps the focus where it was. Otherwise it would drop the keyboard mid-sentence. Whether that holds
+  on the tablet is on the hardware list.
+- The body's "Checking table availability…" row stays where it was. It also covers the kitchen scan, whose times are
+  in the body, and a time or guest change is made up there.
+
+**Left as it is, by the recorded rule:** the line collapses while a change is re-checked, because `useDeferredCompute`
+never shows a stale answer (Patryk's choice). Between two refused times it dips and returns: 56 → 41px at full speed,
+56 → 33px at 4× CPU, over about 200–330ms. Nothing under it moves, and the old banner moved the whole form.
+
+**Files:** new `AvailLine.jsx`, `AvailBanner.jsx`, `BookingFormModal.jsx`, `App.jsx`, `booking-logic.js`,
+`tests/booking-logic.test.js`, `tests/save-path.test.js`.
+

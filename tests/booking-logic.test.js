@@ -13,6 +13,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import {
+  formatSugg, nearestTimes,
   toMins, toTime, overlaps, genId, getDur, statusOrder,
   comboCap, comboCapBest, sanitize, sanitizeAll, isReadableTime, diffBooking,
   lateState, lateMins, freeingSoon, daySummary, rangeStats,
@@ -3079,9 +3080,24 @@ describe("the save and the preview ask tablesKept (v18.3.2)", () => {
     expect(/tablesPinned\(form\.status/.test(FORM), "no site still asks the status alone").toBe(false);
   });
 
-  it("v18.3.3: the scan asks keptRefusal and the banner shows its sentence as a warning", () => {
+  // v18.14.0 (H3): the footer is the one part of the dialog that stays on screen
+  // with the keyboard up, so the answer lives there and the body's list is gone.
+  it("H3: the line is in the footer, above the buttons, in a region that stays mounted", () => {
+    const foot = FORM.slice(FORM.indexOf("const footerEl=("));
+    const err = foot.indexOf("{errorEl}"), line = foot.indexOf('<div role="status"><Reveal show={!!availLine'), row = foot.indexOf('justifyContent:"space-between"');
+    expect(err).toBeGreaterThan(-1);
+    expect(line, "under the save's refusal, which says \"see suggestions below\"").toBeGreaterThan(err);
+    expect(row, "above the buttons").toBeGreaterThan(line);
+    expect(FORM.includes("<AvailBanner"), "the body's list is gone").toBe(false);
+  });
+
+  it("H3: a named refusal yields to Save's, the same sentence, rather than standing beside it", () => {
+    expect(FORM).toContain("show={!!availLine&&!(formAvail.refusal&&formAvail.refusal===error)}");
+  });
+
+  it("v18.3.3: the scan asks keptRefusal and the line shows its sentence as a warning (H3 moved it to the footer)", () => {
     expect(/const refusal=keptRefusal\(bookings,cur,form,tableBlocks\);/.test(FORM)).toBe(true);
-    expect(/msg=\{formAvail\.refusal\|\|"No tables available\."\}/.test(FORM)).toBe(true);
+    expect(/text=\{formAvail\.refusal\|\|"No table for "\+\(Number\(form\.size\)\|\|2\)\+" at "\+form\.time\}/.test(FORM)).toBe(true);
     expect(/warn=\{!!formAvail\.refusal\}/.test(FORM)).toBe(true);
   });
 });
@@ -3291,5 +3307,30 @@ describe("pickedRefusal: what Save will say about the tables picked in the form"
     const kitchen = APP.indexOf('setConfirmKitchen("form")');
     expect(picked).toBeGreaterThan(-1);
     expect(kitchen).toBeGreaterThan(picked);
+  });
+});
+
+// v18.14.0 (H3): what the booking form's availability line offers.
+describe("nearestTimes", () => {
+  const sugg = formatSugg([1080, 1095, 1110, 1125, 1170, 1185, 1200, 1215], 1140); // 18:00–18:45 · 19:30–20:15, around 19:00
+
+  it("takes two each side of the time asked for, in clock order", () => {
+    expect(nearestTimes(sugg, 4)).toEqual(["18:30", "18:45", "19:30", "19:45"]);
+  });
+
+  it("makes the number up from the other side when one runs short", () => {
+    expect(nearestTimes({ earlier: ["18:45"], later: ["19:30", "19:45", "20:00", "20:15"] }, 4)).toEqual(["18:45", "19:30", "19:45", "20:00"]);
+    expect(nearestTimes({ earlier: ["18:00", "18:15", "18:30", "18:45"], later: ["19:30"] }, 4)).toEqual(["18:15", "18:30", "18:45", "19:30"]);
+    expect(nearestTimes({ earlier: [], later: ["19:30", "19:45", "20:00", "20:15", "20:30"] }, 4)).toEqual(["19:30", "19:45", "20:00", "20:15"]);
+    expect(nearestTimes({ earlier: ["18:00", "18:15", "18:30", "18:45", "19:00"], later: [] }, 4)).toEqual(["18:15", "18:30", "18:45", "19:00"]);
+  });
+
+  it("offers what there is when there are fewer than asked for", () => {
+    expect(nearestTimes({ earlier: ["18:45"], later: ["19:30"] }, 4)).toEqual(["18:45", "19:30"]);
+    expect(nearestTimes({ earlier: [], later: [] }, 4)).toEqual([]);
+  });
+
+  it("takes a named refusal's null sugg", () => {
+    expect(nearestTimes(null, 4)).toEqual([]);
   });
 });

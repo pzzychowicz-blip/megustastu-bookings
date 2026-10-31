@@ -94,7 +94,9 @@ const importScope = (src, lifted) => scopeOf(LIB, src, lifted, {});
 // import now rather than lifted.
 const APP_SAVE_NAMES = [
   "withClearedSeats", "undoDelta",
+  "planEdit", "planNew",
   "doSaveEdit", "doSaveNew", "doSave", "openEdit",
+  "planRefused", "save",
 ];
 const APP_SAVE = APP_SAVE_NAMES.map((n) => liftFunction(APP, n));
 const APP_GENERATOR = [liftEffect(APP, "dueOccurrences(recurring.rules", "generate")];
@@ -303,6 +305,8 @@ function appEnv(opts) {
     setEditId: rec("setEditId"),
     setSwapAffected: rec("setSwapAffected"),
     setShowHistory: rec("setShowHistory"),
+    confirmKitchen: opts.confirmKitchen || null,
+    setConfirmKitchen: rec("setConfirmKitchen"),
   }, opts.env);
   return h;
 }
@@ -315,6 +319,13 @@ function runSave(opts) {
   Object.defineProperty(out, "subjects", { value: h.subjects || [], enumerable: false });
   if (opts.pendingWaitlist) out.pendingWaitlistAfter = h.pendingWaitlistRef.current;
   return out;
+}
+// One press of the form's Save button, through `save`, which asks the kitchen
+// question before `doSave`. `doSave` alone cannot see that order.
+function runPress(opts, statusOverride) {
+  const h = appEnv(opts);
+  compile(APP, APP_SAVE, h.env).save(statusOverride);
+  return reduce(h);
 }
 // `openEdit(b)`: what the edit form opens with.
 function runOpenEdit(b, env) {
@@ -2902,5 +2913,61 @@ describe("the form's saves name their booking to the write", () => {
     const out = runSave({ form: newDraft({ name: "Ana" }) });
     expect(out.subjects.length).toBe(1);
     expect(Object.keys(out.writes[0].rows)).toContain(out.subjects[0]);
+  });
+});
+
+// v18.14.0 (H3): the path was Save → "Kitchen may be busy" → Confirm → only then
+// the refusal, a question answered for a save that could not go through. Save
+// asks its own plan first, and the plan is run, never written.
+describe("the form's Save puts the kitchen question only to a save that can go through", () => {
+  // Thirteen two-tops at 20:00, nobody movable: no table, and the kitchen busy.
+  const noTable = () => ({ bookings: fullDay(T, "20:00", true), form: newDraft({ name: "Ana" }) });
+  // Two starting at 20:00 reach the limit with this one, and the room is empty.
+  const busyKitchen = () => ({
+    bookings: [bk("a", { tables: ["1"] }), bk("b", { tables: ["2"] })],
+    form: newDraft({ name: "Ana" }),
+  });
+  const asked = (out) => out.calls.includes('setConfirmKitchen("form")');
+
+  it("no table: refused at once, with the save's own sentence, and the question never raised", () => {
+    const out = runPress(noTable());
+    expect(asked(out)).toBe(false);
+    expect(out.calls.some((c) => c.startsWith("setError("))).toBe(true);
+    expect(out.writes).toBeUndefined();
+    expect(out.guard, "the form stays open with Save live").toBe("ready");
+  });
+
+  it("Save pending takes the same way", () => {
+    const out = runPress(noTable(), "pending");
+    expect(asked(out)).toBe(false);
+    expect(out.calls.some((c) => c.startsWith("setError("))).toBe(true);
+  });
+
+  it("an edit into a full evening does too", () => {
+    const b1 = bk("b1", { time: "18:00", tables: ["1"] });
+    const out = runPress({ bookings: fullDay(T, "20:00", true).concat([b1]), editId: "b1", form: draftOf(b1, { time: "20:00" }) });
+    expect(asked(out)).toBe(false);
+    expect(out.calls).toContain('setError("No tables available at this time — see suggestions below.")');
+    expect(out.writes).toBeUndefined();
+  });
+
+  it("a table free: the question is raised, and asking wrote nothing", () => {
+    const out = runPress(busyKitchen());
+    expect(asked(out)).toBe(true);
+    expect(out.writes).toBeUndefined();
+    expect(out.calls.some((c) => c.startsWith("setError("))).toBe(false);
+  });
+
+  it("a quiet kitchen never runs the plan twice: the save just goes", () => {
+    const out = runPress({ bookings: [], form: newDraft({ name: "Ana" }) });
+    expect(asked(out)).toBe(false);
+    expect(out.writes.length).toBe(1);
+  });
+
+  it("a plan that throws reaches doSave's catch, which reports it, rather than dying in the button's handler", () => {
+    const boom = () => { throw new Error("boom"); };
+    const out = runPress(Object.assign(busyKitchen(), { env: { getUser: boom } }));
+    expect(asked(out)).toBe(false);
+    expect(out.calls).toContain('setError("Error: boom")');
   });
 });

@@ -1,6 +1,7 @@
 // ── AvailBanner — "no tables available", with nearby alternatives ────────────
-// Shown above the booking and walk-in forms when the requested slot cannot be
-// filled. `warn` softens it from a refusal to an advisory.
+// Shown in the walk-in form when the requested slot cannot be filled. `warn`
+// softens it from a refusal to an advisory. The booking form's answer is
+// `AvailLine` since v18.14.0, pinned above its buttons; `TimeChip` is both's.
 //
 // v17.15.2: MOVED OUT OF atoms.jsx, and rebuilt on `AlertPanel`.
 //
@@ -32,7 +33,9 @@ import { AlertIcon } from "./Icons";
 // is pressed by Enter and Space, and wears the app's press dip. Its look is the
 // span's, declaration for declaration: `index.css` gives a button the app's
 // font, and every property a button's UA style would change is set inline.
-export function TimeChip({ time, onPick }) {
+// `style` (v18.14.0): the availability line sizes its chips to the row they sit
+// in; everywhere else the chip is its own size.
+export function TimeChip({ time, onPick, style }) {
   return (
     <button
       type="button"
@@ -44,7 +47,8 @@ export function TimeChip({ time, onPick }) {
         background: "var(--suggest-bg)",
         color: "var(--success-text)",
         border: "1px solid var(--suggest-border)",
-        boxShadow: "var(--shadow-btn)"
+        boxShadow: "var(--shadow-btn)",
+        ...(style || null)
       }}
     >
       {time}
