@@ -38229,3 +38229,19 @@ identical. **Measured:** 3,888 tests passing before; 3,888 of those still passin
 `tests/test-hygiene.test.js` now fails a test that reads App.jsx directly. On its first run
 it reported `motion.test.js`, a false positive on `offenders.push("App.jsx")`, which is a
 label; the detector now skips `.push(` and pins that case.
+
+### The lint guards
+
+Lint and build both pass over a TDZ, and a TDZ blanks the whole app. `no-use-before-define`
+with `variables: false` now runs on `src/App.jsx` and `src/hooks/`: it asks only about a read
+in the same scope, which is what throws during render. It has 0 findings there today.
+Scoped because `src/lib/whatsapp.js:182-183` holds two findings that do not run in render.
+
+`react-hooks/invariant` is an error on `src/App.jsx`, and each domain hook joins it. The
+compiler can stop analysing `BookingApp` silently: a `class` in the body removes all of App's
+warnings with no error, and only this rule says so. It is not on all of `src/hooks/`, because
+`useWaSettings.js:115` already reports.
+
+**Proved by planting each fault in `npm run lint`'s config, then restoring the file:**
+`activeView` below the `useKeyboardShortcuts` call fails `no-use-before-define`, and a
+`class` in the body fails `react-hooks/invariant`.

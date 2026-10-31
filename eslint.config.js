@@ -44,6 +44,28 @@ export default defineConfig([
     },
   },
   {
+    // v18.13.1: lint and build both pass over a TDZ, and a TDZ blanks the whole
+    // app. `variables: false` asks only about a read in the SAME scope, which is
+    // the shape that throws during render; a read inside a handler runs later and
+    // stays legal. A hook's argument is read at the call, so moving a handler into
+    // a hook is what turns one into the other. Reintroduced by hand, all four TDZs
+    // this app has had (`activeView`, `tagList`, `isViewToday`, `guestTags`) fail
+    // this rule. Scoped because `src/lib/whatsapp.js` holds two findings that do not
+    // run in render.
+    files: ['src/App.jsx', 'src/hooks/**/*.{js,jsx}'],
+    rules: {
+      'no-use-before-define': ['error', { functions: false, classes: false, variables: false }],
+    },
+  },
+  {
+    // v18.13.1: the compiler can stop analysing `BookingApp` silently. A `class` in
+    // the body takes all of App's warnings with it, no error, and the count simply
+    // falls; only this rule reports it. A new domain hook joins this list. Not all
+    // of src/hooks/: `useWaSettings.js:115` already reports here, a separate fix.
+    files: ['src/App.jsx'],
+    rules: { 'react-hooks/invariant': 'error' },
+  },
+  {
     // WA sandbox: api/* are Vercel serverless FUNCTIONS, not browser code —
     // they legitimately use `process.env` and `Buffer` (Meta HMAC signature
     // verification, base64 service-account decoding). Node globals for that
