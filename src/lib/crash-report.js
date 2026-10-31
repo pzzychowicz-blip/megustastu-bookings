@@ -14,13 +14,16 @@
 //     also what removes the message V8 repeats on the stack's first line.
 //   • The digit mask is for the MESSAGE alone. A column in a minified bundle can be six
 //     digits, and the columns are what the rebuild runbook decodes.
-//   • A value that is not an Error is never described. A promise can reject with a
+//   • An object that is not an Error is never described. A promise can reject with a
 //     booking, and a booking's `.name` is a guest's, so `name` is read from a real Error
-//     only and an object contributes nothing at all.
+//     only and an object contributes nothing at all. A thrown string or number IS read,
+//     through the mask, because that is the shape `event.message` arrives in. So reject
+//     with an Error, never with free text: the mask cannot see a name. Nothing in src/
+//     rejects with a string today.
 //   • A double-quoted run in a message is masked, first quote to last, because that is
 //     where a built-in error quotes its input: V8's JSON.parse puts the text it could
 //     not read there. Single quotes stay, because `(reading 'time')` is the useful half
-//     of a TypeError and they only ever hold a property name.
+//     of a TypeError, and V8 puts a property name or one character there.
 //
 // ── ONE ENTRY, NOT A FLOOD ──────────────────────────────────────────────────
 // An effect that throws on every 15s tick would otherwise write a row for each one, for
