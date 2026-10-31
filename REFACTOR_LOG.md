@@ -38411,3 +38411,13 @@ the same statements in another order, no behaviour change, and the file leaves t
 Every file in `src/` is now under `invariant`. The hook has no new advisory, so the total stays 63.
 **The cause is narrowed, not explained:** this hook's order is what triggers it here, and v18.13.1's
 small hook with the same shape did not reproduce it, so nothing here says when the compiler does this.
+
+### The `atoms` chunk stays whole (#40)
+
+Measured with a static import graph from `src/main.jsx` (`espree`): 158 files load at startup and 43
+only lazily. Of `atoms.jsx`'s 49 exports, 37 are used at startup, 6 only by lazy code (`mkStep`,
+`useOverlayScroll`, `MODAL_TITLE_ATTR`, `PAUSED_FADE`, `Kbd`, `SearchField`), and 6 by nothing outside
+the file. Bundling the 37 alone against all 49 gives 18.64 and 19.17 kB gz, so a split saves 0.53 kB at
+startup. And the chunk is not the atoms: its 33.8 kB gz holds 15 modules, among them `booking-logic`,
+`constants`, `Icons`, `vouchers`, `booking-fields` and `phone-countries`, all needed at startup anyway
+(a source-map build, which reproduced the same chunk hash). **Decided (Patryk, 2026-10-31): no split.**

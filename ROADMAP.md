@@ -105,10 +105,6 @@ and `MGT_Bookings_Tech_Debt_Scan_2026-10-30.md`.
 
 - **Refresh the `.design-sync` snapshot (#39).** It is behind `atoms.jsx`.
 
-- **Measure the eager `atoms` chunk, then decide (#40).** It grew from 23 to 34 kB gz
-  by 2026-10-30 (`atoms.jsx`: 2,565 lines, fan-in 70). Measure which atoms only lazy chunks use before
-  deciding whether a split is worth it.
-
 ## Designed, not implemented
 
 Nothing at present.
