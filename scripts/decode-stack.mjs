@@ -19,8 +19,9 @@ import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 
 const NOT_THIS_BUILD = "(not in this rebuild: wrong commit, or VERCEL_ENV differs)";
 
-// "fn assets/index-x.js:1:2345" → "src/App.jsx:88:4 fn". A browser's column counts from
-// 1 and a map's from 0. `mapFor(file)` answers a TraceMap, or null.
+// "fn assets/index-x.js:1:2345" → "src/App.jsx:88:5 fn". A browser's column counts from
+// 1 and a map's from 0, so it goes in less one and comes out plus one, the way an editor
+// counts. `mapFor(file)` answers a TraceMap, or null.
 export function decodeFrame(frame, mapFor) {
   const m = /^(?:(.+) )?(\S+):(\d+):(\d+)$/.exec(frame);
   if (!m) return frame;
@@ -28,7 +29,7 @@ export function decodeFrame(frame, mapFor) {
   if (!map) return frame + "   " + NOT_THIS_BUILD;
   const at = originalPositionFor(map, { line: Number(m[3]), column: Number(m[4]) - 1 });
   if (!at.source) return frame + "   (no mapping)";
-  const place = at.source.replace(/^(\.\.\/)+/, "") + ":" + at.line + ":" + at.column;
+  const place = at.source.replace(/^(\.\.\/)+/, "") + ":" + at.line + ":" + (at.column + 1);
   const name = at.name || m[1];
   return name ? place + " " + name : place;
 }

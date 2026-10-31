@@ -20,12 +20,12 @@ const MAP = new TraceMap({ version: 3, sources: ["../../src/a.js"], names: ["run
 const mapFor = (file) => (file === "index-abc.js" ? MAP : null);
 
 describe("decodeFrame", () => {
-  it("counts a browser's column from 1 and a map's from 0", () => {
-    expect(decodeFrame("Qx assets/index-abc.js:1:1", mapFor)).toBe("src/a.js:1:0 Qx");
-    expect(decodeFrame("Qx assets/index-abc.js:1:10", mapFor)).toBe("src/a.js:1:9 run");
+  it("counts a browser's column from 1 and a map's from 0, and prints the way an editor counts", () => {
+    expect(decodeFrame("Qx assets/index-abc.js:1:1", mapFor)).toBe("src/a.js:1:1 Qx");
+    expect(decodeFrame("Qx assets/index-abc.js:1:10", mapFor)).toBe("src/a.js:1:10 run");
   });
   it("needs no function name", () => {
-    expect(decodeFrame("assets/index-abc.js:1:1", mapFor)).toBe("src/a.js:1:0");
+    expect(decodeFrame("assets/index-abc.js:1:1", mapFor)).toBe("src/a.js:1:1");
   });
   it("a frame from another build is said, and never guessed at", () => {
     expect(decodeFrame("Qx assets/index-other.js:1:10", mapFor)).toBe(
@@ -61,9 +61,9 @@ describe("decodeCrash", () => {
       "2026-11-01T20:15:00.000Z · 18.13.0 · timeline · Android · Chrome",
       "render TypeError: x is undefined",
       "stack:",
-      "  src/a.js:1:9 run",
+      "  src/a.js:1:10 run",
       "component:",
-      "  src/a.js:1:0 App",
+      "  src/a.js:1:1 App",
     ].join("\n"));
   });
   it("a crash with no stack is still a crash", () => {
