@@ -89,6 +89,21 @@ export function useWaSettings({ enabled } = {}) {
     return unsub;
   }, [on]);
 
+  // Guarded write; accepts a PARTIAL update (the useGeneralSettings contract).
+  function saveWaSettings(partial) {
+    if (!loaded.current) {
+      console.warn("[SAFE] Refused to write WhatsApp settings — initial read has not completed yet.");
+      return;
+    }
+    const prev = waSettings;
+    const next = sanitizeWa({ ...prev, ...(partial || {}) });
+    setWa(next);
+    writeWithRev("settings/whatsapp", next, revRef, undefined, function () {
+      const entry = settingsWriteEntry("settings/whatsapp", prev, next);
+      if (entry) emitActivity([entry]);
+    });
+  }
+
   // ── The auto-archive epoch ──────────────────────────────────────────────────
   // Without this, the very first load after the feature ships sees every
   // historical conversation whose linked booking is already "completed" and
@@ -110,21 +125,6 @@ export function useWaSettings({ enabled } = {}) {
     saveWaSettings({ autoArchiveSince: Date.now() });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot after load; saveWaSettings is a fresh closure each render
   }, [on, loadedState]);
-
-  // Guarded write; accepts a PARTIAL update (the useGeneralSettings contract).
-  function saveWaSettings(partial) {
-    if (!loaded.current) {
-      console.warn("[SAFE] Refused to write WhatsApp settings — initial read has not completed yet.");
-      return;
-    }
-    const prev = waSettings;
-    const next = sanitizeWa({ ...prev, ...(partial || {}) });
-    setWa(next);
-    writeWithRev("settings/whatsapp", next, revRef, undefined, function () {
-      const entry = settingsWriteEntry("settings/whatsapp", prev, next);
-      if (entry) emitActivity([entry]);
-    });
-  }
 
   return { waSettings, saveWaSettings };
 }

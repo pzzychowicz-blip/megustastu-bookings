@@ -62,10 +62,8 @@ export default defineConfig([
     // v18.13.1: the compiler can stop analysing `BookingApp` silently. A `class` in
     // the body takes all of App's warnings with it, no error, and the count simply
     // falls; only this rule reports it. All of src/, so a new domain hook needs no
-    // entry here. `useWaSettings.js:115` already reports (ROADMAP), and leaves this
-    // list when that is fixed.
+    // entry here.
     files: ['src/**/*.{js,jsx}'],
-    ignores: ['src/hooks/useWaSettings.js'],
     rules: { 'react-hooks/invariant': 'error' },
   },
   {

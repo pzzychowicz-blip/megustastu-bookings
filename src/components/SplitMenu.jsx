@@ -39,7 +39,7 @@ const LABEL = { timeline: "Timeline", list: "List", plan: "Plan" };
 const ORDER = ["timeline", "list", "plan"];
 
 // v17.11.0: `sideBySideOk` — is the shell wide enough that a Timeline would get
-// a usable pane side by side? (App owns the arithmetic; see MIN_TL_PANE there.)
+// a usable pane side by side? (useShellPrefs owns the arithmetic; see MIN_TL_PANE there.)
 // When it is false the menu does not silently drop the option, it shows it
 // refused with the reason: a control that vanishes teaches nothing, and the
 // answer here depends on a setting the user can change.

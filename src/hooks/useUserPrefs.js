@@ -122,7 +122,7 @@ export function sanitizeUserPrefs(raw){
   return {
     v: 1,
     // v18.0.0 session 7: "auto" is Automatic dark mode — follow this device's OS — kept as a
-    // CHOICE. null cannot carry it: null means "never chosen", which App's seeding
+    // CHOICE. null cannot carry it: null means "never chosen", which useShellPrefs' seeding
     // effect fills from the next device to sign in with an explicit value.
     theme: src.theme === "dark" || src.theme === "light" || src.theme === "auto" ? src.theme : null,
     reduceMotion: triBool(src.reduceMotion),
@@ -135,7 +135,7 @@ export function sanitizeUserPrefs(raw){
 
 export function useUserPrefs(uid){
   const [userPrefs, setUP] = useState(DEFAULT_USER_PREFS);
-  // False until the first snapshot for THIS uid lands. App gates its
+  // False until the first snapshot for THIS uid lands. useShellPrefs gates its
   // apply-the-server-values effect on this, so it can tell "no preferences yet"
   // (seed from the device) apart from "not loaded yet" (do nothing).
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -152,7 +152,7 @@ export function useUserPrefs(uid){
 
   useEffect(function(){
     // No uid: subscribe to nothing and stay unloaded, so saveUserPrefs refuses
-    // and App's seeding effect never fires. Leaking a previous account's
+    // and useShellPrefs' seeding effect never fires. Leaking a previous account's
     // preferences is not a risk here — App renders BookingApp with
     // `key={user.uid}`, so an account switch remounts the whole subtree and
     // this hook starts from DEFAULT_USER_PREFS again.
@@ -161,7 +161,7 @@ export function useUserPrefs(uid){
     const unsub = onValue(ref(db, path), function(snap){
       const val = snap.val();
       // An ABSENT node is not an error — it's a user who has never saved
-      // preferences. App's seeding effect turns that into a write of whatever
+      // preferences. useShellPrefs' seeding effect turns that into a write of whatever
       // this device already had.
       setUP(val && typeof val === "object" ? sanitizeUserPrefs(val) : DEFAULT_USER_PREFS);
       loaded.current = true;

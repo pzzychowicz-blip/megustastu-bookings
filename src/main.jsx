@@ -60,7 +60,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 // cannot run at all) and re-introduced one on strict terms.
 //
 // It is NOT registered here. src/lib/serviceWorker.js owns the key, the
-// reader/writer and applyServiceWorker(); App.jsx calls it gated on
+// reader/writer and applyServiceWorker(); useShellPrefs calls it gated on
 // `bookingsReady`, so a build that cannot reach Firebase can never cache itself
 // and serve itself back. Read the "offline shell" section in CLAUDE.md before
 // touching any of it: an installed worker cannot be withdrawn by reverting the

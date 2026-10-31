@@ -19,9 +19,7 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **`useWaSettings` bails out of the compiler.** `react-hooks/invariant` reports `PruneHoistedContexts: Unexpected hoisted function` on `saveWaSettings` (line 115), so the compiler says nothing about that hook. The file is named in that rule's `ignores` in `eslint.config.js`, and leaves it when this is fixed. Found in v18.13.1. The cause is not established: a small hook with a hoisted function called from an effect does not reproduce it. A fix may surface advisories against the `--max-warnings` cap.
-
-- **`BookingApp` V2–V5** (`useInboxEntry`, `useWaitlistOffers`, `useShellPrefs`, `useBookingForm`). Designed in `MGT_Bookings_State_By_Domain_Design.md`, context folder. After WhatsApp go-live settles; each version needs its own approval and a fresh census first.
+- **`BookingApp` V2, V3 and V5** (`useInboxEntry`, `useWaitlistOffers`, `useBookingForm`). Designed in `MGT_Bookings_State_By_Domain_Design.md`, context folder. After WhatsApp go-live settles; each version needs its own approval and a fresh census first.
 
 - **WhatsApp coexistence: the rehearsal, then the restaurant's number.** The code
   shipped in v18.9.0 (Embedded Signup at `/wa-connect`, the four coexistence webhooks,
@@ -101,15 +99,19 @@ and `MGT_Bookings_Tech_Debt_Scan_2026-10-30.md`.
 - **Make `InboxPanel.onKey` a table (#32).** Complexity 56 on 2026-10-30. The `lib/shortcuts.js`
   pattern, after go-live.
 
-- **Sweep merged branches and stale worktrees (#37).** 133 merged remote branches and 20
-  worktrees (5.1 GB) on 2026-10-30, in one pass, checking each first. New merges have
-  deleted their own branch since that date.
+- **The split direction button does nothing on a Timeline split at tablet width.** On a shell too narrow
+  for a side-by-side Timeline, `toggleSplitDir` (`useShellPrefs.js`) writes `v` and the repair effect
+  writes `h` straight back, with the title still offering "Switch to side by side". Measured on the
+  restaurant tablet at 998 wide. `SplitMenu` already refuses that choice and says why, so the button
+  should do the same: disabled there, with the reason. Found by v18.13.2's review, which changes no
+  behaviour.
+
+- **Two June worktrees are left from the #37 sweep.** `awesome-meninsky-14260e` and
+  `trusting-sutherland-89fdb5` hold uncommitted WhatsApp prototypes that v18 superseded. 11 files in
+  each are evicted by iCloud, so they could not be archived and were not removed. Download them or
+  decide they can go. Their `.env.local` files differ from the main checkout's.
 
 - **Refresh the `.design-sync` snapshot (#39).** It is behind `atoms.jsx`.
-
-- **Measure the eager `atoms` chunk, then decide (#40).** It grew from 23 to 34 kB gz
-  by 2026-10-30 (`atoms.jsx`: 2,565 lines, fan-in 70). Measure which atoms only lazy chunks use before
-  deciding whether a split is worth it.
 
 ## Designed, not implemented
 
