@@ -2023,6 +2023,11 @@ it. Both halves are needed (with `Reveal`'s alone, still cut at 0.08–0.28px);
 with both, the card sits at 0 for 80–100ms before it goes. The rule is
 `usePresenceLifecycle`'s: a hold starts from an effect on the state that draws
 the exit, never beside the `setState` that will.
+**An entrance needs its start DRAWN the same way** (v18.14.0). `Reveal` set
+`mounted` from the effect that started its two frames, and after a slow click
+those frames ran first, so the node was born open with nothing to ease from: a
+refusal eased 2 times in 8 at 1× CPU and never at 4×. It mounts closed from the
+render that receives `show={true}` now.
 
 **The Plan view's zoom has edges that give, and its resets glide** (v18.3.0,
 A8). A pinch past 0.5× or 5× RESISTS rather than stopping dead: apple-design

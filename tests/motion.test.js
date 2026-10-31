@@ -129,6 +129,20 @@ describe("exit holds outlast their animations", () => {
     expect(body, "no hold started in the effect").not.toMatch(/setTimeout\(/);
   });
 
+  // v18.14.0: the opening's half of the v18.3.3 pin below. The effect's two rAFs
+  // can run before a render the effect schedules, so `mounted` has to be settled
+  // in the render that receives show={true}, or a slow click mounts the node
+  // already open and nothing eases: measured 2 of 8 at 1× CPU, 0 of 8 at 4×.
+  it("Reveal mounts closed from the render that receives show={true}", () => {
+    const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    const body = atoms.slice(atoms.indexOf("export function Reveal("), atoms.indexOf("export function AutoHeight("));
+    expect(body).toMatch(/if \(show && !mounted\) \{\s*setMounted\(true\);\s*if \(pageHidden\(\)\) \{ setOpen\(true\); setRevealed\(true\); \}\s*\}\s*if \(!mounted\) return null;/);
+    const effect = body.slice(body.indexOf("useEffect("), body.indexOf("}, [show]);"));
+    expect(effect.length).toBeGreaterThan(0);
+    expect(effect, "the effect runs after the commit that mounts the node, never beside it").not.toContain("setMounted(true)");
+    expect(effect).toContain("requestAnimationFrame");
+  });
+
   // v18.3.3: those holds start after a commit, so the fold has to be drawn BY
   // that commit. Read from state, it began a render later (two, for a
   // useRevealRows row), which a busy main thread pushes frames later: measured

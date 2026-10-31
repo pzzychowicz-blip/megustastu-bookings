@@ -19,15 +19,6 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **`Reveal` can open at once instead of easing, after a slow click.** Found building
-  v18.14.0's H4, and not new: `Reveal` itself is unchanged from `main`. The double
-  `requestAnimationFrame` that starts the ease can run before the `mounted` commit when
-  the click's render is slow, so the refusal pane, and a plain "Customer name is
-  required.", appear with no ease (measured: 38–67ms DEV renders, the two ticks 1ms
-  apart, headless Chromium). Not measured on the tablet. A likely fix is a second effect
-  keyed on `[show, mounted]`. It touches every `Reveal` in the app, so it wants its own
-  version and an in-and-out check across them.
-
 - **The row warning with the Optimiser on.** `dropPreview` is deliberately cheap, because
   `planDrop`'s trial is far too heavy for every hover. With the Optimiser on, a row can
   say "Moves …" and the release can still refuse. A trial run once the finger has settled

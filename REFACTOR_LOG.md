@@ -38822,7 +38822,7 @@ required." does the same, so it is older than this version and not this fix: `Re
 ticks ran 1ms apart before the `mounted` render committed, so `mounted` and `open` landed in one commit and nothing
 transitioned. A Reveal opened from a timer, such as the availability line, is not affected. It was measured in
 headless Chromium in DEV, so whether the tablet does it is not established. `atoms.jsx`'s `Reveal` is unchanged from
-`main`. It is outside the scan's 20 fixes, so it does not ship here.
+`main`. It is outside the scan's 20 fixes, so it was left here, and Patryk then asked for it: see "Reveal: an opening always eases" below.
 
 **Files:** `App.jsx`, `BookingFormModal.jsx`, `AvailBanner.jsx`, `phone-countries.js`, `tests/save-path.test.js`,
 `tests/phone-countries.test.js`.
@@ -39106,6 +39106,36 @@ the table's three handlers, once, so a box cannot answer differently from its ta
 **Files:** `src/lib/plan-hit.js` (new), `PlanView.jsx`, `src/index.css`,
 `tests/plan-hit.test.js` (new), `src/lib/CLAUDE.md`, `DESIGN.md`.
 
+### Reveal: an opening always eases
+
+Patryk asked for this one here, after the 20, from the ROADMAP entry H4's finding became. The branch had not
+merged, so it is one more commit in this version rather than a version of its own.
+
+`Reveal` set `mounted` in the effect that started its two `requestAnimationFrame`s. That render runs in a later task,
+so after a slow click the browser's overdue frames came first, `mounted` and `open` landed in one commit, and the node
+was born open. It now mounts closed in the render that receives `show={true}`, the twin of v18.3.3's `isOpen`, so the
+frames can only run after it. This is a render-phase update, the shape `useRevealRows` already uses for its re-seed,
+rather than the second effect the ROADMAP guessed at. The hidden page's snap moved with it, because a closed commit
+first could arm a transition that plays on wake.
+
+**It was wider than the finding.** The probe records every `Reveal` as it mounts, and at 4× CPU the Summary's body, the
+header's Follow group (H7's) and the refusal were all born open on every tap.
+
+| Reading | Before | After |
+|---|---|---|
+| Form's refusal on a real tap, 507, eased of 8, at 1× / 4× / 6× CPU | 2 / 0 / 0 | **8 / 8 / 8** |
+| A tour of the app, 2 rounds at 507, born open of 21 mounts, at 1× / 4× | 5 / 6 | **0 / 0** |
+| Summary, header group, refusal and a Settings section, in and out, 507 and 570, 1× and 4× | not read | 64 of 64 ease and end right |
+| Hidden page | | born open, 0 transitions, nothing plays on wake |
+| OS reduced motion, 1× and 4× | | height snaps, opacity fades, as the CSS intends |
+| Manual Reduce animations, 1× and 4× | | snaps |
+| Open or close interrupted at 150ms and inside the two frames, 1× and 4× | | 8 of 8 end right |
+
+**Not measured.** A newcomer row in the notification strip, the tour at 570, and the tablet itself. The rigs in the
+section below ran before this fix and were not run again after it, because the session's usage ran out.
+
+**Files:** `atoms.jsx`, `tests/motion.test.js`, `src/components/CLAUDE.md`, `DESIGN.md`, `ROADMAP.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, at 998 × 507 and 570 in Light and 507 in Dark, across the main card,
@@ -39140,8 +39170,8 @@ entry is a defect in any commit.
 **Only the hardware can settle these, for Patryk after merge:** a finger on the sticky ruler during a fast swipe, and
 edge scroll · Undo after a real drag · the pinned line with Android's keyboard up · time-picker speed with M5 ·
 pull-to-refresh in a Chrome tab · whether the tablet vibrates, and the switch · Larger text at arm's length on the
-pass · automatic dark mode at sunset.
+pass · automatic dark mode at sunset · the Summary and a refusal easing in on the tablet.
 
-**Size:** main entry 448.85 kB (131.85 gz).
+**Size:** main entry 448.85 kB (131.86 gz).
 
 **Files:** `REFACTOR_LOG.md`, `ROADMAP.md`, `GLOSSARY.md`, `DESIGN.md`, `CLAUDE.md`.

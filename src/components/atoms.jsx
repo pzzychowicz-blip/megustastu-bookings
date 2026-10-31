@@ -1151,7 +1151,6 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
   // (v18.3.1's rule).
   useEffect(function () {
     if (show) {
-      setMounted(true);
       if (pageHidden()) { setOpen(true); setRevealed(true); return undefined; }
       // Double rAF: ensure the 0fr→1fr change lands in a separate frame from
       // the mount so the transition actually fires (a single frame can batch).
@@ -1172,6 +1171,20 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
     return afterFrame(function () { setMounted(false); }, exitHold(speed));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `speed` is fixed per call site; re-running on it would restart a live transition
   }, [show]);
+  // v18.14.0: mounted from the render that receives `show={true}`, the twin of
+  // `isOpen` below. The effect used to do this, and its render runs in a later
+  // task, so after a slow click the browser's overdue frames came first: both
+  // rAFs fired, `mounted` and `open` landed in one commit, and the node was born
+  // open with nothing to ease from. Measured at 998 × 507: the form's refusal
+  // eased 2 times in 8 at 1× CPU and never at 4× or 6×, and the Summary's body
+  // and the header's Follow group did the same. With the closed node in this
+  // commit the rAFs can only run after it, and the frame between them computes
+  // the style the ease starts from. The hidden page's snap comes along, because
+  // a closed commit first could arm a transition that plays on wake.
+  if (show && !mounted) {
+    setMounted(true);
+    if (pageHidden()) { setOpen(true); setRevealed(true); }
+  }
   if (!mounted) return null;
   // A Reveal is a DISCLOSURE by default, so it takes M.reveal rather than the
   // M.shift a bare geometry change would get — see the --t-reveal note in
