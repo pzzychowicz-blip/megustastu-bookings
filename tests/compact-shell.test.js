@@ -3,12 +3,11 @@
 
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { appCode } from "./app-source.js";
 import { isCompact, COMPACT_HEIGHT } from "../src/lib/compact-shell";
 
-const read = (f) => stripComments(readFileSync(join(process.cwd(), "src", f), "utf8")).join("\n");
+const read = (f) => stripComments(readFileSync(new URL("../src/" + f, import.meta.url), "utf8")).join("\n");
 
 describe("isCompact", () => {
   it("is the tablet with and without Chrome's bars", () => {

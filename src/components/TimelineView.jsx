@@ -41,12 +41,12 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, mem
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
-  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
+  S, TBL, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { toMins, toTime, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf } from "../lib/booking-logic";
 import { railFlagsOf } from "./blockFlags";
 import { noShowMap, identityKey, bookingTags, tagLine } from "../lib/customers";
-import { mkBtn, Reveal, useFlip, SizeRing, ModalPresence } from "./atoms";
+import { Reveal, useFlip, SizeRing, ModalPresence } from "./atoms";
 import { TimelineZoomControls } from "./TimelineZoomControls";
 import { OptimiserControls } from "./OptimiserControls";
 import { useRevealRows } from "../hooks/useRevealRows";
