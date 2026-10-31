@@ -287,7 +287,11 @@ explaining why is usually the one to read.
   (light's is already opaque). Each value is that token's composite over
   `--bg-app`, so a surface keeps its colour and only stops showing what is
   behind it — the page header ghosted faintly through the iPhone booking sheet
-  in dark. **The hairlines take the muted ink**: `--border-soft`,
+  in dark. A change to the token does not carry its composite along:
+  `tests/contrast.test.js` holds `--bg-sheet`'s since v18.14.0 raised the sheet
+  to the phone's 0.98 in both themes, because at 0.72 an amber block behind a
+  dialog tinted the form. A sheet that near-opaque has no use for a white rim,
+  so a hairline inside one takes `--border-soft`. **The hairlines take the muted ink**: `--border-soft`,
   `--border-sheet` and `--tl-card-border` become `var(--text-muted)`, which is
   what "more contrast" asks of an edge. **Text does not change**: every ink
   already passes, and the setting asks for solid surfaces and visible edges,
@@ -504,8 +508,8 @@ explaining why is usually the one to read.
   and "+ New" wrapped onto a second header row of their own, and the header and
   date row took ~455 of an 812px screen before the grid began. Below 600px they
   are `MOBILE_BAR` (App.jsx): fixed to the bottom, two equal thumb-width
-  buttons, the OPAQUE `--bg-sheet-mobile` (0.98 — `--bg-sheet` at 0.72 let a
-  timeline row show through) with a hairline and `--shadow-soft`, NO blur (the
+  buttons, the OPAQUE `--bg-sheet-mobile` (0.98 — `--bg-sheet`, at 0.72 until
+  v18.14.0, let a timeline row show through) with a hairline and `--shadow-soft`, NO blur (the
   ≤4 budget), z 100 — over the page and the toasts, under every modal. A spacer
   of the same height ends `<main>` so the last row is never under it.
 - **The Summary sits beside the date controls only on one line (v18.2.0).** The

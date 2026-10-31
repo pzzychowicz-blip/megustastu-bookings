@@ -38951,3 +38951,31 @@ the Completed badge on a List card stays at its exempt 2.19.
 **Files:** `src/index.css`, `constants.js`, `BookingFormModal.jsx`, `ListView.jsx`,
 `QuickStatusPopup.jsx`, `index.html`, `vercel.json`, `tests/contrast.test.js`,
 `tests/a11y.test.js`, `DESIGN.md`.
+
+### L6: a dialog no longer shows what is behind it
+
+Built ahead of its place, because M3 and M6 are measured on this surface: the plan's M3
+note asks for L6's token first. `--bg-sheet` went to the 0.98 the phone sheet already
+uses: 0.72 to 0.98 in Light, 0.85 to 0.98 in Dark. Same hues, and the blur stays.
+
+| At 998 × 507, a new booking over the evening | Before | After |
+|---|---|---|
+| The sheet's gutter over the amber blocks, per channel | 211–225, 206–223, 190–224 | 252–253, 252–253, 250–253 |
+| The same gutter on the left, over nothing | 220–222 | 253 |
+| Blurred surfaces while a form is up | 2 | 2 |
+
+998 × 570 reads the same as 507, and Dark's footer is one flat `rgba(44, 44, 46, 0.98)`.
+
+**Two things the token took with it.**
+
+- The Increase Contrast sheets were composites of the OLD token over `--bg-app`, which
+  DESIGN.md promises and nothing checked. Now `#fefeff` and `#2c2c2e`, and a test holds
+  the composite. Left alone, Light under more contrast would have read darker than at rest.
+- `--border-sheet` is a white rim. Inside a near-white sheet it draws nothing, so the
+  footer's hairline vanished and a scrolling Section was cut off by no visible edge. The
+  footer and the three "Selected" cards (Walk-in, Assign, Preferred) take `--border-soft`.
+  Only the card branch of `Overlay`: the phone sheet did not change, so its footer did not.
+  The autocomplete menu keeps the rim, because it floats on its own shadow.
+
+**Files:** `src/index.css`, `atoms.jsx`, `ManualModal.jsx`, `PrefPickerModal.jsx`,
+`WalkinForm.jsx`, `App.jsx` (comment), `tests/contrast.test.js`, `DESIGN.md`.

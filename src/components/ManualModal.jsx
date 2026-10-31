@@ -285,7 +285,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
       <div style={{
         marginBottom: 14, padding: "12px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
-        border: "1px solid " + (conflict ? "var(--danger-border)" : ok ? "var(--suggest-border)" : "var(--border-sheet)"),
+        border: "1px solid " + (conflict ? "var(--danger-border)" : ok ? "var(--suggest-border)" : "var(--border-soft)"),
         display: "flex", alignItems: "center", justifyContent: "space-between",
         gap: 8, flexWrap: "wrap",
         boxShadow: "var(--shadow-card)"

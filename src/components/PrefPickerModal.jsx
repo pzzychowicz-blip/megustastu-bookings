@@ -105,7 +105,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
       <div style={{
         marginBottom: 14, padding: "10px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
-        border: "1px solid " + (capOk ? "var(--suggest-border)" : "var(--border-sheet)"),
+        border: "1px solid " + (capOk ? "var(--suggest-border)" : "var(--border-soft)"),
         boxShadow: "var(--shadow-card)"
       }}>
         <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>

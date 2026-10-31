@@ -886,6 +886,24 @@ describe("registry coverage", () => {
   });
 });
 
+// v18.14.0 (L6): at 0.72 an amber block behind a dialog moved the sheet's blue channel
+// by 34 levels, and everything on the sheet read against that. Two facts hold the fix:
+// a dialog's sheet stays as opaque as the phone sheet, and each Increase Contrast value
+// stays that token's composite over --bg-app, which DESIGN.md promises and which a
+// change to the token does not carry along by itself.
+describe("a dialog's sheet does not show what is behind it", () => {
+  for (const [theme, vars, more] of [["light", LIGHT_VARS, LIGHT_MORE_VARS], ["dark", DARK_VARS, DARK_MORE_VARS]]) {
+    it(`both sheets are near-opaque in ${theme}`, () => {
+      for (const k of ["--bg-sheet", "--bg-sheet-mobile"]) expect(parse(vars[k]).a, k).toBeGreaterThanOrEqual(0.98);
+    });
+    it(`the Increase Contrast sheet is its composite over the page in ${theme}`, () => {
+      const got = over(parse(vars["--bg-sheet"]), parse(vars["--bg-app"]));
+      const want = parse(more["--bg-sheet"]);
+      for (const ch of ["r", "g", "b"]) expect(Math.abs(got[ch] - want[ch]), ch).toBeLessThanOrEqual(1);
+    });
+  }
+});
+
 // ── The party-size ring — a NON-TEXT boundary (v17.9.1) ──────────────────────
 // Everything above measures a fill against the INK painted on it. This measures
 // a 1px white ring against the fill it is drawn on, which is a different shape:

@@ -646,7 +646,7 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor, fo
   // which a tap outside it closes; a phone's sheet has no scrim, so its footer
   // is the one way out and stays. A `Reveal`, so it folds out and back in.
   const cardFoot = footer ? (
-    <div style={{ flexShrink: 0, padding: tight ? "6px 24px" : "16px 24px", transition: "padding " + M.shift, borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
+    <div style={{ flexShrink: 0, padding: tight ? "6px 24px" : "16px 24px", transition: "padding " + M.shift, borderTop: "1px solid var(--border-soft)", boxSizing: "border-box" }}>
       {footer}
     </div>
   ) : null;

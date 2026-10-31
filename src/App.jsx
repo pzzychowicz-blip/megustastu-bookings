@@ -477,9 +477,9 @@ const DAY_DISMISS_KEYS=Object.freeze(["late","overlap","wait"]);
 // modal is open) reaches it too; `position: fixed` takes it out of the header's
 // layout, not out of its subtree. z 100: over the page and the toast layer
 // (60), under every modal (200). No backdrop blur — the ≤4 simultaneous blur
-// budget (CLAUDE.md) — so the MOBILE sheet token (0.98 in both themes: the one
-// sheet fill opaque enough that a timeline row scrolling beneath does not show
-// through, measured with `--bg-sheet` at 0.72), with a hairline and the soft
+// budget (CLAUDE.md) — so the MOBILE sheet token (0.98 in both themes: opaque
+// enough that a timeline row scrolling beneath does not show through, measured
+// when `--bg-sheet` was still 0.72), with a hairline and the soft
 // shadow to separate it from what scrolls beneath. The safe-area inset keeps
 // both buttons clear of an iPhone's home indicator, and (v18.3.0, N7) the side
 // insets keep them clear of the notch in landscape; in portrait those are 0.
