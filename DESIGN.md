@@ -1658,6 +1658,35 @@ mechanism in all three. The now-pill rides it; the now-line stays with the rows.
 - The notification strip still scrolls away, Patryk's v17.5.0 decision. A swipe that
   starts on the ruler does not pan the grid.
 
+### Two-line blocks (v18.14.0)
+A block used to lose its time on any day where one block could not fit the chip
+beside the name, and the ring and flags then cut the name shorter still. At 1.5× a
+90-minute block is 162px against the 180 that takes, so that was the normal service
+night: 7 of 17 names cut, no times. Now such a day is two-line, and **a block always
+shows its time.**
+
+- **The day decides, not the block.** `chipsOn` stays all-or-nothing: one line only
+  when every confirmed and pending block fits, or the grid reads mixed (v16.0.0).
+- **Line 1 is the name alone. Line 2 is time, ring, status, flags**, with the Assign
+  handle still the block's full height at the right. Line 2's start takes the name's
+  place in `visibleRail`, so the ring and flags drop in the ladder's order as before.
+- **The insets are the one-line block's** (Patryk): 6px at the left, the same at the
+  name and the chip, and top and bottom even. They are even to the ink, measured:
+  4.5px above the capitals and 4.5px under the chip, with the ring running a pixel
+  past it. The chip is the one-line block's chip, untouched: a time is the same object
+  wherever it appears. Line 2 is always 18 tall, so a block with no ring keeps the
+  name where its neighbours have it.
+- **Seated and completed blocks stay on one line** (Patryk, v16.0.0 stands).
+- **What gives way to the name:** the fold, 14px on one line, 11 on two, 8 inside a
+  3px border, because the fold cannot leave the padding box and the name's inset does
+  not move. And `ClashBand`, which drops 3px onto the bottom border so it clears the
+  time's digits; its dark casing is what keeps it a stripe there.
+- **It eases both ways**, on a zoom or a status change: the chip, ring and rail close
+  on horizontal `Reveal`s as line 2 opens, and the name rises because the group is
+  centred. The fold's size and the band's drop take the same `M.reveal`.
+- **A typed 60-minute booking at 1×** (about 79px) has less room than the chip, which
+  is cut at the handle rather than dropped. It is the one place a time is cut.
+
 ### The compact layout (v18.14.0)
 Below 640px tall on anything that is not a phone (`isCompact`, `lib/compact-shell.js`)
 the shell gives its height to the grid. The tablet on the pass is 998 × 507 with

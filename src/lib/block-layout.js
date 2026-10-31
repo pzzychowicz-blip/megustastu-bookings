@@ -45,6 +45,18 @@
 // `railFlagsOf`; tests/block-layout.test.js pins its fixture to them.
 
 /**
+ * v18.14.0 (D1): is this block drawn on two lines?
+ *
+ * `showChip` is TimelineView's `chipsOn` for a block that can wear a chip, so a
+ * day goes one-line only when every block fits, and otherwise every confirmed
+ * and pending block is two-line: the start time never drops. Seated and completed
+ * blocks have never worn a chip and stay on one line (Patryk, v16.0.0).
+ */
+export function twoLineBlock(status, showChip) {
+  return !showChip && (status === "confirmed" || status === "pending");
+}
+
+/**
  * Decide what fits on a block of `blockPx`, given the fixed cost of the parts
  * that are never dropped.
  *

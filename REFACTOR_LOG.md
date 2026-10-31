@@ -38539,3 +38539,39 @@ Five things the mechanism needed that the plan did not name:
 
 **Files:** `TimelineView.jsx`, `lib/edge-scroll.js`, `atoms.jsx`, `SplitLayout.jsx`, `App.jsx`, `constants.js`,
 `index.css`, new `tests/timeline-ruler.test.js`, `tests/timeline-drag.test.js`, `tests/unplaced.test.js`.
+
+### D1: two-line blocks
+
+A day where one block could not fit the start-time chip took the time off every block, and the ring and
+flags then cut the names too. At the account's 1.5× a 90-minute block is 162px against the 180 `chipRoomFor`
+wants, so that was the usual service night. `chipsOn` stays all-or-nothing, as decided: on, one line; off, two.
+Confirmed and pending only. `twoLineBlock` reads `showChip`, so a leaving copy's snapshot needs nothing new.
+
+Patryk asked for the one-line block's padding around the content, so the insets did not move, and that
+decided the rest:
+- **The fold:** the 12px noted last session stopped clearing the name once top and bottom were evened (the
+  capitals rose to 4.5px, and a 3px border takes the fold further in). It is 14 on one line, 11 on two, 8 with
+  a border, with a 6px pencil at 8. Read at 6× zoom: "Emil" stopped reading "Émil".
+- **`ClashBand`:** at `bottom: 8` it covered the lower half of "20:30", the failure its own comment warns of.
+  It drops 3px onto the border on a two-line day. Its casing, added after the original placement note was
+  written, is why that no longer reads as a thicker border.
+- **A step the first pass had:** the one-line ring's `Reveal` stays on the name's row while line 2 eases, and
+  18 tall against the name's 13 that row grew 5px, so line 2 stepped 2.5px when the Reveal unmounted, at both
+  ends of the ease. Negative block margins on the Reveal hold the row at 13. `overflow: hidden` on the group
+  would then cut the ring, so it clips with `overflowX: clip`, which leaves the other axis alone.
+
+Left as it is: a typed 60-minute booking at 1× (about 79px) has less room than the chip, so the chip is cut at
+the handle. The old layout showed no time there at all, and the default lengths never get that narrow.
+
+| Reading (the 17 blocks of the test day) | Before | After |
+|---|---|---|
+| Names cut at 1.5× / 1× | 7 / 15 | **0 / 8** |
+| Blocks showing a time at 1.5× | 0 | 17 |
+| One-line day (2×), every rect of name, chip, ring, marks and handle, against HEAD | | 17 of 17 identical |
+| Seated and completed blocks on a two-line day, against HEAD | | 4 of 4 identical |
+| Two to one line and back on a zoom: name's biggest step per frame | | 0.9px both ways |
+| Same on a status flip, confirmed to seated and back | | 1.0px and 0.9px |
+| The time chip's distance under the name, through the ease | | 14.0 throughout |
+| Ink insets on the 36px block, from pixels: above the capitals, under the chip, under the ring | | 4.5 · 4.5 · 3 |
+
+**Files:** `TimelineView.jsx`, `lib/block-layout.js`, `tests/block-layout.test.js`, `tests/contrast.test.js`.

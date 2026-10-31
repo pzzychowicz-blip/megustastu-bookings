@@ -637,9 +637,11 @@ const ATOMS_SRC = stripComments(readFileSync(
 // of the three that is a named binding — so the scan cannot wander. If that
 // declaration is ever renamed the test throws here rather than silently
 // measuring nothing, which is the failure mode to prefer.
-function chipOpacity() {
+// v18.14.0 (D1): a second block chip, on line 2 of a two-line block, and the common
+// one in service. Same anchor rule, so it is passed its own.
+function chipOpacity(anchor = /const\s+timeChip\s*=/) {
   const lines = TIMELINE_SRC.split("\n");
-  const start = lines.findIndex((l) => /const\s+timeChip\s*=/.test(l));
+  const start = lines.findIndex((l) => anchor.test(l));
   if (start < 0) {
     throw new Error(
       "contrast.test: could not find `const timeChip` in TimelineView.jsx. " +
@@ -661,6 +663,9 @@ function chipOpacity() {
 }
 
 describe("timeline start-time chip — the hour pill over each block, as rendered", () => {
+  it("is full strength on a two-line block too: the ten cases below hold for both chips", () => {
+    expect(chipOpacity(/<Reveal show=\{twoLine\}>/)).toBe(chipOpacity());
+  });
   for (const theme of ["light", "dark"]) {
     for (const blockTok of BLOCK_FILLS) {
       it(`${blockTok} start-time chip is legible in ${theme}`, () => {

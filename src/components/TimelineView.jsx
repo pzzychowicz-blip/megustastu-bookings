@@ -58,7 +58,7 @@ import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
 import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
-import { visibleRail } from "../lib/block-layout";
+import { visibleRail, twoLineBlock } from "../lib/block-layout";
 import { unplacedOf, primaryGridTable, packLanes, unplacedHeight } from "../lib/unplaced";
 import { edgeVelocity, edgeStep, scrollParentY, scrollBounds, rowProbeY } from "../lib/edge-scroll";
 import { afterFrame, everyFrame, pageHidden } from "../lib/after-frame";
@@ -124,6 +124,9 @@ const FREE_PX = 36;      // the "~Nm" table-turn pill + its margin (v17.9.1)
 const CLASH_PX = 18;     // the double-booked marker + its margin (v17.11.0)
 const STATUS_PX = 18;    // the status mark + its margin (v17.11.0) — on EVERY block
 const NAME_MIN_PX = 55;  // ~6 characters and an ellipsis
+// v18.14.0 (D1): what a two-line block spends before its second line's marks: the
+// inset, the chip, and enough over for a 3px warn border's two extra sides.
+const LINE_TWO_PX = 52;
 
 // v17.9.1: the rail's flags as DATA, so "how many fit" and "which ones
 // survive" are two questions with two separate answers.
@@ -303,9 +306,17 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // and grows, so anything droppable is invisible for the first stretch of
   // every visit — which for this marker would mean it disappears exactly while
   // a host is deciding where to put the party who just walked in.
+  // v18.14.0 (D1): a two-line block's name has a line to itself, so line 2's start
+  // takes the name's place in this sum, and the ring and flags still drop in the
+  // ladder's order.
+  const twoLine = twoLineBlock(b.status, showChip);
+  // On two lines the name starts where the fold is, and its inset is the one-line
+  // block's (Patryk), so the fold gives way. A 3px border takes it further in,
+  // because the fold is clipped to the padding box while the name moves with it.
+  const fold = !twoLine ? 14 : border === "none" ? 11 : 8;
   const { showRing, flags: railFlags } = visibleRail(
     d * pxPerMin,
-    HANDLE_PX + NAME_MIN_PX + (showChip ? CHIP_PX : 0) + (freeMin != null ? FREE_PX : 0)
+    HANDLE_PX + (twoLine ? LINE_TWO_PX : NAME_MIN_PX + (showChip ? CHIP_PX : 0)) + (freeMin != null ? FREE_PX : 0)
       + STATUS_PX + (clash ? CLASH_PX : 0),
     RING_PX, FLAG_PX, allFlags
   );
@@ -313,7 +324,8 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // name. The show/hide decision (`showChip`) is made ONCE at the TimelineView
   // level for the WHOLE day — all blocks show chips or none do (a mixed grid
   // read messy in live QA). marginLeft clears the v15.8.2 dog-ear corner so a
-  // noted booking's fold never overlaps.
+  // noted booking's fold never overlaps. v18.14.0 (D1): a day without this chip
+  // wears the time on line 2 instead, so a block always shows it.
   // v16.1.1: wrapped in a HORIZONTAL Reveal (eases occupied width 0↔full) rather
   // than Presence (transform slide). Presence only translated the chip, so the
   // flexbox reserved/released the chip's width in one frame and the sibling name
@@ -357,6 +369,61 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         pointerEvents: "none", position: "relative"
       }}>{b.time}</span>
     </Reveal>
+  );
+
+  // The rail's marks, drawn once and placed by the line count: at the end of the
+  // line on a one-line block, after the ring on line 2 on a two-line one.
+  const marks = (
+    <>
+        {/* v17.9.0: the flag rail — the four markers that used to be appended to
+            the label string, plus the ★ that was floating on the left. Order is
+            Patryk's: deposit, preferred, then the exception flags, then the
+            Assign handle. All flexShrink:0 — the name truncates, these survive.
+            v17.9.1: …up to the point where they stop fitting, at which they are
+            dropped rather than clipped on top of each other. See blockBudget. */}
+        {/* v17.11.0: the STATUS mark leads the rail — on every block, never
+            dropped, and the one marker here that is not conditional.
+
+            A block's status was `BLOCK_BG[b.status]` and nothing else: no text,
+            no mark, a WCAG 1.4.1 failure that three of the review's seven passes
+            found independently. The legend at the bottom of the view is a lookup,
+            not an in-context indicator, and it does nothing at all for a screen
+            reader. `StatusIcon` shipped in v17.10.0 for exactly this and went
+            onto buttons only.
+
+            It leads because it is not a flag: the flags say what is unusual about
+            a booking, and this says what the booking IS. It is also the only part
+            of the rail that answers the question the three views used to answer
+            three different ways — List names the status in a badge, Plan uses
+            occupancy fills, and Timeline said it in colour alone.
+
+            Fixed cost, like the clash marker, for the same reason: a seated block
+            is drawn at its LIVE duration, so it starts a few pixels wide and
+            grows, and a droppable status mark would be missing from every block
+            for the first stretch of every visit — i.e. exactly while the party is
+            being seated. `role="img"` + `aria-label` come from BlockFlag, so the
+            status finally reaches the accessibility tree too. */}
+        <BlockFlag title={STATUS_LABEL[b.status] || b.status}>
+          <StatusIcon status={b.status} size={IC.control} />
+        </BlockFlag>
+        {railFlags.map((f) => (
+          <BlockFlag key={f.k} title={f.title}>{f.icon}</BlockFlag>
+        ))}
+        {/* The double-booked marker sits LAST among the markers, nearest the
+            handle. v17.9.0's rail order is facts first, exception states last
+            (deposit, preferred, then locked / repeat-no-show / overstaying), and
+            a clash is the most severe exception of all — so it takes the end of
+            that run rather than jumping the queue to the front. Outside
+            `railFlags` because it is never dropped; the title names the other
+            party, which is the question anyone who sees this marker asks next and
+            the one thing the stripe cannot say. */}
+        {clash ? (
+          <BlockFlag title={"Double-booked with " + clash.names.join(", ")
+            + (clash.tables.length ? " on " + (clash.tables.length === 1 ? "table " : "tables ") + clash.tables.join(", ") : "")}>
+            <ClashIcon size={IC.control} />
+          </BlockFlag>
+        ) : null}
+    </>
   );
 
   // v18.3.0 (O1): a block that UNMOUNTS while holding focus hands it to the grid
@@ -799,18 +866,19 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       {/* v15.8.2: top-LEFT dog-ear note marker (clear of the right-edge "=" handle). The
           block's overflow:hidden + borderRadius clip it into a clean folded corner. The
           white triangle (14px) sits in the top ~14px of the 36px block, so it never
-          overlaps the vertically-centred guest name. A small dark note/pencil glyph nests
+          overlaps the vertically-centred guest name (`fold`: on two lines it must
+          shrink to stay that true). A small dark note/pencil glyph nests
           in the corner where the triangle is thickest. Near-solid white + dark icon give
           strong contrast on every saturated BLOCK_BG fill in both themes. */}
       {hasNote ? (
         <>
           <div style={{
             position: "absolute", top: 0, left: 0, width: 0, height: 0,
-            borderTop: "14px solid rgba(255,255,255,0.95)",  /* @fixed-fill */
-            borderRight: "14px solid transparent",
-            pointerEvents: "none"
+            borderTop: fold + "px solid rgba(255,255,255,0.95)",  /* @fixed-fill */
+            borderRight: fold + "px solid transparent",
+            pointerEvents: "none", transition: "border-width " + M.reveal
           }} />
-          <svg viewBox="0 0 24 24" width="8" height="8" style={{
+          <svg viewBox="0 0 24 24" width={fold < 11 ? 6 : 8} height={fold < 11 ? 6 : 8} style={{
             position: "absolute", top: "0.5px", left: "0.5px", pointerEvents: "none"
           }}>
             <path
@@ -875,70 +943,53 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
           The group also pushes the flag rail right on its own, so there is no
           spacer element and no marginLeft:auto that would have to be moved onto
           whichever conditional flag happens to render first. */}
-      <span style={{
-        flex: "1 1 0%", minWidth: 0, paddingLeft: 6,
-        display: "flex", alignItems: "center", position: "relative"
+      <div style={{
+        flex: "1 1 0%", minWidth: 0, paddingLeft: 6, overflowX: "clip",
+        display: "flex", flexDirection: "column", position: "relative"
       }}>
-        <span style={{
-          minWidth: 0, fontSize: T.small, fontWeight: FW.bold,
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
-        }}>{b.name}</span>
-        {/* The party size. It was "(6)" inside the name string, which put a pair
-            of parentheses in the middle of the block's one bold text run and
-            made the size the first thing the ellipsis took after the name. A
-            ring is the same fact at a glance and it is flexShrink:0, so it
-            survives. Transparent fill: it is a count, not a status, and a
-            filled pill here would compete with the time chip. */}
-        {showRing ? <SizeRing n={b.size} style={{ marginLeft: 6 }} /> : null}
-      </span>
-      {/* v17.9.0: the flag rail — the four markers that used to be appended to
-          the label string, plus the ★ that was floating on the left. Order is
-          Patryk's: deposit, preferred, then the exception flags, then the
-          Assign handle. All flexShrink:0 — the name truncates, these survive.
-          v17.9.1: …up to the point where they stop fitting, at which they are
-          dropped rather than clipped on top of each other. See blockBudget. */}
-      {/* v17.11.0: the STATUS mark leads the rail — on every block, never
-          dropped, and the one marker here that is not conditional.
-
-          A block's status was `BLOCK_BG[b.status]` and nothing else: no text,
-          no mark, a WCAG 1.4.1 failure that three of the review's seven passes
-          found independently. The legend at the bottom of the view is a lookup,
-          not an in-context indicator, and it does nothing at all for a screen
-          reader. `StatusIcon` shipped in v17.10.0 for exactly this and went
-          onto buttons only.
-
-          It leads because it is not a flag: the flags say what is unusual about
-          a booking, and this says what the booking IS. It is also the only part
-          of the rail that answers the question the three views used to answer
-          three different ways — List names the status in a badge, Plan uses
-          occupancy fills, and Timeline said it in colour alone.
-
-          Fixed cost, like the clash marker, for the same reason: a seated block
-          is drawn at its LIVE duration, so it starts a few pixels wide and
-          grows, and a droppable status mark would be missing from every block
-          for the first stretch of every visit — i.e. exactly while the party is
-          being seated. `role="img"` + `aria-label` come from BlockFlag, so the
-          status finally reaches the accessibility tree too. */}
-      <BlockFlag title={STATUS_LABEL[b.status] || b.status}>
-        <StatusIcon status={b.status} size={IC.control} />
-      </BlockFlag>
-      {railFlags.map((f) => (
-        <BlockFlag key={f.k} title={f.title}>{f.icon}</BlockFlag>
-      ))}
-      {/* The double-booked marker sits LAST among the markers, nearest the
-          handle. v17.9.0's rail order is facts first, exception states last
-          (deposit, preferred, then locked / repeat-no-show / overstaying), and
-          a clash is the most severe exception of all — so it takes the end of
-          that run rather than jumping the queue to the front. Outside
-          `railFlags` because it is never dropped; the title names the other
-          party, which is the question anyone who sees this marker asks next and
-          the one thing the stripe cannot say. */}
-      {clash ? (
-        <BlockFlag title={"Double-booked with " + clash.names.join(", ")
-          + (clash.tables.length ? " on " + (clash.tables.length === 1 ? "table " : "tables ") + clash.tables.join(", ") : "")}>
-          <ClashIcon size={IC.control} />
-        </BlockFlag>
-      ) : null}
+        <span style={{ display: "flex", alignItems: "center", minWidth: 0 }}>
+          <span style={{
+            minWidth: 0, fontSize: T.small, fontWeight: FW.bold,
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+          }}>{b.name}</span>
+          {/* The party size. It was "(6)" inside the name string, which put a pair
+              of parentheses in the middle of the block's one bold text run and
+              made the size the first thing the ellipsis took after the name. A
+              ring is the same fact at a glance and it is flexShrink:0, so it
+              survives. Transparent fill: it is a count, not a status, and a
+              filled pill here would compete with the time chip. */}
+          {/* The negative margin is what keeps this row the height of the name. The
+              ring is 18 tall to the name's 13, and this Reveal is on the row while
+              line 2 eases, so without it line 2 steps 2.5px as the Reveal goes.
+              `overflowX: clip` above is for the same reason: `hidden` would cut the
+              ring's top and bottom off, where `clip` leaves the other axis alone. */}
+          <Reveal horizontal show={showRing && !twoLine} style={{ flexShrink: 0, marginBlock: -2.5 /* @canvas */ }}>
+            <SizeRing n={b.size} style={{ marginLeft: 6 }} />
+          </Reveal>
+        </span>
+        {/* v18.14.0 (D1): line 2. A day whose blocks cannot all fit the chip used
+            to drop the time from every block, and ring and flags then cut the
+            names shorter still. Now that day is two-line: the name alone above,
+            and the time, ring, status and flags under it, the time at the name's
+            own left edge. A change of zoom eases: this line opens as the one-line
+            rail and chip close, and the name rises with it because the group is
+            centred in the block. */}
+        <Reveal show={twoLine}>
+          <span style={{
+            display: "flex", alignItems: "center",
+            height: 18, marginBottom: 2   /* @canvas */
+          }}>
+            <span style={{
+              ...HOUR_PILL,
+              flexShrink: 0, lineHeight: "12px", fontWeight: FW.medium,
+              pointerEvents: "none"
+            }}>{b.time}</span>
+            {showRing ? <SizeRing n={b.size} style={{ marginLeft: 4 }} /> : null}
+            {marks}
+          </span>
+        </Reveal>
+      </div>
+      <Reveal horizontal show={!twoLine} style={{ flexShrink: 0 }}>{marks}</Reveal>
       {/* v16.3.0: table-turn countdown pill — a seated block within ~15 min of
           its scheduled end shows "~Nm" (translucent, like the start-time chip).
           Flex item before the assign handle (no absolute overlap of the name); the
@@ -1064,13 +1115,19 @@ function GridLines() {
 // exact minute the earlier booking finishes — the fact the later block is
 // painting over. Verified live: the stripe ends at Pau's right edge, 72px short
 // of Rita's, on a pair where Pau is otherwise invisible past 20:30.
-function ClashBand({ from, to, totalMins }) {
+//
+// v18.14.0 (D1): on a two-line day the label fills the block, so "low enough to
+// clear the label" moves. Measured: at the old height the stripe covered the lower
+// half of "20:30". It drops 3px onto the bottom border, clear of the digits, and
+// the casing is what keeps it a stripe there rather than a thicker border.
+function ClashBand({ from, to, totalMins, twoLine = false }) {
   const left = pct(from);
   const w = Math.max(((to - from) / totalMins) * 100, 0.5) + "%";
   return (
     <div aria-hidden="true" style={{
       position: "absolute", bottom: 8, height: 4,   /* @canvas */
       left, width: w,
+      transform: twoLine ? "translateY(3px)" : "none", transition: "transform " + M.reveal,
       background: "var(--tl-clash-a)",
       // /code-review fix: a 1px casing, because the red core does NOT contrast
       // with the fills it is drawn on — 1.02:1 on a seated block, 1.34 on a
@@ -1277,8 +1334,9 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
       }}
     >
       {/* The start-time chip, in TimelineBlock's exact chip style. A real block
-          shows it only when the whole day's blocks are wide enough (the
-          all-or-nothing `chipsOn` rule); a ghost always does, because the time
+          wears it on the name's line only when the whole day's blocks are wide
+          enough (the all-or-nothing `chipsOn` rule), and otherwise under the name;
+          a ghost has one line and always shows it there, because the time
           is the entire proposal — a ghost without one says nothing useful. */}
       <span style={{
         ...HOUR_PILL,
@@ -1702,6 +1760,11 @@ export const TimelineView = memo(function TimelineView({
   //
   // Same all-or-nothing shape as before (one mixed grid read messy in live QA);
   // the per-block part is only what each block needs, and the worst one decides.
+  //
+  // v18.14.0 (D1): off no longer means no time. It means the day is two-line
+  // (`twoLineBlock`), so the time moves under the name instead of leaving, and the
+  // name gets the whole line. At Patryk's 1.5x a 90-minute block is 162px against
+  // the 180 this needs, so in service that is the usual layout, not the exception.
   const confirmedDay = day.filter((b) => b.status === "confirmed" || b.status === "pending");
   const chipsOn = confirmedDay.length > 0 && confirmedDay.every(function (b) {
     return liveBarDur(b, nowMins, today) * pxPerMin >= chipRoomFor(b, nsMap[identityKey(b)] || 0, warnings[b.id], !!clashes[b.id]);
@@ -2112,7 +2175,7 @@ export const TimelineView = memo(function TimelineView({
         {/* LAST in the row, so it paints over the blocks — the whole point is
             that it marks the span the later block is hiding the earlier one on. */}
         {(clashSpans[id] || []).map((sp, i) => (
-          <ClashBand key={"cb" + i} from={sp.from} to={sp.to} totalMins={totalMins} />
+          <ClashBand key={"cb" + i} from={sp.from} to={sp.to} totalMins={totalMins} twoLine={!chipsOn} />
         ))}
       </div>
     );

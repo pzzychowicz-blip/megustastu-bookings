@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { visibleRail } from "../src/lib/block-layout.js";
+import { visibleRail, twoLineBlock } from "../src/lib/block-layout.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
 // The measured widths from TimelineView.jsx. Duplicated deliberately: this file
@@ -150,5 +150,46 @@ describe("the fixture matches the component (v18.2.0 phase 22)", () => {
   it("there is ONE list, in its own module, and the grid imports it", () => {
     expect(tv).not.toMatch(/function railFlagsOf\(/);
     expect(tv).toMatch(/import \{ railFlagsOf \} from "\.\/blockFlags";/);
+  });
+});
+
+// v18.14.0 (D1): the rule is Patryk's, and each half of it fails without a sound.
+// A seated block on two lines reopens v16.0.0; a mixed grid is the v16.0.0 defect.
+describe("two-line blocks", () => {
+  const tv = stripComments(readFileSync(new URL("../src/components/TimelineView.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("a day without chips puts every confirmed and pending block on two lines", () => {
+    expect(twoLineBlock("confirmed", false)).toBe(true);
+    expect(twoLineBlock("pending", false)).toBe(true);
+  });
+  it("a block wearing its chip stays on one line", () => {
+    expect(twoLineBlock("confirmed", true)).toBe(false);
+    expect(twoLineBlock("pending", true)).toBe(false);
+  });
+  it("seated and completed blocks never go to two lines", () => {
+    for (const s of ["seated", "completed", "cancelled"]) expect(twoLineBlock(s, false)).toBe(false);
+  });
+  it("is decided from showChip, so a leaving copy's snapshot decides it too", () => {
+    expect(tv).toMatch(/const twoLine = twoLineBlock\(b\.status, showChip\);/);
+    expect(tv).toMatch(/chip: chipsOn && \(b\.status === "confirmed" \|\| b\.status === "pending"\)/);
+  });
+  it("line 2's start takes the name's place in the budget, and only there", () => {
+    expect(tv).toMatch(/HANDLE_PX \+ \(twoLine \? LINE_TWO_PX : NAME_MIN_PX \+ \(showChip \? CHIP_PX : 0\)\)/);
+  });
+  it("the status mark and the flags are on one of the two lines, never neither", () => {
+    expect(tv).toMatch(/<Reveal show=\{twoLine\}>[\s\S]*?\{marks\}[\s\S]*?<\/Reveal>/);
+    expect(tv).toMatch(/<Reveal horizontal show=\{!twoLine\} style=\{\{ flexShrink: 0 \}\}>\{marks\}<\/Reveal>/);
+  });
+  it("the ring on the name's row does not make that row taller", () => {
+    expect(tv).toMatch(/show=\{showRing && !twoLine\} style=\{\{ flexShrink: 0, marginBlock: -2\.5/);
+    expect(tv).toMatch(/paddingLeft: 6, overflowX: "clip"/);
+  });
+  it("the fold gives way to the name, not the name to the fold", () => {
+    expect(tv).toMatch(/const fold = !twoLine \? 14 : border === "none" \? 11 : 8;/);
+    expect(tv).toMatch(/flex: "1 1 0%", minWidth: 0, paddingLeft: 6, overflowX/);
+  });
+  it("the clash band drops clear of the time on a two-line day", () => {
+    expect(tv).toMatch(/twoLine=\{!chipsOn\}/);
+    expect(tv).toMatch(/transform: twoLine \? "translateY\(3px\)" : "none", transition: "transform " \+ M\.reveal/);
   });
 });
