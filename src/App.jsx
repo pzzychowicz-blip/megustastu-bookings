@@ -338,8 +338,7 @@ import { useTagSettings } from "./hooks/useTagSettings";
 // v18.11.0: Book from the waitlist keeps the occasion tags the list still has.
 import { knownTagIds } from "./lib/tags";
 // v18.0.0 session 8: the activity log. `useActivityLog` installs the module-level
-// sink every writer emits into; `useActivityFeed` is the app's first Firebase
-// QUERY, and is attached only while the log is open.
+// sink every writer emits into.
 import { useActivityLog, redactGuest } from "./hooks/useActivityLog";
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
@@ -373,8 +372,6 @@ import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWo
 import { useWindowAtTop } from "./hooks/useWindowAtTop";
 import { todayStr, stepDate, formatDay } from "./lib/day";
 import { onPrintEnd, printOrReport, PRINT_IGNORED_TEXT } from "./lib/print-end";
-// v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
-// stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
 import { retentionLabel } from "./lib/activity";
 import { noteCrashView } from "./lib/crash-report";
 

@@ -24,6 +24,8 @@ import { activityWindow, clearOutcome, CLEAR_FAILED, retentionMs } from "../lib/
 import { downloadCrashes } from "../lib/crash-report";
 import { todayStr } from "../lib/day";
 import { saveTextFile } from "../lib/download";
+// v18.0.0 session 8: `useActivityFeed` is the app's first Firebase QUERY, and is
+// attached only while the log is open.
 import { useActivityFeed, clearActivityAndLog, readCrashes, pruneActivity } from "./useActivityLog";
 
 export function useSettingsPanel({
