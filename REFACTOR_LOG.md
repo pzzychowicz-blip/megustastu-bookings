@@ -38827,3 +38827,27 @@ headless Chromium in DEV, so whether the tablet does it is not established. `ato
 **Files:** `App.jsx`, `BookingFormModal.jsx`, `AvailBanner.jsx`, `phone-countries.js`, `tests/save-path.test.js`,
 `tests/phone-countries.test.js`.
 
+### M5: a new booking opens near now
+
+The form always opened at a literal 13:00, so nearly every evening booking began by changing the time through
+Android's native picker. Today, while the restaurant is open, a new booking opens at the next quarter hour, never past
+the day's last start. Any other day, and outside the hours, it opens at that day's opening time, which is
+`hoursFor(date).open` and no longer a literal. `newBookingTime` is pure, and the time goes in the draft `openForm` is
+given, so it is the baseline too and a form nobody touched is not dirty. `EMPTY_FORM` is unchanged, and so is the
+WhatsApp seed, which passes its own time.
+
+| Reading, DEV, 998 × 507 and 570 alike | Opens at | Back |
+|---|---|---|
+| The real clock, 17:3x, today | 17:45 | closes, not dirty |
+| Tomorrow | 13:00 | closes, not dirty |
+| Page clock 19:07 | 19:15 | closes, not dirty |
+| 20:15 exactly | 20:30, and the availability line is already up | closes, not dirty |
+| 21:50, past the last start | 21:45 | closes, not dirty |
+| 10:00, before opening | 13:00 | closes, not dirty |
+| 23:10, after closing | 13:00 | closes, not dirty |
+
+"Next" is strictly after now, so a form opened on the quarter does not offer the minute it is already in. How fast the
+Android time picker feels with this is on the hardware list.
+
+**Files:** `booking-logic.js`, `App.jsx`, `tests/booking-logic.test.js`.
+

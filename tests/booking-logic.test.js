@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import {
-  formatSugg, nearestTimes,
+  formatSugg, nearestTimes, newBookingTime,
   toMins, toTime, overlaps, genId, getDur, statusOrder,
   comboCap, comboCapBest, sanitize, sanitizeAll, isReadableTime, diffBooking,
   lateState, lateMins, freeingSoon, daySummary, rangeStats,
@@ -33,7 +33,7 @@ import {
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
-import { setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
+import { setWeekHours, DEFAULT_WEEK_HOURS, setHourExceptions } from "../src/lib/constants.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { draftFromBooking } from "../src/lib/booking-fields.js";
 import { applyEdit, buildBooking, editWindow, keptRefusal, releaseSwapped, pickedRefusal, PICKED_REFUSAL } from "../src/lib/booking-save.js";
@@ -3332,5 +3332,59 @@ describe("nearestTimes", () => {
 
   it("takes a named refusal's null sugg", () => {
     expect(nearestTimes(null, 4)).toEqual([]);
+  });
+});
+
+// v18.14.0 (M5): what a new booking opens at. The default week is 13:00–22:00.
+describe("newBookingTime", () => {
+  const D = "2099-06-17";
+  const at = (h, m) => h * 60 + m;
+
+  it("today, while open, is the next quarter hour", () => {
+    expect(newBookingTime(D, D, at(19, 7))).toBe("19:15");
+    expect(newBookingTime(D, D, at(19, 14))).toBe("19:15");
+    expect(newBookingTime(D, D, at(19, 58))).toBe("20:00");
+  });
+
+  it("is strictly after now, so a booking made on the quarter opens at the next one", () => {
+    expect(newBookingTime(D, D, at(19, 15))).toBe("19:30");
+    expect(newBookingTime(D, D, at(13, 0))).toBe("13:15");
+  });
+
+  it("never passes the day's last start", () => {
+    expect(newBookingTime(D, D, at(21, 40))).toBe("21:45");
+    expect(newBookingTime(D, D, at(21, 50))).toBe("21:45");
+    expect(lastStartMins(22)).toBe(at(21, 45));
+  });
+
+  it("outside the hours today, opens at the day's opening time", () => {
+    expect(newBookingTime(D, D, at(10, 0))).toBe("13:00");
+    expect(newBookingTime(D, D, at(22, 0))).toBe("13:00");
+    expect(newBookingTime(D, D, at(23, 30))).toBe("13:00");
+  });
+
+  it("any other day opens at that day's opening time, whatever the clock says", () => {
+    expect(newBookingTime("2099-06-18", D, at(19, 7))).toBe("13:00");
+  });
+
+  it("reads the day's own hours, not a literal", () => {
+    const W = "2099-06-16"; // a Tuesday
+    setHourExceptions({ [W]: { open: 18, close: 23.5 } });
+    try {
+      expect(newBookingTime(W, D, at(19, 7))).toBe("18:00");
+      expect(newBookingTime(W, W, at(23, 20))).toBe("23:15");
+    } finally {
+      setHourExceptions({});
+    }
+  });
+
+  it("a day marked closed has no opening hours to be inside", () => {
+    const W = "2099-06-16";
+    setHourExceptions({ [W]: { open: 13, close: 22, closed: true } });
+    try {
+      expect(newBookingTime(W, W, at(19, 7))).toBe("13:00");
+    } finally {
+      setHourExceptions({});
+    }
   });
 });

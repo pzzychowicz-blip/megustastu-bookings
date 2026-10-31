@@ -879,6 +879,17 @@ export function trialFits(bookings,date,time,size,pref,dur,blocks,editId,prefTab
 export function lastStartMins(close){
   return Math.min(Number(close)||0,24)*60-15;
 }
+// v18.14.0 (M5): the time a new booking opens at. A literal 13:00 meant nearly
+// every evening booking began by changing the time, through Android's native
+// picker. Today, while the restaurant is open, it is the next quarter hour, the
+// slot the rest of the app works in, and never past the day's last start. Any other
+// day, and outside the hours, it is that day's opening time.
+export function newBookingTime(date,today,nowMins){
+  const h=hoursFor(date);
+  const open=h.open*60;
+  if(h.closed||date!==today||nowMins<open||nowMins>=h.close*60) return toTime(open);
+  return toTime(Math.min(Math.floor(nowMins/15)*15+15,lastStartMins(h.close)));
+}
 export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noReshuffle){
   var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date
   if(h.closed) return []; // closed day → no valid times

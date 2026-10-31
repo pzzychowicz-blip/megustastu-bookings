@@ -39,7 +39,7 @@ import {
   applyOpt,
   optimizerActiveFor, syncLiveDurations, bookingsAfterAction,
   checkInefficent, findClashes, clashRowId,
-  nowTime,
+  nowTime, newBookingTime,
   lateState, freeingSoon,
   undoSnapshots,
   // v18.0.0 session 7: the length Book Again carries over.
@@ -2003,7 +2003,9 @@ export function BookingApp({uid}){
   // so they asked no capability and left `pendingWaitlistRef` set.
   // `openNew` itself takes nothing: it is an `onClick`, and a parameter there
   // would be handed the click event as the draft.
-  function openNewWith(draft){if(refused("bookingCreate"))return false;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(draft||Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);return true;}
+  // v18.14.0 (M5): the time is in the draft `openForm` is given, so it is the
+  // baseline too, and a form nobody touched is not dirty.
+  function openNewWith(draft){if(refused("bookingCreate"))return false;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(draft||Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",time:newBookingTime(seedDate,today,nowMins),size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);return true;}
   function openNew(){openNewWith(null);}
   // v18.3.4: the draft is the field table's (`draftFromBooking`), so a field the
   // form edits cannot be left out of what it opens with — the silent wipe
