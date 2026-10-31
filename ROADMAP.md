@@ -19,6 +19,8 @@ session and keeping it in sync.
 
 ## Deferred
 
+- **`BookingApp` V2–V5** (`useInboxEntry`, `useWaitlistOffers`, `useShellPrefs`, `useBookingForm`). Designed in `MGT_Bookings_State_By_Domain_Design.md`, context folder. After WhatsApp go-live settles; each version needs its own approval and a fresh census first.
+
 - **WhatsApp coexistence: the rehearsal, then the restaurant's number.** The code
   shipped in v18.9.0 (Embedded Signup at `/wa-connect`, the four coexistence webhooks,
   contact sync, phone replies, history import, the disconnect banner, Not a customer).
