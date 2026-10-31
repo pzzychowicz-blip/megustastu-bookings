@@ -30,6 +30,7 @@ the Rule of law; `src/CLAUDE.md` holds the app-code architecture and gotchas.
 - **useWalkin.js** — the walk-in draft and its handlers. The record it writes is `walkinBooking` (`lib/booking-save.js`). `doSaveWalkin` keeps the commit-once guard, both refusals, the write (`prev.concat([nb])`, which `tests/submit-guard.test.js` reads) and the close. `walkinBaseline` is STATE set in `openWalkin` only (→ `walkinDirty`). Visibility (`showWalkin`) is App's modal stack; the draft stays here.
 
 - **useWinW.js** — the viewport width.
+- **useWinH.js** — the viewport height, read by the WhatsApp inbox (`INBOX_COMPACT_HEIGHT`) and App (`isCompact`).
 
 - **useKeyboardInset.js** — `{ bottom, top }`: how much of a full-screen fixed box the on-screen keyboard covers, and (`coveredTopOf`) how far iOS moved such a box above the visible area, which only the WhatsApp panel pads by. **`Overlay` is its one caller and applies both as PADDING, never by moving an edge** (`src/components/CLAUDE.md`, atoms). The arithmetic is the pure `keyboardInsetOf(win)`, tested with device numbers in `tests/keyboard-inset.test.js`.
   - **The inset is `clientHeight − visualViewport.height − offsetTop`** (`viewportTopOf`). Never read `innerHeight` (iOS moves it apart from the viewport; the test fails if the hook does), and use `offsetTop`, not `pageTop` (a fixed box is laid out in the layout viewport). Each step's device measurements: `src/CLAUDE.md`, the on-screen keyboard row.

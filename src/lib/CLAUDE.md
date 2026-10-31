@@ -36,6 +36,8 @@ by generated cases). And **the files on the WhatsApp backend's Node ESM chain**
   - **`walkinBooking` and `occurrenceBooking`** are the app's other two new records; `occurrenceBooking` owns the deterministic `r<rule>_<date>` id (the root row on occurrence ids). `waitlistEntry(f, opts)` is the entry all three Add to waitlist doors write. `againDraft(source, ctx)` is Book Again's draft, built on `EMPTY_FORM` (no note, deposit or occasion tag).
   - Tags: `applyEdit` and `buildBooking` write `tags: cleanTagIds(f.tags)` and call `saveGuestTags` on `prev` inside the transform, with one `tagNow` taken outside it. `occurrenceBooking` writes both arrays empty; `walkinBooking` neither. Not on the backend's Node chain.
 
+- **compact-shell.js** — `isCompact(winH, isMobile)` and `COMPACT_HEIGHT` (640): the compact layout's one question (`src/CLAUDE.md`).
+
 - **constants.js** — the tokens (`S`, `BTN`, `R`, `M`, …; DESIGN.md), the layout and hours live bindings and their setters (`src/CLAUDE.md`, Operating hours and Layout config), `DUR_TIERS`/`setDurTiers`, `TURN_BUFFER`/`setTurnBuffer` (0 = off, the default), `PICK_RULES`.
   - **`EMPTY_FORM.date` is a GETTER**, so a tablet left open past midnight does not default to yesterday; spread and `Object.assign` read it, so callers still get a string. `EMPTY_FORM` is held to `draftFromBooking`'s keys plus `repeatWeekly` (`tests/booking-fields.test.js`).
   - **`exitHold(speed)`** (with `EXIT_PAD`) is how long a leaving node stays mounted, as arithmetic; `EXIT_MS` and `REVEAL_EXIT_MS` are its two applications. `M.dur` is the one hand-kept mirror of the CSS durations (`tests/motion.test.js`).

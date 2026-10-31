@@ -53,7 +53,7 @@ describe("the hook measures before paint, on the one box whose size moves when t
 describe("App's date-nav row", () => {
   it("drops the controls only while the Summary is measured beside them, and never while it is open", () => {
     expect(App).toMatch(/const summaryLine=useSharesLine\(dateRowRef,dateNavRef,summarySlotRef\);/);
-    expect(App).toMatch(/const dateCtrlShift=\(summaryLine\.same!==true\|\|summaryOpen\)\?"none":"translateY\("\+DATE_CTRL_DROP\+"px\)";/);
+    expect(App).toMatch(/const dateCtrlShift=\(compact\|\|summaryLine\.same!==true\|\|summaryOpen\)\?"none":"translateY\("\+DATE_CTRL_DROP\+"px\)";/);
     const shift = App.slice(App.indexOf("const dateCtrlShift="), App.indexOf(";", App.indexOf("const dateCtrlShift=")));
     expect(shift, "the width breakpoint was the bug — the gate is the measurement").not.toMatch(/isMobile/);
   });
@@ -65,7 +65,7 @@ describe("App's date-nav row", () => {
   });
 
   it("wires the three refs to the row, the date nav and the Summary's slot", () => {
-    expect(App).toMatch(/ref=\{dateRowRef\}\s+style=\{\{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0\}\}><nav aria-label="Date" ref=\{dateNavRef\}/);
+    expect(App).toMatch(/ref=\{dateRowRef\}\s+style=\{\{display:"flex",alignItems:"flex-start",gap:8,marginBottom:compact\?8:12,flexWrap:"wrap",flexShrink:0\}\}><nav aria-label="Date" ref=\{dateNavRef\}/);
     expect(App).toMatch(/<div ref=\{summarySlotRef\} style=\{\{flexGrow:1,flexShrink:1,flexBasis:"auto",minWidth:0\}\}>\{summaryPanel\}<\/div>/);
   });
 

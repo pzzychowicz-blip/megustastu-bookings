@@ -1640,6 +1640,25 @@ the keyboard goes.
   list (two panes), the conversation's chips and actions, the linked booking, the
   request banner and the draft. The thread and the reply box stay.
 
+### The compact layout (v18.14.0)
+Below 640px tall on anything that is not a phone (`isCompact`, `lib/compact-shell.js`)
+the shell gives its height to the grid. The tablet on the pass is 998 × 507 with
+Chrome's bars and 998 × 570 without; a laptop's browser window is about 650. It took
+the first table row from 253px down to 162, which is 5 tables on opening instead of 2.
+
+- **What goes, on every view:** the subtitle, the 16px under `main`, the date
+  controls' 9px drop. The name steps down to `T.title`, the Summary's headline row
+  is the date controls' 40px, and the gaps around them step down a notch.
+- **What moves, on a lone Timeline only** (`toolbarFolded`): Follow and zoom into the
+  header, after the name, on a horizontal `Reveal` so they leave and return with the
+  view. Optimiser and Reshuffle into the opened Summary, left of its own actions. In
+  a split each pane keeps its own toolbar.
+- **Why Optimiser is the half that goes:** in the evening the whole toolbar is 433px
+  and the header has 352 left. The Optimiser has switched itself off by then, so
+  it is the half nobody reaches for mid-service.
+- **It is a breakpoint, not a transition**, like `isMobile`. A screen does not change
+  height in service, and on Android the keyboard can only flip it behind a modal.
+
 ### Press feedback — universal, opt-OUT (v17.8.0)
 Every `button` dips to `scale(0.96)` on `:active`; `.mgt-hover-scale` buttons dip
 to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in

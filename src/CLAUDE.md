@@ -98,6 +98,9 @@ Every booking mutation goes through `bookingsAfterAction(bookings, viewDate, tab
 ### The fixed shell — `shellFixed`
 Normally `<body>` scrolls. `shellFixed` makes the outer div a `100dvh` overflow-hidden flex column with pinned header rows and ONE `flex:1; minHeight:0; overflowY:auto` region; a separate effect sets `body.overflow = hidden` (separate because the mount effect sits above `navLocked`'s declaration, a TDZ). **One mechanism for Lock navigation AND Split View** (`navLocked || !!split`), never a second layout; both default off. Split View implies a pinned nav (two panes need a definite height), and `SlideView` needs `fill`.
 
+### The compact layout
+`isCompact(winH, isMobile)` (`lib/compact-shell.js`, below 640px tall, never a phone) is App's `compact`; `toolbarFolded` is `compact && !split && view === "timeline"`. A HEIGHT test, because only height separates the tablet on the pass from a taller screen of the same width; `useShortViewport` means something else (the keyboard is up). **`zoom`, `followNow` and `autoOptimizer` are App's, so the controls can be drawn anywhere**: `TimelineZoomControls` in the card or the header, `OptimiserControls` in the card or the Summary, and a change to either is a change to both places. The Summary takes `showOptimiser` and the functions, never an element (memo). Not animated, like `isMobile`; the header group is a `Reveal` only because it leaves with the VIEW. DESIGN.md has the numbers.
+
 ### Split View
 Two of Timeline / List / Plan at once, per device; tablet and up (`winW >= 600`, enforced by `readSplit` and an effect). State `split = {a, b, dir, ratio}` or `null`, persisted only through `applySplit`; `readSplit` validates HARD and returns `null` on anything odd. The master toggle defaults ON (stores only `"0"`); the gesture is inert while it is off.
 - **The same view can never fill both panes**: the timeline, list and follow-now state are singletons in App and two instances would fight.

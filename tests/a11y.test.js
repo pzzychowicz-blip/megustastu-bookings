@@ -56,6 +56,7 @@ const App = appCode();
 const Atoms = read("components/atoms.jsx");
 const List = read("components/ListView.jsx");
 const Timeline = read("components/TimelineView.jsx");
+const Zoom = read("components/TimelineZoomControls.jsx");
 const Glyphs = read("components/FloorGlyphs.jsx");
 const Plan = read("components/PlanView.jsx");
 const Toasts = read("components/StatusToasts.jsx");
@@ -1627,10 +1628,10 @@ describe("the booking form's steppers and the timeline zoom work from the keyboa
   });
 
   it("the zoom buttons are named, and the reset button's name LEADS with its text", () => {
-    expect(count(Timeline, /aria-label="Zoom out"/g)).toBe(1);
-    expect(count(Timeline, /aria-label="Zoom in"/g)).toBe(1);
+    expect(count(Zoom, /aria-label="Zoom out"/g)).toBe(1);
+    expect(count(Zoom, /aria-label="Zoom in"/g)).toBe(1);
     // Label in Name: the visible "1x" (or "2x → 1x") comes first.
-    has(Timeline, "TimelineView", /aria-label=\{\(zoom !== 1 \? zoom \+ "x → " : ""\) \+ "1x \(reset zoom\)"\}/,
+    has(Zoom, "TimelineZoomControls", /aria-label=\{\(zoom !== 1 \? zoom \+ "x → " : ""\) \+ "1x \(reset zoom\)"\}/,
       "the reset button shows text, so its accessible name must start with that text");
   });
 });

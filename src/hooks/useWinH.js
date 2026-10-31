@@ -10,7 +10,8 @@
 //
 // Used by the WhatsApp InboxPanel to derive a `compact` flag (winH <
 // INBOX_COMPACT_HEIGHT) so the draft card + composer template chips collapse
-// on short screens (tablet) without changing the tall/laptop layout.
+// on short screens (tablet) without changing the tall/laptop layout, and by
+// App for the compact layout (lib/compact-shell.js).
 
 import { useState, useEffect } from "react";
 

@@ -46,7 +46,9 @@ import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { toMins, toTime, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf } from "../lib/booking-logic";
 import { railFlagsOf } from "./blockFlags";
 import { noShowMap, identityKey, bookingTags, tagLine } from "../lib/customers";
-import { mkBtn, Presence, Reveal, useFlip, SizeRing, ModalPresence } from "./atoms";
+import { mkBtn, Reveal, useFlip, SizeRing, ModalPresence } from "./atoms";
+import { TimelineZoomControls } from "./TimelineZoomControls";
+import { OptimiserControls } from "./OptimiserControls";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { useEnterLeave } from "../hooks/useEnterLeave";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
@@ -1384,6 +1386,8 @@ export const TimelineView = memo(function TimelineView({
   // The memo-busting layout identity (App's `layout` state; the note above the component).
   // /code-review: read here too, as one of useEnterLeave's deps.
   layoutSig = null,
+  // v18.14.0 (H7): App draws this card's toolbar elsewhere (lib/compact-shell.js).
+  toolbarFolded = false,
 }) {
   const scrollRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
@@ -2190,114 +2194,16 @@ export const TimelineView = memo(function TimelineView({
   );
 
   // ── Header controls (top row above the grid) ─────────────────────────────
-  // Follow-now button: today only. Phase C1 — label flips between "Following"
-  // and "Follow" so screen-readers and quick visual scans get the state from
-  // the text, not just the background colour. Background still flips for
-  // emphasis.
-  const followBtn = isToday ? (
-    <button
-      onClick={() => {
-        if (!followNow) {
-          setFollowNow(true);
-          if (zoom < followZoom) setZoom(followZoom);
-        } else {
-          setFollowNow(false);
-        }
-      }}
-      className="mgt-hover-scale mgt-press"
-      style={mkBtn({
-        minHeight: 36, padding: "4px 10px", fontSize: T.small,
-        // v17.8.0: the idle fill was a hard-coded copy of --app-btn-grey's old
-        // value, so the contrast pass fixed every other secondary button and
-        // left this one at 1.82:1 — the lowest on the screen, on the control
-        // that follows the clock during service. A literal duplicate of a token
-        // is a token that cannot be fixed.
-        background: followNow ? "var(--app-btn-dark)" : "var(--app-btn-grey)"
-      })}
-    >
-      {followNow ? "Following" : "Follow"}
-    </button>
-  ) : null;
-
-  // Zoom buttons (− · 1×/reset · +) — minimum 1× (i.e. never zoom below the
-  // "fit one full service into the screen" baseline).
+  // v18.14.0 (H7): their own components, because on a short screen they leave
+  // this card: Follow and zoom for App's header, Optimiser for the Summary.
+  // `toolbarFolded` is App's, and the state they drive was App's already.
   const zoomBtns = (
-    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-      {followBtn}
-      {/* v18.2.0: named. Their whole content is a glyph, so they announced as
-          "-" and "+" — the LayoutSettings `Stepper` defect (v17.15.5), and the
-          same reasoning: a glyph doing an icon's job carries no word a voice-
-          control user could say, so a name in words takes nothing away. The
-          reset button below DOES carry text, so its name leads with it. */}
-      <button
-        onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
-        aria-label="Zoom out"
-        className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
-      >
-        −
-      </button>
-      {/* v17.2.0 follow-up: the reset label grows "1x" → "Nx → 1x" when zoomed —
-          the widening used to SNAP and shove the whole toolbar group sideways.
-          The "Nx → " prefix now rides a horizontal Reveal (the start-time-chip
-          pattern) so the button width eases in/out instead of jumping. The
-          constant "1x" tail keeps the button's identity while collapsed. */}
-      <button
-        onClick={() => { setZoom(1); setFollowNow(false); }}
-        aria-label={(zoom !== 1 ? zoom + "x → " : "") + "1x (reset zoom)"}
-        className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 36, padding: "4px 10px", fontSize: T.small, background: zoom === 1 ? "var(--btn-default)" : BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
-      >
-        {/* NB the child must be NULL (not an empty span) at 1× — Reveal caches its
-            last truthy children for the exit ease; an always-mounted span would
-            overwrite that cache with empty text and the collapse would animate a
-            blank box (the text snapping away instead of easing out). */}
-        <Reveal horizontal show={zoom !== 1}>
-          {zoom !== 1 ? <span style={{ whiteSpace: "pre" }}>{zoom + "x → "}</span> : null}
-        </Reveal>
-        1x
-      </button>
-      <button
-        onClick={() => setZoom((z) => Math.min(maxZoom, z + 0.5))}
-        aria-label="Zoom in"
-        className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
-      >
-        +
-      </button>
-    </div>
+    <TimelineZoomControls
+      zoom={zoom} setZoom={setZoom} maxZoom={maxZoom} followZoom={followZoom}
+      followNow={followNow} setFollowNow={setFollowNow} isToday={isToday} />
   );
-
-  // Optimizer toggle + Reshuffle (today only). Reshuffle is only shown when
-  // the optimizer is OFF — when ON it runs continuously, no manual trigger
-  // needed.
   const optBtns = isToday ? (
-    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-      <button
-        onClick={() => setAutoOptimizer(!autoOptimizer)}
-        className="mgt-hover-scale"
-        style={mkBtn({
-          minHeight: 36, padding: "4px 12px", fontSize: T.small,
-          // v17.8.0 review fix: the OFF fill was the SAME hard-coded grey the
-          // Follow button above was just cured of, in the same commit, eight
-          // lines apart — 1.94:1 white-on-grey in light mode. Fixing one copy of
-          // a literal does not fix the literal; grep the VALUE.
-          background: autoOptimizer ? "var(--app-walkin)" : "var(--app-btn-grey)"
-        })}
-      >
-        {"Optimiser: " + (autoOptimizer ? "ON" : "OFF")}
-      </button>
-      {/* v15.8.0: slides in L→R when Optimizer is toggled OFF, slides out →L when ON. */}
-      <Presence show={!autoOptimizer} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span">
-        <button
-          onClick={onReshuffle}
-          className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 36, padding: "4px 12px", fontSize: T.small, background: BTN.orange })}
-        >
-          Reshuffle
-        </button>
-      </Presence>
-    </div>
+    <OptimiserControls autoOptimizer={autoOptimizer} setAutoOptimizer={setAutoOptimizer} onReshuffle={onReshuffle} />
   ) : null;
 
   // ── Legend chips (status colours + indoor/outdoor + blocked) ─────────────
@@ -2368,16 +2274,18 @@ export const TimelineView = memo(function TimelineView({
       // blur changes nothing (≤5/255 measured), and it spent the tablet's ≤4 budget.
       borderRadius: R.sheet,
       border: "1px solid var(--tl-card-border)",
-      padding: "10px 12px",
+      padding: toolbarFolded ? "4px 12px" : "10px 12px",
       boxShadow: "var(--shadow-soft)"
     }}>
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        marginBottom: 8, gap: 8, flexWrap: "wrap"
-      }}>
-        {optBtns || <div />}
-        {zoomBtns}
-      </div>
+      {toolbarFolded ? null : (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          marginBottom: 8, gap: 8, flexWrap: "wrap"
+        }}>
+          {optBtns || <div />}
+          {zoomBtns}
+        </div>
+      )}
       {/* v17.8.0: the "Closed this day" notice that used to sit here moved to
           NotificationStrip. It was a day-level fact drawn per-view — here and,
           differently worded, in PlanView — while List had none. One section now

@@ -23,6 +23,7 @@ import { useMemo, memo } from "react";
 import { daySummary, countLabel, depositSummary, depositParts } from "../lib/booking-logic";
 import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC, SP, H } from "../lib/constants";
 import { mkBtn, Reveal, TBadge } from "./atoms";
+import { OptimiserControls } from "./OptimiserControls";
 // v17.9.0: the local `hh` was one of six copies of this label — see lib/time-grid.js.
 import { hourLabel as hh } from "../lib/time-grid";
 import { ChevronDownIcon, ChevronUpIcon, PrintIcon } from "./Icons";
@@ -60,7 +61,7 @@ function FreeingEntry({ f }) {
 // so it used to re-render on every BookingApp render. Function props are App's
 // stable VA wrappers; hoursSig/layoutSig are identity-only props that bust the
 // memo on an hours/layout edit (hoursFor + TOTAL_SEATS are live bindings).
-export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, unplacedCount = 0, currency, onToggle, onOpenWeek, onPrint, onSpecialHours }) {
+export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, unplacedCount = 0, currency, onToggle, onOpenWeek, onPrint, onSpecialHours, compact = false, showOptimiser = false, autoOptimizer = true, setAutoOptimizer, onReshuffle }) {
   // v17.1.0 perf: Summary lives in the always-visible date-nav row, so this
   // used to walk all bookings on EVERY BookingApp render; memoized.
   const s = useMemo(() => daySummary(bookings, date, splitHour), [bookings, date, splitHour]);
@@ -99,7 +100,10 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
         border: "1px solid var(--border-soft)",
         borderRadius: R.card,
         boxShadow: "var(--shadow-soft)",
-        overflow: "hidden"
+        overflow: "hidden",
+        // v18.14.0 (H7): on a short screen the card is the date controls' height,
+        // which is also what leaves their 9px drop nothing to centre against.
+        ...(compact ? { minHeight: H.control, boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "center" } : null)
       }}
     >
       {/* Header — the headline toggles the body (click or the `s` shortcut), and
@@ -107,7 +111,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
           rather than one wrapping the row, so we never nest a <button> inside a
           <button>. (The More button lived here until v17.9.0 — see the note at
           its new home in the expanded body.) */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: compact ? "0 14px" : "10px 14px", flexWrap: "wrap" }}>
         <button /* @no-lift pre-existing, not reviewed for v18.0.0 */
           onClick={onToggle}
           aria-expanded={open}
@@ -275,8 +279,16 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
               shape rather than the 36px/T.small one it wore in the header —
               two buttons sharing a row that disagree on height and type size
               read as one control and one afterthought. */}
-          {onPrint || onOpenWeek || onSpecialHours ? (
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+          {onPrint || onOpenWeek || onSpecialHours || showOptimiser ? (
+            <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              {/* v18.14.0 (H7): where the Optimiser goes on a short screen, while
+                  Follow and zoom take the header. Left, so the day's own actions
+                  keep their places at the right. */}
+              {showOptimiser ? (
+                <div style={{ marginRight: "auto" }}>
+                  <OptimiserControls autoOptimizer={autoOptimizer} setAutoOptimizer={setAutoOptimizer} onReshuffle={onReshuffle} />
+                </div>
+              ) : null}
               {/* v18.10.0: this date's own hours — a special day (closed, or
                   other hours) through SpecialDayModal. Only for `hoursEdit`
                   (App passes null otherwise). First, so Print and More keep

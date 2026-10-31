@@ -38463,3 +38463,46 @@ holds `.env.local` files, so treat it as a secret. Two worktrees could not be ar
   `fitTimeline`, so on a shell too narrow for a side-by-side Timeline a tap writes `v` and the repair effect
   writes `h` straight back. Measured on the restaurant tablet at 998 wide, and the title still offers
   "Switch to side by side". The line moved verbatim, and this version changes no behaviour.
+
+## v18.14.0 — the 20 skills-scan fixes
+
+**Date:** 2026-10-31 · **Branch:** `feat/v18.14.0-skills-scan-fixes`
+
+The 2026-10-31 scan, weighted for real service: the tablet on the pass (998 × 507 with Chrome's bars,
+998 × 570 without), Timeline, Light in a dim room, wet hands, 1–2 staff, one of whom struggles with
+small text, Lock navigation on. Patryk decided every finding and chose one version, one branch and one
+PR. H1 (white on amber) and M2 (yellow) stay exempt by his decision. Report:
+`MGT_Bookings_Skills_Scan_2026-10-31.md` in the context folder, with the rig beside it.
+
+**Each fix below names its reading.** All readings are headless, on DEV, at 998 × 507 and 998 × 570,
+DPR 2, touch, Lock navigation on, on the capture profile's seeded day (12 bookings, 17 blocks, 2 lanes of
+Unplaced) unless the fix says otherwise.
+
+### H7: the compact layout
+
+Patryk: below 640px tall, Follow and zoom in the header, Optimiser and Reshuffle in the opened Summary.
+`isCompact(winH, isMobile)` (`lib/compact-shell.js`) is a HEIGHT test because nothing else separates that
+tablet from a taller screen of the same width; `useShortViewport`'s 480 means "the keyboard is up".
+Applied to all three views; `toolbarFolded` (a lone Timeline) moves the controls.
+
+**The scan's plan did not fit.** It said to fold the toolbar row into the header, but in the evening the
+Optimiser is off, so the row is `Optimiser: OFF` 110, Reshuffle 79, Following 75 and zoom 145 plus gaps: 433px,
+against 352 left in the header with the name hidden. And dropping the subtitle saves 1px on its own: the
+40px controls set the header's height. So the half nobody needs mid-service went to the Summary.
+
+`zoom`, `followNow` and `autoOptimizer` were App's already, so the two groups became components
+(`TimelineZoomControls`, `OptimiserControls`) with no portal and nothing moved but markup. The Summary takes
+scalars and stable functions, never an element, which would bust its memo.
+
+| Reading | Before | After |
+|---|---|---|
+| Tables fully on screen at 507 | 2 | 5 |
+| Tables fully on screen at 570 | 4 | 6 |
+| `main` top at 507 | 139 | 104 |
+| First grid pixel at 507 | 253 | 162 |
+| Header at 700 tall | 16–57 | 16–57 (`main` 139, grid 253: unchanged) |
+| Header zoom group, leaving / arriving | n/a | 215 → 0 in 240ms / 42 → 215 in 300ms |
+
+**Files:** new `src/lib/compact-shell.js`, `src/components/TimelineZoomControls.jsx`,
+`src/components/OptimiserControls.jsx`, `tests/compact-shell.test.js`; `src/App.jsx`, `TimelineView.jsx`,
+`Summary.jsx`, `tests/a11y.test.js`.

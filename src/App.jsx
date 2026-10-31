@@ -184,6 +184,7 @@ import { ReminderEditor }          from "./components/ReminderEditor";
 // B3) moved to TimelineView's imports because TimelineView is its only
 // consumer.
 import { TimelineView } from "./components/TimelineView";
+import { TimelineZoomControls } from "./components/TimelineZoomControls";
 import { ListView }     from "./components/ListView";
 import { Summary }      from "./components/Summary";
 // v17.9.0: CogIcon comes straight from Icons.jsx now, not via SettingsChrome's
@@ -236,6 +237,8 @@ import { BookingFormModal } from "./components/BookingFormModal";
 // App.jsx. One hook per file in src/hooks/, mirroring the components/
 // pattern. No barrel index — explicit imports keep dependencies visible.
 import { useWinW } from "./hooks/useWinW";
+import { useWinH } from "./hooks/useWinH";
+import { isCompact } from "./lib/compact-shell";
 // v18.2.0: whether the Summary shares the date controls' flex line — see
 // DATE_CTRL_DROP and the hook's own header.
 import { useSharesLine } from "./hooks/useSharesLine";
@@ -425,7 +428,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.13.2"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.14.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1405,6 +1408,8 @@ export function BookingApp({uid}){
   },[bookings,nowMins]);
   const winW=useWinW();
   const isMobile=winW<600;
+  // v18.14.0 (H7): the compact layout, lib/compact-shell.js.
+  const compact=isCompact(useWinH(),isMobile);
   const splitMenuFor = modalOpen.splitmenu || null; // which view's SplitMenu is open
   const setSplitMenuFor = setModalFns.splitmenu;
   // v18.13.2: the shell's preferences and Split View, out of this body. Below
@@ -3443,6 +3448,11 @@ export function BookingApp({uid}){
   // Split View renders TWO of them. Constructing an element is just
   // createElement — nothing renders until it's mounted — and `planView` above
   // has always been built this way, so this costs nothing.
+  // v18.14.0 (H7): on a short screen the Timeline's toolbar row costs a table, so
+  // Follow and zoom go in the header and Optimiser in the opened Summary. Not in
+  // a split: each pane keeps its own controls, and the header could not say
+  // which pane it was zooming anyway.
+  const toolbarFolded=compact&&!split&&view==="timeline";
   const timelineEl=<TimelineView
     bookings={bookings}
     catchingUp={catchingUp}
@@ -3475,6 +3485,7 @@ export function BookingApp({uid}){
     autoOptimizer={autoOptimizer}
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={VA.onReshuffle}
+    toolbarFolded={toolbarFolded}
     turnBuffer={turnBuffer}
     waitGhosts={waitGhosts}
     onBookWait={VA.onBookWait}
@@ -3570,7 +3581,12 @@ export function BookingApp({uid}){
     onToggle={VA.onSummaryToggle}
     onOpenWeek={VA.onOpenWeek}
     onPrint={VA.onPrint}
-    onSpecialHours={can("hoursEdit")?VA.onSpecialHours:null} />;
+    onSpecialHours={can("hoursEdit")?VA.onSpecialHours:null}
+    compact={compact}
+    showOptimiser={toolbarFolded&&viewDate===todayStr()}
+    autoOptimizer={autoOptimizer}
+    setAutoOptimizer={setAutoOptimizer}
+    onReshuffle={VA.onReshuffle} />;
   // v17.9.1: the vertical position of the two date-nav control groups — see
   // DATE_CTRL_DROP. Applied to BOTH groups so the arrows/date field and the
   // Today/waitlist pills stay on one line as they move.
@@ -3603,7 +3619,7 @@ export function BookingApp({uid}){
   // over the Summary card's left edge. Phase 23's `useAlignLeft` did that, and
   // in use the sideways movement did not look good; the switcher keeps its own
   // place in the header.
-  const dateCtrlShift=(summaryLine.same!==true||summaryOpen)?"none":"translateY("+DATE_CTRL_DROP+"px)";
+  const dateCtrlShift=(compact||summaryLine.same!==true||summaryOpen)?"none":"translateY("+DATE_CTRL_DROP+"px)";
   const dateCtrlMotion=summaryLine.settled?"transform "+M.shift:"none";
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
@@ -3721,7 +3737,7 @@ export function BookingApp({uid}){
       style={Object.assign({background:"var(--bg-app)",
         // v18.3.0 (N7): a phone's side paddings clear the notch in landscape;
         // the side insets are 0 in portrait, so portrait is unchanged.
-        padding:isMobile?"12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"},
+        padding:isMobile?"12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))":compact?"8px 16px 0":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"},
         /* v17.5.0: shellFixed → a 100dvh flex column whose inner region scrolls,
            so the header + date rows stay put. Off = the original growing block.
            v17.5.0 correction: NO overflow:hidden here. It clipped the List
@@ -3758,7 +3774,7 @@ export function BookingApp({uid}){
           /* v17.12.0: `inert` while a modal is open — see the <main> note below. */
           inert={anyModal}
           ref={headerRef}
-          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}>{/* v17.9.0 (Patryk): the cog leads the title block. The two lines
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:compact?8:12,flexWrap:"wrap",gap:8,flexShrink:0}}>{/* v17.9.0 (Patryk): the cog leads the title block. The two lines
               beside it ARE the restaurant's configuration read back — its name,
               its table counts, its opening hours — and the control that edits
               all three now sits against them instead of across the row in a
@@ -3769,10 +3785,12 @@ export function BookingApp({uid}){
               title="Settings & keyboard shortcuts"
               aria-label="Settings & keyboard shortcuts"
               className="mgt-hover-scale"
-              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{/* v18.2.0: separators. The double spaces between the three facts were
+              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile||compact?T.title:T.display,fontWeight: FW.bold,margin:0,whiteSpace:compact?"nowrap":undefined}}>{generalSettings.restaurantName}</h1>{compact?null:<div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{/* v18.2.0: separators. The double spaces between the three facts were
                 collapsed by HTML to one, so it read "4 indoor 9 outdoor 13:00 -
                 22:00" — one run of numbers (the design critique). A middle dot
-                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))+(viewHours.special?" · "+(viewHours.note||"special day"):"")}</div></div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div><div ref={headCtrlRef} style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",justifyContent:"flex-end",flexGrow:1,minWidth:0}}><ViewSwitcher
+                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))+(viewHours.special?" · "+(viewHours.note||"special day"):"")}</div>}</div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div>{/* v18.14.0 (H7): Follow and zoom on a short screen, after the
+              name (`marginRight` keeps them there), easing out with the Timeline
+              when the view changes. */}<Reveal horizontal speed="move" show={toolbarFolded} style={{marginRight:"auto"}}>{toolbarFolded?<TimelineZoomControls zoom={timelineZoom} setZoom={VA.onSetZoom} maxZoom={tlSettings.maxZoom} followZoom={tlSettings.followZoom} followNow={followNow} setFollowNow={setFollowNow} isToday={viewDate===todayStr()} />:null}</Reveal><div ref={headCtrlRef} style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",justifyContent:"flex-end",flexGrow:1,minWidth:0}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -3846,7 +3864,7 @@ export function BookingApp({uid}){
              still the open height. See DATE_CTRL_DROP for the numbers. */
           inert={anyModal}
           ref={dateRowRef}
-          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" ref={dateNavRef} style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:dateCtrlMotion}}><button
+          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:compact?8:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" ref={dateNavRef} style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:dateCtrlMotion}}><button
               onClick={function(){goToDate(stepDate(viewDate,-1));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
@@ -3921,7 +3939,7 @@ export function BookingApp({uid}){
                  card is the content box, so 4% padding is precisely enough at
                  any width. The negative margin puts the content back where it
                  was, so card width and position are unchanged from before. */
-              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:12}):undefined}>{/* v17.12.0 (review fix): `inert` sits on the two CONTENT
+              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:compact?6:12}):undefined}>{/* v17.12.0 (review fix): `inert` sits on the two CONTENT
                   children rather than on <main> itself. It was on <main>, and
                   <main> also contains StatusToasts — the app's live region for
                   transient status. `inert` removes a subtree from the
