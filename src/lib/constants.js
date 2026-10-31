@@ -558,6 +558,11 @@ export function setTurnBuffer(cfg){
 }
 
 export var ROW_H=44,LABEL_W=58;
+// v18.14.0 (H6): the sticky ruler covers the top of the Timeline's scrollport, so
+// a block reached by keyboard must not land under it (WCAG 2.4.11, Focus Not
+// Obscured). The ruler's 24px and a gap. `main` and SplitLayout's panes take this,
+// and the body's copy is in index.css.
+export var SCROLL_CLEAR_RULER=32;
 // v17.0.0: 5th status `pending` (awaiting confirmation) — yellow family;
 // confirmed recolored to accent blue in index.html (the yellow moved to pending).
 export var STATUS_COLORS={confirmed:{bg:"rgba(var(--status-confirmed-rgb),0.15)",text:"var(--status-confirmed-text)",border:"rgba(var(--status-confirmed-rgb),0.35)"},pending:{bg:"rgba(var(--status-pending-rgb),0.15)",text:"var(--status-pending-text)",border:"rgba(var(--status-pending-rgb),0.35)"},seated:{bg:"rgba(var(--status-seated-rgb),0.15)",text:"var(--status-seated-text)",border:"rgba(var(--status-seated-rgb),0.35)"},completed:{bg:"rgba(var(--status-completed-rgb),0.12)",text:"var(--status-completed-text)",border:"rgba(var(--status-completed-rgb),0.3)"},cancelled:{bg:"rgba(var(--status-cancelled-rgb),0.12)",text:"var(--status-cancelled-text)",border:"rgba(var(--status-cancelled-rgb),0.3)"}};

@@ -152,6 +152,7 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | Faint tail after a block | **turnaround tail** | The `TURN_BUFFER` minutes the table stays unavailable. |
 | Vertical line that moves | **now-line** | Current time. |
 | "13:00" labels across the top | **hour pill** (`--tl-hour-pill`, `hourLabel()`) | The grid header. Same pill the block's start-time chip uses. |
+| The strip of hours that stays at the top while the rows scroll under it | **sticky ruler** (`ruler`, `syncRuler`, `TimelineView.jsx`) | v18.14.0. Sticks to whatever scrolls, so it holds with Lock navigation on or off and in split view. Carries the hour pills and the now-pill, and follows the grid sideways. |
 | "Follow" / "Following" button | **follow** (`followNow`) | Auto-scrolls and zooms to the current time. Today only. |
 | "Optimiser: ON/OFF" button | **optimiser toggle** | See §8 on the spelling. |
 

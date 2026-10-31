@@ -29,7 +29,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME, VIEW_ORDER } from "./lib/constants";
+  OPEN, CLOSE, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME, VIEW_ORDER, SCROLL_CLEAR_RULER } from "./lib/constants";
 
 import {
   getDur, toMins, sanitizeBlock,
@@ -3939,7 +3939,9 @@ export function BookingApp({uid}){
                  card is the content box, so 4% padding is precisely enough at
                  any width. The negative margin puts the content back where it
                  was, so card width and position are unchanged from before. */
-              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBlock:compact?6:12}):undefined}>{/* v17.12.0 (review fix): `inert` sits on the two CONTENT
+              split?{overflow:"hidden"}:{overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",marginInline:"-4%",paddingInline:"4%",paddingBottom:compact?6:12,scrollPaddingTop:SCROLL_CLEAR_RULER}):undefined}>{/* v18.14.0 (H6): the top gap is a child, not padding: Chrome
+                  measures `position: sticky` from inside a scroller's padding, so
+                  with padding here the stuck ruler left a sliver of rows above it. */}{shellFixed&&!split?<div style={{paddingTop:compact?6:12,flexShrink:0}} />:null}{/* v17.12.0 (review fix): `inert` sits on the two CONTENT
                   children rather than on <main> itself. It was on <main>, and
                   <main> also contains StatusToasts — the app's live region for
                   transient status. `inert` removes a subtree from the

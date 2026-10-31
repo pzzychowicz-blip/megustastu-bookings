@@ -1643,9 +1643,12 @@ export function SlideView({ dir, fill = false, children }) {
     <div
       className={animating ? dir : undefined}
       onAnimationEnd={function () { setAnimating(false); }}
+      // v18.14.0 (H6): `clip`, not `hidden`. A `hidden` box is a scroll container,
+      // so for the length of a date fade the Timeline's sticky ruler stuck to this
+      // and dropped back into the page. `clip` clips the same and scrolls nothing.
       style={fill
-        ? { overflow: animating ? "hidden" : "visible", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }
-        : { overflow: animating ? "hidden" : "visible" }}
+        ? { overflow: animating ? "clip" : "visible", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }
+        : { overflow: animating ? "clip" : "visible" }}
     >
       {children}
     </div>

@@ -38506,3 +38506,36 @@ scalars and stable functions, never an element, which would bust its memo.
 **Files:** new `src/lib/compact-shell.js`, `src/components/TimelineZoomControls.jsx`,
 `src/components/OptimiserControls.jsx`, `tests/compact-shell.test.js`; `src/App.jsx`, `TimelineView.jsx`,
 `Summary.jsx`, `tests/a11y.test.js`.
+
+### H6: the sticky hour ruler
+
+Patryk chose a separate strip over the plan's "the Timeline takes over its vertical scroll". That needs
+a definite height, which the lock-off page does not have, and it would have pinned the notification strip
+above the grid, one table less. The ruler cannot stick from inside the grid: `overflow-x: auto` makes y
+auto too, so that scroller would be what it sticks to. So it is a strip of its own above the rows, holding
+the hour lines and labels and the now-pill, with an inner `syncRuler` keeps at the grid's `scrollLeft`.
+Printing cannot be affected, against the plan's note: `#root` is hidden there and `TimelineSheet` draws its
+own grid.
+
+Five things the mechanism needed that the plan did not name:
+- **Chrome measures sticky from inside a scroller's padding** (`top: -4` under 6px of padding stuck at +2),
+  which left a 2px sliver of rows above the stuck ruler, and an engine that does not do this would cut the
+  ruler instead. So `main` and the split panes lost their top padding to a spacer child.
+- **`SlideView`'s `overflow: hidden`** made it a scroll container for the length of a date fade, so the ruler
+  would have stuck to it and dropped back into the page. It is `clip` now.
+- **`centerNow` writes `scrollLeft` in a rAF**, and the scroll event lands a frame later, so it calls
+  `syncRuler` itself or the ruler trails the now-line through a Follow ease.
+- **A drag:** a row passing under the ruler is still in the geometry, so `tableForClientY` looks up through
+  `rowProbeY`, and `scrollBounds` starts the top band under the ruler, only while it is stuck.
+- **Keyboard focus:** `scrollPaddingTop` 32 on the three scrollports (WCAG 2.4.11).
+
+| Reading | Value |
+|---|---|
+| Ruler's ticks when scrolled, against the scrollport's top: lock on 507 / 570 / 720 | 104 of 104 · 104 of 104 · 139 of 139 |
+| Same, lock off (the body scrolls) and in a split (a pane scrolls) | 0 of 0 · 186 of 186 |
+| Tables on screen scrolled to the end | 8 at 507 (6 before H7 and H6), 9 at 570 |
+| Ruler and rows, left edge after a 120px scroll | -25 and -25 |
+| Paced touch drag from table 10 to 8px under the stuck ruler | `main` 118 → 68 → 38 → 15 → 0, the edge scroll runs |
+
+**Files:** `TimelineView.jsx`, `lib/edge-scroll.js`, `atoms.jsx`, `SplitLayout.jsx`, `App.jsx`, `constants.js`,
+`index.css`, new `tests/timeline-ruler.test.js`, `tests/timeline-drag.test.js`, `tests/unplaced.test.js`.

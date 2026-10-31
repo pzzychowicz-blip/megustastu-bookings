@@ -41,7 +41,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, mem
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
-  S, TBL, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
+  S, TBL, TIMELINE_TABLES, R, M, T, FW, IC, SP, RIM_SOLID, exitHold } from "../lib/constants";
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { toMins, toTime, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf } from "../lib/booking-logic";
 import { railFlagsOf } from "./blockFlags";
@@ -60,7 +60,7 @@ import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail } from "../lib/block-layout";
 import { unplacedOf, primaryGridTable, packLanes, unplacedHeight } from "../lib/unplaced";
-import { edgeVelocity, edgeStep, scrollParentY, scrollBounds } from "../lib/edge-scroll";
+import { edgeVelocity, edgeStep, scrollParentY, scrollBounds, rowProbeY } from "../lib/edge-scroll";
 import { afterFrame, everyFrame, pageHidden } from "../lib/after-frame";
 
 // A block moves in two ways at once and they are NOT the same kind of motion:
@@ -1311,6 +1311,13 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
   );
 }
 
+// v18.14.0 (H6): keeps the ruler's clipped inner over the grid's minute. Out here
+// because a function in the component body that calls it stops counting as stable
+// to the deps rule, which `centerNow` has to.
+function syncRuler(grid, clip) {
+  if (grid && clip) clip.scrollLeft = grid.scrollLeft;
+}
+
 // v17.1.0 perf: React.memo — BookingApp re-renders on every form keystroke /
 // banner tick, and the timeline is its heaviest subtree. All function props are
 // the stable VA wrappers (App.jsx viewActionsRef pattern); `hoursSig` and
@@ -1390,6 +1397,10 @@ export const TimelineView = memo(function TimelineView({
   toolbarFolded = false,
 }) {
   const scrollRef = useRef(null);
+  // v18.14.0 (H6): the sticky ruler and its clipped inner, which `syncRuler` holds
+  // at the grid's scrollLeft.
+  const rulerRef = useRef(null);
+  const rulerClipRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
   const [quickStatus, setQuickStatus] = useState(null);
   // /code-review: the drag closes the card as a HAND-OFF (ModalPresence's
@@ -1410,6 +1421,19 @@ export const TimelineView = memo(function TimelineView({
   // v17.1.0 perf: noShowMap walks EVERY booking (all dates — grows with
   // history); memo on the bookings ref so it no longer reruns per render.
   const nsMap = useMemo(() => noShowMap(bookings), [bookings]);
+
+  // v18.14.0 (H6): the ruler cannot sit inside the grid's scroller and stick to
+  // the page: that scroller clips both axes (`overflow-x: auto` makes y auto
+  // too), so `position: sticky` would stick to IT. So the ruler is a strip of its
+  // own, above the rows, and this keeps its inner over the same minute as the
+  // grid. The swipe itself runs off the main thread, so during a fling the ruler
+  // can trail by a frame and settles at rest.
+  //
+  // A new width changes where the scroll lands without a scroll event of its own
+  // to rely on, and a remount starts the clip at 0.
+  useLayoutEffect(() => {
+    syncRuler(scrollRef.current, rulerClipRef.current);
+  }, [gridW, date]);
 
   // ── Follow-now scroll synchronisation ────────────────────────────────────
   // When followNow is on (today only), keep the current minute ~30 min from
@@ -1435,6 +1459,9 @@ export const TimelineView = memo(function TimelineView({
       const el = scrollRef.current;
       if (!el) return;
       el.scrollLeft = fraction * el.scrollWidth;
+      // In this frame, not on the scroll event: that lands in the next one, and
+      // the ruler would trail the now-line through the whole ease.
+      syncRuler(el, rulerClipRef.current);
       if (performance.now() - start < 500) {
         followRafRef.current = requestAnimationFrame(step);
       }
@@ -1450,6 +1477,7 @@ export const TimelineView = memo(function TimelineView({
       if (scrollPosRef) scrollPosRef.current = fraction * gridW;
     } else if (scrollPosRef && scrollPosRef.current > 0) {
       scrollRef.current.scrollLeft = scrollPosRef.current;
+      syncRuler(scrollRef.current, rulerClipRef.current);
     }
     return () => cancelAnimationFrame(followRafRef.current);
     // v18.3.2 (the stale-closure triage): `totalMins` joins the list. `gridW`
@@ -1463,6 +1491,7 @@ export const TimelineView = memo(function TimelineView({
     if (scrollRef.current && scrollPosRef) {
       scrollPosRef.current = scrollRef.current.scrollLeft;
     }
+    syncRuler(scrollRef.current, rulerClipRef.current);
     if (quickStatus) setQuickStatus(null);
   }
 
@@ -1845,15 +1874,8 @@ export const TimelineView = memo(function TimelineView({
 
   // ── Labels column (left) — sticky table IDs + optional Unplaced row ──────
   const labelCol = (
-    // v14.3.1 (Fix 3): paddingTop mirrors the grid scroller's padding so the
-    // 24px header + ROW_H rows line up with the grid column after the pad.
-    <div style={{ width: LABEL_W + "px", flexShrink: 0, paddingTop: 8 }}>
-      <div style={{
-        height: 24,   /* @canvas */ background: "var(--tl-header-strip)",
-        borderRadius: "6px 0 0 0",
-        borderBottom: "2px solid var(--tl-header-border)",
-        boxSizing: "border-box"
-      }} />
+    // v18.14.0 (H6): its corner of the header moved to the ruler strip.
+    <div style={{ width: LABEL_W + "px", flexShrink: 0 }}>
       {/* v18.2.0: the Unplaced row leads, directly under the header — it holds
           the bookings the rows below cannot show, so it is the first thing to
           read rather than the last thing below eleven rows of tables.
@@ -1932,8 +1954,10 @@ export const TimelineView = memo(function TimelineView({
     const el = flipRef.current;
     if (!el) return null;
     const u = unplacedRef.current;
-    const top = u ? u.getBoundingClientRect().bottom : el.getBoundingClientRect().top + 24 + unplacedH;
-    const idx = Math.floor((clientY - top) / ROW_H);
+    const gridTop = el.getBoundingClientRect().top;
+    const top = u ? u.getBoundingClientRect().bottom : gridTop + unplacedH;
+    const ruler = rulerRef.current;
+    const idx = Math.floor((rowProbeY(clientY, ruler ? ruler.getBoundingClientRect().bottom : null, gridTop) - top) / ROW_H);
     return idx >= 0 && idx < TIMELINE_TABLES.length ? TIMELINE_TABLES[idx].id : null;
   }
 
@@ -2133,20 +2157,67 @@ export const TimelineView = memo(function TimelineView({
       }}
     >
       <div style={{
-        position: "absolute", top: 3, left: "50%", transform: "translateX(-50%)",
-        fontSize: T.micro, fontWeight: FW.semi, color: "var(--text-on-accent)",
-        background: "var(--tl-now-pill)",
-        padding: "2px 4px", borderRadius: R.pill, whiteSpace: "nowrap", zIndex: 11,
-        boxShadow: "var(--shadow-btn)"
-      }}>
-        {toTime(nowMins)}
-      </div>
-      <div style={{
-        position: "absolute", top: 11, bottom: 0, left: "50%", transform: "translateX(-50%)",
+        position: "absolute", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)",
         width: 2, background: "var(--tl-now-line)"
       }} />
     </div>
   ) : null;
+  // v18.14.0 (H6): the pill rides the ruler, so "now" stays readable with the
+  // ruler stuck. The line under it stays with the rows.
+  const nowPill = nowInRange ? (
+    <div style={{
+      position: "absolute", top: 3, left: pct(nowMins), transform: "translateX(-50%)",
+      fontSize: T.micro, fontWeight: FW.semi, color: "var(--text-on-accent)",
+      background: "var(--tl-now-pill)",
+      padding: "2px 4px", borderRadius: R.pill, whiteSpace: "nowrap", zIndex: 11,
+      boxShadow: "var(--shadow-btn)"
+    }}>
+      {toTime(nowMins)}
+    </div>
+  ) : null;
+
+  // ── The sticky ruler (v18.14.0, H6) ──────────────────────────────────────
+  // Scrolled to tables 6–13 the ruler was 198px above the screen, so a booking
+  // late in the day could not be read against the clock. It sticks to the nearest
+  // scrollport, whichever that is: `main` with the lock on, a pane in a split, the
+  // body with it off, which is why this is not the Timeline owning its own
+  // vertical scroll: that needs a definite height, which only two of the three
+  // have, and it would have pinned the notification strip above the grid.
+  // Opaque (DESIGN.md: a surface that carries data), because rows pass under it.
+  // `top` is its own padding negated, so that gap scrolls away and the ticks sit
+  // at the very top. `data-sticky-top` is how a drag's edge scroll finds it.
+  const rulerPad = toolbarFolded ? SP.tight : SP.base;
+  const ruler = (
+    <div ref={rulerRef} data-sticky-top="" style={{
+      position: "sticky", top: -rulerPad, zIndex: 20, display: "flex",
+      paddingTop: rulerPad, background: "var(--tl-ruler-bg)"
+    }}>
+      <div style={{
+        width: LABEL_W + "px", flexShrink: 0,
+        height: 24,   /* @canvas */ background: "var(--tl-header-strip)",
+        borderRadius: "6px 0 0 0",
+        borderBottom: "2px solid var(--tl-header-border)",
+        boxSizing: "border-box"
+      }} />
+      {/* The same side padding and the same inner width as the grid's scroller, so
+          the two share a scroll range and one scrollLeft means one minute. */}
+      <div ref={rulerClipRef} style={{ flex: 1, minWidth: 0, overflow: "hidden", padding: "0 8px" }}>
+        <div style={{
+          width: gridW + "px", minWidth: "100%", transition: "width " + M.shift,
+          position: "relative",
+          borderBottom: "2px solid var(--tl-header-border)",
+          background: "var(--tl-header-strip)",
+          borderRadius: "0 6px 0 0",
+          height: 24,   /* @canvas */ overflow: "visible", boxSizing: "border-box"
+        }}>
+          {headerLines}
+          <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, borderLeft: "2px solid var(--tl-gridline-hour)" }} />
+          {headerLabels}
+          {nowPill}
+        </div>
+      </div>
+    </div>
+  );
 
   // ── Grid column (right, scrollable) ──────────────────────────────────────
   const gridCol = (
@@ -2161,9 +2232,10 @@ export const TimelineView = memo(function TimelineView({
       tabIndex={-1}
       className="mgt-tl-scroll"
       // v14.3.1 (Fix 3): pad the scroller so a hover-scaled block at the grid
-      // edges (first/last minute, top/bottom row) doesn't clip on any side.
-      // labelCol gets a matching paddingTop so its rows stay aligned with the grid.
-      style={{ flex: 1, overflowX: "auto", overflowY: "hidden", padding: 8 }}
+      // edges (first/last minute, bottom row) doesn't clip on any side. No top
+      // pad since v18.14.0: the top row's lift stays inside its 3px gutter, and
+      // the ruler above is what a pad would separate it from.
+      style={{ flex: 1, overflowX: "auto", overflowY: "hidden", padding: "0 8px 8px" }}
     >
       {/* v15.8.0: width transitions so a zoom change (+/− / 1× / Follow) eases to
           the new scale. Blocks/gridlines are %-positioned against this width, so
@@ -2175,17 +2247,6 @@ export const TimelineView = memo(function TimelineView({
       {/* v18.3.0 (M1): `data-flip-root` lets a dropped block find this
           container without a second ref, to seed its release position. */}
       <div ref={flipRef} data-flip-root="" style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width " + M.shift }}>
-        <div style={{
-          position: "relative",
-          borderBottom: "2px solid var(--tl-header-border)",
-          background: "var(--tl-header-strip)",
-          borderRadius: "0 6px 0 0",
-          height: 24,   /* @canvas */ overflow: "visible", boxSizing: "border-box"
-        }}>
-          {headerLines}
-          <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, borderLeft: "2px solid var(--tl-gridline-hour)" }} />
-          {headerLabels}
-        </div>
         {unplacedGrid}
         {gridRows}
         {nowLine}
@@ -2298,6 +2359,7 @@ export const TimelineView = memo(function TimelineView({
           The `null` on the false branch is what lets the exit animate at all
           (Reveal caches only truthy children and collapses that cache). */}
       <Reveal show={isEmpty}>{isEmpty ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}</Reveal>
+      {ruler}
       <div style={{ display: "flex" }}>
         {labelCol}
         {gridCol}

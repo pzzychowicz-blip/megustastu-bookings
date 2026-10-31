@@ -70,5 +70,23 @@ export function scrollBounds(sc) {
     const br = bar.getBoundingClientRect();
     if (br.height > 0) bottom = Math.min(bottom, br.top);
   }
+  // v18.14.0 (H6): and the top starts under a stuck ruler, the same reasoning:
+  // the top row a finger can see must be in the band. Only while it IS stuck:
+  // at rest it is somewhere down the page, with the band's job still ahead of it.
+  const stuck = (sc.querySelector ? sc.querySelector("[data-sticky-top]") : null);
+  if (stuck) {
+    const sr = stuck.getBoundingClientRect();
+    if (sr.top <= top + 1 && sr.bottom > top) top = sr.bottom;
+  }
   return { top, bottom };
+}
+
+// Which y to look a table row up at (v18.14.0, H6). A row passing under the stuck
+// ruler is still in the geometry, so a finger resting on the ruler would land a
+// drop on a row it cannot see. While the ruler is stuck (the grid's top has gone
+// up behind it) the finger counts as being just under it. At rest nothing changes,
+// so above the grid is still nowhere: that is how a drag is called off.
+export function rowProbeY(clientY, rulerBottom, gridTop) {
+  if (rulerBottom == null || !(rulerBottom > gridTop + 1)) return clientY;
+  return Math.max(clientY, rulerBottom);
 }

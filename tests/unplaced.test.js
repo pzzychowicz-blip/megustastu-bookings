@@ -130,7 +130,7 @@ describe("the surfaces read the ONE rule", () => {
   it("the drop target starts the table rows at the Unplaced box's LIVE bottom (v18.3.2, O4)", () => {
     // `unplacedH` is where the box is heading; while it eases, only its live
     // bottom says where the rows are, or a drop lands a row off.
-    expect(Timeline).toMatch(/const top = u \? u\.getBoundingClientRect\(\)\.bottom : el\.getBoundingClientRect\(\)\.top \+ 24 \+ unplacedH;/);
+    expect(Timeline).toMatch(/const top = u \? u\.getBoundingClientRect\(\)\.bottom : gridTop \+ unplacedH;/);
     expect(Timeline).toMatch(/const unplacedH = unplacedHeight\(unplacedLanes\.length, ROW_H, UNPLACED_GAP\);/);
   });
 

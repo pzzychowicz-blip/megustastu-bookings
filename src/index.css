@@ -374,6 +374,10 @@
   --tl-row-border: rgba(180, 190, 210, 0.2);      /* between table rows */
   --tl-header-border: rgba(180, 190, 210, 0.3);   /* under the time-axis strip */
   --tl-header-strip: rgba(220, 225, 235, 0.45);   /* the label-col + axis header bg */
+  /* v18.14.0 (H6): the sticky ruler's ground. --tl-card-bg over --bg-app, made
+     opaque because rows pass under it. Both themes' values are what their
+     Increase Contrast rule already gives the card, so that rule needs no line. */
+  --tl-ruler-bg: #eef1f7;
   --tl-hour-pill: rgba(90, 100, 120, 0.9);        /* time labels (white text) */
   --tl-now-pill: rgba(0, 0, 0, 0.9);              /* now-time label */
   --tl-now-line: rgba(0, 0, 0, 0.6);              /* the vertical now line */
@@ -783,6 +787,7 @@
   --tl-row-border: rgba(255, 255, 255, 0.07);
   --tl-header-border: rgba(255, 255, 255, 0.1);
   --tl-header-strip: rgba(255, 255, 255, 0.06);
+  --tl-ruler-bg: #212327;
   --tl-hour-pill: rgba(90, 100, 120, 0.85);
   /* v17.8.0 review fix: was rgba(10,132,255,.95) — the dark --accent,
      copied. White 10px on it measured 3.91:1, the one --tl-* pill that
@@ -924,6 +929,8 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   html.mgt-scroll-lock body { overflow: hidden !important; }
 }
 body {
+  /* v18.14.0: clears the Timeline's sticky ruler (SCROLL_CLEAR_RULER, constants.js). */
+  scroll-padding-top: 32px;
   background: var(--bg-app);
   min-height: 100dvh;
   color: var(--text-primary);

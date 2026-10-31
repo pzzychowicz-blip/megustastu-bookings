@@ -1640,6 +1640,24 @@ the keyboard goes.
   list (two panes), the conversation's chips and actions, the linked booking, the
   request banner and the draft. The thread and the reply box stay.
 
+### The sticky hour ruler (v18.14.0)
+Scrolled to tables 6–13 the ruler used to be 198px above the screen, so a late
+booking could not be read against the clock. It now sticks to the nearest scrollport,
+which is `main` with the lock on, a pane in a split, the body with it off: one
+mechanism in all three. The now-pill rides it; the now-line stays with the rows.
+
+- **A strip of its own above the rows**, not part of the grid, because the grid's
+  horizontal scroller clips both axes. An inner is held at the grid's `scrollLeft`,
+  so during a fast fling it can trail by a frame and settles at rest.
+- **Opaque**, `--tl-ruler-bg`, because rows pass under it: the card's fill over the
+  page, written out. A surface that carries data is opaque.
+- **The scrollports carry no top padding**, a spacer child instead. Chrome measures
+  sticky from inside that padding, which showed a sliver of rows above the ruler.
+- **A dragged block paints above it** (z 30 against 20), and a drop never lands on a
+  row hidden under it.
+- The notification strip still scrolls away, Patryk's v17.5.0 decision. A swipe that
+  starts on the ruler does not pan the grid.
+
 ### The compact layout (v18.14.0)
 Below 640px tall on anything that is not a phone (`isCompact`, `lib/compact-shell.js`)
 the shell gives its height to the grid. The tablet on the pass is 998 × 507 with
