@@ -25,8 +25,8 @@
 // ONE ResizeObserver, on the ROW: a line break always changes the row's height
 // (one line against two), and a width change is the other way a break
 // happens, so the row's box is the one thing whose size moves whenever the
-// answer can. Every other notification — the Summary opening, a resize that
-// breaks nothing — measures and hands back the same object, which React drops.
+// answer can. Every other notification, such as a resize that breaks nothing,
+// measures and hands back the same object, which React drops.
 //
 // `useLayoutEffect`, so the first answer lands before the first paint.
 

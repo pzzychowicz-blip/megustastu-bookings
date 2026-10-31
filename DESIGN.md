@@ -504,6 +504,14 @@ explaining why is usually the one to read.
   200px over ~138px of text, so the slot (which measures content) and the
   card's own row (which broke on the basis) disagreed from about 784 to 846px,
   and the two-line card came back there.
+  **Its opened body is a row of its own (v18.14.0, L5).** It used to open inside
+  the slot, so the lid's row grew to the body's height and the space under the
+  date controls stood empty, and the controls hopped up 9px to meet it. The body
+  now portals into a slot under the date row, full width: the lid and the
+  controls hold still, the empty area is gone, and Print and More stay reachable
+  on the tablet. Patryk's default accepted with the plan, and the cost is honest:
+  open, the Summary reads as two pieces, and the same content takes about 22px
+  more height at 998 × 507 than the one tall card did.
 - **The view switcher keeps its own place in the header (v18.2.0 phase 64).**
   Phase 23 measured the Summary card's left edge and glided Timeline / List /
   Plan sideways to stand over it whenever the Summary's width changed (the

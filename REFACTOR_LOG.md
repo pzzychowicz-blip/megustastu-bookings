@@ -38640,3 +38640,27 @@ beside it. Its `aria-label` leads with the same words.
 
 **Files:** `TimelineZoomControls.jsx`, `tests/a11y.test.js`.
 
+### L5: the Summary's body gets its own row
+
+The opened body sat inside the slot beside the date controls. It stretched the row by 174px at 998 × 507, all of
+it empty under the controls, and the controls hopped up 9px on a tall screen to get out of the way. It now portals
+into a slot under the date row, at full width. The lid and the controls hold still, because the row's height no
+longer moves, so `summaryOpen` left the drop's gate. The slot carries `inert={anyModal}` itself, since a portal
+leaves the row's `inert` behind.
+
+| Reading | Before | After |
+|---|---|---|
+| Date controls on opening, 998 × 800 | 78 → 69 | **78 → 78** |
+| Same at 998 × 507 and 998 × 570 | 56 → 56 | 56 → 56 |
+| Lid on opening, 507 · 570 · 800 | 58 → 57 · not read · 80 → 80 | **58 → 58 · 58 → 58 · 80 → 80** |
+| Left edge of the hourly bars at 507 | 384 | **31** |
+| `main`'s top at 507, closed → open | 104 → 278 | 104 → **300** |
+| Ease of `main`, 3 runs each way at 507 and 570 | | 18.4px per frame at most, one dropped frame aside, lid and nav still throughout |
+| Phone, 390 × 800, open and close | | lid 167, nav 108, both still, `main` 270 ↔ 540 |
+| Horizontal page overflow, open | | none |
+| Print and More behind a modal | | inert, and live again after it |
+
+That 22px is the cost, and so is the look: open, the Summary reads as two pieces. Both were the plan's stated
+default, the only shape that loses the empty area and keeps the lid under the finger.
+
+**Files:** `Summary.jsx`, `App.jsx`, `useSharesLine.js`, `tests/date-row.test.js`.

@@ -504,6 +504,10 @@ const CHROME_BTN={
 };
 
 // ── How far the date controls sit below the top of their row (v17.9.1) ────────
+// v18.14.0 (L5): the card no longer grows when the Summary opens (its body has a row
+// of its own), so the drop below is simply constant: "open" is gone from this rule
+// and the 9px shift with it. What follows is how it got here.
+//
 // The date-nav row's height is set by the Summary card beside the controls: 58px
 // collapsed, ~210 open. The controls are 40. So "centred while collapsed" is
 // exactly (58 - 40) / 2 = 9px below the top, and "aligned to the header" when
@@ -3568,6 +3572,9 @@ export function BookingApp({uid}){
     setView(v);
   }
 
+  // v18.14.0 (L5): where the Summary's opened body draws, the row under the date
+  // row. State, not a ref: the Summary is memoised and has to hear when it exists.
+  const [summaryBodySlot,setSummaryBodySlot]=useState(null);
   const summaryPanel=<Summary
     bookings={bookings}
     date={viewDate}
@@ -3575,6 +3582,7 @@ export function BookingApp({uid}){
     shiftsEnabled={dayShifts.enabled}
     isToday={viewDate===todayStr()}
     open={summaryOpen}
+    bodySlot={summaryBodySlot}
     freeing={freeingList}
     hoursSig={hoursSig}
     layoutSig={layout}
@@ -3621,7 +3629,7 @@ export function BookingApp({uid}){
   // over the Summary card's left edge. Phase 23's `useAlignLeft` did that, and
   // in use the sideways movement did not look good; the switcher keeps its own
   // place in the header.
-  const dateCtrlShift=(compact||summaryLine.same!==true||summaryOpen)?"none":"translateY("+DATE_CTRL_DROP+"px)";
+  const dateCtrlShift=(compact||summaryLine.same!==true)?"none":"translateY("+DATE_CTRL_DROP+"px)";
   const dateCtrlMotion=summaryLine.settled?"transform "+M.shift:"none";
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
@@ -3852,18 +3860,15 @@ export function BookingApp({uid}){
              flush against the top of the row with 18px of dead space beneath —
              measured, not eyeballed. Centring fixes that.
 
-             But the alignment has to FLIP when the summary expands: the summary
-             is what drives this row's height, and at ~210px open, centred date
-             controls float into the vertical middle of a tall panel, visually
-             detached from the header above them. Open ⇒ back to the top, which
-             is where a control that is not the tall thing belongs.
-
-             v17.9.1: the intent above is unchanged; the MECHANISM is. The row is
-             pinned to flex-start and the controls carry the offset themselves as
-             a transitioned transform (DATE_CTRL_DROP), because flipping
+             v17.9.1: the row is pinned to flex-start and the controls carry the
+             offset themselves as a transform (DATE_CTRL_DROP), because flipping
              `alignItems` re-resolved the position against whatever height the
-             row happened to have in that one frame — which, on collapse, was
-             still the open height. See DATE_CTRL_DROP for the numbers. */
+             row happened to have in that one frame.
+
+             v18.14.0 (L5): nothing flips any more. The opened Summary used to
+             grow this row, so the controls went back to the top on opening;
+             its body now lives in the slot under this row, the row's height
+             never moves, and the drop holds. See DATE_CTRL_DROP for the numbers. */
           inert={anyModal}
           ref={dateRowRef}
           style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:compact?8:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" ref={dateNavRef} style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:dateCtrlMotion}}><button
@@ -3914,12 +3919,12 @@ export function BookingApp({uid}){
               otherwise (Patryk's choice). A phone needs no case of its own: the
               one-line width never fits beside the controls there, and alone on
               its line the card shrinks (minWidth 0) and wraps inside, as before.
-              The opened body is kept out of that width (`contain`, Summary.jsx),
-              or opening the Summary could bounce it onto the next line. */}<div ref={summarySlotRef} style={{flexGrow:1,flexShrink:1,flexBasis:"auto",minWidth:0}}>{summaryPanel}</div>{/* v17.9.0: the 🔍/⚙ pair that lived here since v17.0.0 round 8 is
+              v18.14.0 (L5): the opened body draws in its own row below, so it is
+              not in that width at all and the card here never changes height. */}<div ref={summarySlotRef} style={{flexGrow:1,flexShrink:1,flexBasis:"auto",minWidth:0}}>{summaryPanel}</div>{/* v17.9.0: the 🔍/⚙ pair that lived here since v17.0.0 round 8 is
               gone — both buttons moved up into the header row above, each to the
               thing it acts on (see CHROME_BTN). The pair was created to give all
               three views ONE copy of these controls, and that still holds: the
-              header is no less shared than the date-nav row was. */}</div>{/* v17.5.0: in the fixed shell everything from here down lives in ONE
+              header is no less shared than the date-nav row was. */}</div><div ref={setSummaryBodySlot} inert={anyModal} style={{flexShrink:0}} />{/* v17.5.0: in the fixed shell everything from here down lives in ONE
             scroll region, so the two rows above stay pinned. The banners scroll
             away with the content — they're the pinning scope Patryk chose, and
             several open at once (a 3+ row late banner) would eat the viewport.

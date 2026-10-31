@@ -20,6 +20,7 @@
 // v14.6.0.
 
 import { useMemo, memo } from "react";
+import { createPortal } from "react-dom";
 import { daySummary, countLabel, depositSummary, depositParts } from "../lib/booking-logic";
 import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC, SP, H } from "../lib/constants";
 import { mkBtn, Reveal, TBadge } from "./atoms";
@@ -61,7 +62,7 @@ function FreeingEntry({ f }) {
 // so it used to re-render on every BookingApp render. Function props are App's
 // stable VA wrappers; hoursSig/layoutSig are identity-only props that bust the
 // memo on an hours/layout edit (hoursFor + TOTAL_SEATS are live bindings).
-export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, unplacedCount = 0, currency, onToggle, onOpenWeek, onPrint, onSpecialHours, compact = false, showOptimiser = false, autoOptimizer = true, setAutoOptimizer, onReshuffle }) {
+export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, unplacedCount = 0, currency, onToggle, onOpenWeek, onPrint, onSpecialHours, compact = false, showOptimiser = false, autoOptimizer = true, setAutoOptimizer, onReshuffle , bodySlot = null}) {
   // v17.1.0 perf: Summary lives in the always-visible date-nav row, so this
   // used to walk all bookings on EVERY BookingApp render; memoized.
   const s = useMemo(() => daySummary(bookings, date, splitHour), [bookings, date, splitHour]);
@@ -80,7 +81,123 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
   const showShifts = shiftsEnabled !== false && splitInWindow; // Shifts toggle (Settings → General → Shifts)
   const maxHourCovers = s.hours.reduce(function(m, h){ return Math.max(m, h.covers); }, 0) || 1;
 
+  // Expanded body — shift chips + hourly bars. Wrapped in Reveal (v15.8.0) so the
+  // panel eases open/closed instead of snapping the column below it. Its margin is
+  // inside the Reveal, so the gap under it eases too, and a closed body takes no
+  // height at all.
+  //
+  // v18.14.0 (L5): its own full-width card, in a slot App keeps under the date row,
+  // rather than the bottom of this one. It used to stretch this card down, which
+  // left the area under the date controls empty and moved them 9px to stay centred
+  // against the taller card. `bodySlot` is null for a caller with no slot, which
+  // draws it in place.
+  const body = (
+    <Reveal show={open}>
+      <div style={{
+        padding: "12px 14px 14px", marginBottom: compact ? SP.base : SP.wide,
+        background: "var(--bg-soft)", border: "1px solid var(--border-soft)",
+        borderRadius: R.card, boxShadow: "var(--shadow-soft)"
+      }}>
+        {hasData ? (
+          <div>
+            {showShifts ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                <ShiftChip label={"Afternoon " + hh(dh.open) + "–" + hh(splitHour)} covers={s.afternoon.covers} count={s.afternoon.count} />
+                <ShiftChip label={"Evening " + hh(splitHour) + "–" + hh(dh.close)} covers={s.evening.covers} count={s.evening.count} />
+              </div>
+            ) : null}
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {s.hours.map(function(h){
+                return (
+                  <div key={h.hour} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: T.body }}>
+                    <span style={{ color: "var(--text-secondary)", fontWeight: FW.medium, minWidth: LABEL_COL, flexShrink: 0 }}>
+                      {hh(h.hour) + "–" + hh(h.hour + 1)}
+                    </span>
+                    <div style={{ flex: 1, height: 7, background: "var(--bg-input)", borderRadius: 4,   /* @canvas */  overflow: "hidden", minWidth: 40 }}>
+                      <div style={{ width: ((h.covers / maxHourCovers) * 100) + "%", height: "100%", background: "var(--accent)", opacity: 0.8, borderRadius: 4,   /* @canvas */ }} />
+                    </div>
+                    <span style={{ color: "var(--text-primary)", fontWeight: FW.bold, minWidth: 70, textAlign: "right", flexShrink: 0 }}>
+                      {coversLabel(h.covers)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: T.body, color: "var(--text-muted)", padding: "4px 0 2px" }}>No bookings for this day.</div>
+        )}
+        {/* v18.5.0 (Patryk): the day's deposits, under the hourly bars. Shown
+            only on a day that has one, and a side with nothing is left out.
+            Outside the `hasData` branch on purpose: a day whose only booking
+            was cancelled reads "No bookings for this day." and can still
+            hold a forfeited deposit. Laid out as one more row of the bars:
+            the label in the hour column, the figures beside it. Each part is
+            its own no-wrap unit, so a narrow panel puts "forfeited" under
+            "held" in the same column, and no separator is drawn that a wrap
+            could leave at the start of a line. The words are `depositParts`,
+            which the printed day sheet joins into its own header line. */}
+        {depParts.length ? (
+          <div style={{ display: "flex", alignItems: "baseline", gap: SP.base, marginTop: SP.wide, fontSize: T.body }}>
+            <span style={{ color: "var(--text-secondary)", fontWeight: FW.medium, minWidth: LABEL_COL, flexShrink: 0 }}>Deposits</span>
+            <div style={{ display: "flex", flexWrap: "wrap", columnGap: SP.wide, rowGap: SP.hair, minWidth: 0, color: "var(--text-muted)" }}>
+              {depParts.map(function(p){
+                return (
+                  <span key={p.key} style={{ whiteSpace: "nowrap" }}>
+                    <span style={{ color: "var(--text-primary)", fontWeight: FW.bold }}>{p.amount}</span>
+                    {" " + p.word + " (" + p.count + ")"}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+        {/* The day's two actions, right-aligned: print it, or step back and
+            look at the week/month around it. More takes Print's exact button
+            shape rather than the 36px/T.small one it wore in the header —
+            two buttons sharing a row that disagree on height and type size
+            read as one control and one afterthought. */}
+        {onPrint || onOpenWeek || onSpecialHours || showOptimiser ? (
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+            {/* v18.14.0 (H7): where the Optimiser goes on a short screen, while
+                Follow and zoom take the header. Left, so the day's own actions
+                keep their places at the right. */}
+            {showOptimiser ? (
+              <div style={{ marginRight: "auto" }}>
+                <OptimiserControls autoOptimizer={autoOptimizer} setAutoOptimizer={setAutoOptimizer} onReshuffle={onReshuffle} />
+              </div>
+            ) : null}
+            {/* v18.10.0: this date's own hours — a special day (closed, or
+                other hours) through SpecialDayModal. Only for `hoursEdit`
+                (App passes null otherwise). First, so Print and More keep
+                their places at the right. */}
+            {onSpecialHours ? (
+              <button
+                onClick={onSpecialHours}
+                className="mgt-hover-scale mgt-press"
+                style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.nav })}>Hours for this day</button>
+            ) : null}
+            {onPrint ? (
+              <button
+                onClick={onPrint}
+                className="mgt-hover-scale mgt-press"
+                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={IC.control} />Print</button>
+            ) : null}
+            {onOpenWeek ? (
+              <button
+                onClick={onOpenWeek}
+                title="Week & month at a glance (M)"
+                className="mgt-hover-scale mgt-press"
+                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav })}>More</button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </Reveal>
+  );
+
   return (
+    <>
     <div
       /* v17.9.1 (Patryk): a tint, not a lift — "friendlier for the user". The
          Summary is a PANEL holding a toggle, a chevron, Print and More, so it is
@@ -205,118 +322,9 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
           </button>
         </div>
       </div>
-
-      {/* Expanded body — shift chips + hourly bars. Wrapped in Reveal (v15.8.0)
-          so the panel eases open/closed instead of snapping the column below
-          it (the outer panel is overflow:hidden, so the collapse won't spill).
-
-          v18.2.0: `contain: inline-size` keeps the body out of the panel's
-          INTRINSIC width. App's date-nav row sizes this panel by its one-line
-          width (flexBasis "auto") to decide whether it fits beside the date
-          controls, and that width must be the HEADER's: the body only exists
-          while open, and it is the wider of the two on a day that is not
-          today (measured: ~388px against a ~270px header), so counting it
-          would move the panel onto the next line the moment it opened. Laid
-          out, the body still takes the panel's full width. */}
-      <Reveal show={open} style={{ contain: "inline-size" }}>
-        <div style={{ padding: "2px 14px 14px" }}>
-          {hasData ? (
-            <div>
-              {showShifts ? (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                  <ShiftChip label={"Afternoon " + hh(dh.open) + "–" + hh(splitHour)} covers={s.afternoon.covers} count={s.afternoon.count} />
-                  <ShiftChip label={"Evening " + hh(splitHour) + "–" + hh(dh.close)} covers={s.evening.covers} count={s.evening.count} />
-                </div>
-              ) : null}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {s.hours.map(function(h){
-                  return (
-                    <div key={h.hour} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: T.body }}>
-                      <span style={{ color: "var(--text-secondary)", fontWeight: FW.medium, minWidth: LABEL_COL, flexShrink: 0 }}>
-                        {hh(h.hour) + "–" + hh(h.hour + 1)}
-                      </span>
-                      <div style={{ flex: 1, height: 7, background: "var(--bg-input)", borderRadius: 4,   /* @canvas */  overflow: "hidden", minWidth: 40 }}>
-                        <div style={{ width: ((h.covers / maxHourCovers) * 100) + "%", height: "100%", background: "var(--accent)", opacity: 0.8, borderRadius: 4,   /* @canvas */ }} />
-                      </div>
-                      <span style={{ color: "var(--text-primary)", fontWeight: FW.bold, minWidth: 70, textAlign: "right", flexShrink: 0 }}>
-                        {coversLabel(h.covers)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div style={{ fontSize: T.body, color: "var(--text-muted)", padding: "4px 0 2px" }}>No bookings for this day.</div>
-          )}
-          {/* v18.5.0 (Patryk): the day's deposits, under the hourly bars. Shown
-              only on a day that has one, and a side with nothing is left out.
-              Outside the `hasData` branch on purpose: a day whose only booking
-              was cancelled reads "No bookings for this day." and can still
-              hold a forfeited deposit. Laid out as one more row of the bars:
-              the label in the hour column, the figures beside it. Each part is
-              its own no-wrap unit, so a narrow panel puts "forfeited" under
-              "held" in the same column, and no separator is drawn that a wrap
-              could leave at the start of a line. The words are `depositParts`,
-              which the printed day sheet joins into its own header line. */}
-          {depParts.length ? (
-            <div style={{ display: "flex", alignItems: "baseline", gap: SP.base, marginTop: SP.wide, fontSize: T.body }}>
-              <span style={{ color: "var(--text-secondary)", fontWeight: FW.medium, minWidth: LABEL_COL, flexShrink: 0 }}>Deposits</span>
-              <div style={{ display: "flex", flexWrap: "wrap", columnGap: SP.wide, rowGap: SP.hair, minWidth: 0, color: "var(--text-muted)" }}>
-                {depParts.map(function(p){
-                  return (
-                    <span key={p.key} style={{ whiteSpace: "nowrap" }}>
-                      <span style={{ color: "var(--text-primary)", fontWeight: FW.bold }}>{p.amount}</span>
-                      {" " + p.word + " (" + p.count + ")"}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-          {/* The day's two actions, right-aligned: print it, or step back and
-              look at the week/month around it. More takes Print's exact button
-              shape rather than the 36px/T.small one it wore in the header —
-              two buttons sharing a row that disagree on height and type size
-              read as one control and one afterthought. */}
-          {onPrint || onOpenWeek || onSpecialHours || showOptimiser ? (
-            <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-              {/* v18.14.0 (H7): where the Optimiser goes on a short screen, while
-                  Follow and zoom take the header. Left, so the day's own actions
-                  keep their places at the right. */}
-              {showOptimiser ? (
-                <div style={{ marginRight: "auto" }}>
-                  <OptimiserControls autoOptimizer={autoOptimizer} setAutoOptimizer={setAutoOptimizer} onReshuffle={onReshuffle} />
-                </div>
-              ) : null}
-              {/* v18.10.0: this date's own hours — a special day (closed, or
-                  other hours) through SpecialDayModal. Only for `hoursEdit`
-                  (App passes null otherwise). First, so Print and More keep
-                  their places at the right. */}
-              {onSpecialHours ? (
-                <button
-                  onClick={onSpecialHours}
-                  className="mgt-hover-scale mgt-press"
-                  style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.nav })}>Hours for this day</button>
-              ) : null}
-              {onPrint ? (
-                <button
-                  onClick={onPrint}
-                  className="mgt-hover-scale mgt-press"
-                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={IC.control} />Print</button>
-              ) : null}
-              {onOpenWeek ? (
-                <button
-                  onClick={onOpenWeek}
-                  title="Week & month at a glance (M)"
-                  className="mgt-hover-scale mgt-press"
-                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav })}>More</button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </Reveal>
     </div>
+    {bodySlot ? createPortal(body, bodySlot) : body}
+    </>
   );
 });
 
