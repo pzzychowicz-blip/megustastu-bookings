@@ -39808,6 +39808,19 @@ drawing that turns on `M.move`, the notification strip's speed, as Patryk chose.
 **Files:** `atoms.jsx` (`TurnChevron`), `BookingFormModal.jsx`, `CustomersSettings.jsx`, `Summary.jsx`, `VouchersSettings.jsx`,
 `whatsapp/ConversationView.jsx`, `tests/turn-chevron.test.js` (new), `tests/summary-freeing.test.js`.
 
+**Correction 31: the country menu fades both ways.** It arrived and went in one frame, with its 249 rows. It takes `mgt-pop-in` and
+`mgt-pop-out` now, the pair for a popover anchored to its trigger, from the corner under the pill: opacity 0 → 1 in about 220ms, and back
+on Escape, on a tap on the pill, on a pick and on a press outside it.
+
+It does not use `Presence`, which is the obvious tool and mounts a commit after its `show`. The search box has to take focus inside the
+tap or iOS opens no keyboard, and the effect that scrolls to the current country would find no list. So the menu keeps its own `leaving`,
+a few lines long. Three things a plain exit would have broken, each measured: the list holds its filter for the exit (3 rows stay 3,
+and `q` clears when it ends), Escape still closes only the menu, with focus back on the pill and the form open, and the leaving copy is
+inert, so Tab goes to the number field rather than into a list about to vanish. The form's name and phone suggestions are left as they
+are: they answer typing, and Patryk's choice named this menu.
+
+**Files:** `CountryPicker.jsx`, `tests/country-menu.test.js` (new).
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

@@ -28,7 +28,8 @@
 // finger landed on.
 
 import { useState, useRef, useEffect, useId } from "react";
-import { S, T, FW, SP, IC } from "../lib/constants";
+import { S, T, FW, SP, IC, EXIT_MS } from "../lib/constants";
+import { afterFrame } from "../lib/after-frame";
 import { mkInp } from "./atoms";
 import { ChevronDownIcon, CheckIcon } from "./Icons";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
@@ -46,6 +47,12 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
+  // v18.14.0 (correction 31, Patryk): the menu fades in and out, on the pair for a
+  // popover anchored to its trigger. Not `Presence`, which mounts a commit after its
+  // `show`: the search box has to take focus inside the tap or iOS opens no keyboard.
+  // The list stays as it is for the exit, so `q` clears when that ends, and the
+  // leaving copy is inert, so neither a tap nor a Tab can land in it.
+  const [leaving, setLeaving] = useState(false);
   const rootRef = useRef(null);
   const btnRef = useRef(null);
   const listRef = useRef(null);
@@ -66,9 +73,13 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
 
   function close(refocus) {
     setOpen(false);
-    setQ("");
+    setLeaving(true);
     if (refocus && btnRef.current) btnRef.current.focus();
   }
+  useEffect(function () {
+    if (!leaving) return undefined;
+    return afterFrame(function () { setLeaving(false); setQ(""); }, EXIT_MS);
+  }, [leaving]);
   function pick(c) {
     onPick(c.iso);
     close(true);
@@ -78,6 +89,8 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
     // Start on the current country, so Enter without moving is a no-op.
     const at = rows.findIndex(function (r) { return cur && r.c.iso === cur.iso; });
     setActive(at < 0 ? 0 : at);
+    setLeaving(false);
+    setQ("");
     setOpen(true);
   }
 
@@ -138,8 +151,8 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
         </> : <span style={{ color: "var(--field-prompt)" }}>Code</span>}
         <span aria-hidden="true" style={{ color: S.muted, display: "flex" }}><ChevronDownIcon size={IC.inline} /></span>
       </button>
-      {open ? (
-        <div style={Object.assign({}, AC_MENU, { display: "flex", flexDirection: "column", overflowY: "hidden", maxHeight: 320 /* @canvas the search box plus AC_MENU's 264 of list */ })}>
+      {open || leaving ? (
+        <div className={open ? "mgt-pop-in" : "mgt-pop-out"} inert={!open} style={Object.assign({}, AC_MENU, { transformOrigin: "top left", display: "flex", flexDirection: "column", overflowY: "hidden", maxHeight: 320 /* @canvas the search box plus AC_MENU's 264 of list */ })}>
           <div style={{ padding: SP.base, borderBottom: "1px solid var(--border-soft)", flexShrink: 0 }}>
             <input
               autoFocus
