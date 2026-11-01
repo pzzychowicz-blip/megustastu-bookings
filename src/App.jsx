@@ -68,7 +68,7 @@ import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStac
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { dueOccurrences, withOccurrences } from "./lib/recurring";
-import { planDelete, planUndo, planCustomerDelete, withUndoDelta } from "./lib/delete-undo";
+import { planDelete, planUndo, planCustomerDelete, withUndoDelta, deleteWords, cancelWords } from "./lib/delete-undo";
 import { CONFIRM_MODALS, markArmed, armSettled } from "./lib/arm-guard";
 import { planSettle, settleEffects, carryTransform } from "./lib/voucher-settle";
 import { useSchemaGate } from "./hooks/useSchemaGate";
@@ -3746,13 +3746,15 @@ export function BookingApp({uid}){
   }
   const printModal=<ModalPresence show={!!printAsk}>{printAsk?<Suspense fallback={null}><PrintModal range={printAsk} onPrint={doPrint} onClose={function(){setPrintAsk(null);}} /></Suspense>:null}</ModalPresence>;
 
-  const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
+  const delBooked=confirmDel?bookings.find(function(b){return b.id===confirmDel;}):null;
+  const cancelBooked=confirmCancel?bookings.find(function(b){return b.id===confirmCancel;}):null;
+  const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay /* @static-height one sentence, worked out when it opens, and two buttons */ onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
         style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
         onClick={function(){setConfirmDel(null);}}>Back</button><button
         onClick={function(){if(armSettled())delBooking(confirmDel);}}
         className="mgt-hover-scale"
-        style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This can't be undone. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence>;
+        style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{deleteWords(delBooked,generalSettings.undoSecs||10,autoOptimizer)}</div></Overlay>:null}</ModalPresence>;
 
   // v17.5.0: the ONE discard confirm, shared by the booking form, the walk-in
   // form and ManualModal (requestClose* raise it; doDiscard commits).
@@ -4142,7 +4144,7 @@ export function BookingApp({uid}){
           onSave={addBlock}
           onRemove={removeBlock}
           onDirty={setBlockDirty}
-          onClose={requestCloseBlock} />:null}</ModalPresence><ModalPresence show={!!confirmCancel}>{confirmCancel?<Overlay /* @static-height one fixed sentence and three buttons */ onClose={function(){setConfirmCancel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+          onClose={requestCloseBlock} />:null}</ModalPresence><ModalPresence show={!!confirmCancel}>{confirmCancel?<Overlay /* @static-height one sentence, worked out when it opens, and three buttons */ onClose={function(){setConfirmCancel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmCancel(null);}}>Back</button><button
@@ -4151,7 +4153,7 @@ export function BookingApp({uid}){
               style={mkSolidBtn(BTN.orange,{display:"inline-flex",alignItems:"center",gap:6})}><NoShowIcon size={IC.control} />No show</button><button
               onClick={function(){if(!armSettled())return;doCancelBooking(confirmCancel,false);setShowForm(false);}}
               className="mgt-hover-scale"
-              style={mkSolidBtn(BLOCK_BG.cancelled)}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>The booking stays on the day, marked cancelled. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay /* @static-height one sentence, computed when it opens and not after */ onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={mkSolidBtn(BLOCK_BG.cancelled)}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{cancelWords(cancelBooked,autoOptimizer)}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay /* @static-height one sentence, computed when it opens and not after */ onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button

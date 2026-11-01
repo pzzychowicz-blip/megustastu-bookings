@@ -39637,6 +39637,22 @@ called in render with a closure makes the React Compiler give up on `BookingApp`
 **Files:** `lib/arm-guard.js`, `App.jsx`, `whatsapp/InboxPanel.jsx`, `tests/arm-guard.test.js`, `DESIGN.md`, `GLOSSARY.md`,
 `src/lib/CLAUDE.md`.
 
+**Correction 21: the Delete and Cancel confirms say what is true.** The audit of every red button read each confirm's
+sentence against what the code does, and two claims did not survive.
+
+| Sentence | What happens | Now |
+|---|---|---|
+| Delete: "This can't be undone." | The Undo pill arms straight after it, and restores the booking (measured) | "You can undo this for 20 seconds.", from the Undo setting; DEV's is 20 |
+| Delete and Cancel: "Tables will be re-optimised afterwards." | True only where the Optimiser is on. After 15:00 today `bookingsAfterAction`'s off path keeps every table | Shown only then |
+
+That second one was wrong in the evening, which is when most of these are tapped. `deleteWords` and `cancelWords`
+(`lib/delete-undo.js`) read the booking's own date, as both transforms do, because the off switch is today's alone. On the
+page: at 12:30 both dialogs carry the sentence, at 16:00 neither does. The inbox's bulk delete says Back instead of Cancel,
+like every other confirm, since in this app Cancel means cancel the booking. The other "permanently" and "can't be undone"
+sentences (a reminder, a conversation, Discard) were read against their code and are true.
+
+**Files:** `lib/delete-undo.js`, `App.jsx`, `whatsapp/InboxPanel.jsx`, `tests/delete-undo.test.js`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

@@ -8,7 +8,7 @@
 // in REFACTOR_LOG, since it needs the old code. These are the cases that stay:
 // one per outcome, each asserting what is ASKED or what is WRITTEN.
 import { describe, it, expect, vi } from "vitest";
-import { planDelete, planUndo, planCustomerDelete, withUndoDelta } from "../src/lib/delete-undo.js";
+import { planDelete, planUndo, planCustomerDelete, withUndoDelta, deleteWords, cancelWords } from "../src/lib/delete-undo.js";
 import { undoSnapshots } from "../src/lib/booking-logic.js";
 import { guestTagMap, guestTagsOf } from "../src/lib/customers.js";
 import { sanitizeVoucher } from "../src/lib/vouchers.js";
@@ -29,6 +29,32 @@ function del(id, bookings, more) {
     redeemAsked: false, vouchersOn: true, vouchersByCode: {},
   }, more || {}));
 }
+
+// v18.14.0 (correction 21, Patryk): a confirm says what is true.
+describe("what the Delete and Cancel confirms say", () => {
+  const today = todayStr();
+  const TABLES = " Tables will be re-optimised afterwards.";
+  it("Delete names the Undo it is about to offer, for as long as the setting says", () => {
+    expect(deleteWords({ date: today }, 10, true)).toBe("You can undo this for 10\u00a0seconds." + TABLES);
+    expect(deleteWords({ date: today }, 45, false)).toBe("You can undo this for 45\u00a0seconds.");
+  });
+  it("names the re-optimise only where it happens: today with the Optimiser off, it does not", () => {
+    expect(cancelWords({ date: today }, true)).toBe("The booking stays on the day, marked cancelled." + TABLES);
+    expect(cancelWords({ date: today }, false)).toBe("The booking stays on the day, marked cancelled.");
+  });
+  it("reads the booking's own date: the Optimiser's off switch is today's alone", () => {
+    expect(cancelWords({ date: "2099-01-01" }, false)).toContain(TABLES);
+  });
+  it("claims nothing about a booking it cannot find", () => {
+    expect(deleteWords(null, 10, true)).toBe("You can undo this for 10\u00a0seconds.");
+  });
+  it("is what App draws, and the old sentences are gone", () => {
+    const app = appCode();
+    expect(app).toContain("deleteWords(delBooked,generalSettings.undoSecs||10,autoOptimizer)");
+    expect(app).toContain("cancelWords(cancelBooked,autoOptimizer)");
+    expect(app).not.toContain("This can't be undone. Tables");
+  });
+});
 
 describe("planDelete", () => {
   it("removes the booking and nobody else", () => {

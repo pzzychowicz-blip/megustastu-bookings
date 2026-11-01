@@ -713,7 +713,7 @@ export function InboxPanel({
           <Overlay /* @static-height one sentence naming a count fixed when it opens, and two buttons */
             onClose={() => setConfirmBulkDelete(false)}
             footer={<div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
-              <button onClick={() => setConfirmBulkDelete(false)} className="mgt-hover-scale mgt-press" style={mkBtn({ background: BTN.quiet })}>Cancel</button>
+              <button onClick={() => setConfirmBulkDelete(false)} className="mgt-hover-scale mgt-press" style={mkBtn({ background: BTN.quiet })}>Back</button>
               <button onClick={() => { if (!armSettled()) return; setConfirmBulkDelete(false); runBulk("delete"); }} className="mgt-hover-scale mgt-press" style={mkDangerBtn()}><TrashIcon size={IC.control} />Delete {selected.size}</button>
             </div>}
           >

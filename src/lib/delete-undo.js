@@ -11,12 +11,29 @@
 // Moved verbatim apart from where the values come from, with the comments that
 // explain each rule. `todayStr()` is still read inside the undo's transform,
 // when the write runs, as it was.
-import { bookingsAfterAction, syncLiveDurations, applyUndo, histEntry as defaultHistEntry } from "./booking-logic.js";
+import { bookingsAfterAction, syncLiveDurations, applyUndo, histEntry as defaultHistEntry, countLabel, optimizerActiveFor } from "./booking-logic.js";
 import { memoByPrev } from "./booking-save.js";
 import { rehomeGuestTags, matchesIdentity, anonymizeBooking } from "./customers.js";
 import { rulesOfCustomer } from "./recurring.js";
 import { voucherHeld } from "./vouchers.js";
 import { todayStr } from "./day.js";
+
+// ── What the two confirms say ───────────────────────────────────────────────
+// v18.14.0 (correction 21, Patryk): these were fixed sentences, and two of their
+// claims were false. Delete said "This can't be undone" with an Undo pill armed
+// straight after it. Both said the tables would be re-optimised, which does not
+// happen where the Optimiser is off: `bookingsAfterAction`'s off path keeps
+// everyone's tables, and that is every evening, when most of these are tapped. The
+// date is the booking's own, as both transforms read it.
+function tablesLine(booking,autoOptimizer){
+  return booking&&optimizerActiveFor(booking.date,autoOptimizer)?" Tables will be re-optimised afterwards.":"";
+}
+export function deleteWords(booking,undoSecs,autoOptimizer){
+  return "You can undo this for "+countLabel(undoSecs,"second","seconds")+"."+tablesLine(booking,autoOptimizer);
+}
+export function cancelWords(booking,autoOptimizer){
+  return "The booking stays on the day, marked cancelled."+tablesLine(booking,autoOptimizer);
+}
 
 // ── planDelete ───────────────────────────────────────────────────────────────
 // ctx: {id, bookings, viewDate, tableBlocks, autoOptimizer, redeemAsked,
