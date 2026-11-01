@@ -1815,6 +1815,9 @@ shows its time.**
   `M.move`, because nobody pressed anything and the two are one change. Under the OS's
   reduced motion the widths snap and the colours and fades stay, like every other
   Reveal; "Reduce animations" takes all of it off. The print sheet draws none of this.
+  A List card's flags do the same (`FlagSlot`), with their 8px inside the slot, because
+  a flex gap stays beside a flag folded to nothing, and the box's negative margin hands
+  the last one's back, so the card's measured columns do not move.
 - **A typed 60-minute booking at 1×** (about 79px) has less room than the chip, which
   is cut at the handle rather than dropped. It is the one place a time is cut.
 

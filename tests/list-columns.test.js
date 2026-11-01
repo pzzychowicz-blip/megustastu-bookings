@@ -74,9 +74,19 @@ describe("the name row", () => {
   });
 
   it("the flags live INSIDE that box, after the unit — a third item on the row let a wrapped flag move the covers (x 222 against 208 at 375px)", () => {
-    expect(List).toMatch(/\{hasFlags \? \(\s*<div style=\{\{ \.\.\.NAME_CELL, flex: "1 1 " \+ FLAGS_MIN \+ "px", minWidth: 0, flexWrap: "wrap", gap: "4px 8px" \}\}>\s*\{depositTag\}/);
+    expect(List).toMatch(/<Reveal show=\{hasFlags\} style=\{\{ flex: "1 1 " \+ FLAGS_MIN \+ "px", minWidth: 0 \}\}>\s*<div style=\{\{ \.\.\.NAME_CELL, flexWrap: "wrap", rowGap: 4, marginRight: -FLAG_GAP \}\}>\s*<FlagSlot flag=\{depositTag\} \/>/);
     const box = List.slice(List.indexOf('flex: "1000 1 " + UNIT_W'));
-    expect(box.indexOf("<SBadge status={b.status} />")).toBeLessThan(box.indexOf("{hasFlags ? ("));
+    expect(box.indexOf("<SBadge status={b.status} />")).toBeLessThan(box.indexOf("<Reveal show={hasFlags}"));
+  });
+
+  // v18.14.0 (correction 25, Patryk): each flag eases, and the columns stay put.
+  it("every flag holds a slot, and its gap folds with it", () => {
+    const flags = List.slice(List.indexOf("<Reveal show={hasFlags}"), List.indexOf("</Reveal>", List.indexOf("<Reveal show={hasFlags}")));
+    ["depositTag", "voucherTag", "zoneTag", "prefTag", "lockedTag", "manualTag", "noShowTag", "clashTag", "lateTag", "durationTag"]
+      .forEach((tag) => expect(flags, tag).toContain("<FlagSlot flag={" + tag + "} />"));
+    expect(List).toMatch(/<Reveal horizontal show=\{!!flag\} style=\{\{ flexShrink: 0 \}\}>/);
+    expect(List).toMatch(/marginRight: FLAG_GAP/);
+    expect(List).not.toContain('gap: "4px 8px"');
   });
 });
 

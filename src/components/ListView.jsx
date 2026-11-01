@@ -72,6 +72,8 @@ const FLAG = {
   display: "inline-flex", alignItems: "center", gap: SP.tight,
   fontSize: T.small, fontWeight: FW.semi, whiteSpace: "nowrap"
 };
+// The space between two flags. It lives inside FlagSlot rather than in a flex gap.
+const FLAG_GAP = 8;
 const FLAG_NEUTRAL = "var(--text-secondary)";
 const FLAG_WARN = "var(--warn-text)";
 const FLAG_SUCCESS = "var(--success-text)";
@@ -214,6 +216,20 @@ function CardFlag({ title, ink, children }) {
 // block. No role: the text IS the label.
 function TextFlag({ ink, title, children }) {
   return <span title={title} style={{ ...FLAG, color: ink }}>{children}</span>;
+}
+
+// v18.14.0 (correction 25, Patryk): a slot per flag, as on the timeline block, so one
+// that arrives or leaves opens sideways and the flags after it close up. A flag that
+// has gone leaves on the copy its Reveal kept. FLAG_GAP is inside the slot because a
+// flex gap stays beside a flag folded to nothing (CARD_GAP's reason), and the box's
+// negative margin hands the last flag's back, so a line breaks exactly where the gap
+// broke it: measured identical at 998, 668, 390 and 360.
+function FlagSlot({ flag }) {
+  return (
+    <Reveal horizontal show={!!flag} style={{ flexShrink: 0 }}>
+      {flag ? <span style={{ display: "inline-flex", marginRight: FLAG_GAP }}>{flag}</span> : null}
+    </Reveal>
+  );
 }
 
 // v15.8.0: module-level status-change detection (mirrors TimelineView) so a card
@@ -407,6 +423,10 @@ export const ListView = memo(function ListView({
   // v17.1.0 perf: memoized (walks every booking ever) + moved above the
   // empty-day early return (rules of hooks — the v16.4.0 lesson).
   const nsMap = useMemo(() => noShowMap(bookings), [bookings]);
+  // A slot for every tag on the list, in its order, so a tag takes its place on the
+  // way in and keeps it on the way out.
+  const tagSlots = useMemo(() => ["guest", "occasion"].flatMap((kind) =>
+    ((tagList && tagList[kind]) || []).map((t) => ({ ...t, kind }))), [tagList]);
 
   // v17.3.1: scroll the focused card into view on a PROGRAMMATIC selection —
   // a search-jump (SearchPanel → App's pendingSelectRef / same-day branch) or
@@ -747,9 +767,12 @@ export const ListView = memo(function ListView({
         // block says it in its title only). Guest tags first, then occasion,
         // each in the tag list's order. The `title` says which kind it is.
         const tagged = bookingTags(b, guestTags, tagList);
-        const tagFlags = tagged.guest.map((l) => <TextFlag key={"g" + l} ink={FLAG_NEUTRAL} title={"Guest tag: " + l}>{l}</TextFlag>)
-          .concat(tagged.occasion.map((l) => <TextFlag key={"o" + l} ink={FLAG_NEUTRAL} title={"Occasion: " + l}>{l}</TextFlag>));
-        const hasFlags = !!(depositTag || voucherTag || zoneTag || prefTag || lockedTag || manualTag || noShowTag || clashTag || tagFlags.length || lateTag || durationTag);
+        const tagFlags = tagSlots.map((t) => (
+          <FlagSlot key={t.kind + t.id} flag={tagged[t.kind].includes(t.label)
+            ? <TextFlag ink={FLAG_NEUTRAL} title={(t.kind === "guest" ? "Guest tag: " : "Occasion: ") + t.label}>{t.label}</TextFlag>
+            : null} />
+        ));
+        const hasFlags = !!(depositTag || voucherTag || zoneTag || prefTag || lockedTag || manualTag || noShowTag || clashTag || tagged.guest.length || tagged.occasion.length || lateTag || durationTag);
 
         const notesEl = b.notes ? (
           <div style={{
@@ -1007,7 +1030,7 @@ export const ListView = memo(function ListView({
                 flag against 208 on the two without. Inside the box, a flag that
                 does not fit wraps under the unit and moves nothing, and the box
                 can be left out of nothing: it is always there, so the flags can
-                be conditional. Their basis is FLAGS_MIN, the widest chip, so on
+                come and go on a Reveal. Their basis is FLAGS_MIN, the widest chip, so on
                 a narrow card they take a line of their own rather than pushing a
                 chip past the card's edge. */}
             <div style={{ gridColumn: 2, gridRow: 1, minWidth: 0, display: "flex", alignItems: "flex-start", columnGap: 8, rowGap: 4, flexWrap: "wrap" }}>
@@ -1031,21 +1054,21 @@ export const ListView = memo(function ListView({
                     card-only voucher). `manual` sits with
                     `locked` because it is the same fact one notch weaker, and
                     the two counters that have no block counterpart come last. */}
-                {hasFlags ? (
-                  <div style={{ ...NAME_CELL, flex: "1 1 " + FLAGS_MIN + "px", minWidth: 0, flexWrap: "wrap", gap: "4px 8px" }}>
-                    {depositTag}
-                    {voucherTag}
-                    {zoneTag}
-                    {prefTag}
-                    {lockedTag}
-                    {manualTag}
-                    {noShowTag}
-                    {clashTag}
+                <Reveal show={hasFlags} style={{ flex: "1 1 " + FLAGS_MIN + "px", minWidth: 0 }}>
+                  <div style={{ ...NAME_CELL, flexWrap: "wrap", rowGap: 4, marginRight: -FLAG_GAP }}>
+                    <FlagSlot flag={depositTag} />
+                    <FlagSlot flag={voucherTag} />
+                    <FlagSlot flag={zoneTag} />
+                    <FlagSlot flag={prefTag} />
+                    <FlagSlot flag={lockedTag} />
+                    <FlagSlot flag={manualTag} />
+                    <FlagSlot flag={noShowTag} />
+                    <FlagSlot flag={clashTag} />
                     {tagFlags}
-                    {lateTag}
-                    {durationTag}
+                    <FlagSlot flag={lateTag} />
+                    <FlagSlot flag={durationTag} />
                   </div>
-                ) : null}
+                </Reveal>
               </div>
             </div>
             {/* v18.2.0: tables and phone on the LEFT, the actions on the

@@ -39708,6 +39708,23 @@ that one is driven by the clock and was read from the code, the same slot as the
 
 **Files:** `TimelineView.jsx`, `tests/block-layout.test.js`, `tests/guest-tags.test.js`, `DESIGN.md`.
 
+**Correction 25: a List card's flags ease too.** The same defect in the other view, and Patryk's condition was that the card's
+measured columns stay as they are. Each flag holds a `FlagSlot`, a horizontal `Reveal`, and every tag on the list holds one in the
+list's order, so a tag takes its place on the way in and keeps it on the way out. The box itself comes and goes on a `Reveal`, which
+is what gives the last flag on a card an exit: the box used to unmount with it. The 8px between flags moved inside the slot, because
+a flex gap stays beside a flag folded to nothing (`CARD_GAP`'s reason), and the box's negative margin hands the last flag's back, so
+a line breaks exactly where the gap broke it.
+
+Measured against a baseline taken first: all 104 elements of all 12 cards at 998, 668, 390 and 360 wide, 416 positions, 0 moved and
+0 card heights changed. Then a deposit on and off through the real form, per frame, on a tablet and a phone. On a card with flags it
+opens from 0 to 50.9px while the next flag slides from 379.6 to 430.5 in step, and the reverse on the way out. On a card with none
+it is the first flag, so nothing sits beside it: it fades in on the box, at full width, and folds on the way out.
+
+One thing stays as it was. A flag that needs a new line changes line at the frame it stops fitting, and the 4px between the lines
+comes and goes at once. Only a phone can see either, on a card with more flags than a line holds.
+
+**Files:** `ListView.jsx`, `tests/list-columns.test.js`, `DESIGN.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,
