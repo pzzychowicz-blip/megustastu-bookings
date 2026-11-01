@@ -39302,8 +39302,8 @@ at 36 × 36. A forced `:active` reads 0.96 on the gear and on Zoom in, the contr
 **Correction 9: a conversation gets its height back on a short screen.** The regression pass found what Correction 6
 had set aside, and the picture was worse than the 12.7px it had recorded. At 998 × 507, with a Regular's chip and a
 refused draft, the thread's box was 28px, which is its own padding, so the message had no height at all, and the
-composer ran off the panel. It is older than this version. He chose from six real renders, which measured 12, 47, 71
-and 106px for the message, and took all three of the changes they were built from.
+composer ran off the panel. It is older than this version. He chose from five real renders, today and four ways out,
+which measured 12, 47, 71 and 106px for the message, and took all three of the changes they were built from.
 
 | 998 × 507, a draft with no table | Before | After |
 |---|---|---|
@@ -39335,6 +39335,42 @@ at 289.
 
 **Files:** `whatsapp/InboxPanel.jsx`, `whatsapp/ConversationView.jsx`, `lib/compact-shell.js`,
 `tests/wa-inbox-layout.test.js`, `DESIGN.md`, `GLOSSARY.md`, `src/CLAUDE.md`, `src/components/CLAUDE.md`.
+
+**Correction 10: the availability line keeps its band.** He had decided to leave the dip, on numbers of mine that the
+regression pass showed were incomplete. The 41 and 33px in H3's section were taken in the evening, with the Optimiser
+off for today. With it on, which is today before 15:00 and any future day, the check runs the Optimiser, and the 56px
+band closed much further. He had decided on the wrong figures, so it went back to him, and he changed it.
+
+| Between two refused times, band's lowest height of 56 | Full speed | 2× CPU | 4× CPU |
+|---|---|---|---|
+| Optimiser off, before | 41 | 41 | 33 |
+| Optimiser on, before | 26–33 | 18–20 | 4–5, back after about 0.75s |
+| After, either way | 56 | 56 | 56 |
+
+While a refused answer is re-checked the band keeps its height and its tint, and reads "Checking the tables…" with the
+pulsing dot. Nothing stale shows, which is his rule: `useDeferredCompute` is untouched and still hands back null. The
+last refusal is kept only to draw the same line, hidden, which is what holds the height to the pixel when it wraps: 137
+on a phone, unmoved. Hidden means `inert` as well, so an old time cannot be tapped, focused or read out.
+
+- **A fast check never shows the words.** They wait out the answer's fade (`--t-tap`, as a transition delay, so it
+  survives both Reduce Motion rules), and that wait is the grace: at full speed the words stay at 0 and the answer dips
+  and returns; at 4× they reach 0.82.
+- **Two defects the height alone would not have shown, found frame by frame and fixed before committing.** When the
+  re-check found a table, the band folded with the last content `Reveal` had cached, so the words faded in on a closing
+  band, after the check had ended (0.65 at 250ms). `leaving` hides the answer and keeps the words out: 0 at both speeds.
+  And at dinner `kitchenScan` opened the body's "Checking table availability…" under the band, 36 frames on every change
+  of the time. That row now stays shut while the band is up: 0 frames.
+- **The three other paths are as they were.** The first refusal eases in from nothing, a table found eases out, and
+  both still move only the band: 56 → 0 and 0 → 56 at both speeds.
+- **The words are `aria-hidden`.** They are for the eye. The answer leaves the tree while `inert` and comes back new, so
+  a screen reader hears each answer once and nothing in between.
+
+Reduce Motion read as expected: the band folds at once, and the fade and the grace stay. A forced check of the picture at
+998 × 507 is in the session's rig; the tint stays the last answer's, because a flip between red and neutral on each change
+would be the blink this replaces, and the words say what it is.
+
+**Files:** `AvailLine.jsx`, `BookingFormModal.jsx`, `hooks/useDeferredCompute.js` (its comment), `tests/booking-logic.test.js`,
+`GLOSSARY.md`, `src/components/CLAUDE.md`.
 
 ### Closing the version
 

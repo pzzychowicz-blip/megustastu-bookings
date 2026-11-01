@@ -27,6 +27,19 @@
 // as a width, because it follows from the sentence, so it is measured. The row can
 // never talk itself out of a break: the wider padding is the wrapped row's.
 //
+// v18.14.0 (correction 10, Patryk): the band stays while a refused answer is being
+// re-checked. It folded, because the answer is null until the new one lands (never a
+// stale answer, his rule), and with the Optimiser on (today before 15:00, any future
+// day) the check is long enough that the 56px band closed to 4px at 4× CPU and came
+// back about 0.75s later, on every change of the time. `checking` is the same line
+// with its answer hidden, which is what holds the height, to the pixel, wrapped or not,
+// with the words over it. The answer is `inert` meanwhile: it may not be tapped, focused
+// or read out. The words are for the eye and stay out of the live region, so a screen
+// reader hears the new answer once and nothing in between. They wait out the answer's
+// fade, and that wait is also the grace: a check that lands inside it never shows them.
+// `leaving` is the fold once a table is found: the answer stays hidden and the words do
+// not come, or they fade in on a band that is closing, after the check has ended.
+//
 // The chips keep the focus where it is: a tap on one with the keyboard up would
 // otherwise move focus to the chip and drop the keyboard mid-sentence, and the
 // chip can then unmount under that focus. Same `preventDefault` as the name
@@ -34,7 +47,7 @@
 // because a key press raises no mousedown.
 
 import { useRef } from "react";
-import { BLOCK_BG, FW, H, IC, SP, T } from "../lib/constants";
+import { BLOCK_BG, FW, H, IC, M, R, SP, T } from "../lib/constants";
 import { nearestTimes } from "../lib/booking-logic";
 import { useSharesLine } from "../hooks/useSharesLine";
 import { ALERT_TONES, InlineAlert, mkBtn } from "./atoms";
@@ -45,8 +58,10 @@ const LINE_TIMES = 4;
 // The sentence's share of a row's free space against the actions' 1: all of it,
 // to the pixel, and the actions keep the row to themselves once they wrap.
 const SENTENCE_GROW = 9999;
+const ANSWER_FADE = "opacity " + M.tap;
+const WORDS_FADE_IN = "opacity " + M.move + " var(--t-tap)";
 
-export function AvailLine({ text, warn, sugg, onTapTime, onAddToWaitlist }) {
+export function AvailLine({ text, warn, sugg, onTapTime, onAddToWaitlist, checking = false, leaving = false }) {
   const role = ALERT_TONES[warn ? "warn" : "danger"];
   const times = nearestTimes(sugg, LINE_TIMES);
   const rowRef = useRef(null);
@@ -57,10 +72,12 @@ export function AvailLine({ text, warn, sugg, onTapTime, onAddToWaitlist }) {
   // they are its height. Wrapped, it takes the phone's padding, the same as the
   // country codes above it.
   const hasActions = times.length > 0 || !!onAddToWaitlist;
+  const answerHidden = checking || leaving;
   const padding = !hasActions ? null : wrapped ? "10px 12px" : "4px 4px 4px 14px";
   return (
     <InlineAlert tone={role.tone} tint={role.tint} icon={null} style={{ marginBottom: SP.base, ...(padding ? { padding: padding } : null) }}>
-      <span ref={rowRef} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.snug }}>
+      <span style={{ display: "grid" }}>
+      <span ref={rowRef} inert={answerHidden} style={{ gridArea: "1 / 1", minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.snug, opacity: answerHidden ? 0 : 1, transition: ANSWER_FADE }}>
         <span ref={sentenceRef} style={{ flex: SENTENCE_GROW + " 1 auto", minWidth: 0, fontSize: T.lead }}>
           {text}
           {sugg && times.length === 0 ? <span style={{ fontWeight: FW.medium }}> No availability found.</span> : null}
@@ -81,6 +98,11 @@ export function AvailLine({ text, warn, sugg, onTapTime, onAddToWaitlist }) {
               onClick={function () { onAddToWaitlist(); }}><WaitIcon size={IC.control} />Add to waitlist</button>
           ) : null}
         </span>
+      </span>
+      <span aria-hidden="true" style={{ gridArea: "1 / 1", alignSelf: "center", display: "flex", alignItems: "center", gap: SP.base, fontSize: T.lead, fontWeight: FW.medium, pointerEvents: "none", opacity: checking ? 1 : 0, transition: checking ? WORDS_FADE_IN : ANSWER_FADE }}>
+        <span className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: R.pill, background: "currentColor", flexShrink: 0, animationPlayState: checking ? "running" : "paused" }} />
+        Checking the tables…
+      </span>
       </span>
     </InlineAlert>
   );

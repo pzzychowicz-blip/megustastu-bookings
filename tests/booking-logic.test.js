@@ -3084,21 +3084,47 @@ describe("the save and the preview ask tablesKept (v18.3.2)", () => {
   // with the keyboard up, so the answer lives there and the body's list is gone.
   it("H3: the line is in the footer, above the buttons, in a region that stays mounted", () => {
     const foot = FORM.slice(FORM.indexOf("const footerEl=("));
-    const err = foot.indexOf("{errorEl}"), line = foot.indexOf('<div role="status"><Reveal show={!!availLine'), row = foot.indexOf('justifyContent:"space-between"');
+    const err = foot.indexOf("{errorEl}"), line = foot.indexOf('<div role="status"><Reveal show={lineShown'), row = foot.indexOf('justifyContent:"space-between"');
     expect(err).toBeGreaterThan(-1);
     expect(line, "under the save's refusal, which says \"see suggestions below\"").toBeGreaterThan(err);
     expect(row, "above the buttons").toBeGreaterThan(line);
     expect(FORM.includes("<AvailBanner"), "the body's list is gone").toBe(false);
   });
 
+  // v18.14.0 (correction 10, Patryk): what it costs if these go is a 56px band blinking
+  // on every change of the time, which no build or render test would notice.
+  it("the band holds while a refused answer is re-checked, and nothing stale shows", () => {
+    expect(FORM).toMatch(/const answeredNo=formAvail&&!formAvail\.ok\?formAvail:null;/);
+    expect(FORM, "from the render that starts the check, so never a commit behind").toMatch(/if\(!availScan\.pending\)\{\s*if\(lineOpen!==!!answeredNo\) setLineOpen\(!!answeredNo\);/);
+    expect(FORM).toMatch(/const lineChecking=availScan\.pending&&lineOpen;/);
+    expect(FORM).toMatch(/const lineShown=!!answeredNo\|\|lineChecking;/);
+    expect(FORM).toMatch(/const lineAvail=answeredNo\|\|heldAvail;/);
+    expect(FORM).toMatch(/checking=\{lineChecking\}\s*leaving=\{!lineShown\}/);
+    const Line = stripComments(readFileSync(new URL("../src/components/AvailLine.jsx", import.meta.url), "utf8")).join("\n");
+    expect(Line, "the old answer cannot be tapped, focused or read out").toMatch(/<span ref=\{rowRef\} inert=\{answerHidden\}/);
+    expect(Line, "hidden, not gone: it is what holds the height").toMatch(/opacity: answerHidden \? 0 : 1/);
+    expect(Line).toMatch(/const answerHidden = checking \|\| leaving;/);
+    expect(Line, "the words are for the eye").toMatch(/<span aria-hidden="true" style=\{\{ gridArea: "1 \/ 1"/);
+  });
+
+  it("the fold that follows a re-check does not bring the words in: the check is over", () => {
+    const Line = stripComments(readFileSync(new URL("../src/components/AvailLine.jsx", import.meta.url), "utf8")).join("\n");
+    expect(Line).toMatch(/opacity: checking \? 1 : 0, transition: checking \? WORDS_FADE_IN : ANSWER_FADE/);
+    expect(Line, "`leaving` must not reach the words").not.toMatch(/opacity: answerHidden \? 1 : 0/);
+  });
+
+  it("the body's row stays shut while the band is up: at dinner the kitchen's scan would open it on every change of time", () => {
+    expect(FORM).toMatch(/const availChecking=!lineShown&&\(availScan\.pending\|\|\(kitchenBusy&&kitchenScan\.pending\)\);/);
+  });
+
   it("H3: a named refusal yields to Save's, the same sentence, rather than standing beside it", () => {
-    expect(FORM).toContain("show={!!availLine&&!(formAvail.refusal&&formAvail.refusal===error)}");
+    expect(FORM).toContain("show={lineShown&&!(lineAvail.refusal&&lineAvail.refusal===error)}");
   });
 
   it("v18.3.3: the scan asks keptRefusal and the line shows its sentence as a warning (H3 moved it to the footer)", () => {
     expect(/const refusal=keptRefusal\(bookings,cur,form,tableBlocks\);/.test(FORM)).toBe(true);
-    expect(/text=\{formAvail\.refusal\|\|"No table for "\+\(Number\(form\.size\)\|\|2\)\+" at "\+form\.time\}/.test(FORM)).toBe(true);
-    expect(/warn=\{!!formAvail\.refusal\}/.test(FORM)).toBe(true);
+    expect(/text=\{lineAvail\.refusal\|\|"No table for "\+\(Number\(form\.size\)\|\|2\)\+" at "\+form\.time\}/.test(FORM)).toBe(true);
+    expect(/warn=\{!!lineAvail\.refusal\}/.test(FORM)).toBe(true);
   });
 });
 

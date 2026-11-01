@@ -425,8 +425,8 @@ export function BookingFormModal({
   // banner eases in when the result lands ~a frame later; ⏳ cue past ~150ms) and
   // only when the actual scan inputs change — never on name/notes keystrokes or
   // the 15s tick. liveBookings is referentially stable across keystrokes since
-  // App's v16.3.0 useMemo. `value` is null while (re-)checking — the banner
-  // collapses rather than showing a stale answer (Patryk-chosen).
+  // App's v16.3.0 useMemo. `value` is null while (re-)checking, so no stale answer
+  // is ever shown (Patryk-chosen); the line keeps its band meanwhile (`heldAvail`).
   const availScan=useDeferredCompute(function(){
     if(!form.time) return null;
     if(fh.closed) return null; // closed day → no availability to compute
@@ -464,6 +464,22 @@ export function BookingFormModal({
     return {ok:false,tables:null,sugg:formatSugg(sugg,sm)};
   },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,form.status,form._clearManual,bookings,liveBookings,tableBlocks,editId,autoOptimizer,hoursSig,swap,nowMins,today]);
   const formAvail=availScan.value;
+  // v18.14.0 (correction 10, Patryk): the line keeps its band while a refused answer is
+  // re-checked (`AvailLine`, whose header says why). `heldAvail` is the last refusal,
+  // which draws the band for that while, and for its fold once a table is found;
+  // `lineOpen` says it was still the answer when the check began. Set during render,
+  // React's own pattern for a value derived from the last one, so the band is never a
+  // commit behind: it holds from the render that starts the check.
+  const answeredNo=formAvail&&!formAvail.ok?formAvail:null;
+  const [heldAvail,setHeldAvail]=useState(null);
+  const [lineOpen,setLineOpen]=useState(false);
+  if(!availScan.pending){
+    if(lineOpen!==!!answeredNo) setLineOpen(!!answeredNo);
+    if(answeredNo&&heldAvail!==answeredNo) setHeldAvail(answeredNo);
+  }
+  const lineChecking=availScan.pending&&lineOpen;
+  const lineShown=!!answeredNo||lineChecking;
+  const lineAvail=answeredNo||heldAvail;
 
   // ── v18.0.0 session 8 (items 2b, 7): this guest's other vouchers ───────────
   // Read once per mount, like the picker's own and the Vouchers tab's: expiry is
@@ -689,12 +705,14 @@ export function BookingFormModal({
   // booking too, and offers no waitlist: its way out is Clear or Assign.
   // v18.14.0 (H3): this is the footer's availability line now (`AvailLine`, whose
   // header says why), and the body's banner is gone.
-  const availLine=formAvail&&!formAvail.ok?<AvailLine
-    text={formAvail.refusal||"No table for "+(Number(form.size)||2)+" at "+form.time}
-    warn={!!formAvail.refusal}
-    sugg={formAvail.sugg}
+  const availLine=lineAvail?<AvailLine
+    text={lineAvail.refusal||"No table for "+(Number(form.size)||2)+" at "+form.time}
+    warn={!!lineAvail.refusal}
+    sugg={lineAvail.sugg}
+    checking={lineChecking}
+    leaving={!lineShown}
     onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}}
-    onAddToWaitlist={!editId&&onAddToWaitlist&&!formAvail.refusal?onAddToWaitlist:null} />:null;
+    onAddToWaitlist={!editId&&onAddToWaitlist&&!lineAvail.refusal?onAddToWaitlist:null} />:null;
   // v15.0.0: closed-day notice — the chosen date falls on a weekday marked Closed
   // (Settings → General → Opening hours). doSave blocks the write; this explains why.
   // v17.15.2: an AlertPanel, and it takes ClosedIcon — the same mark the strip's
@@ -723,7 +741,9 @@ export function BookingFormModal({
   // unmounts it having barely opened (imperceptible sliver), a slow scan shows
   // it fully.
   // One shared row covers both scans; it sits in the availBanner's slot region.
-  const availChecking=availScan.pending||(kitchenBusy&&kitchenScan.pending);
+  // v18.14.0 (correction 10): not while the line's band is up. It says so itself, and
+  // at dinner the kitchen's scan would open this row under it on every change of time.
+  const availChecking=!lineShown&&(availScan.pending||(kitchenBusy&&kitchenScan.pending));
   const checkingRow=<div style={{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize: T.body,fontWeight: FW.medium,color:"var(--text-muted)",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>;
   // v17.8.0 review fix: these two colours are hex literals ON PURPOSE, and must
   // stay that way. The chip FILLS below are hard-coded pale green / pale yellow
@@ -979,7 +999,7 @@ export function BookingFormModal({
           does: a region that arrives holding its message says nothing. A named
           refusal yields to Save's, which is the same sentence: two panes saying
           one thing read as a fault. */}
-      <div role="status"><Reveal show={!!availLine&&!(formAvail.refusal&&formAvail.refusal===error)}>{availLine}</Reveal></div>
+      <div role="status"><Reveal show={lineShown&&!(lineAvail.refusal&&lineAvail.refusal===error)}>{availLine}</Reveal></div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}{deleteBtn}{(function(){
         if(editId) return null;
         const canSave=!!form.date;
