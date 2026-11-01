@@ -2461,7 +2461,7 @@ describe("the preview row is wired to the optimiser's answer (v18.0.0 session 10
   });
 
   it("the \"was:\" line is suppressed when the answer is the same tables", () => {
-    expect(/if\(\(changed\|\|cleared\)[^\n]*?!\(previewTbls&&tblKey\(previewTbls\)===tblKey\(curTbl\)\)\)/.test(FORM)).toBe(true);
+    expect(/const wasLine=\(changed\|\|cleared\)[^\n]*?!\(previewTbls&&tblKey\(previewTbls\)===tblKey\(curTbl\)\);/.test(FORM)).toBe(true);
   });
 });
 

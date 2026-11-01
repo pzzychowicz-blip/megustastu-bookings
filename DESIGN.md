@@ -1822,6 +1822,18 @@ shows its time.**
   A List card's flags do the same (`FlagSlot`), with their 8px inside the slot, because
   a flex gap stays beside a flag folded to nothing, and the box's negative margin hands
   the last one's back, so the card's measured columns do not move.
+- **What arrives in a row with a gap brings the gap with it (v18.14.0, Patryk).** A
+  `Reveal` is a flex item even while closed, so the row's `gap` would pop while the thing
+  eases. `RowSlot` takes the gap back with a negative margin and carries its own inside
+  the ease, so at rest it sits where a plain child did and closed it takes no room. Its
+  content keeps its width and is clipped, so a label cannot wrap on the way, and the
+  leaving copy is inert. The form's status buttons hold one fixed order on these slots,
+  and each of them, Clear and "was:" ease on `M.reveal`.
+- **An answer being re-checked leaves at once and keeps its room (v18.14.0, Patryk).**
+  "Never show a stale answer" is about the answer. `TablesPreview` takes the form's
+  tables to opacity 0 in the frame the check starts, holds their room so nothing beside
+  them moves, and fades the next answer in where they stood on `M.move`. A sentence that
+  depends on the answer ("was:") waits for it, as the availability line's band does.
 - **A typed 60-minute booking at 1×** (about 79px) has less room than the chip, which
   is cut at the handle rather than dropped. It is the one place a time is cut.
 

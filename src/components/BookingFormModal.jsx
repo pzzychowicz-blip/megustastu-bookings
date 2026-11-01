@@ -70,13 +70,14 @@ import { keptRefusal, pickedRefusal } from "../lib/booking-save";
 import { WEEKDAY_LONG, formatDay } from "../lib/day";
 import { stepPress } from "../lib/keyboard";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
-import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, mkDangerBtn, AutoHeight, Reveal, Presence } from "./atoms";
+import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, RowSlot, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, mkDangerBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AvailLine } from "./AvailLine";
 import { TimeChip } from "./TimeChip";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon, TrashIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
+import { TablesPreview } from "./TablesPreview";
 import { DurationReset } from "./DurationReset";
 import { useLineBand } from "../hooks/useLineBand";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
@@ -100,6 +101,9 @@ import { TagChips } from "./TagChips";
 // a hard CI gate. Only one modal is ever mounted at a time, so a fixed id
 // cannot collide; useId() would be the answer if that stopped being true.
 const FORM_ERROR_ID = "mgt-form-error";
+// v18.14.0 (correction 29, Patryk): every status the form's row can offer, in the
+// order `statusTargets` offers them, so each keeps its place and eases out and in.
+const STATUS_ROW = ["confirmed", "seated", "completed", "cancelled", "pending"];
 
 // v18.2.0: the − / + press handlers are `stepPress` in lib/keyboard.js, shared
 // with the walk-in form's steppers, which had the same pointer-only defect.
@@ -639,25 +643,22 @@ export function BookingFormModal({
       const showClearManual=isManual&&!mt&&!cleared;
       const leftEls=[
         <span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium}}>Tables</span>];
-      if(showTbl) showTbl.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
-      else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
       // v18.0.0 session 10: "was:" only when the tables really are about to
       // change. With the optimiser's answer now driving this row, an edit it is
       // content with would otherwise read "5A (auto) · was: 5A" — a move
       // announced over a booking that is staying exactly where it is. The
       // pre-existing shape had the same wart on any changed edit the optimiser
       // answered with the same tables; one test, one fix.
-      if((changed||cleared)&&!mt&&!pinnedTbl&&curTbl&&!(previewTbls&&tblKey(previewTbls)===tblKey(curTbl))) leftEls.push(<span key="prev" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
-      if(mt) leftEls.push(<button
-        key="clrmt"
+      const wasLine=(changed||cleared)&&!mt&&!pinnedTbl&&curTbl&&!(previewTbls&&tblKey(previewTbls)===tblKey(curTbl));
+      leftEls.push(<TablesPreview key="tables" tables={showTbl||previewTbls} auto={!showTbl} was={wasLine?"was: "+curTbl.join(", "):null} pending={availScan.pending} />);
+      leftEls.push(<RowSlot key="clrmt" show={!!mt} gap={8}>{mt?<button
         className="mgt-hover-scale mgt-press"
         style={mkBtn({fontSize: T.body,background:BTN.quiet})}
-        onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>);
-      if(showClearManual) leftEls.push(<button
-        key="clrman"
+        onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>:null}</RowSlot>);
+      leftEls.push(<RowSlot key="clrman" show={!!showClearManual} gap={8}>{showClearManual?<button
         className="mgt-hover-scale mgt-press"
         style={mkBtn({fontSize: T.body,background:BTN.quiet})}
-        onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[],_clearManual:true});});onClearSwap();}}>Clear</button>);
+        onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[],_clearManual:true});});onClearSwap();}}>Clear</button>:null}</RowSlot>);
       return (
         <Section><div
             style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><div
@@ -668,13 +669,11 @@ export function BookingFormModal({
       );
     }
     const leftEls=[<span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium}}>Tables</span>];
-    if(mt) mt.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
-    else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
-    if(mt) leftEls.push(<button
-      key="clrmt"
+    leftEls.push(<TablesPreview key="tables" tables={mt||previewTbls} auto={!mt} was={null} pending={availScan.pending} />);
+    leftEls.push(<RowSlot key="clrmt" show={!!mt} gap={8}>{mt?<button
       className="mgt-hover-scale mgt-press"
       style={mkBtn({fontSize: T.body,background:BTN.quiet})}
-      onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>);
+      onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>:null}</RowSlot>);
     return (
       <Section><div
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><div
@@ -829,14 +828,13 @@ export function BookingFormModal({
   })();
   const quickStatusBtns=editId?<Section style={{position:"relative"}}>{statusFlash?(
         <div key={statusFlash.k} className="mgt-wipe-ltr" style={{position:"absolute",inset:0,borderRadius:R.card,pointerEvents:"none",zIndex:0,background:statusFlash.color,opacity:0.5}} />
-      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium,marginRight:4}}>Status:</span>{statusTargets.map(function(s){return (
+      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium,marginRight:4}}>Status:</span>{STATUS_ROW.map(function(s){const offered=statusTargets.indexOf(s)>=0;return (
         // v17.10.0: the per-status mark, from the ONE source in Icons.jsx that
         // this row, the List card and the quick-status popup all read.
-        <button
-          key={s}
+        <RowSlot key={s} show={offered} gap={6}>{offered?<button
           className="mgt-hover-scale"
           style={mkBtn({background:STATUS_BTN_BG[s],color:BLOCK_INK[s]||"var(--text-on-accent)",textTransform:"capitalize",minHeight:H.control,display:"inline-flex",alignItems:"center",gap:6})}
-          onClick={function(){flashStatus(s);if(s==="cancelled"){onRequestCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}><StatusIcon status={s} size={IC.control} />{s}</button>
+          onClick={function(){flashStatus(s);if(s==="cancelled"){onRequestCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}><StatusIcon status={s} size={IC.control} />{s}</button>:null}</RowSlot>
       );})}</div></Section>:null;
 
   // v18.0.0 session 8 (item 6): icon-only. It was the words "History (4)" and

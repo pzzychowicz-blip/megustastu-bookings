@@ -1261,6 +1261,22 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
   );
 }
 
+// ── RowSlot — a horizontal Reveal in a row with a `gap` (v18.14.0, correction 29) ──
+// A Reveal is a flex item even while it is closed, so the row's `gap` would arrive
+// and go with it, at once. A slot takes that gap back with a negative margin and
+// carries its own inside the ease, so at rest it sits exactly where a plain child
+// did and closed it takes no room. `gap` is the row's. Its content keeps its width
+// through the ease and is clipped, so a label never wraps on the way. Pass null
+// while closed: Reveal keeps the last copy for the exit, and that copy is inert,
+// because it has been answered and is only on its way out.
+export function RowSlot({ show, gap, children }) {
+  return (
+    <Reveal horizontal show={show} inert={!show} style={{ marginLeft: -gap }}>
+      {children ? <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, whiteSpace: "nowrap", paddingLeft: gap }}>{children}</span> : null}
+    </Reveal>
+  );
+}
+
 // ── AutoHeight — eases its height when its content changes (v15.8.0) ──────────
 // For content-REPLACE cases (Settings tab swap, the ManualModal selection box,
 // form sections) where there's no clean show/hide to drive a Reveal. A

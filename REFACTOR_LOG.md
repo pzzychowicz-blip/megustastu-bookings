@@ -39742,7 +39742,7 @@ that moves under the finger is the thing DESIGN.md's armed-button rule exists to
 
 **What I told Patryk was wrong in one word.** The question said Reset and "(auto)" would share a slot. They are in different rows, and
 the census had listed them together because one tap moved both. Reset is above. "(auto)" is the Tables row, and what it does there is
-a different fault: the next correction.
+a different fault: Correction 29.
 
 **Files:** `DurationReset.jsx` (new), `BookingFormModal.jsx`, `WalkinForm.jsx`, `TimelineZoomControls.jsx`,
 `whatsapp/TemplatesEditor.jsx`, `tests/reserved-slots.test.js` (new), `tests/a11y.test.js`, `DESIGN.md`.
@@ -39772,6 +39772,32 @@ shared id goes on the copy that is armed: moving the arm from Patryk's row to Ma
 step, with one element holding the id.
 
 **Files:** `AdminSettings.jsx`, `CustomersSettings.jsx`, `ActivityLogModal.jsx`, `SpecialDayModal.jsx`, `tests/arm-guard.test.js`.
+
+**Correction 29: the form's status buttons, Clear and "was:" ease, and "(auto)" stops blinking.** Three things popped in the booking
+form, and one rule fixed two of them. A `Reveal` is a flex item even while closed, so in a row with a `gap` the gap arrives and goes at
+once, whatever the thing inside does. `RowSlot` (atoms) takes the gap back with a negative margin and carries its own inside the ease,
+keeps its content's width so a label cannot wrap on the way, and makes the leaving copy inert. At rest nothing moved: the status row at
+390 still breaks after Completed, with 6px between buttons, and Cancelled starts its line at the Section's edge.
+
+- **The status buttons** hold one fixed order now (`STATUS_ROW`, which is the order `statusTargets` offers), so each keeps its place.
+  Tapping Seated on a confirmed booking opens Confirmed 0 → 119 while Seated and Pending close, and Completed slides from 398 to 419
+  and back on the way home, all in step at 520ms.
+- **Clear** in the Tables row opens 0 → 70 and closes, and in Preferred table 0 → 78, with Done still at x 694.9 both ways.
+- **The Tables row** is the fault Correction 26 owed. The scan's answer is null for the length of a check, so on every change of the
+  time or the party the badges and "(auto)" went out for about 50ms and "was:" came in. "Never show a stale answer" stands, so the
+  answer still goes in that frame, to opacity 0. Its room stays. `TablesPreview` holds the last tables invisibly and fades the next
+  answer in where they stood, measured "(auto)" at x 332.5 throughout, opacity 0 → 1 in about 240ms. "was:" waits for the answer in
+  `useLineBand`'s idiom, so a change of guests that keeps the same tables no longer flashes it. It eases in when the tables will
+  really change, and it is on a `RowSlot`.
+
+**One version I threw away.** The first `TablesPreview` put the group in a `Reveal`, which would have slid "was:" along when the answer
+changed size. Measured, the sentence wrapped at the narrow end of the ease, and a phone needs the badges to wrap one by one at rest,
+which a width-animated group would do at every frame of an opening. So the badges stay direct children of the row. **What that leaves:**
+when the answer changes size, "was:" moves in that frame, and a Clear on its way out hops 40px when "(auto)" takes its room. And like
+the List's flags, a status button that needs another line on a phone changes line at once.
+
+**Files:** `atoms.jsx` (`RowSlot`), `TablesPreview.jsx` (new), `BookingFormModal.jsx`, `PrefPickerModal.jsx`, `tests/row-slots.test.js`
+(new), `DESIGN.md`.
 
 ### Closing the version
 
