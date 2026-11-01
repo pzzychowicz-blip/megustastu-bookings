@@ -445,6 +445,10 @@
   --tl-blocked-badge: rgba(153, 27, 27, 0.85);     /* "blocked" label-col badge bg */
   --tl-blocked-badge-border: rgba(153, 27, 27, 0.5);
   --tl-popup-bg: #eef1f7;                           /* quick-status popup card */
+  /* v18.14.0: the conversation menu. It takes the popup's card in Light, and it is
+     its own token because of Dark: nothing dims behind this menu, so the popup's 95%
+     let Accept and Dismiss read through it, behind the word Delete. */
+  --menu-bg: var(--tl-popup-bg);
   --tl-popup-scrim: rgba(0, 0, 0, 0.18);
   /* v17.0.0 correction: floor-plan glyph outlines — the light-mode tables/
      chairs blended into the canvas; strokes need real contrast per theme. */
@@ -848,6 +852,7 @@
   /* block warn borders, blocked-stripe + badge, popup are theme-invariant
      (saturated, white text — read on both); only scrim/card/bg flip */
   --tl-popup-bg: rgba(44, 44, 46, 0.95);
+  --menu-bg: #2c2c2e;
   --tl-popup-scrim: rgba(0, 0, 0, 0.45);
   --fp-outline: rgba(200, 205, 220, 0.4);
   --fp-chair-outline: rgba(200, 205, 220, 0.3);

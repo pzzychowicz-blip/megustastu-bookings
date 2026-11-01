@@ -304,6 +304,11 @@ export function InboxPanel({
   // are unreachable from under the inbox either way.
   useEffect(() => {
     function onKey(e) {
+      // v18.14.0: an open ⋯ menu has the keyboard (ConversationMenu). Its listener
+      // is on `window` in the capture phase too, and this one is re-added on every
+      // render, so neither can count on running first. The DOM says whether it is
+      // open, which needs no prop through ConversationView to stay true.
+      if (document.querySelector('[role="menu"]')) return;
       if (e.key === "Escape") {
         // Each of these CONSUMES the key — see the note above.
         const consume = () => { e.preventDefault(); e.stopPropagation(); };

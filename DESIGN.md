@@ -442,6 +442,8 @@ explaining why is usually the one to read.
   `mkDangerBtn` (atoms): solid `--app-danger-solid` with the solid rim, on
   mkBtn's geometry; arming a two-tap confirm changes the LABEL ("Confirm —
   remove") and nothing else, not the colour and not the size under the finger.
+  A row of a menu is the exception (v18.14.0, Patryk): Delete on the conversation
+  menu is red words on the menu's surface, and the solid red is the confirm's.
   **A Delete or a Remove carries `TrashIcon` before its word**; Void voucher,
   Unblock and Clear this range do not, because they are not deletions of a
   thing. A confirm dialog's red button is `mkDangerConfirm`, the same red on
@@ -606,7 +608,8 @@ explaining why is usually the one to read.
   restaurant's tablets never hover. The inbox's Re-check, Edit templates and
   Simulator were icon-only; each now carries its word beside the mark (the
   shape Archive already had), and the title stays as the longer description.
-  A bare ✕ for Close is the one exception: everybody reads it.
+  A bare ✕ for Close and a bare ⋯ for More are the exceptions: everybody reads
+  them, and Re-check keeps its word on the ⋯ menu's row (v18.14.0).
 - **A day is written ONE way: "Thu 24.09" (v18.2.0, C1).** Weekday, day and
   month, and the year only when it is not this year: "Fri 15.01.2027". It is
   `formatDay` in `lib/day.js`, and nothing else writes a date on screen. The

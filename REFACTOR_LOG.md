@@ -39242,6 +39242,44 @@ has no dark fill left to step from. DESIGN.md keeps the rule that test held, for
 `tests/contrast.test.js`, `tests/destructive-buttons.test.js`, `tests/motion.test.js`, `.design-sync/`, `DESIGN.md`,
 `GLOSSARY.md`, `src/components/CLAUDE.md`.
 
+**Correction 6: the inbox's header keeps one action, and the rest are under a ⋯.** His words: "Point 4, but the
+order of the buttons (looking from right to left) is: a new ⋯ menu first and second Archive." So `[Archive] [⋯]`,
+with the ⋯ at the far right holding Re-check and Not a customer. On an archived thread it is `[Restore] [⋯]`, Restore
+stays solid teal, and the ⋯ adds Delete in red, which still confirms. He chose a menu under the button with nothing
+dimmed over the List card's centred card, and the ⋯ turning while Re-check runs over a row that stays open.
+`ConversationMenu` is a real ARIA menu; what it holds is `conversationMenuIds`, which is pure and tested. Delete is
+last, so red is never the row under the thumb, and it is only offered on Archived. With two buttons the header no
+longer wraps, so v18.9.0's wrapping and its `maxWidth` went.
+
+Measured live at 998×570, DPR 2, touch. Archive 842–925 and the ⋯ 931–967, both 36 tall; rows 216×44 and every one
+hit-tests as itself over the thread and the draft card. In: opacity 0 to 1 with scale .97 to 1 and 4px down to rest,
+from the top-right corner. Out: the same pair back, then gone at 415ms. A tap elsewhere closes it and still does what
+that tap does, a tap leaves focus on the ⋯ with no ring, and at `data-motion="reduce"` it opens and closes at once.
+By key: Enter or Space opens on the first row, ↓ ↑ wrap, Home and End go, Tab leaves and closes, and Escape closes
+the menu alone: the first Escape left the inbox open with focus on the ⋯, the second closed the inbox, and on a phone
+it left the conversation open. Re-check, with its request held open through a route: the menu closes, the marks
+cross-fade (.63 → 0 in, .19 → 1 out, read in steps), the arrow turns, a reopened menu reads "Checking…" muted and
+`aria-disabled` and a tap on it does nothing, and the result line is unchanged. Delete raises the same confirm, and
+Escape from it puts focus back on the ⋯, which is why focus is handed back before the action runs. Fits a phone at
+375×812 (menu 137–353) and at 998×507.
+
+Two things the mock could not show. **InboxPanel owns the keys:** its listener is on `window` in the capture phase and
+re-added on every render, so ↓ inside the menu would have moved the conversation and Escape on a phone would have
+left the thread as well. `stopPropagation` does not stop a listener on the same target, so that listener stands down
+while a `[role="menu"]` is in the DOM. **`--tl-popup-bg` is 95% in Dark** because it normally sits on a dimmed page.
+With nothing dimmed, Accept and Dismiss read through it behind the word Delete. `--menu-bg` is the popup's card in
+Light, which is what he approved, and `#2c2c2e` in Dark. The rows' three inks are measured on it in all four themes.
+
+Not caused by this and not fixed here, because it is a separate job: a tall draft card does not fit a short screen. The
+header is the same height as before (it ends at the same pixel), and nothing else in that column moved in this version,
+but measured here on the only DEV thread, Send ends 12.7px past the panel's bottom at rest at 998×507, and while
+"Reading the message…" sits above the draft it ends 23px past at 998×570 and 79.7px past at 998×507.
+
+**Files:** `whatsapp/ConversationMenu.jsx` (new), `whatsapp/ConversationView.jsx`, `whatsapp/InboxPanel.jsx`,
+`lib/whatsapp.js`, `lib/keyboard.js`, `index.css`, `tests/conversation-menu.test.js` (new),
+`tests/wa-inbox-layout.test.js`, `tests/destructive-buttons.test.js`, `tests/contrast.test.js`, `DESIGN.md`,
+`GLOSSARY.md`, `src/CLAUDE.md`, `src/components/CLAUDE.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, at 998 × 507 and 570 in Light and 507 in Dark, across the main card,

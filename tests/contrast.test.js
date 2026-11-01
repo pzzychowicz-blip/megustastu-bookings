@@ -924,6 +924,22 @@ describe("--text-faint on the cards it sits on, in Light", () => {
   }
 });
 
+// v18.14.0 (correction 6): the ⋯ menu's rows are inks on a popup, so no fill names them.
+// Opaque in every theme, because nothing dims behind it: --tl-popup-bg's 95% in Dark let
+// the buttons under it read through, behind the word Delete.
+describe("the conversation menu's words", () => {
+  const THEMES = { Light: LIGHT_VARS, Dark: DARK_VARS, "Light, Increase Contrast": LIGHT_MORE_VARS, "Dark, Increase Contrast": DARK_MORE_VARS };
+  for (const [theme, vars] of Object.entries(THEMES)) {
+    for (const ink of ["--text-primary", "--text-muted", "--danger-text"]) {
+      it(`${ink} reads on the menu in ${theme}`, () => {
+        const card = parse(vars["--menu-bg"]);
+        expect(card.a).toBe(1);
+        expect(ratio(parse(vars[ink]), card)).toBeGreaterThanOrEqual(NEED.label);
+      });
+    }
+  }
+});
+
 // ── A field's edge — a NON-TEXT boundary (v18.14.0, M6) ──────────────────────────
 // The party-size ring's shape again (below): there is no ink, so it is not a row in
 // FILLS. A white rim drew a field at 1.02:1 on a Section. M6 then held it to WCAG

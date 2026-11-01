@@ -5,12 +5,13 @@
 // is disabled when the 24h service window has expired.
 
 import { useState, useRef, useEffect } from "react";
-import { matchCustomerByPhone, regularChipLabel, conversationName, formatWindow, intentBannerVisible, isParsing, threadItems, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
-import { Reveal, mkBtn, mkSolidBtn, mkDangerBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
+import { matchCustomerByPhone, regularChipLabel, conversationName, conversationMenuIds, formatWindow, intentBannerVisible, isParsing, threadItems, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
+import { Reveal, mkBtn, mkSolidBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { RecheckIcon, ArchiveIcon, DraftIcon, RestoreIcon, MuteIcon } from "./WaIcons";
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon, TrashIcon } from "../Icons";
 import { MessageBubble } from "./MessageBubble";
+import { ConversationMenu } from "./ConversationMenu";
 import { DraftCard } from "./DraftCard";
 import { ReplyComposer } from "./ReplyComposer";
 import { LinkedBookingCard } from "./LinkedBookingCard";
@@ -297,62 +298,36 @@ export function ConversationView({
     ? <OutlineChip tone={win.expired ? "danger" : "success"} size="small">{win.label}</OutlineChip>
     : null;
 
-  // Manual LLM re-check — leftmost of the header actions in BOTH states (an
-  // archived thread can be re-checked too; that's often exactly why you opened
-  // it). It spins while the round-trip is in flight.
-  // v18.2.0 (the design critique, W3): icon AND word, like Archive beside it.
-  // It was icon-only, named by its `title` alone — an accessible name, but a
-  // tooltip the tablets never show, so a finger never learned what the
-  // circular arrow does. The title stays, as the longer description.
-  const running = recheck === "running";
-  const recheckBtn = onRecheck ? (
-    <button
-      onClick={runRecheck}
-      disabled={running}
-      title={running ? "Checking…" : "Re-check this conversation for requested changes"}
-      className={running ? undefined : "mgt-hover-scale mgt-press"}
-      style={mkSolidBtn(BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, cursor: running ? "default" : "pointer", flexShrink: 0, opacity: running ? 0.6 : 1 })}
-    >
-      {/* The spin is a LOOP — nothing arrives and nothing leaves, so neither
-          direction curve describes it and it keeps `linear`. Documented
-          exception, alongside .mgt-shimmer and .mgt-dot-pulse — and marked as
-          one, so `check:style`'s motion rule reads it as a decision rather than
-          as the sweep having missed a file (17.15.0-wa-sandbox). */}
-      <span style={running ? { display: "block", animation: "mgt-spin 900ms linear infinite" /* @motion */ } : { display: "block" }}><RecheckIcon size={IC.inline} /></span>
-      {running ? "Checking…" : "Re-check"}
-    </button>
-  ) : null;
-
+  // v18.14.0 (correction 6, Patryk): one action stays in the header and the rest
+  // are under the ⋯ beside it, `[Archive] [⋯]`, or `[Restore] [⋯]` on an archived
+  // thread. Delete still asks (`onDelete` raises the confirm).
+  //
+  // Manual LLM re-check, in BOTH states: an archived thread can be re-checked too,
+  // and that's often exactly why you opened it. The ⋯ turns while the round-trip is
+  // in flight, so the menu need not stay open to see it.
+  //
   // v18.9.0 — "Not a customer": a supplier, the gestor, a friend. Archives the
   // conversation and mutes it (no auto-reply, no parse, no unread, it stays in
   // Archived when they write again). Offered wherever the conversation is not
   // muted already; undone by Restore, which reads "Customer again" on a muted
   // conversation (useWhatsApp.handleUnarchive clears both).
-  const muteBtn = onMute && !conv.muted ? (
-    <button onClick={() => onMute(conv.phoneKey)} title="Not a customer: archive it, and stop replying to and reading its messages" className="mgt-hover-scale mgt-press" style={mkSolidBtn(BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0 })}><MuteIcon size={IC.inline} />Not a customer</button>
-  ) : null;
-
-  // The actions WRAP (v18.9.0): with "Not a customer" an archived thread has
-  // four, wider than a phone's header. They wrap as one group, right-aligned.
-  let headerActionBtns;
-  if (conv.archived) {
-    headerActionBtns = (
-      <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
-        {recheckBtn}
-        <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title={conv.muted ? "A customer after all: back to the inbox, and replied to and read again" : "Restore conversation"} className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-handled)", { padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />{conv.muted ? "Customer again" : "Restore"}</button>
-        {muteBtn}
-        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={mkDangerBtn({ gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small })} ><TrashIcon size={IC.inline} />Delete</button>
-      </div>
-    );
-  } else {
-    headerActionBtns = (
-      <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
-        {recheckBtn}
-        {muteBtn}
-        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn(BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0 })} ><ArchiveIcon size={IC.inline} />Archive</button>
-      </div>
-    );
-  }
+  const running = recheck === "running";
+  const menuRows = {
+    recheck: { label: running ? "Checking…" : "Re-check", icon: RecheckIcon, turning: running, inactive: running, title: running ? "Checking…" : "Re-check this conversation for requested changes", onPick: runRecheck },
+    mute: { label: "Not a customer", icon: MuteIcon, title: "Not a customer: archive it, and stop replying to and reading its messages", onPick: () => onMute(conv.phoneKey) },
+    delete: { label: "Delete", icon: TrashIcon, danger: true, title: "Delete conversation", onPick: () => { if (onDelete) onDelete(conv.phoneKey); } },
+  };
+  const menuItems = conversationMenuIds(conv, { recheck: !!onRecheck, mute: !!onMute }).map((id) => ({ id, ...menuRows[id] }));
+  const headerActionBtns = (
+    <div style={{ display: "flex", gap: 6, flexShrink: 0, justifyContent: "flex-end" }}>
+      {conv.archived
+        ? <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title={conv.muted ? "A customer after all: back to the inbox, and replied to and read again" : "Restore conversation"} className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-handled)", { padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />{conv.muted ? "Customer again" : "Restore"}</button>
+        : <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn(BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0 })} ><ArchiveIcon size={IC.inline} />Archive</button>}
+      {/* key: this component is not remounted on a thread switch, and a menu must
+          not stay open over the next conversation's actions. */}
+      {menuItems.length ? <ConversationMenu key={conv.phoneKey} items={menuItems} busy={running} /> : null}
+    </div>
+  );
   const disabled = !!(win && win.expired);
 
   // Intent banner gating: hidden once handled, until a newer INBOUND message
@@ -408,12 +383,7 @@ export function ConversationView({
           ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }} title="Its messages are kept, not answered or read, and stay in Archived"><MuteIcon size={IC.inline} />Not a customer</OutlineChip>
           : conv.archived ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }}><ArchiveIcon size={IC.inline} />Archived</OutlineChip> : null}
         {windowEl}
-        {/* `maxWidth: 100%` is what lets the actions WRAP (v18.9.0 follow-up):
-            this box does not shrink, so its width was the buttons' one-line
-            width, and on a 375px phone an archived thread's four ran 40px
-            past the screen (Delete cut off at x 415). Capped at the header's
-            width, the group inside wraps, right-aligned, as it was meant to. */}
-        <div style={{ marginLeft: "auto", flexShrink: 0, maxWidth: "100%" }}>{headerActionBtns}</div>
+        <div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>
       </div>
       </Reveal>
       <Reveal show={histOpen && hasRegulars && !kbFold} style={{ padding: "0 14px" }}><div style={{ paddingTop: 8 }}>{pastListBody}</div></Reveal>

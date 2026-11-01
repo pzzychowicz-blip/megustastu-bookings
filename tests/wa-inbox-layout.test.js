@@ -68,7 +68,8 @@ describe("W2 — two jobs, two names, two marks", () => {
 // the shape of Archive beside Re-check.
 describe("W3 — the words are on the buttons, not in a tooltip", () => {
   it("Re-check says Re-check, and Checking… while it runs", () => {
-    expect(View).toMatch(/<RecheckIcon size=\{IC\.inline\} \/><\/span>\s*\{running \? "Checking…" : "Re-check"\}\s*<\/button>/);
+    // v18.14.0 (correction 6): a row of the ⋯ menu, word and mark as before.
+    expect(View).toMatch(/recheck: \{ label: running \? "Checking…" : "Re-check", icon: RecheckIcon,/);
     expect(View, "no longer a bare square").not.toMatch(/width: H\.chrome, height: H\.chrome, minHeight: H\.chrome, padding: 0, cursor: running/);
   });
 
@@ -189,18 +190,23 @@ describe("the inbox's disconnection banner (v18.9.0)", () => {
   });
 });
 
-// v18.9.0 follow-up, measured on DEV at 375×812: an archived thread has four
-// actions (Re-check · Restore · Not a customer · Delete), and they ran 40px
-// past the screen (Delete at x 337–415). The group inside wraps, but the box
-// around it does not shrink, so its width was the buttons' one-line width.
-// Capped at the header's width it wraps: Delete at 282–360 on a second row,
-// and at 1280 the row is one line as before.
-describe("the conversation header's actions stay on a phone's screen", () => {
-  it("caps the box around the actions at the header's width", () => {
-    expect(View).toContain('<div style={{ marginLeft: "auto", flexShrink: 0, maxWidth: "100%" }}>{headerActionBtns}</div>');
+// v18.9.0 follow-up, measured on DEV at 375×812: an archived thread had four actions,
+// and they ran 40px past the screen, so the group was made to wrap. v18.14.0 (correction
+// 6, Patryk): it has two, Archive or Restore and the ⋯, which fit (Archive 235–318, ⋯
+// 324–360 at 375), so the wrapping went with the other three.
+describe("the conversation header has one action and the ⋯", () => {
+  const header = View.slice(View.indexOf("const headerActionBtns"), View.indexOf("const disabled = "));
+  it("in that order, whichever the action is", () => {
+    expect(header.indexOf("<RestoreIcon")).toBeGreaterThan(-1);
+    expect(header.indexOf("<ArchiveIcon")).toBeGreaterThan(header.indexOf("<RestoreIcon"));
+    expect(header.indexOf("<ConversationMenu")).toBeGreaterThan(header.indexOf("<ArchiveIcon"));
   });
-  it("lets the actions themselves wrap, right-aligned, in both states", () => {
-    const groups = View.match(/headerActionBtns = \(\s*<div style=\{\{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" \}\}>/g) || [];
-    expect(groups.length).toBe(2);
+  it("the rest are not buttons of the header any more", () => {
+    expect(header).not.toMatch(/Not a customer<\/button>|Delete<\/button>|Re-check/);
+    expect(View).not.toMatch(/mkDangerBtn/);
+  });
+  it("sits at the header's right, unwrapped", () => {
+    expect(View).toContain('<div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>');
+    expect(header).toContain('<div style={{ display: "flex", gap: 6, flexShrink: 0, justifyContent: "flex-end" }}>');
   });
 });

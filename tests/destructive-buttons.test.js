@@ -276,7 +276,9 @@ describe("phase 62 — one red for every destructive control, and the trash mark
       ["components/FloorPlanEditor.jsx", /<TrashIcon size=\{IC\.control\} \/>Delete door<\/button>/],
       ["components/FloorPlanEditor.jsx", /<TrashIcon size=\{IC\.control\} \/>Delete wall<\/button>/],
       ["components/LayoutSettings.jsx", /<TrashIcon size=\{IC\.control\} \/>\{orph > 0 \? "Remove anyway" : "Remove"\}/],
-      ["components/whatsapp/ConversationView.jsx", /style=\{mkDangerBtn\(\{ gap: 4, padding: "8px 12px", minHeight: H\.chrome, fontSize: T\.small \}\)\} ><TrashIcon size=\{IC\.inline\} \/>Delete<\/button>/],
+      // v18.14.0 (correction 6): a row of the ⋯ menu, which draws the row's icon before its word.
+      ["components/whatsapp/ConversationView.jsx", /delete: \{ label: "Delete", icon: TrashIcon, danger: true,/],
+      ["components/whatsapp/ConversationMenu.jsx", /<Icon size=\{IC\.control\} \/><\/span>\s*\{it\.label\}/],
       ["components/whatsapp/InboxPanel.jsx", /<TrashIcon size=\{IC\.inline\} \/>Delete<\/button>/],
       ["components/whatsapp/InboxPanel.jsx", /style=\{mkDangerBtn\(\)\}><TrashIcon size=\{IC\.control\} \/>Delete \{selected\.size\}<\/button>/],
     ];
