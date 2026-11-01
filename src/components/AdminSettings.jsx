@@ -27,6 +27,7 @@ import { TrashIcon } from "./Icons";
 import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, isGranted, effectiveRole, displayName } from "../lib/roles";
 import { MODULES, moduleOn } from "../lib/modules";
 import { RETENTION_CHOICES } from "../lib/activity";
+import { markArmed, armSettled } from "../lib/arm-guard";
 import { useIntegrationStatus } from "../hooks/useIntegrationStatus";
 
 const LEVEL_LABEL = { staff: "Staff", manager: "Manager", admin: "Admin" };
@@ -842,8 +843,8 @@ export function AdminTabContent({
                       {self ? null : <button className="mgt-hover-scale"
                         aria-describedby={armed ? removeWarnId : undefined}
                         onClick={function () {
-                          if (armed) { setArmedUid(null); say(onRemoveUser(r.uid)); }
-                          else { setMsg(null); setArmedUid(r.uid); }
+                          if (armed) { if (!armSettled()) return; setArmedUid(null); say(onRemoveUser(r.uid)); }
+                          else { markArmed(); setMsg(null); setArmedUid(r.uid); }
                         }}
                         aria-label={(armed ? "Confirm — remove " : "Remove ") + displayName(r)}
                         style={mkDangerBtn()}

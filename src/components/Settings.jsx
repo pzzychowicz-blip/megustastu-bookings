@@ -74,6 +74,7 @@ import { hourLabel } from "../lib/time-grid";
 import { canVibrate } from "../lib/haptics";
 import { splitExceptions, rangeLabel, specialHoursLabel } from "../lib/special-days";
 import { waAutoReplyOn, AUTO_ACK_TEXT } from "../lib/whatsapp";
+import { markArmed, armSettled } from "../lib/arm-guard";
 import { CloseIcon, DownloadIcon, TrashIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
@@ -742,7 +743,8 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
   const updateTier = (i, patch) => { disarmTier(); saveTiers(tiers.map((t, j) => (j === i ? { ...t, ...patch } : t))); };
   const removeTier = (i) => saveTiers(tiers.filter((_, j) => j !== i));
   const armTierRemove = (i) => {
-    if (armedTier === i) { disarmTier(); removeTier(i); return; }
+    if (armedTier === i) { if (!armSettled()) return; disarmTier(); removeTier(i); return; }
+    markArmed();
     setArmedTier(i);
     if (armTimer.current) clearTimeout(armTimer.current);
     armTimer.current = setTimeout(() => { armTimer.current = null; setArmedTier(null); }, 3000);
@@ -1150,7 +1152,10 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                           called "Delete" (measured on DEV). */}
                       <button
                         aria-label={(armed ? "Confirm — delete (" : "Delete (") + ruleWho + ")"}
-                        onClick={() => { if (armed) { onRemoveRule(r.id); setArmedRule(null); } else setArmedRule(r.id); }}
+                        onClick={() => {
+                          if (armed) { if (!armSettled()) return; onRemoveRule(r.id); setArmedRule(null); }
+                          else { markArmed(); setArmedRule(r.id); }
+                        }}
                         className="mgt-hover-scale mgt-press"
                         style={mkDangerBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px" })}><TrashIcon size={IC.control} />{armed ? "Confirm — delete" : "Delete"}</button>
                     </div>

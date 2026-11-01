@@ -39577,6 +39577,33 @@ on. This confirm is the only one nobody asked for.
 **Files:** `App.jsx`, `lib/modal-keys.js`, `atoms.jsx` (its comment), `tests/modal-keys.test.js`, `DESIGN.md`,
 `GLOSSARY.md`.
 
+**Correction 19: a double tap no longer goes through a two-tap button.** The audit behind Correction 18 found this one.
+Arming changes a button's label and leaves it where it stands, deliberately, so the second tap can find it, and that is
+also why a double tap walks straight through. Measured on DEV with real touches and writes blocked: two taps 120ms apart
+on "Delete customer & all data" erased the customer on the page, the armed warning never readable. That is the worst of
+the nine, because anonymising cannot be undone. Patryk chose to guard all of them.
+
+- **For half a second after arming, a second tap does nothing** (`lib/arm-guard.js`, `ARM_GUARD_MS` 500). One clock for
+  the app, because arming another button only restarts the wait, which is the safe direction.
+- **Nine buttons, the same two lines each**: Clear this range, Remove a person, Delete customer, a duration tier, a
+  standing booking, Remove a special day, a tag, a waiting party and a WhatsApp template.
+- **`tests/arm-guard.test.js`** runs the clock and reads every file that draws "Confirm — …", so a new two-tap button
+  fails until it is on the list and takes both lines. Taking one site's check out turned it red.
+
+| Real paced touches, writes blocked | Two taps, measured apart | Still armed | A tap after the wait |
+|---|---|---|---|
+| Delete customer & all data | 205ms | yes | acts |
+| Remove Tier 1 | 171ms | yes | acts |
+| Remove (a tag) | 153ms | yes | acts |
+
+Those gaps are 120ms of wait plus the rig's own tap time. A fresh load afterwards, writes allowed and nothing tapped,
+read DEV as it was: 28 customers with the 12-visits row at the top, 5 guest and 2 occasion tags, tiers 90 / 90 / 120.
+
+**Files:** new `lib/arm-guard.js`, new `tests/arm-guard.test.js`, `ActivityLogModal.jsx`, `AdminSettings.jsx`,
+`CustomersSettings.jsx`, `Settings.jsx`, `SpecialDayModal.jsx`, `TagListEditor.jsx`, `WaitlistPanel.jsx`,
+`whatsapp/TemplatesEditor.jsx`, `tests/destructive-buttons.test.js` (two pins on a handler's shape, which now also
+require the wait), `DESIGN.md`, `GLOSSARY.md`, `src/lib/CLAUDE.md`, `src/components/CLAUDE.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

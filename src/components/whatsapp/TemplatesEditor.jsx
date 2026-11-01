@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { Overlay, ModalTitle, Fld, mkInp, mkArea, mkBtn, mkDangerBtn, AutoHeight } from "../atoms";
 import { S, BTN, R, T, FW, IC } from "../../lib/constants";
+import { markArmed, armSettled } from "../../lib/arm-guard";
 import { TrashIcon } from "../Icons";
 
 export function TemplatesEditor({ templates, onSave, onClose }) {
@@ -52,7 +53,10 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
           <button className="mgt-hover-scale"
             aria-label={(armed ? "Confirm — delete (" : "Delete (") + name + ")"}
             style={mkDangerBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", gap: 4 })}
-            onClick={() => { if (armed) { setArmedId(null); removeT(t.id); } else setArmedId(t.id); }}
+            onClick={() => {
+              if (armed) { if (!armSettled()) return; setArmedId(null); removeT(t.id); }
+              else { markArmed(); setArmedId(t.id); }
+            }}
           ><TrashIcon size={IC.inline} />{armed ? "Confirm — delete" : "Delete"}</button>
         </div>
       </div>

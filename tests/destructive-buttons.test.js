@@ -66,7 +66,7 @@ describe("Admin → People: Remove", () => {
   });
 
   it("acts on the second tap only", () => {
-    expect(Admin).toMatch(/if \(armed\) \{ setArmedUid\(null\); say\(onRemoveUser\(r\.uid\)\); \}\s*else \{ setMsg\(null\); setArmedUid\(r\.uid\); \}/);
+    expect(Admin).toMatch(/if \(armed\) \{ if \(!armSettled\(\)\) return; setArmedUid\(null\); say\(onRemoveUser\(r\.uid\)\); \}\s*else \{ markArmed\(\); setMsg\(null\); setArmedUid\(r\.uid\); \}/);
     expect(Admin).not.toMatch(/onClick=\{function \(\) \{ say\(onRemoveUser\(r\.uid\)\); \}\}/);
   });
 
@@ -108,7 +108,7 @@ describe("the rows' deletes: one red, and the trash mark", () => {
   });
 
   it("Templates: Delete takes two taps, names its template, and any other action disarms it", () => {
-    expect(Templates).toMatch(/onClick=\{\(\) => \{ if \(armed\) \{ setArmedId\(null\); removeT\(t\.id\); \} else setArmedId\(t\.id\); \}\}/);
+    expect(Templates).toMatch(/onClick=\{\(\) => \{\s*if \(armed\) \{ if \(!armSettled\(\)\) return; setArmedId\(null\); removeT\(t\.id\); \}\s*else \{ markArmed\(\); setArmedId\(t\.id\); \}\s*\}\}/);
     expect(Templates).toMatch(/aria-label=\{\(armed \? "Confirm — delete \(" : "Delete \("\) \+ name \+ "\)"\}/);
     expect(Templates).toMatch(/aria-label=\{"Edit \(" \+ name \+ "\)"\}/);
     expect(Templates).toMatch(/function openEdit\(t\) \{ setArmedId\(null\);/);

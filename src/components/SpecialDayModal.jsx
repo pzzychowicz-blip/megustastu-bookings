@@ -21,6 +21,7 @@ import { formatDay } from "../lib/day";
 import { hourLabel } from "../lib/time-grid";
 import { countLabel } from "../lib/booking-logic";
 import { specialDayRefusal, affectedBookings, clampHours, rangeLabel, SPECIAL_NOTE_MAX } from "../lib/special-days";
+import { markArmed, armSettled } from "../lib/arm-guard";
 import { Overlay, ModalTitle, Section, Fld, DateField, InlineAlert, Reveal, AutoHeight, SEG_TRACK, segStyle, mkBtn, mkSolidBtn, mkDangerBtn, mkInp, mkSel } from "./atoms";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { ClosedIcon, TrashIcon } from "./Icons";
@@ -82,7 +83,8 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
           className="mgt-hover-scale"
           style={mkDangerBtn({ minHeight: H.touch, padding: "10px 18px", marginRight: "auto" })}
           onClick={() => {
-            if (!armed) { setArmed(true); return; }
+            if (!armed) { markArmed(); setArmed(true); return; }
+            if (!armSettled()) return;
             if (onRemove(initial.id) !== false) onClose(true);
             else { setArmed(false); setRefusal(NOT_SAVED); }
           }}

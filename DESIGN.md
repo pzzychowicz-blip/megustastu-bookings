@@ -447,7 +447,11 @@ explaining why is usually the one to read.
   `mkDangerBtn` (atoms): solid `--app-danger-solid` with the solid rim, on
   mkBtn's geometry; arming a two-tap confirm changes the LABEL ("Confirm —
   remove") and nothing else, not the colour and not the size under the finger.
-  A row of a menu is the exception (v18.14.0, Patryk): Delete on the conversation
+  **For half a second after arming, a second tap does nothing (v18.14.0, Patryk):**
+  the button stays put so the second tap can find it, which is exactly what let a
+  double tap through both, on every armed button. `armSettled` (`lib/arm-guard.js`)
+  is the one clock, and `tests/arm-guard.test.js` fails a two-tap button that does
+  not ask it. A row of a menu is the exception (v18.14.0, Patryk): Delete on the conversation
   menu is red words on the menu's surface, and the solid red is the confirm's.
   **A Delete or a Remove carries `TrashIcon` before its word**; Void voucher,
   Unblock and Clear this range do not, because they are not deletions of a

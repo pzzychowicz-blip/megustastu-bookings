@@ -42,6 +42,7 @@ import {
   addTag, renameTag, removeTag, tagIdFor,
 } from "../lib/tags";
 import { genId, countLabel } from "../lib/booking-logic";
+import { markArmed, armSettled } from "../lib/arm-guard";
 import { Collapsible, InlineAlert, OutlineChip, Reveal, mkInp, mkBtn, mkDangerBtn, mkRemoveX } from "./atoms";
 import { CloseIcon, TrashIcon } from "./Icons";
 
@@ -195,8 +196,9 @@ export function TagListEditor({ tagList, onSave, tagError, onClearError, canEdit
   useEffect(function () { return function () { if (armTimer.current) clearTimeout(armTimer.current); }; }, []);
   function disarm() { if (armTimer.current) { clearTimeout(armTimer.current); armTimer.current = null; } setArmedId(null); }
   function arm(id) {
-    if (armedId === id) { disarm(); onSave(removeTag(tagList, id).list); return; }
+    if (armedId === id) { if (!armSettled()) return; disarm(); onSave(removeTag(tagList, id).list); return; }
     if (armTimer.current) clearTimeout(armTimer.current);
+    markArmed();
     setArmedId(id);
     armTimer.current = setTimeout(function () { armTimer.current = null; setArmedId(null); }, ARM_MS);
   }

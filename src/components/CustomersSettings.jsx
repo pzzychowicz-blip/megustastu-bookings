@@ -31,6 +31,7 @@ import { TagListEditor } from "./TagListEditor";
 import { TagChips } from "./TagChips";
 import { tagLabels } from "../lib/tags";
 import { guestTagChoices, customersWithTag } from "../lib/tag-filter";
+import { markArmed, armSettled } from "../lib/arm-guard";
 
 // v18.2.0 phase 62: the id of the armed delete's warning, tied to its button
 // by aria-describedby only while it is on screen. One row is armed at a time.
@@ -236,8 +237,8 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
                 aria-describedby={armed ? DELETE_WARN_ID : undefined}
                 style={mkDangerBtn({ fontSize: T.body, minHeight: 36, minWidth: DELETE_W })}
                 onClick={function () {
-                  if (armed) { onDeleteCustomer({ phone: c.phone, guestIds: c.guestIds }); setArmedKey(null); setOpenKey(null); }
-                  else setArmedKey(c.key);
+                  if (armed) { if (!armSettled()) return; onDeleteCustomer({ phone: c.phone, guestIds: c.guestIds }); setArmedKey(null); setOpenKey(null); }
+                  else { markArmed(); setArmedKey(c.key); }
                 }}><TrashIcon size={IC.control} />{armed ? "Confirm — delete" : "Delete customer & all data"}</button>
             </div>
             {/* v18.9.0: with WhatsApp on, the delete also erases MGT's copy of

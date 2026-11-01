@@ -53,6 +53,7 @@ import { todayStr, addDays, formatDay, formatDaysIn, localDay, showsYear } from 
 import { DownloadIcon } from "./Icons";
 // v18.2.0 /code-review: the entry count joins its word like every other count.
 import { countLabel } from "../lib/booking-logic";
+import { markArmed, armSettled } from "../lib/arm-guard";
 
 // The kinds a person would filter by, in the order they matter during service.
 // `session` and `data` are deliberately last: signing in and exporting a backup
@@ -528,7 +529,8 @@ export function ActivityLogModal({
               disabled={allTime || clearBusy || !!badDay || !!backwards}
               aria-describedby={armed ? warnId : undefined}
               onClick={function () {
-                if (armed) { setArmed(false); onClearRange(); } else setArmed(true);
+                if (armed) { if (!armSettled()) return; setArmed(false); onClearRange(); }
+                else { markArmed(); setArmed(true); }
               }}
               style={mkDangerBtn({
                 fontSize: T.body, minHeight: H.compact, padding: SP.base + "px " + SP.pane + "px",

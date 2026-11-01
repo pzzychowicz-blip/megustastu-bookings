@@ -66,6 +66,7 @@ import { formatPhone } from "../lib/customers";
 import { formatDay } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
 import { tagLabels } from "../lib/tags";
+import { markArmed, armSettled } from "../lib/arm-guard";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { useLeavingOrder } from "../hooks/useLeavingOrder";
 import { Overlay, ModalTitle, mkBtn, mkDangerBtn, AutoHeight, Reveal } from "./atoms";
@@ -127,7 +128,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
             className="mgt-hover-scale mgt-press"
             aria-label={(arming?"Confirm — remove (":"Remove (")+party+")"}
             style={mkDangerBtn({fontSize: T.body,minHeight:36})}
-            onClick={function(){if(arming){onRemove(w.id);setConfirmId(null);}else setConfirmId(w.id);}}><TrashIcon size={IC.control} />{arming?"Confirm — remove":"Remove"}</button></div></div>
+            onClick={function(){if(arming){if(!armSettled())return;onRemove(w.id);setConfirmId(null);}else{markArmed();setConfirmId(w.id);}}}><TrashIcon size={IC.control} />{arming?"Confirm — remove":"Remove"}</button></div></div>
     );
   }
 
