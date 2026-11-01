@@ -32,6 +32,7 @@
 import { mkBtn } from "./atoms";
 import { AlertIcon, OfflineIcon, SwapIcon, ClosedIcon } from "./Icons";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
+import { ParkedDiscard } from "./ParkedDiscard";
 import { BTN, R, T, FW, H, SP } from "../lib/constants";
 
 // A section body: the row under a section header. The mark and title live in the
@@ -141,7 +142,7 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, pa
     title: "Couldn't save", count: parked.length || 1,
     node: body(
       <>
-        <span style={{ flex: 1, minWidth: 0, color: "var(--danger-text)", display: "grid", gap: SP.tight }}>
+        <span style={{ flex: "1 1 200px", minWidth: 0, color: "var(--danger-text)", display: "grid", gap: SP.tight }}>
           {parked.length ? <span>{parkedMessage(parked)}</span> : null}
           {writeWarning ? <span>{writeWarning}</span> : null}
         </span>
@@ -149,27 +150,26 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, pa
             uses for its act-on-this control (Reassign, Assign, No show).
             Discard keeps the neutral slate the Dismiss beside it has — and is
             deliberately NOT a red: in this app "cancel" means cancel the
-            BOOKING (BTN.cancel was that red, removed in v18.2.0). */}
-        {parked.length ? (
-          <button
-            className="mgt-hover-scale"
-            style={mkBtn({ fontSize: T.body, background: BTN.orange, minHeight: H.compact, padding: "4px 12px" })}
-            onClick={onRetryParked}>Retry</button>
-        ) : null}
-        {parked.length ? (
-          <button
-            className="mgt-hover-scale"
-            style={mkBtn({ fontSize: T.body, background: BTN.quiet, minHeight: H.compact, padding: "4px 12px" })}
-            onClick={onDiscardParked}>Discard</button>
-        ) : null}
-        {writeWarning ? (
-          <button
-            className="mgt-hover-scale"
-            style={mkBtn({ fontSize: T.body, background: BTN.quiet, minHeight: H.compact, padding: "4px 12px" })}
-            onClick={onDismissWarning}>Dismiss</button>
-        ) : null}
+            BOOKING (BTN.cancel was that red, removed in v18.2.0). The key
+            disarms it when another write parks, because the armed tap would
+            then discard more than the one it was armed for. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: "auto" }}>
+          {parked.length ? <ParkedDiscard key={parked.length} onDiscard={onDiscardParked} /> : null}
+          {parked.length ? (
+            <button
+              className="mgt-hover-scale"
+              style={mkBtn({ fontSize: T.body, background: BTN.orange, minHeight: H.compact, padding: "4px 12px" })}
+              onClick={onRetryParked}>Retry</button>
+          ) : null}
+          {writeWarning ? (
+            <button
+              className="mgt-hover-scale"
+              style={mkBtn({ fontSize: T.body, background: BTN.quiet, minHeight: H.compact, padding: "4px 12px" })}
+              onClick={onDismissWarning}>Dismiss</button>
+          ) : null}
+        </div>
       </>
-    )
+    , { flexWrap: "wrap" })
   });
 
   if (!isOnline) out.push({

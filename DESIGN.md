@@ -501,6 +501,10 @@ explaining why is usually the one to read.
   both keep editing. Its title names the situation rather than proposing the loss, and
   its second sentence says what the loss costs. Measured before: Escape then Enter wiped
   a walk-in, and the quiet button (Correction 5) was the faintest thing beside the red.
+  The "Couldn't save" banner follows the same rule: nobody asked to lose that change
+  either, so Retry takes the right and Discard the left, in two taps ("Confirm —
+  discard"), in a slot reserving the armed width (`PARKED_ARMED_W`). It keeps its slate,
+  because a red there would read as cancelling the booking.
 - **A surface that carries data is OPAQUE (v18.2.0, X2).** The Week / Month
   cells were `--bg-input` (half-transparent) over a translucent sheet, so the
   page behind the modal showed through and the timeline's orange blocks

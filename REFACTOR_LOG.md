@@ -39653,6 +39653,23 @@ sentences (a reminder, a conversation, Discard) were read against their code and
 
 **Files:** `lib/delete-undo.js`, `App.jsx`, `whatsapp/InboxPanel.jsx`, `tests/delete-undo.test.js`.
 
+**Correction 22: the "Couldn't save" banner follows the same rule.** The same audit found that Discard on a parked write loses
+the change for good in one tap, with Retry to its left, the far side of what the rule from Correction 18 asks for. Patryk chose
+two taps with Retry on the right, the colour left as it was. So the row reads Discard, Retry, then a Dismiss when a warning is
+showing too; Discard arms to "Confirm — discard" with the half-second wait, and goes back by itself after three seconds, since
+nothing else in that row could disarm it. A second write parking while it is armed disarms it as well, because the armed tap
+would then discard more than it was armed for.
+
+DESIGN.md's armed-width rule applies here too, and the row had neither half of it: the text now has a basis, so a phone puts the
+buttons on their own line, and Discard sits in a slot reserving its armed width (136.6 measured, `PARKED_ARMED_W` 137).
+
+Measured on a really refused write, for the first time in this version. The rig's new `reject_writes` answers a write frame with
+`permission_denied` itself, so the frame never reaches DEV: four refusals, the first and its three retries, then "Yara Domínguez,
+21:30 — not saved, and undone." At 998 × 507 and at 390 × 844, Discard's right edge and Retry's position are the same at rest and
+armed, a tap at 120ms stays armed, it disarms after three seconds, and a tap after the wait discards.
+
+**Files:** `ParkedDiscard.jsx` (new), `AppBanners.jsx`, `tests/arm-guard.test.js`, `DESIGN.md`, `GLOSSARY.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

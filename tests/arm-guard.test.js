@@ -53,6 +53,7 @@ const SITES = {
   "src/components/ActivityLogModal.jsx": 1,
   "src/components/AdminSettings.jsx": 1,
   "src/components/CustomersSettings.jsx": 1,
+  "src/components/ParkedDiscard.jsx": 1,
   "src/components/Settings.jsx": 2,
   "src/components/SpecialDayModal.jsx": 1,
   "src/components/TagListEditor.jsx": 1,
@@ -84,6 +85,15 @@ describe("every two-tap button", () => {
     const arm = tiers.slice(tiers.indexOf("const armTierRemove"));
     expect(arm.indexOf("armSettled()")).toBeLessThan(arm.indexOf("removeTier(i)"));
     expect(arm.indexOf("removeTier(i)")).toBeLessThan(arm.indexOf("markArmed()"));
+  });
+});
+
+// Correction 22: Discard is the one button on the strip that loses something for good.
+describe("the parked write", () => {
+  it("draws the two-tap Discard before Retry, so the way forward takes the right", () => {
+    const banners = sources.find(([path]) => path.endsWith("AppBanners.jsx"))[1];
+    expect(banners.indexOf("<ParkedDiscard")).toBeGreaterThan(-1);
+    expect(banners.indexOf("<ParkedDiscard")).toBeLessThan(banners.indexOf(">Retry<"));
   });
 });
 
