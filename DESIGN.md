@@ -1705,6 +1705,15 @@ mechanism in all three. The now-pill rides it; the now-line stays with the rows.
 - The notification strip still scrolls away, Patryk's v17.5.0 decision. A swipe that
   starts on the ruler does not pan the grid.
 
+### The grid's two tints (v18.14.0)
+The Timeline's rows were one ground, so a row's kind was only a word or a badge at the
+far left. A tint is a decoration under the blocks: it never carries a status, and a
+booking keeps its own colour on it (Patryk, 2026-11-01, against changing the blocks).
+
+- **The Unplaced row is rose**, `--tl-unplaced-bg`, the red of its word and its dashed
+  line, in both columns. It is `unplacedEdge`'s fill, so it stops on the dashed line and
+  eases with the row. "Unplaced" reads 6.62:1 on it in Light and 7.21 in Dark.
+
 ### Two-line blocks (v18.14.0)
 A block used to lose its time on any day where one block could not fit the chip
 beside the name, and the ring and flags then cut the name shorter still. At 1.5× a

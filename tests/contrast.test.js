@@ -763,6 +763,20 @@ describe("Following stays a clear step darker than Follow", () => {
   }
 });
 
+// v18.14.0 (correction 1): the Unplaced row's rose ground carries one word,
+// "Unplaced", in --danger-text. A tint is no fill's partner in the registry, so
+// its pair is written out here, over the card's opaque ground.
+describe("the Unplaced word on its rose ground", () => {
+  for (const theme of ["light", "dark"]) {
+    it(`reads in ${theme}`, () => {
+      const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+      const ground = over(parse(vars["--tl-unplaced-bg"]), parse(vars["--tl-ruler-bg"]));
+      const got = +ratio(parse(vars["--danger-text"]), ground).toFixed(2);
+      expect(got, `Unplaced in ${theme}: ${got}:1`).toBeGreaterThanOrEqual(NEED.label);
+    });
+  }
+});
+
 // v18.14.0 (H5): the words on a row under a dragged block. The pill is its role's
 // tint over the ruler's opaque surface, because the row under it wears the same
 // tint and a tint alone would float. The surface is the point of the test: over

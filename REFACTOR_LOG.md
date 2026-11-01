@@ -39136,6 +39136,25 @@ section below ran before this fix and were not run again after it, because the s
 
 **Files:** `atoms.jsx`, `tests/motion.test.js`, `src/components/CLAUDE.md`, `DESIGN.md`, `ROADMAP.md`.
 
+### Patryk's corrections after seeing it (2026-11-01)
+
+He looked at the built version and sent five points. Every fork went through an interview on real renders of
+DEV, in five rounds, and his answers are the scope of this section. The first two sheets were mock-ups: injected
+CSS and DOM on the running app, writes blocked, nothing in `src/`. One rendering was wrong and was caught before
+he saw it: the block-colour option's fill had not applied.
+
+**Correction 1: the Unplaced row is tinted rose.** He asked for a different background, and the option he took
+keeps the bookings' status colour, against changing the blocks. `--tl-unplaced-bg` is `rgba(220,60,60,.08)` in
+Light and `rgba(255,120,120,.1)` in Dark. It is `unplacedEdge`'s fill, in both columns, so it stops on the dashed
+line (the edge's bottom and the line's agree at 278) and needs no hold of its own. The word's wrapper became
+`position: relative`, or the absolute tint paints over it. Measured on real pixels on Saturday's board: "Unplaced"
+#991b1b on #ece3e8 is 6.62:1 in Light, #fca5a5 on #372a2f is 7.21 in Dark, beside an untinted #eef1f7 and #212328.
+It eases both ways with the row: deleting Camilo Rey, writes blocked, took it 88 → 77.5 → 59 → 47.8 → 44.1 → 44,
+and Undo took it 44 → 59 → 73 → 81.5 → 86 → 88. A new test holds the word in both themes, because a tint is no
+fill's partner in the registry. Screen only, by his decision: `TimelineSheet` draws its own grid.
+
+**Files:** `index.css`, `TimelineView.jsx`, `tests/contrast.test.js`, `DESIGN.md`, `GLOSSARY.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, at 998 × 507 and 570 in Light and 507 in Dark, across the main card,

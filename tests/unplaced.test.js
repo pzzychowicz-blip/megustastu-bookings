@@ -209,8 +209,8 @@ describe("the Unplaced row eases open and shut (v18.3.2, O4)", () => {
     expect(TL).toMatch(/const unplacedGridBox = \{ \.\.\.unplacedBox, zIndex: unplacedEasing && unplacedRow\.grow \? 1 : undefined \};/);
   });
 
-  it("the edge (line and grid lines) follows the eased box less the gap, and clips", () => {
-    expect(TL).toMatch(/const unplacedEdge = \{\s*position: "absolute", top: 0, left: 0, right: 0,\s*height: "calc\(100% - " \+ UNPLACED_GAP \+ "px\)",\s*overflow: "hidden"\s*\};/);
+  it("the edge (line, grid lines and rose ground) follows the eased box less the gap, and clips", () => {
+    expect(TL).toMatch(/const unplacedEdge = \{\s*position: "absolute", top: 0, left: 0, right: 0,\s*height: "calc\(100% - " \+ UNPLACED_GAP \+ "px\)",\s*overflow: "hidden",\s*background: "var\(--tl-unplaced-bg\)"\s*\};/);
     expect(TL).toMatch(/<div style=\{unplacedEdge\}>\{unplacedLine\}<GridLines \/><\/div>/);
     expect(TL).toMatch(/<div style=\{unplacedEdge\}>\{unplacedLine\}<\/div>/);
     // One set of grid lines for the row, so they never overflow onto the

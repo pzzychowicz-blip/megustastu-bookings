@@ -1801,10 +1801,14 @@ export const TimelineView = memo(function TimelineView({
   // the row eases it follows the box, so the line travels with the table rows
   // and the grid lines (semi-transparent) are never drawn twice over theirs. It
   // clips, so below 1px the line is gone rather than lying on the header's edge.
+  // v18.14.0 (correction 1): it carries the row's rose ground too, so the tint
+  // stops on the dashed line and eases with the row, and neither column needs
+  // a hold of its own.
   const unplacedEdge = {
     position: "absolute", top: 0, left: 0, right: 0,
     height: "calc(100% - " + UNPLACED_GAP + "px)",
-    overflow: "hidden"
+    overflow: "hidden",
+    background: "var(--tl-unplaced-bg)"
   };
   // Drawn over the last lane's last pixel, never below the lanes, so the box,
   // the label column and `unplacedH` agree to the pixel (v18.2.0 measured: a
@@ -2030,8 +2034,10 @@ export const TimelineView = memo(function TimelineView({
           <>
             <div style={unplacedEdge}>{unplacedLine}</div>
             {/* Less the line's 1px, which this box's own border took when the
-                line was drawn here, so the word stays where it always was. */}
+                line was drawn here, so the word stays where it always was.
+                Positioned, or the absolute tint above it paints over the word. */}
             <div style={{
+              position: "relative",
               height: (heldLanes * sz.rowH - 1) + "px",
               display: "flex", alignItems: "center", justifyContent: "flex-end",
               paddingRight: 6,
