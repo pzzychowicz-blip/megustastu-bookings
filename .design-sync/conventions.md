@@ -6,7 +6,7 @@ MGT Bookings is the staff-only booking app of Me Gustas Tú, a restaurant in the
 
 **Theme.** Light by default. Dark is `data-theme="dark"` on any ancestor, and every token flips with it. Paint a page with `var(--bg-app)`. Text is `var(--text-primary)`, then `var(--text-secondary)`, then `var(--text-muted)`. Put a colour token only on a surface that flips with it.
 
-**Controls.** `mkBtn({ background: BTN.nav })` is the pill button and `mkSolidBtn("var(--app-new)")` the primary action. Fields: `mkInp()`, `mkSel()`, `mkArea()`, and `mkStep()` for − / + steppers. All of them return style objects to spread into `style`. Label every field with `Fld`. Group a form in `Section` cards. `Toggle` is the on/off switch.
+**Controls.** `mkBtn({ background: BTN.quiet })` is the pill button and `mkSolidBtn("var(--app-new)")` the primary action. Fields: `mkInp()`, `mkSel()`, `mkArea()`, and `mkStep()` for − / + steppers. All of them return style objects to spread into `style`. Label every field with `Fld`. Group a form in `Section` cards. `Toggle` is the on/off switch.
 
 **Booking status is never colour alone.** pending yellow · confirmed amber · seated green · completed grey · cancelled red. Fill with `BLOCK_BG[status]`, draw the ink with `BLOCK_INK[status]`, and always add the mark: `SBadge` for a label, or `StatusIcon` inside a block.
 

@@ -807,7 +807,7 @@ export const ListView = memo(function ListView({
             aria-label="More actions"
             aria-expanded={menuFor === b.id}
             title="More actions"
-            style={mkBtn({ background: BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "4px 12px" })}
+            style={mkBtn({ background: BTN.quiet, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "4px 12px" })}
             onClick={stopped(() => setMenuFor(b.id))}
           >
             <MoreIcon size={IC.control} />

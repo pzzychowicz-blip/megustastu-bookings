@@ -16,7 +16,7 @@
 // contract) so App's discard guard covers Cancel, Escape and the backdrop.
 
 import { useState, useEffect } from "react";
-import { S, T, FW, IC, H } from "../lib/constants";
+import { BTN, S, T, FW, IC, H } from "../lib/constants";
 import { formatDay } from "../lib/day";
 import { hourLabel } from "../lib/time-grid";
 import { countLabel } from "../lib/booking-logic";
@@ -90,7 +90,7 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
       ) : null}
       <button
         className="mgt-hover-scale"
-        style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: "var(--app-btn-slate)" })}
+        style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: BTN.quiet })}
         onClick={() => onClose(false)}
       >Cancel</button>
       <button

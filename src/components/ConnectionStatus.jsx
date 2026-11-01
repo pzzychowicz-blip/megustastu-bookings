@@ -237,7 +237,7 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
                 type="button"
                 className="mgt-hover-scale"
                 onClick={onLogout}
-                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "6px 12px", background: BTN.nav })}
+                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "6px 12px", background: BTN.quiet })}
               >
                 Log out
               </button>
@@ -269,7 +269,7 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
               type="button"
               className="mgt-hover-scale"
               onClick={onReconnect}
-              style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "6px 12px", background: BTN.nav, marginBottom: 8 })}
+              style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "6px 12px", background: BTN.quiet, marginBottom: 8 })}
             >
               Reconnect now
             </button>

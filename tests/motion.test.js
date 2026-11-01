@@ -369,11 +369,14 @@ describe("a pressed tag chip's mark arrives and leaves", () => {
     const rule = html.match(/\.mgt-hover-scale, \.mgt-press \{\s*transition:([^;]+);/);
     expect(rule, "the shared interaction transition is still one rule").not.toBeNull();
     const props = rule[1].split(",").map((p) => p.trim().split(/\s+/)[0]);
-    expect(props).toEqual(["transform", "background-color", "box-shadow", "filter"]);
+    expect(props).toEqual(["transform", "background-color", "color", "border-color", "box-shadow", "filter"]);
     const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
     const ease = atoms.slice(atoms.indexOf("const CHIP_BUTTON_EASE"), atoms.indexOf("export function OutlineChip"));
     for (const prop of props) {
-      expect(ease, prop).toContain((prop === "transform" ? '"' : '", ') + prop + ' " + M.tap');
+      // The chip eases its ring and ink on M.move, slower than the class, on
+      // purpose: there the tone is the change. Named is what this is about.
+      const speed = prop === "color" || prop === "border-color" ? "M.move" : "M.tap";
+      expect(ease, prop).toContain((prop === "transform" ? '"' : '", ') + prop + ' " + ' + speed);
     }
   });
 });

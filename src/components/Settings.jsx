@@ -353,7 +353,7 @@ function SpecialDaysList({ exceptions, onOpen }) {
           <span style={{ fontSize: T.body, color: "var(--text-primary)", flex: "1 1 200px" }}>{line(ex)}</span>
           <button type="button" className="mgt-hover-scale" onClick={() => onOpen(ex.id)}
             aria-label={"Change " + rangeLabel(ex, today)}
-            style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.nav })}>Change</button>
+            style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.quiet })}>Change</button>
         </div>
       )) : (
         <div style={{ fontSize: T.body, color: "var(--text-muted)", padding: "6px 0" }}>None planned.</div>
@@ -368,7 +368,7 @@ function SpecialDaysList({ exceptions, onOpen }) {
       ) : null}
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: SP.snug }}>
         <button type="button" className="mgt-hover-scale" onClick={() => onOpen(null)}
-          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "6px 14px", background: BTN.nav })}>Add a special day</button>
+          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "6px 14px", background: BTN.quiet })}>Add a special day</button>
       </div>
     </div>
   );
@@ -1227,7 +1227,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               onClick={onBackup}
               className="mgt-hover-scale mgt-press"
               aria-busy={backupStatus && backupStatus.kind === "busy" ? true : undefined}
-              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><DownloadIcon size={IC.control} />Download backup</button>
+              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.quiet, display: "inline-flex", alignItems: "center", gap: 6 })}><DownloadIcon size={IC.control} />Download backup</button>
           </div>
           {/* v18.3.1: the outcome, here rather than in the red banner behind
               this overlay (App's backupStatus). The region is ALWAYS mounted:

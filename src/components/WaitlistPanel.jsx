@@ -61,7 +61,7 @@
 //                    leaves or arrives then does not fold (useRevealRows' quiet)
 
 import { useState } from "react";
-import { S, BLOCK_BG, R, T, FW, IC, SP, ROW_FOLD } from "../lib/constants";
+import { BTN, S, BLOCK_BG, R, T, FW, IC, SP, ROW_FOLD } from "../lib/constants";
 import { formatPhone } from "../lib/customers";
 import { formatDay } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
@@ -153,7 +153,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
   const footerEl=(
     <div style={{display:"flex",justifyContent:"flex-end"}}><button
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
         onClick={onClose}>Done</button></div>
   );
 

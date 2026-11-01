@@ -20,7 +20,7 @@ function Panel({ dark, Icon, label }: { dark: boolean; Icon: any; label: string 
         ))}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: SP.base, flexWrap: "wrap" }}>
-        <button style={mkBtn({ background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}>
+        <button style={mkBtn({ background: BTN.quiet, display: "inline-flex", alignItems: "center", gap: 6 })}>
           <Icon size={IC.control} />{label}
         </button>
         <button aria-label={label} title={label} style={mkBtn({ background: "var(--app-btn-grey)", width: 40, height: 40, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" })}>

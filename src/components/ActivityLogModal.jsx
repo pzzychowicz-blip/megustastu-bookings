@@ -229,7 +229,7 @@ export function ActivityLogModal({
     <Overlay onClose={onClose} footer={
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button className="mgt-hover-scale" onClick={onClose}
-          style={mkBtn({ background: "var(--app-btn-slate)" })}>Done</button>
+          style={mkBtn({ background: BTN.quiet })}>Done</button>
       </div>
     }>
       {/* A read surface, so the pill takes the neutral — ModalTitle's colour
@@ -339,7 +339,7 @@ export function ActivityLogModal({
               disabled={crashBusy}
               onClick={pressCrashes}
               style={mkBtn({
-                background: BTN.nav, fontSize: T.body, minHeight: H.compact,
+                background: BTN.quiet, fontSize: T.body, minHeight: H.compact,
                 display: "inline-flex", alignItems: "center", gap: SP.snug,
                 opacity: crashBusy ? 0.5 : 1,
               })}
@@ -466,7 +466,7 @@ export function ActivityLogModal({
                 className="mgt-hover-scale"
                 onClick={onLoadOlder}
                 disabled={loadingMore}
-                style={mkBtn({ background: "var(--app-btn-slate)", minHeight: H.compact, fontSize: T.body })}
+                style={mkBtn({ background: BTN.quiet, minHeight: H.compact, fontSize: T.body })}
               >{loadingMore ? "Loading…" : "Load older"}</button>
             </div>
           ) : null}
@@ -517,7 +517,7 @@ export function ActivityLogModal({
               disabled={!shown.length}
               onClick={function () { onDownload(activityCsv(shown, byId), activityCsvName(fromDay, toDay)); }}
               style={mkBtn({
-                background: BTN.nav, fontSize: T.body, minHeight: H.compact,
+                background: BTN.quiet, fontSize: T.body, minHeight: H.compact,
                 display: "inline-flex", alignItems: "center", gap: SP.snug,
                 opacity: shown.length ? 1 : 0.5,
               })}

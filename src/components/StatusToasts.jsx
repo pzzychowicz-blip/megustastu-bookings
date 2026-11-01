@@ -125,7 +125,7 @@ export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown
         <button
           onClick={function(e){e.stopPropagation();onUndo();}}
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({fontSize: T.body,minHeight:H.compact,padding:"4px 12px",background:BTN.nav,flexShrink:0})}>Undo</button>
+          style={mkBtn({fontSize: T.body,minHeight:H.compact,padding:"4px 12px",background:"var(--accent)",flexShrink:0})}>Undo</button>
       </span>,{pointerEvents:"auto",padding:"6px 10px 6px 14px"})},
     {key:"dragmsg",on:!!dragMsg,
       node:toast(dragMsg&&dragMsg.good?"var(--success-text)":"var(--warn-text)",dragMsg?dragMsg.text:"")},

@@ -3739,7 +3739,7 @@ export function BookingApp({uid}){
 
   const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
-        style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
         onClick={function(){setConfirmDel(null);}}>Back</button><button
         onClick={function(){delBooking(confirmDel);}}
         className="mgt-hover-scale"
@@ -3752,12 +3752,12 @@ export function BookingApp({uid}){
   // anchors to the viewport inside a plain relative/z-index ancestor (only
   // transform/filter/perspective would break that). Order-proof by construction.
   //
-  // "Keep editing" uses --app-btn-slate, NOT a red: in this app's vocabulary
+  // "Keep editing" is the quiet button, NOT a red: in this app's vocabulary
   // "cancel" means cancel the BOOKING (BTN.cancel, red, removed v18.2.0). The
   // delModal footer this is otherwise modelled on can afford that (its safe
   // option is literally called Cancel); here the safe option sitting next to a
   // red Discard would read as two danger buttons — the exact mis-tap this
-  // guard exists to prevent. Slate is the house token for a neutral dialog
+  // guard exists to prevent. Quiet is the house look for a neutral dialog
   // secondary (see confirmKitchen's "Back").
   const DISCARD_BODY={
     form:"The booking you're editing hasn't been saved yet.",
@@ -3769,7 +3769,7 @@ export function BookingApp({uid}){
   };
   const discardModal=<div style={{position:"relative",zIndex:260}}><ModalPresence show={!!confirmDiscard}>{confirmDiscard?<Overlay /* @static-height one sentence out of DISCARD_BODY, fixed for the life of one open */ onClose={function(){setConfirmDiscard(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
-        style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
         onClick={function(){setConfirmDiscard(null);}}>Keep editing</button><button
         onClick={doDiscard}
         className="mgt-hover-scale"
@@ -3956,13 +3956,13 @@ export function BookingApp({uid}){
           style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:compact?8:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" ref={dateNavRef} style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:dateCtrlMotion}}><button
               onClick={function(){goToDate(stepDate(viewDate,-1));}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
+              style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.quiet})}
               aria-label="Previous day"
               title="Previous day (←)"
               ><ChevronLeftIcon size={IC.chrome} /></button><button
               onClick={function(){goToDate(stepDate(viewDate,1));}}
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
+              style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.quiet})}
               aria-label="Next day"
               title="Next day (→)"
               ><ChevronRightIcon size={IC.chrome} /></button><DateField
@@ -3991,7 +3991,7 @@ export function BookingApp({uid}){
                  white text is a recorded exemption, extended to this chrome by
                  Patryk after seeing all three candidate treatments side by side
                  in both themes. */
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BLOCK_BG.pending:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={IC.control} />{dayWaiting.length}</button></Presence></div>{/* v18.2.0: the basis is "auto" — the Summary's own ONE-LINE width — where it
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BLOCK_BG.pending:BTN.quiet,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={IC.control} />{dayWaiting.length}</button></Presence></div>{/* v18.2.0: the basis is "auto" — the Summary's own ONE-LINE width — where it
               was 360 (and "100%" on a phone). A wrapping row breaks on the basis,
               so at 360 the Summary stayed beside the controls from ~680px up even
               when its numbers needed ~600, and its collapsed card went to two
@@ -4134,7 +4134,7 @@ export function BookingApp({uid}){
           onDirty={setBlockDirty}
           onClose={requestCloseBlock} />:null}</ModalPresence><ModalPresence show={!!confirmCancel}>{confirmCancel?<Overlay /* @static-height one fixed sentence and three buttons */ onClose={function(){setConfirmCancel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmCancel(null);}}>Back</button><button
               onClick={function(){doCancelBooking(confirmCancel,true);setShowForm(false);}}
               className="mgt-hover-scale"
@@ -4143,7 +4143,7 @@ export function BookingApp({uid}){
               className="mgt-hover-scale"
               style={mkSolidBtn(BLOCK_BG.cancelled)}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>The booking stays on the day, marked cancelled. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay /* @static-height one sentence, computed when it opens and not after */ onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
               className="mgt-hover-scale"
@@ -4156,7 +4156,7 @@ export function BookingApp({uid}){
               onSkip={function(){if(voucherAsk.from==="settle")setVoucherAsk(null);else settleVoucher(0);}}
               onClose={function(){setVoucherAsk(null);}} />:null}</ModalPresence><ModalPresence show={!!voucherBack}>{voucherBack&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherBack.id;})||{}).voucherCode)]?<Overlay /* @static-height two fixed sentences and two buttons */ onClose={function(){setVoucherBack(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){settleVoucherBack(false);}}>Keep redeemed</button><button
               onClick={function(){settleVoucherBack(true);}}
               className="mgt-hover-scale"
@@ -4168,7 +4168,7 @@ export function BookingApp({uid}){
               return "This visit redeemed "+money(amt,generalSettings.currency)+" of voucher "+formatCode(v?v.code:"")+". "+why+" — restore that amount to the voucher, or keep it redeemed?";
             })()}</div><div style={{fontSize: T.small,color:S.sub}}>{voucherBack.from==="delete"?"Restoring puts the balance back. Keeping it redeemed leaves the amount spent against a booking that will no longer exist. The booking is deleted either way.":"Restoring puts the balance back and removes this visit from the voucher’s history. Keeping it redeemed leaves the record as it is."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!seatNote}>{seatNote?<SeatNoteModal note={seatNote} onClose={function(){setSeatNote(null);}} />:null}</ModalPresence><ModalPresence show={!!seatClash}>{seatClash?<SeatClashModal clash={seatClash} onComplete={seatAfterClearing} onAnyway={seatAnyway} onBack={function(){setSeatClash(null);}} />:null}</ModalPresence><ModalPresence show={!!voucherCarry}>{voucherCarry?<VoucherCarryModal carry={voucherCarry} currency={generalSettings.currency} onMove={doVoucherCarry} onNotNow={function(){setVoucherCarry(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button
               onClick={function(){setConfirmReshuffle(false);forceReshuffle();}}
               className="mgt-hover-scale"
@@ -4178,7 +4178,7 @@ export function BookingApp({uid}){
         // resets to 'general' on close so reopens feel fresh.
         showSettings?<Overlay /* @static-height the tab body eases inside SettingsContent's own AutoHeight watch={cur} */ onClose={requestCloseSettings} maxWidth={SETTINGS_CARD_W} anchor="top" footer={<div style={{display:"flex",justifyContent:"flex-end"}}><button
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"8px 18px",background:"var(--app-btn-slate)"})}
+              style={mkBtn({minHeight:40,padding:"8px 18px",background:BTN.quiet})}
               onClick={requestCloseSettings}>Close</button></div>}><ModalTitle background="var(--app-btn-grey-strong)">Settings</ModalTitle><Suspense fallback={null}><SettingsContent
             appVersion={__APP_SIGNATURE__.version}
             onDirty={setSettingsDirty}
@@ -4283,7 +4283,7 @@ export function BookingApp({uid}){
         // Renders on top of Settings in DOM order so it visually covers the list.
         confirmReminderDel?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReminderDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmReminderDel(null);}}>Back</button><button
               onClick={function(){doDeleteReminder(confirmReminderDel);}}
               className="mgt-hover-scale"
@@ -4351,14 +4351,14 @@ export function BookingApp({uid}){
           const bk=conv&&conv.acceptedBookingId?bookings.find(function(b){return b.id===conv.acceptedBookingId;}):null;
           return <Overlay /* @static-height one sentence, chosen from the linked booking when it opens and not after */ onClose={function(){setConfirmArchive(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmArchive(null);}}>Back</button><button
               onClick={function(){wa.doArchive(confirmArchive);setConfirmArchive(null);}}
               className="mgt-hover-scale"
               style={mkSolidBtn(BTN.orange,{minHeight:H.touch})}>Archive anyway</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Archive conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{bk?("This conversation is linked to a booking on "+formatDay(bk.date)+" at "+bk.time+". Archiving won't cancel the booking."):"Archive this conversation?"}</div></Overlay>;
         })():null}{confirmDeleteConv?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmDeleteConv(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmDeleteConv(null);}}>Back</button><button
               onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
               className="mgt-hover-scale"

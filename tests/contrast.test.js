@@ -325,15 +325,15 @@ const FILLS = [
   { fill: "--tag-flag", alpha: null, ink: "--text-on-accent", role: "label", what: "booking flag tag" },
 
   // Buttons.
-  { fill: "--btn-default", alpha: null, ink: "--text-on-accent", role: "button", what: "mkBtn default" },
-  { fill: "--btn-nav", alpha: null, ink: "--text-on-accent", role: "button", what: "nav / inactive view" },
+  // v18.14.0 (correction 5): every secondary grey is one quiet button, on the field's
+  // pale fill with --text-secondary, and the rows for the seven greys it replaced
+  // went with their tokens. Translucent, so this reading is over BASE alone: "the
+  // quiet button on what it sits on", below, is the screen's.
+  { fill: "--btn-quiet", alpha: null, ink: "--text-secondary", role: "button", what: "the quiet button" },
   { fill: "--btn-tables", alpha: null, ink: "--text-on-accent", role: "button", what: "Assign tables" },
   { fill: "--btn-edit", alpha: null, ink: "--text-on-accent", role: "button", what: "Edit" },
   { fill: "--btn-today", alpha: null, ink: "--text-on-accent", role: "button", what: "Today" },
   { fill: "--btn-del", alpha: null, ink: "--text-on-accent", role: "button", what: "Delete" },
-  { fill: "--btn-clear", alpha: null, ink: "--text-on-accent", role: "button", what: "Clear" },
-  { fill: "--btn-reset", alpha: null, ink: "--text-on-accent", role: "button", what: "Reset" },
-  { fill: "--btn-dismiss", alpha: null, ink: "--text-on-accent", role: "button", what: "Dismiss" },
   { fill: "--btn-orange", alpha: null, ink: "--text-on-accent", role: "button", what: "walk-in / count" },
   // v18.2.0 phase 28: a row's destructive button at rest (mkDangerBtn, the
   // Layout ×) is the danger pane's pair used as a button; and Layout's Cancel ×
@@ -354,10 +354,8 @@ const FILLS = [
   // that matters most — the INACTIVE View button, the control staff look at on
   // every screen — is --app-btn-grey, not --btn-nav. It measured 1.94:1. Two
   // names for one concept is how a fill hides from its own audit.
-  { fill: "--app-btn-grey", alpha: null, ink: "--text-on-accent", role: "button", what: "inactive View / secondary" },
-  { fill: "--app-btn-grey-strong", alpha: null, ink: "--text-on-accent", role: "button", what: "secondary (strong)" },
-  { fill: "--app-btn-slate", alpha: null, ink: "--text-on-accent", role: "button", what: "dialog secondary" },
-  { fill: "--app-btn-slate-dim", alpha: null, ink: "--text-on-accent", role: "button", what: "write-warning dismiss" },
+  { fill: "--app-btn-grey", alpha: null, ink: "--text-on-accent", role: "button", what: "a Completed button (--btn-completed), a tab's count badge" },
+  { fill: "--app-btn-grey-strong", alpha: null, ink: "--text-on-accent", role: "button", what: "a neutral title pill" },
 
   // v17.13.0 — two fills that reached this file only because the colour rule
   // in check:style forced them out of the components. Both carried white text
@@ -750,19 +748,6 @@ describe("fill/ink contrast — every text-bearing fill, both themes, at rest an
   }
 });
 
-// v18.14.0 (M1): Follow says which state it is in by getting darker, so a pair of
-// fills can each clear the bar and still fail together. Raising the idle grey alone
-// would have left 4.96 beside 5.74. The step is the ratio of the two readings: 1.91
-// before M1, and it is the distance, not either number, that the control depends on.
-describe("Following stays a clear step darker than Follow", () => {
-  for (const theme of ["light", "dark"]) {
-    it(`in ${theme}`, () => {
-      const read = (fill) => measure({ fill, alpha: null, ink: "--text-on-accent" }, theme);
-      expect(read("--app-btn-dark") / read("--app-btn-grey")).toBeGreaterThanOrEqual(1.85);
-    });
-  }
-});
-
 // v18.14.0 (correction 1): the Unplaced row's rose ground carries one word,
 // "Unplaced", in --danger-text. A tint is no fill's partner in the registry, so
 // its pair is written out here, over the card's opaque ground.
@@ -970,6 +955,35 @@ describe("a field's edge against what it sits on, in Light", () => {
     expect(start).toBeGreaterThan(-1);
     expect(ATOMS_SRC.slice(start, ATOMS_SRC.indexOf("}", start + 40))).toContain("var(--field-edge)");
   });
+});
+
+// v18.14.0 (correction 5): the quiet button's fill is translucent, so the registry's
+// one reading over BASE is not the screen's, and the ink is an ink that flips. These
+// are the surfaces it lands on, the strip's two panes included, because Dismiss and
+// Snooze sit on them.
+describe("the quiet button on what it sits on", () => {
+  for (const theme of ["light", "dark"]) {
+    const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+    const app = parse(vars["--bg-app"]);
+    const card = over(parse(vars["--tl-card-bg"]), app);
+    const sheet = over(parse(vars["--bg-sheet"]), app);
+    const SURFACES = {
+      "the page": app,
+      "the main card": card,
+      "a dialog's sheet": sheet,
+      "a Section in a dialog": over(parse(vars["--bg-soft"]), sheet),
+      "the inbox header": over(parse(vars["--wa-header-bg"]), app),
+      "a danger pane": over(parse(vars["--danger-bg"]), card),
+      "a warn pane": over(parse(vars["--warn-bg"]), card),
+    };
+    for (const [what, ground] of Object.entries(SURFACES)) {
+      it(`reads on ${what} in ${theme}`, () => {
+        const face = over(parse(vars["--btn-quiet"]), ground);
+        const got = +ratio(parse(vars["--text-secondary"]), face).toFixed(2);
+        expect(got, `quiet on ${what}, ${theme}: ${got}:1`).toBeGreaterThanOrEqual(NEED.button);
+      });
+    }
+  }
 });
 
 // v18.14.0 (L6): at 0.72 an amber block behind a dialog moved the sheet's blue channel
@@ -1298,14 +1312,14 @@ describe("Save pending outline (--pending-outline)", () => {
   }
 });
 
-describe("dismiss is not destructive (v18.2.0)", () => {
-  it("--btn-dismiss ALIASES the dialog secondary's slate — no red, no copied literal", () => {
-    expect(RAW_LIGHT["--btn-dismiss"]).toBe("var(--app-btn-slate)");
-    expect(LIGHT_VARS["--btn-dismiss"]).toBe(LIGHT_VARS["--app-btn-slate"]);
-    expect(DARK_VARS["--btn-dismiss"], "resolved AFTER the dark block overrides slate").toBe(DARK_VARS["--app-btn-slate"]);
+describe("the alias resolver (v18.2.0)", () => {
+  it("--btn-quiet ALIASES the field's fill, so Dark's arrives with it and nothing is copied", () => {
+    expect(RAW_LIGHT["--btn-quiet"]).toBe("var(--bg-input)");
+    expect(LIGHT_VARS["--btn-quiet"]).toBe(LIGHT_VARS["--bg-input"]);
+    expect(DARK_VARS["--btn-quiet"], "resolved AFTER the dark block overrides the fill").toBe(DARK_VARS["--bg-input"]);
   });
 
-  it("the alias resolver refuses a dangling name instead of passing a string to parse()", () => {
+  it("refuses a dangling name instead of passing a string to parse()", () => {
     expect(() => resolveAliases({ "--a": "var(--nope)" })).toThrow(/does not declare/);
     expect(() => resolveAliases({ "--a": "var(--b)", "--b": "var(--a)" })).toThrow(/cycle/);
   });

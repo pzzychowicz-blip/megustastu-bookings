@@ -40,7 +40,7 @@
 //                      using it" and "Redeem & complete".
 
 import { useState } from "react";
-import { S, R, T, FW } from "../lib/constants";
+import { BTN, S, R, T, FW } from "../lib/constants";
 import { formatCode, remainingOf, redeemableAmount, clampMoney, money } from "../lib/vouchers";
 import { Overlay, ModalTitle, InlineAlert, Reveal, Fld, mkInp, mkBtn, mkSolidBtn } from "./atoms";
 
@@ -65,7 +65,7 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", settle 
       onClose={onClose}
       footer={
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
-          <button type="button" onClick={onSkip} className="mgt-hover-scale" style={mkBtn({ background: "var(--app-btn-slate)" })}>
+          <button type="button" onClick={onSkip} className="mgt-hover-scale" style={mkBtn({ background: BTN.quiet })}>
             {settle ? "Not now" : "Complete without using it"}
           </button>
           <button type="button" onClick={commit} className="mgt-hover-scale" style={mkSolidBtn("var(--accent)")}>

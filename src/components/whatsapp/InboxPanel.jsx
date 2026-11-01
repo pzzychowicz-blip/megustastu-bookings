@@ -33,7 +33,7 @@ import { SelectIcon, FlaskIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
 import { CloseIcon, EditIcon, TrashIcon } from "../Icons";
 import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Reveal, InlineAlert, MODAL_TITLE_ATTR } from "../atoms";
 import { disconnectSentence } from "../../lib/wa-coexist";
-import { R, T, FW, M, IC, H } from "../../lib/constants";
+import { BTN, R, T, FW, M, IC, H } from "../../lib/constants";
 // v18.2.0 /code-review: "3 selected", "Delete 3 conversations?" keep their count and word together.
 import { countLabel } from "../../lib/booking-logic";
 import { raisesKeyboard } from "../../lib/keyboard";
@@ -503,7 +503,7 @@ export function InboxPanel({
     return (
       <button className="mgt-hover-scale" onClick={() => switchTab(key)} style={{ background: isActive ? "var(--bg-tab-active)" : "transparent", color: isActive ? "var(--text-primary)" : "var(--text-muted)", border: "none", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: isActive ? "var(--shadow-btn)" : "none" }}>
         {label}
-        {badge != null && badge > 0 ? <span style={{ fontSize: T.micro, fontWeight: FW.bold, padding: "0 6px", borderRadius: R.pill, background: isActive ? "var(--wa-unread-dot)" : "var(--btn-default)", color: "var(--text-on-accent)", lineHeight: 1.4 }}>{badge}</span> : null}
+        {badge != null && badge > 0 ? <span style={{ fontSize: T.micro, fontWeight: FW.bold, padding: "0 6px", borderRadius: R.pill, background: isActive ? "var(--wa-unread-dot)" : "var(--app-btn-grey)", color: "var(--text-on-accent)", lineHeight: 1.4 }}>{badge}</span> : null}
       </button>
     );
   }
@@ -544,7 +544,7 @@ export function InboxPanel({
                 quick-reply Templates button per Patryk (2026-07-16); the sim
                 opens on top of this window. */}
             {onOpenSim ? (
-              <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), HEAD_TEXT_BTN)}><FlaskIcon size={IC.inline} />Simulator</button>
+              <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: BTN.quiet }), HEAD_TEXT_BTN)}><FlaskIcon size={IC.inline} />Simulator</button>
             ) : null}
             {/* v18.2.0 (the design critique, W2): "Edit templates", with the
                 app's edit pencil. It was "Templates" with the same document
@@ -554,9 +554,9 @@ export function InboxPanel({
                 W3: and it SAYS so, as does the simulator's — icon-only, their
                 meaning lived in a tooltip the tablets never show. Close stays
                 a bare ✕, the one mark everybody reads. */}
-            <button onClick={() => setShowTpl(true)} title="Edit templates (T)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), HEAD_TEXT_BTN)}><EditIcon size={IC.inline} />Edit templates</button>
+            <button onClick={() => setShowTpl(true)} title="Edit templates (T)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: BTN.quiet }), HEAD_TEXT_BTN)}><EditIcon size={IC.inline} />Edit templates</button>
           </div>
-          <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1, order: twoPane ? 0 : 1, marginLeft: twoPane ? 0 : "auto" })}><CloseIcon size={IC.chrome} /></button>
+          <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: BTN.quiet }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1, order: twoPane ? 0 : 1, marginLeft: twoPane ? 0 : "auto" })}><CloseIcon size={IC.chrome} /></button>
         </div>
         {/* v18.9.0: the WhatsApp Business app's connection is broken (Meta's
             account_update, recorded on waLink by the server): every device's
@@ -653,11 +653,11 @@ export function InboxPanel({
             <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexShrink: 0 }}>
               {tab === "archived" ? (
                 <>
-                  <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-btn-handled)" : "var(--btn-default)", { padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />Restore</button>
-                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={selected.size ? mkDangerBtn({ gap: 4, padding: "6px 12px", minHeight: H.compact, fontSize: T.body, whiteSpace: "nowrap" }) : mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: 0.6 })} ><TrashIcon size={IC.inline} />Delete</button>
+                  <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-btn-handled)" : BTN.quiet, { padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />Restore</button>
+                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={selected.size ? mkDangerBtn({ gap: 4, padding: "6px 12px", minHeight: H.compact, fontSize: T.body, whiteSpace: "nowrap" }) : mkSolidBtn(BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: 0.6 })} ><TrashIcon size={IC.inline} />Delete</button>
                 </>
               ) : (
-                <button onClick={() => runBulk("archive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-green-dark)" : "var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 })} ><ArchiveIcon size={IC.inline} />Archive</button>
+                <button onClick={() => runBulk("archive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-green-dark)" : BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 })} ><ArchiveIcon size={IC.inline} />Archive</button>
               )}
               <button onClick={exitSelectMode} className="mgt-hover-scale mgt-press" style={{ background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "6px 12px", fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap" }}>Cancel</button>
             </div>
@@ -680,7 +680,7 @@ export function InboxPanel({
           <Overlay /* @static-height one sentence naming a count fixed when it opens, and two buttons */
             onClose={() => setConfirmBulkDelete(false)}
             footer={<div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
-              <button onClick={() => setConfirmBulkDelete(false)} className="mgt-hover-scale mgt-press" style={mkBtn({ background: "var(--btn-default)" })}>Cancel</button>
+              <button onClick={() => setConfirmBulkDelete(false)} className="mgt-hover-scale mgt-press" style={mkBtn({ background: BTN.quiet })}>Cancel</button>
               <button onClick={() => { setConfirmBulkDelete(false); runBulk("delete"); }} className="mgt-hover-scale mgt-press" style={mkDangerBtn()}><TrashIcon size={IC.control} />Delete {selected.size}</button>
             </div>}
           >

@@ -179,7 +179,7 @@ function AddTagRow({ kind, tagList, onSave, onDirty }) {
           disabled={full || !dirty}
           aria-label={"Add " + KIND_ONE[kind]}
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 14px", background: BTN.nav, opacity: full || !dirty ? 0.4 : 1, cursor: full || !dirty ? "not-allowed" : "pointer" })}>Add</button>
+          style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 14px", background: BTN.quiet, opacity: full || !dirty ? 0.4 : 1, cursor: full || !dirty ? "not-allowed" : "pointer" })}>Add</button>
       </div>
       <Reveal show={!!refusal}>
         <div id={hintId} style={{ fontSize: T.small, paddingTop: SP.tight, color: "var(--danger-text)", fontWeight: FW.semi }}>{refusal}</div>
@@ -217,7 +217,7 @@ export function TagListEditor({ tagList, onSave, tagError, onClearError, canEdit
               onClick={onClearError}
               aria-label="Dismiss"
               className="mgt-hover-scale"
-              style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 10px", background: BTN.dismiss })}>Dismiss</button>
+              style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 10px", background: BTN.quiet })}>Dismiss</button>
           </div>
         </Reveal>
       </div>

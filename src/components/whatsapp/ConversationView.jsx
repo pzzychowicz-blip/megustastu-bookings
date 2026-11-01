@@ -6,7 +6,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, regularChipLabel, conversationName, formatWindow, intentBannerVisible, isParsing, threadItems, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
-import { Reveal, mkSolidBtn, mkDangerBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
+import { Reveal, mkBtn, mkSolidBtn, mkDangerBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { RecheckIcon, ArchiveIcon, DraftIcon, RestoreIcon, MuteIcon } from "./WaIcons";
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon, TrashIcon } from "../Icons";
@@ -15,7 +15,7 @@ import { DraftCard } from "./DraftCard";
 import { ReplyComposer } from "./ReplyComposer";
 import { LinkedBookingCard } from "./LinkedBookingCard";
 import { IntentBanner } from "./IntentBanner";
-import { R, T, FW, IC, H, M, SP } from "../../lib/constants";
+import { BTN, R, T, FW, IC, H, M, SP } from "../../lib/constants";
 import { formatDay, todayStr } from "../../lib/day";
 import { guestsLabel } from "../../lib/booking-logic";
 import { onWaitlistFor } from "../../lib/draft-check";
@@ -311,7 +311,7 @@ export function ConversationView({
       disabled={running}
       title={running ? "Checking…" : "Re-check this conversation for requested changes"}
       className={running ? undefined : "mgt-hover-scale mgt-press"}
-      style={mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, cursor: running ? "default" : "pointer", flexShrink: 0, boxShadow: "var(--shadow-btn)", opacity: running ? 0.6 : 1 })}
+      style={mkSolidBtn(BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, cursor: running ? "default" : "pointer", flexShrink: 0, opacity: running ? 0.6 : 1 })}
     >
       {/* The spin is a LOOP — nothing arrives and nothing leaves, so neither
           direction curve describes it and it keeps `linear`. Documented
@@ -329,7 +329,7 @@ export function ConversationView({
   // muted already; undone by Restore, which reads "Customer again" on a muted
   // conversation (useWhatsApp.handleUnarchive clears both).
   const muteBtn = onMute && !conv.muted ? (
-    <button onClick={() => onMute(conv.phoneKey)} title="Not a customer: archive it, and stop replying to and reading its messages" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0, boxShadow: "var(--shadow-btn)" })}><MuteIcon size={IC.inline} />Not a customer</button>
+    <button onClick={() => onMute(conv.phoneKey)} title="Not a customer: archive it, and stop replying to and reading its messages" className="mgt-hover-scale mgt-press" style={mkSolidBtn(BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0 })}><MuteIcon size={IC.inline} />Not a customer</button>
   ) : null;
 
   // The actions WRAP (v18.9.0): with "Not a customer" an archived thread has
@@ -349,7 +349,7 @@ export function ConversationView({
       <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
         {recheckBtn}
         {muteBtn}
-        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0, boxShadow: "var(--shadow-btn)" })} ><ArchiveIcon size={IC.inline} />Archive</button>
+        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn(BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0 })} ><ArchiveIcon size={IC.inline} />Archive</button>
       </div>
     );
   }
@@ -389,7 +389,7 @@ export function ConversationView({
       <Reveal show={kbFold} inert={!kbFold} style={{ flexShrink: 0 }}>
         <div style={{ padding: "6px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)", flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
-          <button onClick={onUnfold} title="Hide the keyboard and show the details" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0, boxShadow: "var(--shadow-btn)" })}>{foldedSays}<ChevronDownIcon size={IC.inline} /></button>
+          <button onClick={onUnfold} title="Hide the keyboard and show the details" className="mgt-hover-scale mgt-press" style={mkSolidBtn(BTN.quiet, { display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0 })}>{foldedSays}<ChevronDownIcon size={IC.inline} /></button>
         </div>
       </Reveal>
       <Reveal show={!kbFold} inert={kbFold} style={{ flexShrink: 0 }}>
@@ -398,7 +398,7 @@ export function ConversationView({
           cluster wraps under the name on narrow widths; the action buttons stay
           pinned right via marginLeft:auto. The old "WA" badge was removed. */}
       <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", flexShrink: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        {showBack ? <button onClick={onBack} className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: R.pill, width: 36, height: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, lineHeight: 1 }} title="Back" aria-label="Back to the conversation list"><ChevronLeftIcon size={IC.chrome} /></button> : null}
+        {showBack ? <button onClick={onBack} className="mgt-hover-scale mgt-press" style={mkBtn({ background: BTN.quiet, width: 36, height: 36, minHeight: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: T.lead, flexShrink: 0, lineHeight: 1 })} title="Back" aria-label="Back to the conversation list"><ChevronLeftIcon size={IC.chrome} /></button> : null}
         <span style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", minWidth: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
         {phoneDisplay ? <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span> : null}
         {regularChip}

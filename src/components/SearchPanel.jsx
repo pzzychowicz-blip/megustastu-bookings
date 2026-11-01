@@ -16,7 +16,7 @@
 //   onClose()  — close the panel
 
 import { useState, useRef, useEffect } from "react";
-import { S, R, T, FW } from "../lib/constants";
+import { BTN, S, R, T, FW } from "../lib/constants";
 import { searchBookings, matchedTagLabels, formatPhone } from "../lib/customers";
 import { formatDay, showsYear } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
@@ -140,7 +140,7 @@ export function SearchPanel({ bookings, todayStr, isMobile, guestTags, tagList, 
   const footerEl = (
     <div style={{ display: "flex", justifyContent: "flex-end" }}><button
       className="mgt-hover-scale mgt-press"
-      style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
+      style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
       onClick={onClose}>Done</button></div>
   );
 

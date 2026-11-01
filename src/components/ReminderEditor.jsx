@@ -126,7 +126,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         <button
           onClick={onCancel}
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: "var(--app-btn-slate)" })}
+          style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: BTN.quiet })}
         >
           Back
         </button>
@@ -214,7 +214,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             <button
               onClick={addTime}
               className="mgt-hover-scale"
-              style={mkBtn({ minHeight: 36, padding: "6px 12px", fontSize: T.body, background: BTN.nav })}
+              style={mkBtn({ minHeight: 36, padding: "6px 12px", fontSize: T.body, background: BTN.quiet })}
             >
               + Add time
             </button>
@@ -226,14 +226,14 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             <button
               onClick={() => setType("once")}
               className="mgt-hover-scale"
-              style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "once" ? S.accent : "var(--app-btn-grey)" })}
+              style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "once" ? S.accent : BTN.quiet })}
             >
               One-off
             </button>
             <button
               onClick={() => setType("weekly")}
               className="mgt-hover-scale"
-              style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "weekly" ? S.accent : "var(--app-btn-grey)" })}
+              style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "weekly" ? S.accent : BTN.quiet })}
             >
               Weekly
             </button>
@@ -264,7 +264,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                     key={d.i}
                     onClick={() => toggleDay(d.i)}
                     className="mgt-hover-scale"
-                    style={mkBtn({ flex: 1, minWidth: 48, minHeight: 40, padding: "8px 6px", fontSize: T.body, background: sel ? S.accent : "var(--app-btn-grey)" })}
+                    style={mkBtn({ flex: 1, minWidth: 48, minHeight: 40, padding: "8px 6px", fontSize: T.body, background: sel ? S.accent : BTN.quiet })}
                   >
                     {d.s}
                   </button>

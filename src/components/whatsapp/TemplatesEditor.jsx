@@ -48,7 +48,7 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
           {/* v18.2.0: each names its template, the visible word leading,
               for the reason the reminder rows' do (tests/a11y.test.js). */}
-          <button className="mgt-hover-scale" aria-label={"Edit (" + name + ")"} style={mkBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", background: BTN.edit })} onClick={() => openEdit(t)}>Edit</button>
+          <button className="mgt-hover-scale" aria-label={"Edit (" + name + ")"} style={mkBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", background: BTN.quiet })} onClick={() => openEdit(t)}>Edit</button>
           <button className="mgt-hover-scale"
             aria-label={(armed ? "Confirm — delete (" : "Delete (") + name + ")"}
             style={mkDangerBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", gap: 4 })}
@@ -62,13 +62,13 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
 
   const editFooter = (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-      <button className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })} onClick={() => setEditing(null)}>Cancel</button>
+      <button className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })} onClick={() => setEditing(null)}>Cancel</button>
       <button onClick={saveEdit} className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: S.accent })}>Save template</button>
     </div>
   );
   const listFooter = (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-      <button className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })} onClick={onClose}>Close</button>
+      <button className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })} onClick={onClose}>Close</button>
       <button onClick={() => onSave(list)} className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: S.accent })}>Save all</button>
     </div>
   );

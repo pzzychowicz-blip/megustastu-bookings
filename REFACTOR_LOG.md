@@ -39204,6 +39204,44 @@ date pill, and the test still holds that one at 3:1. At rest they read `rgb(195,
 
 **Files:** `index.css`, `tests/contrast.test.js`, `DESIGN.md`.
 
+**Correction 5: every secondary grey is one quiet button, across the whole app.** He pointed at the inbox's
+Re-check and Edit templates: visible, but they take the main focus and look heavy. Shown four recipes on his own
+screens, he chose the field's pale fill and the field's edge, grey words, no shadow, the same size, and chose "the
+whole app" over the inbox alone. `BTN.quiet` is one token, and the look is one rule in `mkBtn` and `mkSolidBtn`
+(`quietLook`): the FILL decides. That was chosen over rewriting about 125 sites, because about 15 of them are
+`cond ? blue : grey`, and each would otherwise have had to carry its ink, edge and shadow through the ternary. A
+button that names no fill is quiet. `--btn-clear`, `--btn-reset`, `--btn-nav`, `--btn-dismiss`, `--btn-default` and
+both slates are deleted, which touched 47 files. `--app-btn-grey` stays for Completed and the inbox tab's count,
+`--app-btn-grey-strong` for the title pills, `--app-btn-dark` for Following.
+
+His exceptions: Follow idle and Optimiser OFF go quiet while Following stays dark and Optimiser ON stays green; Undo
+becomes solid blue; the grey title pills and Completed on a button stay solid. He also ticked the four that were
+arguable: the inbox ✕; Send while it cannot send, which is a quiet disabled button that turns green when it can; the
+Template editor, where Edit on each card and Close are quiet while Save all and Add template stay blue; and the
+phone's back chevron and folded draft button.
+
+A deleted token fails silently, as a transparent button, so the walk was built to find that: on Timeline, the
+Summary, the strip, List, Plan, the form, Walk-in, Find a booking, Hours, Print, the week view, all nine Settings
+tabs with every group open, the inbox and the Template editor, in Light, Dark and on a phone, every `var()` in an
+inline style was resolved on its own element, and none came back empty. Every quiet button read
+`rgba(255,255,255,.5)`, `rgb(195,202,214)`, `rgb(74,85,104)` and no shadow in Light, and `rgba(118,118,128,.24)`,
+`rgba(255,255,255,.12)`, `rgb(199,199,204)` in Dark. Follow's flip eases all four properties both ways, about 140ms
+each way, read frame by frame, because the shared transition now names `color` and `border-color`. Undo reads
+`rgb(0,102,214)` and Completed `rgb(108,112,121)`. A forced `:active` is the same 0.96 on a quiet button and on
++ New, and a key focus draws the 2px ring. Log in stays blue on the signed-out page and `/wa-connect`'s links are
+quiet, in both themes, in a clean browser with nothing typed. Send's flip was not driven: the only DEV conversation
+has an expired window, so it cannot send. It has the same class as Follow, and the test reads its ternary.
+
+One trap: moving a fill's `background` after the spread keeps the quiet ink, so LoginScreen's Log in was grey on
+blue until the fill moved inside `mkBtn`, and a test now refuses that shape. The Follow step test is gone, since idle
+has no dark fill left to step from. DESIGN.md keeps the rule that test held, for the next such pair.
+
+**Files:** `lib/constants.js`, `components/atoms.jsx`, `index.css`, 47 component files by a codemod (plus by hand
+`LoginScreen`, `StatusToasts`, `whatsapp/TemplatesEditor`, `whatsapp/ReplyComposer`, `whatsapp/InboxPanel`,
+`whatsapp/ConversationView`, `TimelineZoomControls`, `AdminSettings`), `tests/quiet-buttons.test.js` (new),
+`tests/contrast.test.js`, `tests/destructive-buttons.test.js`, `tests/motion.test.js`, `.design-sync/`, `DESIGN.md`,
+`GLOSSARY.md`, `src/components/CLAUDE.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, at 998 × 507 and 570 in Light and 507 in Dark, across the main card,

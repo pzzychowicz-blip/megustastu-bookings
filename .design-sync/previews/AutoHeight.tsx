@@ -9,8 +9,8 @@ export const TabSwap = () => {
   return (
     <Surface>
       <div style={{ display: "flex", gap: SP.snug, marginBottom: SP.base }}>
-        <button style={mkBtn({ background: tab === "week" ? "var(--accent)" : BTN.nav })} onClick={() => setTab("week")}>Week</button>
-        <button style={mkBtn({ background: tab === "note" ? "var(--accent)" : BTN.nav })} onClick={() => setTab("note")}>Note</button>
+        <button style={mkBtn({ background: tab === "week" ? "var(--accent)" : BTN.quiet })} onClick={() => setTab("week")}>Week</button>
+        <button style={mkBtn({ background: tab === "note" ? "var(--accent)" : BTN.quiet })} onClick={() => setTab("note")}>Note</button>
       </div>
       <Section style={{ marginBottom: 0 }}>
         <AutoHeight watch={tab}>

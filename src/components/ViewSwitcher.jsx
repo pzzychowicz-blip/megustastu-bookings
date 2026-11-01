@@ -112,7 +112,7 @@ export function ViewSwitcher({
   // stretches them back into an egg.
   const toolBtn = (extra) => mkBtn(Object.assign({
     width: 40, height: 40, minHeight: 40, padding: 0, fontSize: T.lead,
-    background: BTN.nav,
+    background: BTN.quiet,
     display: "inline-flex", alignItems: "center", justifyContent: "center",
     flexShrink: 0, lineHeight: 1
   }, extra));
@@ -166,7 +166,7 @@ export function ViewSwitcher({
             style={toolBtn()}>{split && split.dir === "v" ? <SplitStackIcon size={IC.chrome} /> : <SplitSideIcon size={IC.chrome} />}</button>
           <button className="mgt-hover-scale" onClick={onExitSplit}
             title="Leave split view" aria-label="Leave split view"
-            style={toolBtn({ background: BTN.dismiss })}><CloseIcon size={IC.control} /></button>
+            style={toolBtn({ background: BTN.quiet })}><CloseIcon size={IC.control} /></button>
         </span>
       </Presence>
     </>

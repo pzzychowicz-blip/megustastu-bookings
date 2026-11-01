@@ -30,7 +30,7 @@
 // menu animates out as well as in, inert while it leaves.
 
 import { useState } from "react";
-import { S, R, T, FW, IC } from "../lib/constants";
+import { BTN, S, R, T, FW, IC } from "../lib/constants";
 import { useArmAfterRelease } from "../hooks/useArmAfterRelease";
 import { mkBtn, PopupShell, useModalPresence } from "./atoms";
 import { SplitSideIcon, SplitStackIcon } from "./Icons";
@@ -92,9 +92,9 @@ export function SplitMenu({ view, onConfirm, onClose, sideBySideOk = true }) {
       {step === 1 ? (
         <div style={row}>
           <button className={noSide ? "mgt-nopress" : "mgt-hover-scale"} disabled={noSide}
-            style={dirBtn({ background: "var(--app-btn-grey)", ...(noSide ? { opacity: 0.45, cursor: "default" } : null) })}
+            style={dirBtn({ background: BTN.quiet, ...(noSide ? { opacity: 0.45, cursor: "default" } : null) })}
             onClick={() => { if (live && !noSide) { setDir("v"); setStep(2); } }}><SplitSideIcon size={IC.chrome} />Side by side</button>
-          <button className="mgt-hover-scale" style={dirBtn({ background: "var(--app-btn-grey)" })}
+          <button className="mgt-hover-scale" style={dirBtn({ background: BTN.quiet })}
             onClick={() => { if (live) { setDir("h"); setStep(2); } }}><SplitStackIcon size={IC.chrome} />Top and bottom</button>
         </div>
       ) : (

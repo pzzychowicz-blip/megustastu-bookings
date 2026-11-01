@@ -79,7 +79,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
       {prefs.length > 0 ? (
         <button
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.clear })}
+          style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
           onClick={() => onChange([])}
         >
           Clear
@@ -87,7 +87,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
       ) : null}
       <button
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
         onClick={onClose}
       >
         Done

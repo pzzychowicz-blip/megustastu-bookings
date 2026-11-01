@@ -128,7 +128,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
               onClick={function () { onChange(""); setErr(""); }}
               aria-label={"Remove voucher " + formatCode(code) + " from this booking"}
               className="mgt-hover-scale"
-              style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, borderRadius: R.pill, marginLeft: "auto" })}>
+              style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.quiet, borderRadius: R.pill, marginLeft: "auto" })}>
               Remove
             </button>
           )}
@@ -228,7 +228,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
                       onClick={function () { attach(s.code); }}
                       aria-label={"Attach voucher " + formatCode(s.code) + " to this booking"}
                       className="mgt-hover-scale"
-                      style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, borderRadius: R.pill, marginLeft: "auto" })}>
+                      style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.quiet, borderRadius: R.pill, marginLeft: "auto" })}>
                       Attach
                     </button>
                   </div>
@@ -257,7 +257,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
             </div>
             <button type="button" onClick={function () { attach(); }}
               className="mgt-hover-scale"
-              style={mkBtn({ fontSize: T.body, background: BTN.nav, borderRadius: R.pill })}>
+              style={mkBtn({ fontSize: T.body, background: BTN.quiet, borderRadius: R.pill })}>
               Attach
             </button>
           </div>

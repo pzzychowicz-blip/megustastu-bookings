@@ -16,7 +16,7 @@
 // original.
 
 import { useState, useEffect } from "react";
-import { S, TBL, OPEN, GRID_CLOSE, hoursFor, R, T, FW } from "../lib/constants";
+import { BTN, S, TBL, OPEN, GRID_CLOSE, hoursFor, R, T, FW } from "../lib/constants";
 import { toMins, isIn } from "../lib/booking-logic";
 import { hourLabel } from "../lib/time-grid";
 import { Overlay, Section, Fld, mkBtn, mkSolidBtn, mkDangerBtn, mkInp, Reveal, AutoHeight, InlineAlert } from "./atoms";
@@ -101,14 +101,14 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <button
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 40, padding: "8px 16px", background: "var(--app-btn-slate)" })}
+          style={mkBtn({ minHeight: 40, padding: "8px 16px", background: BTN.quiet })}
           onClick={() => { setNotSaved(false); setMode("add"); }}
         >
           + Add block
         </button>
         <button
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 40, padding: "8px 16px", background: "var(--app-btn-slate)" })}
+          style={mkBtn({ minHeight: 40, padding: "8px 16px", background: BTN.quiet })}
           onClick={onClose}
         >
           Close
@@ -203,7 +203,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
       <button
         className="mgt-hover-scale"
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
         onClick={onClose}
       >
         Back

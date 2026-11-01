@@ -175,20 +175,20 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
               <button
                 onClick={onSpecialHours}
                 className="mgt-hover-scale mgt-press"
-                style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.nav })}>Hours for this day</button>
+                style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.quiet })}>Hours for this day</button>
             ) : null}
             {onPrint ? (
               <button
                 onClick={onPrint}
                 className="mgt-hover-scale mgt-press"
-                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={IC.control} />Print</button>
+                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.quiet, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={IC.control} />Print</button>
             ) : null}
             {onOpenWeek ? (
               <button
                 onClick={onOpenWeek}
                 title="Week & month at a glance (M)"
                 className="mgt-hover-scale mgt-press"
-                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav })}>More</button>
+                style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.quiet })}>More</button>
             ) : null}
           </div>
         ) : null}

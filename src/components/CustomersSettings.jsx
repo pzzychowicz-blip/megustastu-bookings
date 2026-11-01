@@ -264,7 +264,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
         key={key}
         onClick={function () { setFilter(key); setOpenKey(null); setArmedKey(null); }}
         className="mgt-hover-scale"
-        style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: active ? "var(--accent)" : BTN.nav, opacity: searching ? 0.5 : 1 })}>{label}</button>
+        style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: active ? "var(--accent)" : BTN.quiet, opacity: searching ? 0.5 : 1 })}>{label}</button>
     );
   };
 
@@ -320,14 +320,14 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
                 aria-label="Decrease visits for a regular"
                 disabled={regularMin <= 1}
                 className={regularMin <= 1 ? undefined : "mgt-hover-scale"}
-                style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: regularMin <= 1 ? 0.4 : 1, cursor: regularMin <= 1 ? "not-allowed" : "pointer" })}>−</button>
+                style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.quiet, opacity: regularMin <= 1 ? 0.4 : 1, cursor: regularMin <= 1 ? "not-allowed" : "pointer" })}>−</button>
               <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, minWidth: 62, textAlign: "center" }}>{regularMin + "+ visit" + (regularMin !== 1 ? "s" : "")}</span>
               <button
                 onClick={function () { setRegularMin(function (m) { return Math.min(50, m + 1); }); }}
                 aria-label="Increase visits for a regular"
                 disabled={regularMin >= 50}
                 className={regularMin >= 50 ? undefined : "mgt-hover-scale"}
-                style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: regularMin >= 50 ? 0.4 : 1, cursor: regularMin >= 50 ? "not-allowed" : "pointer" })}>+</button>
+                style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.quiet, opacity: regularMin >= 50 ? 0.4 : 1, cursor: regularMin >= 50 ? "not-allowed" : "pointer" })}>+</button>
             </span>
           ) : null}
         </div>

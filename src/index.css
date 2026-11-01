@@ -181,28 +181,18 @@
   --btn-del: #d33a3a;
   /* v18.2.0 phase 59 (round 3's T-1): --btn-cancel is gone. It was --btn-del's
      value under a second name, and phase 41 took its last user. */
-  /* v18.2.0 (the design critique, X5): "Clear" empties a table SELECTION —
-     the booking form's, the walk-in form's, table assignment's, the preferred
-     tables' — and destroys nothing, so it leaves the delete red for the
-     dialog slate, the same alias Dismiss took (below). */
-  --btn-clear: var(--app-btn-slate);
-  /* v18.2.0 phase 78 (round 2's loose end): the duration "Reset" puts a
-     booking's length back to its party's default — the booking and walk-in
-     forms' — and destroys nothing either, so it takes Clear's slate. */
-  --btn-reset: var(--app-btn-slate);
   --btn-today: var(--accent);
-  --btn-nav: var(--app-btn-grey);
+  /* v18.14.0 correction 5 (Patryk): the quiet button, every secondary grey in the
+     app: Back, Close, Clear, Reset, Dismiss, Re-check, the date arrows. A solid
+     grey weighed as much as the action beside it. It is the pale field fill, and
+     mkBtn pairs it with --text-secondary, --field-edge and no shadow, so Dark's
+     fill and Increase Contrast's strong edge both arrive by alias. Nothing that
+     destroys wears it, and Clear, Reset and Dismiss never wear the red. */
+  --btn-quiet: var(--bg-input);
   /* v18.14.0 (M1): Completed on a BUTTON takes the grey. Its pale fill is accepted
      at 2.19:1 on a block, whose position and width carry the status, and a button
      has only its word. STATUS_BTN_BG reads this; blocks stay on --block-completed. */
   --btn-completed: var(--app-btn-grey);
-  /* v18.2.0: the dialog secondary's slate, not the delete red. "Dismiss"
-     (the reshuffle suggestion) and every banner row's close control wore the
-     same red as Delete and Cancel, so the app's word for "destructive" was
-     also its word for "not now" — the design critique. An ALIAS, not a copy
-     of slate's value, so it follows slate in both themes (the contrast test
-     resolves aliases per theme). */
-  --btn-dismiss: var(--app-btn-slate);
   --btn-orange: #bf5319;
   /* v17.8.0: booking-attribute FLAGS (manual / locked / preferred-tables).
      They were three unrelated hand-picked hues — #0369a1 blue (a shade off
@@ -239,7 +229,6 @@
      white over the sheet over --bg-app), made solid. */
   --bg-cal-cell: #fbfcfd;
   --bg-kbd: rgba(255, 255, 255, 0.75);           /* keycap */
-  --btn-default: var(--app-btn-grey);       /* mkBtn default grey fill — v17.8.0, was rgba(120,130,150,.55) = 1.99:1 white-on-grey */
   --bg-stepper: rgba(235, 239, 246, 0.95);       /* +/- stepper buttons (form) */
   --bg-tabbar: rgba(240, 243, 248, 0.8);         /* Settings tab-strip track */
   --bg-tab-active: rgba(255, 255, 255, 0.95);    /* lifted active tab */
@@ -499,7 +488,6 @@
   --app-date-bg: rgba(255, 255, 255, 0.45); --app-date-border: var(--field-edge);
   /* Neutral grey button fills (header Log out / dialog Back-Cancel / Settings title) */
   --app-btn-grey: #6c7079;                 --app-btn-grey-strong: var(--app-btn-grey);
-  --app-btn-slate: #64748b;                 /* dialog secondary buttons */
   /* v17.13.0 — two fills that were hand-written literals, i.e. invisible
      to tests/contrast.test.js, which enumerates TOKENS. Both carry white
      text, which is exactly the pairing that file exists to measure.
@@ -557,7 +545,6 @@
      near-unreadable on the dark sheet. */
   --tbl-out-text: #3f7f8c;
   --tbl-ind-text: #7c3aed;
-  --app-btn-slate-dim: #6a747e;             /* write-warning dismiss */
   /* Saturated action fills (white text — read on both themes) */
   --app-walkin: #387d54;                    /* Walk-in button */
   --app-success-solid: rgba(22, 99, 51, 0.8); /* v17.8.0: reminder "Done" */
@@ -823,14 +810,12 @@
   --bg-input: rgba(118, 118, 128, 0.24);
   --bg-cal-cell: #3c3c40;                          /* v18.2.0: see :root */
   --bg-kbd: rgba(255, 255, 255, 0.1);
-  --btn-default: rgba(110, 118, 135, 0.5);
   /* v18.14.0 (M1): Light moved these to opaque fills at 4.5:1 and Dark did not.
      They are Light's old values, which Dark used to inherit, so dropping a line
      here moves Dark without a word. */
   --btn-tables: rgba(0, 116, 244, 0.75);
   --btn-edit: rgba(0, 108, 225, 0.7);
   --btn-today: rgba(0, 108, 225, 0.7);
-  --btn-nav: rgba(39, 43, 49, 0.5);
   --btn-del: rgba(211, 58, 58, 0.75);
   --btn-orange: rgba(210, 91, 28, 0.8);
   --btn-completed: var(--block-completed);
@@ -935,8 +920,6 @@
   --danger-bg-soft: rgba(80, 25, 25, 0.3);
   --app-date-bg: rgba(118, 118, 128, 0.24);  --app-date-border: rgba(255, 255, 255, 0.12);
   --app-btn-grey: rgba(110, 118, 135, 0.5);  --app-btn-grey-strong: rgba(110, 118, 135, 0.6);
-  --app-btn-slate: rgba(100, 116, 139, 0.7);
-  --app-btn-slate-dim: rgba(120, 130, 140, 0.6);
   /* walkin / new / danger / warn solids are saturated — read on both; kept from :root */
   /* v14.3.0: hover-lift card — opaque dark surface (matches Scheduling) */
   --bg-hover-card: rgb(50, 50, 53);
@@ -1136,10 +1119,15 @@ html[data-holding] * {
    property either class animates. Order can no longer matter because
    there is nothing left to override.
    `border-radius` is deliberately NOT in the list — v17.7.0 removed the
-   radius change from the hover rule, so it had nothing left to ease. */
+   radius change from the hover rule, so it had nothing left to ease.
+   v18.14.0 (correction 5): `color` and `border-color` joined it, because a button
+   that flips between quiet and solid (Follow, Optimiser, Send) changes all of them
+   at once, and white ink cannot snap ahead of the fill it has to read on. */
 .mgt-hover-scale, .mgt-press {
   transition: transform var(--t-tap) var(--ease-out),
               background-color var(--t-tap) var(--ease-out),
+              color var(--t-tap) var(--ease-out),
+              border-color var(--t-tap) var(--ease-out),
               box-shadow var(--t-tap) var(--ease-out),
               filter var(--t-tap) var(--ease-out);
 }

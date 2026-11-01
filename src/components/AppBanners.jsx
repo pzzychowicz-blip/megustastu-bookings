@@ -159,13 +159,13 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, pa
         {parked.length ? (
           <button
             className="mgt-hover-scale"
-            style={mkBtn({ fontSize: T.body, background: "var(--app-btn-slate-dim)", minHeight: H.compact, padding: "4px 12px" })}
+            style={mkBtn({ fontSize: T.body, background: BTN.quiet, minHeight: H.compact, padding: "4px 12px" })}
             onClick={onDiscardParked}>Discard</button>
         ) : null}
         {writeWarning ? (
           <button
             className="mgt-hover-scale"
-            style={mkBtn({ fontSize: T.body, background: "var(--app-btn-slate-dim)", minHeight: H.compact, padding: "4px 12px" })}
+            style={mkBtn({ fontSize: T.body, background: BTN.quiet, minHeight: H.compact, padding: "4px 12px" })}
             onClick={onDismissWarning}>Dismiss</button>
         ) : null}
       </>
@@ -235,7 +235,7 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, pa
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}><button
           onClick={onDismissIneff}
           className="mgt-hover-scale"
-          style={mkBtn({ fontSize: T.body, minHeight: 36, padding: "6px 14px", background: BTN.dismiss })}>Dismiss</button><button
+          style={mkBtn({ fontSize: T.body, minHeight: 36, padding: "6px 14px", background: BTN.quiet })}>Dismiss</button><button
           onClick={onReshuffle}
           className="mgt-hover-scale"
           style={{ background: BTN.orange, color: "var(--text-on-accent)", border: "1px solid var(--border-glass)", borderRadius: R.pill, padding: "6px 14px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, minHeight: 36, boxShadow: "var(--shadow-btn)" }}>Reshuffle</button></div>

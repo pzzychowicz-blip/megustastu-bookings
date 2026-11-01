@@ -22,7 +22,7 @@ export function OptimiserControls({ autoOptimizer, setAutoOptimizer, onReshuffle
           // Follow button above was just cured of, in the same commit, eight
           // lines apart — 1.94:1 white-on-grey in light mode. Fixing one copy of
           // a literal does not fix the literal; grep the VALUE.
-          background: autoOptimizer ? "var(--app-walkin)" : "var(--app-btn-grey)"
+          background: autoOptimizer ? "var(--app-walkin)" : BTN.quiet
         })}
       >
         {"Optimiser: " + (autoOptimizer ? "ON" : "OFF")}

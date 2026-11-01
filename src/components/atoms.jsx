@@ -13,7 +13,7 @@
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
+import { BTN, BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
 import { isIn, guestsLabel } from "../lib/booking-logic";
 import { weekdayShort } from "../lib/day";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
@@ -156,10 +156,26 @@ export function mkStep(size) {
   };
 }
 
+// ── The quiet button (v18.14.0, Patryk) ──────────────────────────────────────
+// `BTN.quiet` is every secondary grey in the app. A solid grey held the same weight
+// as the action beside it: Re-check and Edit templates drew the eye in an inbox whose
+// point is the conversation. So a button that is not the point of the screen wears
+// the field's pale fill, its edge and secondary ink, with no shadow, at the same size.
+// The fill decides, here and nowhere else, so `cond ? S.accent : BTN.quiet` carries
+// its ink, edge and shadow with it. Increase Contrast's strong edge comes with the
+// token. A solid button stays one by naming its fill: Following, Optimiser ON, the
+// Completed status and the grey title pills. `extra` still wins, after this.
+function quietLook(background) {
+  return background === BTN.quiet
+    ? { border: "1px solid var(--field-edge)", color: "var(--text-secondary)", boxShadow: "none" }
+    : null;
+}
+
 export function mkBtn(extra) {
+  const background = (extra && extra.background) || BTN.quiet;
   return {
     border: "1px solid var(--border-glass)",
-    background: "var(--btn-default)",
+    background,
     borderRadius: R.pill,
     padding: "8px 14px",
     cursor: "pointer",
@@ -173,6 +189,7 @@ export function mkBtn(extra) {
     minHeight: H.control,
     boxShadow: "var(--shadow-btn)",
     letterSpacing: "0.01em",
+    ...quietLook(background),
     ...(extra || {})
   };
 }
@@ -211,6 +228,7 @@ export function mkSolidBtn(background, extra) {
     color: "var(--text-on-accent)",
     minHeight: H.touch,
     boxShadow: "var(--shadow-btn-solid)",
+    ...quietLook(background),
     ...(extra || {})
   };
 }

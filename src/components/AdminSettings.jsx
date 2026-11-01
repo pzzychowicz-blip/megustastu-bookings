@@ -21,7 +21,7 @@
 // letting the reader assume.
 
 import { useState, useRef, useEffect, useId } from "react";
-import { R, T, FW, SP, H, IC } from "../lib/constants";
+import { BTN, R, T, FW, SP, H, IC } from "../lib/constants";
 import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel, mkDangerBtn } from "./atoms";
 import { TrashIcon } from "./Icons";
 import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, isGranted, effectiveRole, displayName } from "../lib/roles";
@@ -596,7 +596,7 @@ export function RolesModal({ rows, selectedUid, myUid, onSelect, onToggleCap, on
       // shipped as a bare button and sat bottom-LEFT with the rest of the bar
       // empty, which is the only footer in the app that does.
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button className="mgt-hover-scale" onClick={onClose} style={mkSolidBtn("var(--app-btn-slate)")}>Done</button>
+        <button className="mgt-hover-scale" onClick={onClose} style={mkSolidBtn(BTN.quiet)}>Done</button>
       </div>
     }>
       {/* `background` is REQUIRED and has no default — omitting it rendered
@@ -914,7 +914,7 @@ export function AdminTabContent({
             type="button"
             className="mgt-hover-scale"
             onClick={onOpenActivity}
-            style={mkBtn({ background: "var(--app-btn-grey-strong)", flexShrink: 0 })}
+            style={mkBtn({ background: BTN.quiet, flexShrink: 0 })}
           >Open the log</button>
         </div>
         {/* v18.0.0 session 11: the retention window, which was hard-coded in

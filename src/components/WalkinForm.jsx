@@ -166,7 +166,7 @@ export function WalkinForm({
       <button
         key="clr"
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.clear })}
+        style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.quiet })}
         onClick={() => setDraft({ ...wf, tables: [], _pre: false })}
       >
         Clear
@@ -339,7 +339,7 @@ export function WalkinForm({
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <button
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
+          style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
           onClick={onClose}
         >
           Back
@@ -538,7 +538,7 @@ export function WalkinForm({
               {wf.customDur ? (
                 <button
                   className="mgt-hover-scale mgt-press"
-                  style={mkBtn({ fontSize: T.body, background: BTN.reset })}
+                  style={mkBtn({ fontSize: T.body, background: BTN.quiet })}
                   // v18.2.0: pointer-only like the steppers beside it; same fix.
                   {...stepPress(() => setDraft({ ...wf, customDur: null }))}
                 >

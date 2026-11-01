@@ -268,7 +268,7 @@ export function useReminders({ nowMins, setWriteWarning, reminderEditor, setRemi
               style={{fontSize: T.body,color:"var(--text-primary)",fontWeight: FW.semi,wordBreak:"break-word"}}>{ab.reminder.text}</span></div><div style={{display:"flex",gap:6,flexShrink:0}}><button
               onClick={function(){snoozeReminderFire(ab.fireKey);}}
               className="mgt-hover-scale mgt-press"
-              style={mkBtn({fontSize: T.body,minHeight:H.chrome,padding:"4px 12px",background:BTN.nav})}>Snooze 15m</button><button
+              style={mkBtn({fontSize: T.body,minHeight:H.chrome,padding:"4px 12px",background:BTN.quiet})}>Snooze 15m</button><button
               onClick={function(){markReminderDone(ab.fireKey);}}
               className="mgt-hover-scale mgt-press"
               style={mkBtn({fontSize: T.body,minHeight:H.chrome,padding:"6px 14px",background:"var(--app-success-solid)"})}>Done</button></div></div>

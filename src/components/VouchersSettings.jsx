@@ -132,7 +132,7 @@ function CopyBtn({ code }) {
         style={mkBtn({
           padding: SP.none, minHeight: H.compact, width: H.compact,
           display: "inline-flex", alignItems: "center", justifyContent: "center",
-          background: BTN.nav,
+          background: BTN.quiet,
         })}>
         {done ? <CheckIcon size={IC.chrome} /> : <CopyIcon size={IC.chrome} />}
       </button>
@@ -200,8 +200,8 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
           // as a hard-edged rectangle inside its own rounded card.
           //
           // v18.0.0 session 8: the surface is `--bg-soft`, and it may NOT go
-          // back to `BTN.nav`. That token is declared once in src/index.css and
-          // is therefore theme-INVARIANT dark slate, while everything this
+          // back to `BTN.nav`. That token was declared once in src/index.css and
+          // was therefore theme-INVARIANT dark slate, while everything this
           // control contains — two or three OutlineChips and the chevron — is
           // painted in inks that FLIP. In dark they are pale on dark and read
           // fine; in light they are dark on dark. Measured in the running app,
@@ -287,7 +287,7 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
             onClick={function (e) { e.stopPropagation(); onVoid(v.code, state !== "void"); }}
             aria-label={(state === "void" ? "Reinstate" : "Void") + " voucher " + formatCode(v.code)}
             className="mgt-hover-scale"
-            style={state === "void" ? mkBtn({ fontSize: T.body, minHeight: 36, background: BTN.nav }) : mkDangerBtn({ fontSize: T.body, minHeight: 36 })}>
+            style={state === "void" ? mkBtn({ fontSize: T.body, minHeight: 36, background: BTN.quiet }) : mkDangerBtn({ fontSize: T.body, minHeight: 36 })}>
             {state === "void" ? "Reinstate voucher" : "Void voucher"}
           </button>
           <div style={{ fontSize: T.micro, color: S.muted, marginTop: 6 }}>
@@ -309,7 +309,7 @@ function FilterBtn({ id, label, active, onPick }) {
       // state is colour alone (v17.15.6).
       aria-pressed={active}
       className="mgt-hover-scale"
-      style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: active ? "var(--accent)" : BTN.nav })}>
+      style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: active ? "var(--accent)" : BTN.quiet })}>
       {label}
     </button>
   );
@@ -477,7 +477,7 @@ export function VouchersTabContent({
             disabled={atMin}
             className={atMin ? undefined : "mgt-hover-scale"}
             onClick={function () { onSaveDefaults({ expiryMonths: voucherDefaults.expiryMonths - 1 }); }}
-            style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: atMin ? 0.4 : 1, cursor: atMin ? "not-allowed" : "pointer" })}>−</button>
+            style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.quiet, opacity: atMin ? 0.4 : 1, cursor: atMin ? "not-allowed" : "pointer" })}>−</button>
           <span style={{ fontSize: T.body, color: S.text, minWidth: 96, textAlign: "center" }}>
             {voucherDefaults && voucherDefaults.expiryMonths > 0
               ? countLabel(voucherDefaults.expiryMonths, "month", "months")
@@ -488,7 +488,7 @@ export function VouchersTabContent({
             disabled={atMax}
             className={atMax ? undefined : "mgt-hover-scale"}
             onClick={function () { onSaveDefaults({ expiryMonths: voucherDefaults.expiryMonths + 1 }); }}
-            style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: atMax ? 0.4 : 1, cursor: atMax ? "not-allowed" : "pointer" })}>+</button>
+            style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.quiet, opacity: atMax ? 0.4 : 1, cursor: atMax ? "not-allowed" : "pointer" })}>+</button>
         </div>
       </Section>
 

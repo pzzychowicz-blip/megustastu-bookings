@@ -250,11 +250,11 @@ explaining why is usually the one to read.
   a named exemption at 3.65:1, in `EXEMPT_FLOOR`'s per-theme form, because it is
   also text and rings there. A status BUTTON reads `STATUS_BTN_BG`: Completed takes
   the grey on a button, and its pale fill stays on blocks, badges and legends.
-  **Two fills that each clear the bar can still fail together.** Follow says which
-  state it is in by getting darker, so the idle grey moving to 4.96:1 would have
-  left it beside Following at 5.74:1. `--app-btn-dark` moved with it, and
-  `tests/contrast.test.js` holds the step between the two, not either number. Any
-  pair that signals a state by darkness alone needs the same pin.
+  **Two fills that each clear the bar can still fail together.** Follow used to say
+  which state it was in by getting darker, so the idle grey moving to 4.96:1 would
+  have left it beside Following at 5.74:1, and a test held the step between the two.
+  The quiet button ended that pair (below): idle is pale now. The rule stands for
+  the next one: a pair that signals a state by darkness alone needs the same pin.
   **`--text-faint` is held to 4.5:1 on the cards it sits on, in Light (v18.14.0).**
   It is the ink of every Settings tab's help text and it read 2.7–3.0:1, because
   it is no fill's partner and the registry enumerates fills. It has its own test,
@@ -359,6 +359,26 @@ explaining why is usually the one to read.
   the button's `--shadow-btn` this way (v17.8.0 review fix); the fix is one
   comma-separated value, `"inset 0 -3px 0 …, var(--shadow-btn)"`. Same trap for
   any property `mkBtn`/`mkInp` already own.
+- **The quiet button (v18.14.0, Patryk): one look for everything that does not
+  commit.** Every secondary grey was a solid pill with white words and a shadow, so
+  Re-check, Edit templates, Back and a day arrow spoke as loudly as Save. They are
+  one recipe now, across the whole app: the field's pale fill (`BTN.quiet`,
+  `--btn-quiet`, an alias of `--bg-input`), the field's edge (`--field-edge`),
+  `--text-secondary` words, no shadow, at the same size. **The fill decides, in one
+  place:** `quietLook(background)` is read by `mkBtn` and `mkSolidBtn`, so
+  `cond ? blue : BTN.quiet` carries its ink, edge and shadow with the fill, and a
+  button that names no fill is quiet. Two things follow. A fill goes INSIDE the call:
+  `{ ...mkBtn(), background: x }` keeps the quiet ink, which is how Log in read grey
+  on blue for one commit. And `boxShadow` in `extra` hands the shadow back.
+  `--btn-clear`, `--btn-reset`, `--btn-nav`, `--btn-dismiss`, `--btn-default` and the
+  two slates are gone, because they were five names for this one job. A quiet button
+  flips with its theme, so it may sit on anything: `tests/contrast.test.js` measures
+  its words on the seven surfaces it sits on, in both themes.
+  **What he kept solid:** Following (dark) and Optimiser ON (green), beside their
+  quiet idle states; Undo, solid blue; the grey title pills; Completed on a button;
+  Send, the moment it can send. Going between the two is one change, in and out:
+  `.mgt-hover-scale, .mgt-press` also ease `color` and `border-color`, so a flip
+  never snaps its words or its edge under a fill that is still moving.
 - **`mkInp` / `mkBtn` return *style objects*** (not JSX) — usage is `<input style={mkInp()}>` /
   `<button style={mkBtn({...})}>`. (Note: the sibling Scheduling app's equivalents return JSX;
   Bookings differs. Don't assume a `className`/prop passthrough — it isn't there.)
@@ -409,12 +429,14 @@ explaining why is usually the one to read.
   `--app-btn-slate`, the dialog secondary ("Back", "Keep editing") — one change,
   every dismiss in the app. Its other side was `BTN.cancel`, a red named for
   cancelling a BOOKING that kept being reached for as a dialog's "go back"; it
-  had no users after phase 41 and phase 59 removed it. A dialog's go-back is
+  had no users after phase 41 and phase 59 removed it. A dialog's go-back was
   `--app-btn-slate` (`confirmKitchen`'s "Back", "Keep editing"). **Phase 36 did the same for `--btn-clear`**
   (the critique's X5): "Clear" empties a table selection — the booking form's,
   the walk-in form's, table assignment's, the preferred tables' — and was the
   delete red too. **Phase 78 did it for `--btn-reset`**, the booking and walk-in
   forms' duration "Reset", which puts the length back to the party's default.
+  **v18.14.0 took the tokens away and kept the rule:** all of these are the quiet
+  button now, so a thing that is not a deletion has no red to reach for.
 - **A destructive button is ONE solid red, at rest and armed (v18.2.0 phase 62,
   Patryk).** Everything that deletes, removes, voids, unblocks or clears is
   `mkDangerBtn` (atoms): solid `--app-danger-solid` with the solid rim, on
@@ -996,6 +1018,8 @@ explaining why is usually the one to read.
   audited for the one thing it was no longer carrying. **A `BTN.*` fill takes
   `--text-on-accent` and nothing else** — if a control's contents are chips,
   muted glyphs or any other sheet ink, the control belongs on a sheet surface.
+  (`BTN.quiet`, v18.14.0, is the one exception: it IS a sheet surface, it flips,
+  and its ink is `--text-secondary`.)
   **v17.15.0: an outline chip's border is DERIVED from its text**, not chosen
   beside it — `--chip-<role>-border` is `color-mix(in srgb, var(--<role>-text)
   50%, transparent)`. The border and the text are the same statement at two

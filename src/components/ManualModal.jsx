@@ -225,7 +225,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
       <button
         className="mgt-hover-scale"
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
         onClick={onClose}
       >
         Back
@@ -303,7 +303,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         {selected.length > 0 ? (
           <button
             className="mgt-hover-scale mgt-press"
-            style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.clear })}
+            style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.quiet })}
             onClick={() => setSelected([])}
           >
             Clear

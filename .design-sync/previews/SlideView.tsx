@@ -12,7 +12,7 @@ export const ViewSwitch = () => {
     <Surface>
       <div style={{ display: "flex", gap: SP.snug, marginBottom: SP.base }}>
         {VIEWS.map((v, n) => (
-          <button key={v} style={mkBtn({ background: n === i ? "var(--accent)" : BTN.nav })} onClick={() => go(n)}>{v}</button>
+          <button key={v} style={mkBtn({ background: n === i ? "var(--accent)" : BTN.quiet })} onClick={() => go(n)}>{v}</button>
         ))}
       </div>
       <SlideView key={i} dir={dir}>

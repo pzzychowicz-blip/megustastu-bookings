@@ -91,7 +91,7 @@ export function ClashBanner({ pairs, bookings, onAssign, onDismiss, swapKey }) {
              rule; the Assign button needs nothing, its visible text is a name. */
           aria-label={"Dismiss the double-booking warning for " + firstWho + " and " + laterWho}
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.dismiss })}><CloseIcon size={IC.control} /></button>
+          style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.quiet })}><CloseIcon size={IC.control} /></button>
       </div>
     );
   }

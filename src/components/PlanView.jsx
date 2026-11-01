@@ -38,7 +38,7 @@
 // Blur budget: no backdrop-filter here — popovers use the opaque popup tokens.
 
 import { useState, useRef, useEffect, memo } from "react";
-import { S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
+import { BTN, S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
 import { freeWindow } from "../lib/plan-avail";
 import { bandZoom, clampZoom, clampPan } from "../lib/plan-zoom"; // v18.3.0 phase 14: the zoom and pan limits
@@ -758,7 +758,7 @@ export const PlanView = memo(function PlanView({
           {isToday ? (
             <button className="mgt-hover-scale"
               onClick={() => { setSliderTouched(false); setSlider(clampExact(nowMins)); reCentre(true); }}
-              style={mkBtn({ fontSize: T.small, minHeight: 28, padding: "2px 10px", background: atNow ? S.accent : "var(--app-btn-grey)" })}>Now</button>
+              style={mkBtn({ fontSize: T.small, minHeight: 28, padding: "2px 10px", background: atNow ? S.accent : BTN.quiet })}>Now</button>
           ) : null}
         </span>
         <span style={{

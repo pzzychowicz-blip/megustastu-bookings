@@ -18,7 +18,7 @@
 // IIFE) and converted RC() → JSX. Behaviour, output markup, and all inline
 // styles are byte-identical to the original.
 
-import { S, R, T, FW } from "../lib/constants";
+import { BTN, S, R, T, FW } from "../lib/constants";
 import { Overlay, mkBtn } from "./atoms";
 import { formatDay, formatDaysIn, localDay } from "../lib/day";
 
@@ -78,7 +78,7 @@ export function HistoryPopup({ booking, onClose }) {
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
         <button
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-btn-slate)" })}
+          style={mkBtn({ minHeight: 40, padding: "8px 18px", background: BTN.quiet })}
           onClick={onClose}
         >
           Close

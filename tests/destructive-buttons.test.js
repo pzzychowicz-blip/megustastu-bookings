@@ -224,20 +224,18 @@ describe("a paused reminder fades its text, never its buttons", () => {
   });
 });
 
-// v18.2.0 phase 36 (X5): "Clear" empties a table selection and destroys
-// nothing, but wore the delete red. Measured on DEV: the walk-in form's Clear
-// now reads rgb(100, 116, 139), exactly --app-btn-slate, as Dismiss does.
-describe("X5 — Clear is not red", () => {
+// v18.2.0 phase 36 (X5): "Clear" empties a table selection and destroys nothing, but
+// wore the delete red; phase 78 said the same of the duration Reset, and the design
+// critique of Dismiss. v18.14.0 (correction 5) took all three, and every other
+// secondary grey, to one quiet button, which holds X5 by having no red to reach.
+describe("X5 — Clear, Reset and Dismiss are not red", () => {
   const CSS = readFileSync(join(SRC, "index.css"), "utf8");
-  it("aliases the dialog slate, as Dismiss does, in every theme", () => {
-    expect(CSS).toMatch(/--btn-clear: var\(--app-btn-slate\);/);
-    expect(CSS).toMatch(/--btn-dismiss: var\(--app-btn-slate\);/);
-    expect((CSS.match(/--btn-clear:/g) || []).length, "no theme block overrides it back").toBe(1);
+  it("the quiet button is the field's fill in every theme", () => {
+    expect(CSS).toMatch(/--btn-quiet: var\(--bg-input\);/);
+    expect((CSS.match(/--btn-quiet:/g) || []).length, "no theme block overrides it back").toBe(1);
   });
-  // v18.2.0 phase 78: the forms' duration Reset destroys nothing either.
-  it("so does the duration Reset", () => {
-    expect(CSS).toMatch(/--btn-reset: var\(--app-btn-slate\);/);
-    expect((CSS.match(/--btn-reset:/g) || []).length, "no theme block overrides it back").toBe(1);
+  it("their own tokens are gone, so a theme block cannot take one back to red", () => {
+    expect(CSS).not.toMatch(/--btn-(clear|reset|dismiss):/);
   });
 });
 

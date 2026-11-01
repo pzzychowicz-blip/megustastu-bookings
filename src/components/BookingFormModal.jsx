@@ -522,7 +522,7 @@ export function BookingFormModal({
     const hasPref=prefs.length>0;
     const prefBtn=<button
       className="mgt-hover-scale"
-      style={mkBtn({background:hasPref?"var(--btn-tables)":BTN.nav,fontSize: T.body,padding:"6px 10px",display:"inline-flex",alignItems:"center",gap:6})}
+      style={mkBtn({background:hasPref?"var(--btn-tables)":BTN.quiet,fontSize: T.body,padding:"6px 10px",display:"inline-flex",alignItems:"center",gap:6})}
       onClick={function(){onOpenPrefPicker();}}><StarIcon size={IC.inline} />{hasPref?prefs.join("+"):"Preferred"}</button>;
     if(editId){
       const cur=bookings.find(function(b){return b.id===editId;});
@@ -644,12 +644,12 @@ export function BookingFormModal({
       if(mt) leftEls.push(<button
         key="clrmt"
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({fontSize: T.body,background:BTN.clear})}
+        style={mkBtn({fontSize: T.body,background:BTN.quiet})}
         onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>);
       if(showClearManual) leftEls.push(<button
         key="clrman"
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({fontSize: T.body,background:BTN.clear})}
+        style={mkBtn({fontSize: T.body,background:BTN.quiet})}
         onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[],_clearManual:true});});onClearSwap();}}>Clear</button>);
       return (
         <Section><div
@@ -666,7 +666,7 @@ export function BookingFormModal({
     if(mt) leftEls.push(<button
       key="clrmt"
       className="mgt-hover-scale mgt-press"
-      style={mkBtn({fontSize: T.body,background:BTN.clear})}
+      style={mkBtn({fontSize: T.body,background:BTN.quiet})}
       onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>);
     return (
       <Section><div
@@ -848,7 +848,7 @@ export function BookingFormModal({
         className="mgt-hover-scale"
         aria-label={"History, "+n+" "+(n===1?"entry":"entries")}
         title={"History ("+n+")"}
-        style={mkBtn({background:"var(--app-btn-slate)",padding:SP.none,minHeight:H.chrome,width:H.chrome,display:"inline-flex",alignItems:"center",justifyContent:"center"})}><HistoryIcon size={IC.chrome} /></button>
+        style={mkBtn({background:BTN.quiet,padding:SP.none,minHeight:H.chrome,width:H.chrome,display:"inline-flex",alignItems:"center",justifyContent:"center"})}><HistoryIcon size={IC.chrome} /></button>
     );
   })();
   // v14: Book Again button — visible only in Edit Booking modal when status is
@@ -955,7 +955,7 @@ export function BookingFormModal({
   const resetDurBtn=form.customDur?<button
     key="rd"
     className="mgt-hover-scale mgt-press"
-    style={mkBtn({fontSize: T.body,background:BTN.reset})}
+    style={mkBtn({fontSize: T.body,background:BTN.quiet})}
     /* v18.2.0: pointer-only like the steppers beside it — Enter and Space did
        nothing — so it takes the same stepPress. */
     {...stepPress(function(){setForm(function(f){return Object.assign({},f,{customDur:null});});})}>Reset</button>:null;
@@ -1008,9 +1008,9 @@ export function BookingFormModal({
            the FORM. CLAUDE.md named this exact trap and the fix (until v18.2.0
            removed the token), and it
            was sitting two buttons away from a red-adjacent amber and a blue
-           primary, so the footer read as three warnings. --app-btn-slate is the
-           documented neutral dialog secondary. */
-        style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+           primary, so the footer read as three warnings. The quiet button is the
+           neutral dialog secondary. */
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
         onClick={function(){onClose();}}>Back</button>{(function(){
         // v14 p1 (Issue 3): Save is disabled when date is empty. Prevents the
         // dd.mm.yyyy placeholder state from being submitted (esp. via Book Again

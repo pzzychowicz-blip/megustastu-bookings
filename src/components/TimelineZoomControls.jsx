@@ -31,7 +31,7 @@ export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, follo
         // left this one at 1.82:1 — the lowest on the screen, on the control
         // that follows the clock during service. A literal duplicate of a token
         // is a token that cannot be fixed.
-        background: followNow ? "var(--app-btn-dark)" : "var(--app-btn-grey)"
+        background: followNow ? "var(--app-btn-dark)" : BTN.quiet
       })}
     >
       {followNow ? "Following" : "Follow"}
@@ -52,7 +52,7 @@ export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, follo
         onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
         aria-label="Zoom out"
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
+        style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.quiet })}
       >
         −
       </button>
@@ -67,7 +67,7 @@ export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, follo
         onClick={() => { setZoom(1); setFollowNow(false); }}
         aria-label={(zoom !== 1 ? "Whole day" : "1x") + " (reset zoom)"}
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 36, padding: "4px 10px", fontSize: T.small, background: zoom === 1 ? "var(--btn-default)" : BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
+        style={mkBtn({ minHeight: 36, padding: "4px 10px", fontSize: T.small, background: BTN.quiet, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
       >
         {/* NB each child must be NULL (not an empty span) when closed — Reveal
             caches its last truthy children for the exit ease; an always-mounted
@@ -84,7 +84,7 @@ export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, follo
         onClick={() => setZoom((z) => Math.min(maxZoom, z + 0.5))}
         aria-label="Zoom in"
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
+        style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.quiet })}
       >
         +
       </button>
