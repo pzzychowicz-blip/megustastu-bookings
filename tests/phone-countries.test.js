@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   COUNTRIES, countryByIso, splitPhone, joinPhone, dialLabel, cleanPinned,
-  matchesCountry, flagOf, DEFAULT_PINNED, phoneHasCode, withTypedCode, numberCleared, pinnedCodes,
+  matchesCountry, flagOf, DEFAULT_PINNED, phoneHasCode, withTypedCode, numberCleared, pinnedCodes, codeColumns,
 } from "../src/lib/phone-countries";
 import * as phoneLib from "../src/lib/phone-countries";
 import { normalizePhone } from "../src/lib/customers";
@@ -506,6 +506,15 @@ describe("phoneForSave — the phone rule, in one place (v18.3.2)", () => {
 });
 
 // v18.14.0 (H4): the refusal's one-tap fixes.
+describe("codeColumns", () => {
+  it("a tablet's form takes up to six in a row", () => {
+    expect([1, 2, 5, 6, 7, 12].map((n) => codeColumns(n, false))).toEqual([1, 2, 5, 6, 6, 6]);
+  });
+  it("a phone takes three, and four are 2 + 2, never a lone chip under three", () => {
+    expect([1, 2, 3, 4, 5, 6, 7].map((n) => codeColumns(n, true))).toEqual([1, 2, 3, 2, 3, 3, 3]);
+  });
+});
+
 describe("pinnedCodes", () => {
   it("is each pin's flag and code, in the order Settings holds them", () => {
     expect(pinnedCodes(["ES", "GB"])).toEqual([

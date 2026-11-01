@@ -39173,6 +39173,26 @@ his decision; a test keeps both names out of `TimelineSheet`.
 `tests/contrast.test.js`, `tests/drop-plan.test.js`, `DESIGN.md`, `GLOSSARY.md`, `src/hooks/CLAUDE.md`,
 `src/components/CLAUDE.md`.
 
+**Correction 3: the buttons on the two pictured surfaces stretch edge to edge.** His option C, on the availability
+line and the country codes only: equal cells, the sentence left. Walk-in's banner and the WhatsApp Accept at chips
+keep theirs, and a test holds that `TimeChip` itself does not stretch. **The line:** the tablet's one row had to
+stay one row, and a breakpoint could not say where that ends, so nothing measures for the cells: the sentence's
+growth outweighs the actions' 9999 to 1, so it takes a shared row's free space, and a line of their own gives the
+actions all of it. The tablet reads as before: 530 × 48, chips 47.8 / 45.6 / 47.7 / 47.7, Add to waitlist 124.4, and
+12 guests stays one row. On a 375 phone the pane is 339 × 129 at 10px 12px, four cells of 75.8 run 12 from either
+edge, and the bar is 315 wide. Only the padding and the bar's own line depend on the wrap, and those are measured
+(`useSharesLine`), on a group that stays mounted, because the hook takes its nodes once. A first build let the bar
+share the times' line at 430, against his full-width bar, so the measured `wrapped` puts it on its own line. Turning
+a phone 430 → 590 → 430 with no reload goes to one row and back. **The codes:** `InlineAlert` gained `below`, a
+full-width line under the mark and the sentence together, which is what lets them run under the mark as the mock
+did with a measured negative margin. A grid, because a phone's six are 3 + 3 and a flex row cannot say that:
+`codeColumns(n, narrow)`, six at most on a tablet, three on a phone, four as 2 + 2. The tablet's six are 78.7 each at
+14px, the phone's 101 at 12px, which is also what keeps the sentence on one line at 375 (at 14px it wrapped, which
+the mock had not shown). Both still ease in and out through their `Reveal`s on a phone.
+
+**Files:** `AvailLine.jsx`, `atoms.jsx`, `BookingFormModal.jsx`, `lib/phone-countries.js`, `tests/stretched-chips.test.js`,
+`tests/phone-countries.test.js`, `GLOSSARY.md`, `src/components/CLAUDE.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, at 998 × 507 and 570 in Light and 507 in Dark, across the main card,

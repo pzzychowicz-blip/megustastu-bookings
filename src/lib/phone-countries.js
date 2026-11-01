@@ -147,6 +147,14 @@ export function pinnedCodes(pinned) {
   return out;
 }
 
+// v18.14.0 (correction 3): how many equal cells a row of those codes takes, stretched
+// edge to edge. A phone holds three, so six are 3 + 3, and four are 2 + 2 rather than
+// a lone chip under three. A tablet's form holds six in a row.
+export function codeColumns(n, narrow) {
+  if (!narrow) return Math.min(n, 6);
+  return n === 4 ? 2 : Math.min(n, 3);
+}
+
 // ── Every dial code, longest first ───────────────────────────────────────────
 // So "+1876…" matches Jamaica (1876) before the USA (1), and "+441481…"
 // Guernsey before the UK.

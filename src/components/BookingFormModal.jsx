@@ -62,7 +62,7 @@ import {
   // v18.14.0 (H4): the refusal that carries the pinned codes.
   NO_CODE_REFUSAL
 } from "../lib/booking-logic";
-import { pinnedCodes } from "../lib/phone-countries";
+import { codeColumns, pinnedCodes } from "../lib/phone-countries";
 // v18.3.3: and what the save will say about the tables it keeps — v18.3.4 moved
 // it beside the save, where it reads the save's own window (`editWindow`).
 import { keptRefusal, pickedRefusal } from "../lib/booking-save";
@@ -941,9 +941,12 @@ export function BookingFormModal({
   // the refusal: a tap writes the code and carries on with what was refused
   // (`onPickCode`, App's `pickPhoneCode`). Nothing is assumed until the tap, so
   // v18.1.0's no-default-country decision stands. No pins means the sentence alone.
+  // v18.14.0 (correction 3): the codes run edge to edge under the sentence, in
+  // equal cells, a grid because a phone's six are 3 + 3 (`codeColumns`). A phone's
+  // 2px less padding a side is what keeps the sentence on one line at 375.
   const codes=error===NO_CODE_REFUSAL?pinnedCodes(pinnedCountries):[];
   const errorEl=<div role="alert"><Reveal show={!!error}>{error?
-    <InlineAlert id={FORM_ERROR_ID} style={{marginBottom:14,...(codes.length?{padding:"10px 4px 4px 14px",alignItems:"flex-start"}:null)}}>{codes.length?<span style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:SP.snug}}><span style={{flex:"1 1 auto",minWidth:0}}>{error}</span><span style={{display:"inline-flex",flexWrap:"wrap",gap:SP.tight}}>{codes.map(function(c){return <TimeChip key={c.iso} time={c.iso} label={c.label} onPick={onPickCode} style={{minHeight:H.control,padding:"0 8px"}} />;})}</span></span>:error}</InlineAlert>
+    <InlineAlert id={FORM_ERROR_ID} style={{marginBottom:14,rowGap:SP.snug,...(codes.length&&isMobile?{padding:"10px 12px"}:null)}} below={codes.length?<div style={{display:"grid",gridTemplateColumns:"repeat("+codeColumns(codes.length,isMobile)+",1fr)",gap:SP.snug}}>{codes.map(function(c){return <TimeChip key={c.iso} time={c.iso} label={c.label} onPick={onPickCode} style={{minHeight:H.control,padding:"0 8px"}} />;})}</div>:null}>{error}</InlineAlert>
   :null}</Reveal></div>;
   // Gated on `error` as well as the field name, so the id handed to
   // aria-describedby can only ever name an element that is on screen.

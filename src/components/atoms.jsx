@@ -818,7 +818,7 @@ export const ALERT_TONES = {
 // default is the one place a rename would fail silently rather than loudly.
 export const ALERT_DANGER = ALERT_TONES.danger;
 
-export function InlineAlert({ tone = ALERT_DANGER.tone, tint = ALERT_DANGER.tint, icon: Icon = AlertIcon, id, style, children }) {
+export function InlineAlert({ tone = ALERT_DANGER.tone, tint = ALERT_DANGER.tint, icon: Icon = AlertIcon, id, style, below, children }) {
   return (
     <div id={id} style={{
       // `alignItems: center` and the mark-to-text gap both mirror the strip's
@@ -828,6 +828,10 @@ export function InlineAlert({ tone = ALERT_DANGER.tone, tint = ALERT_DANGER.tint
       // pixel between a modal alert and a strip section is not something anyone
       // can see, whereas an off-scale literal here is something check:style can.
       display: "flex", alignItems: "center", gap: SP.base,
+      // v18.14.0 (correction 3): `below` is a full-width line under the mark and
+      // the sentence, not under the sentence alone, so what it holds can run from
+      // edge to edge of the pane.
+      flexWrap: below ? "wrap" : undefined,
       padding: "10px 14px", borderRadius: R.card,
       background: tint,
       ...(style || {})
@@ -843,6 +847,7 @@ export function InlineAlert({ tone = ALERT_DANGER.tone, tint = ALERT_DANGER.tint
         </span>
       ) : null}
       <span style={{ fontSize: T.body, fontWeight: FW.bold, color: tone, flex: 1, minWidth: 0 }}>{children}</span>
+      {below ? <div style={{ flex: "1 1 100%", minWidth: 0 }}>{below}</div> : null}
     </div>
   );
 }
