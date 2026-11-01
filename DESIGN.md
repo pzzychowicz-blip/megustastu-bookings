@@ -355,7 +355,7 @@ explaining why is usually the one to read.
   to be inside the check.
 
   **Corollary for pill-shaped controls (v17.8.0): `--r-pill` clamps to half the SHORTER side, so only a SQUARE box is a circle.** An icon button sized by `minHeight` + horizontal padding is ~30×40 and renders as a vertical egg — which is what the three Split-View tools were, one row above the perfectly round 34×34 🔍/⚙ pair. A single-glyph button gets explicit equal `width`/`height` and `padding: 0` (and `min-*` is not enough — a flex row will stretch it back).
-- Reusable JSX atoms in `src/components/atoms.jsx`: `Overlay`, `Fld`, `Section`, `TBadge`, `AvailBanner`, `Toggle`, `mkInp`, `mkBtn`.
+- Reusable JSX atoms in `src/components/atoms.jsx`: `Overlay`, `Fld`, `Section`, `TBadge`, `Toggle`, `mkInp`, `mkBtn`.
 - New UI composes from atoms, not redefining them. Add new atoms there if needed.
 - **`mkBtn` already sets `boxShadow`, so `Object.assign`-ing another one REPLACES it** — a
   property, not a shadow list. `ViewSwitcher`'s split-pane marker silently stripped
@@ -944,7 +944,7 @@ explaining why is usually the one to read.
   under the TITLE rather than under the mark. Both are the notification strip's
   section shape, so a fault looks the same wherever it fires. `AlertPanel` is
   not in `atoms.jsx` because it imports the strip's geometry and the strip
-  imports atoms; that is also why `AvailBanner` moved to its own file.
+  imports atoms.
 
   It is **not** `BannerRows`, which is bound to `useRevealRows`, an
   arrival/departure lifecycle for rows that come and go while you watch. These

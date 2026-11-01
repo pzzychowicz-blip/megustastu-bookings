@@ -72,11 +72,12 @@ import { stepPress } from "../lib/keyboard";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
 import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, mkDangerBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AvailLine } from "./AvailLine";
-import { TimeChip } from "./AvailBanner";
+import { TimeChip } from "./TimeChip";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon, TrashIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
+import { useLineBand } from "../hooks/useLineBand";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
 import { VoucherPicker } from "./VoucherPicker";
 import { PhoneField } from "./PhoneField";
@@ -466,21 +467,9 @@ export function BookingFormModal({
   },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,form.status,form._clearManual,bookings,liveBookings,tableBlocks,editId,autoOptimizer,hoursSig,swap,nowMins,today]);
   const formAvail=availScan.value;
   // v18.14.0 (correction 10, Patryk): the line keeps its band while a refused answer is
-  // re-checked (`AvailLine`, whose header says why). `heldAvail` is the last refusal,
-  // which draws the band for that while, and for its fold once a table is found;
-  // `lineOpen` says it was still the answer when the check began. Set during render,
-  // React's own pattern for a value derived from the last one, so the band is never a
-  // commit behind: it holds from the render that starts the check.
+  // re-checked (`useLineBand`).
   const answeredNo=formAvail&&!formAvail.ok?formAvail:null;
-  const [heldAvail,setHeldAvail]=useState(null);
-  const [lineOpen,setLineOpen]=useState(false);
-  if(!availScan.pending){
-    if(lineOpen!==!!answeredNo) setLineOpen(!!answeredNo);
-    if(answeredNo&&heldAvail!==answeredNo) setHeldAvail(answeredNo);
-  }
-  const lineChecking=availScan.pending&&lineOpen;
-  const lineShown=!!answeredNo||lineChecking;
-  const lineAvail=answeredNo||heldAvail;
+  const {answer:lineAvail,shown:lineShown,checking:lineChecking}=useLineBand(answeredNo,availScan.pending);
 
   // ── v18.0.0 session 8 (items 2b, 7): this guest's other vouchers ───────────
   // Read once per mount, like the picker's own and the Vouchers tab's: expiry is

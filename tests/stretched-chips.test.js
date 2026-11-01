@@ -46,8 +46,8 @@ describe("the country codes", () => {
 
 describe("the two surfaces he did not picture keep their chips", () => {
   it("TimeChip itself does not stretch: the two callers ask", () => {
-    const chip = code("components/AvailBanner.jsx");
-    const body = chip.slice(chip.indexOf("export function TimeChip"), chip.indexOf("export function AvailBanner"));
+    const chip = code("components/TimeChip.jsx");
+    const body = chip.slice(chip.indexOf("export function TimeChip"));
     expect(body).not.toMatch(/flex:/);
   });
 });

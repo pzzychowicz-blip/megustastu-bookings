@@ -1,7 +1,7 @@
 // src/components/atoms.jsx
 // Tiny UI primitives used across the app: modal Overlay, form Fld, Section
-// container, status / table / small badges, Toggle switch, Kbd keycap, and
-// AvailBanner. Plus the style-builder helpers mkInp / mkBtn.
+// container, status / table / small badges, Toggle switch and Kbd keycap. Plus
+// the style-builder helpers mkInp / mkBtn.
 //
 // Phase B1 (v15-refactor): extracted from App.jsx and converted RC() → JSX.
 // First file in the codebase using JSX syntax — proves the build pipeline

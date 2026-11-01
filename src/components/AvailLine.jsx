@@ -1,4 +1,4 @@
-// ── AvailLine — "No table for 8 at 21:00", pinned above the form's buttons ───
+// ── AvailLine — "No table for 8 at 21:00", pinned above a form's buttons ─────
 // v18.14.0 (H3). A phone booking learned "no table" last: the answer was a
 // banner in the form's body, at y=694 on a 570-tall screen, and with the
 // keyboard up the body is about 211px, so the first thing to say so was Save.
@@ -18,6 +18,11 @@
 // already do, and the chips and the button take narrower insets than they have
 // elsewhere; their height stays the row's, for wet hands. The tint and tone are
 // the pairing `tests/contrast.test.js` measures.
+//
+// v18.14.0 (correction 16, Patryk): the walk-in's too, for the same reason. On a full
+// evening at 998 × 507 its banner was at y 906, under the picker, and nothing on screen
+// said so. One sentence, one colour, one place, in both forms. `useLineBand` is what
+// each form asks.
 //
 // v18.14.0 (correction 15, Patryk): today, no time that has passed (`earliestOffer`).
 // On a full evening that can leave none, and then the sentence is the whole answer,
@@ -55,7 +60,7 @@ import { BLOCK_BG, FW, H, IC, M, R, SP, T } from "../lib/constants";
 import { nearestTimes } from "../lib/booking-logic";
 import { useSharesLine } from "../hooks/useSharesLine";
 import { ALERT_TONES, InlineAlert, mkBtn } from "./atoms";
-import { TimeChip } from "./AvailBanner";
+import { TimeChip } from "./TimeChip";
 import { WaitIcon } from "./Icons";
 
 const LINE_TIMES = 4;

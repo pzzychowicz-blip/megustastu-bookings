@@ -24,10 +24,6 @@ session and keeping it in sync.
   say "Moves …" and the release can still refuse. A trial run once the finger has settled
   on a row, off the frame path, would close the gap.
 
-- **Walk-in's "no tables" banner is under the picker.** On a full evening at 998 × 507 it
-  sits off screen. M4 reordered the form to get the picker on screen, and moving the
-  banner was not in that fix.
-
 - **`BookingApp` V2, V3 and V5** (`useInboxEntry`, `useWaitlistOffers`, `useBookingForm`). Designed in `MGT_Bookings_State_By_Domain_Design.md`, context folder. After WhatsApp go-live settles; each version needs its own approval and a fresh census first.
 
 - **WhatsApp coexistence: the rehearsal, then the restaurant's number.** The code

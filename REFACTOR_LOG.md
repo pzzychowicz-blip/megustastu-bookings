@@ -39458,6 +39458,46 @@ where the first offered 18:45 to 19:30 before.
 **Files:** `lib/booking-logic.js`, `lib/draft-check.js`, `hooks/useDraftCheck.js`, `AvailLine.jsx`, `WalkinForm.jsx`,
 `BookingFormModal.jsx`, `tests/booking-logic.test.js`, `tests/draft-check.test.js`, `GLOSSARY.md`, `src/lib/CLAUDE.md`.
 
+**Correction 16: the walk-in says "no table" where you can see it.** On a full evening at 998 × 507 the dialog is 456px tall,
+the body 26–404, and the banner sat at y 906 inside 1,323px of content, with the picker's busy pills above it and nothing
+on screen to say why Seat stayed grey. He chose the booking form's line, pinned above Back and Seat, in the same red,
+over the banner above the picker, which filled the body and pushed the tables out of view.
+
+- **One sentence in both forms**, "No table for 8 at 21:00", where this one said "No tables available at 21:00." The four
+  nearest times replace the Before and After lists, and Add to waitlist sits in the row.
+- **The band logic came with it, as a hook.** `useLineBand` is what correction 10 wrote into the booking form, because
+  the walk-in's scan also reads null while it re-checks and would have blinked the same way. `AvailBanner` had no caller
+  left and is gone; `TimeChip`, which three others use, keeps its own file.
+- **A picked table settles the question**, so the line goes with that tap rather than after a scan, and Clear brings it back.
+- **The body's cue stays shut under the band**, as in the booking form.
+
+Measured at 998 × 507 and 570, Light, writes blocked, at 1× and 4× CPU, with `c16walkin.py` and `c16pick.py`:
+
+| | 507 | 570 |
+|---|---|---|
+| Line | y 365, 56 tall | y 425, 56 tall |
+| Seat | y 421 | y 481 |
+| Body | 26–348 | 30–408 |
+
+| Change | Band | Answer | Words |
+|---|---|---|---|
+| Fits → refused | 0 → 56, easing | solid | 0 |
+| Refused → refused | 56 throughout | dips to 0.68 at 4× | 0 |
+| Refused → fits | 56 → 0, easing | fades with it | 0 |
+| A chip tapped | 56 → 0, easing | fades with it | 0 |
+| A table picked | 56 → 0, easing | fades with it | 0 |
+| Clear | 0 → 56, easing | solid | 0 |
+
+On a phone at 375 × 812 it wraps to 137px, with four chips and a full-width Add to waitlist, and nothing overflows.
+
+**The cost, stated:** with the line up on a 507 tablet the body loses 56px and the picker's first tables go under the band.
+The picker can be scrolled, and at that moment its tables are busy anyway.
+
+**Files:** new `hooks/useLineBand.js`, `TimeChip.jsx` (was `AvailBanner.jsx`), `WalkinForm.jsx`, `AvailLine.jsx`,
+`BookingFormModal.jsx`, `whatsapp/DraftCard.jsx`, `atoms.jsx` (its comment), `tests/walkin.test.js`,
+`tests/booking-logic.test.js`, `tests/stretched-chips.test.js`, `GLOSSARY.md`, `DESIGN.md`, `src/components/CLAUDE.md`,
+`src/hooks/CLAUDE.md`, `ROADMAP.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

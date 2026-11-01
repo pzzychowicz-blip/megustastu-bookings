@@ -3093,17 +3093,17 @@ describe("the save and the preview ask tablesKept (v18.3.2)", () => {
     expect(err).toBeGreaterThan(-1);
     expect(line, "under the save's refusal, which says \"see suggestions below\"").toBeGreaterThan(err);
     expect(row, "above the buttons").toBeGreaterThan(line);
-    expect(FORM.includes("<AvailBanner"), "the body's list is gone").toBe(false);
   });
 
   // v18.14.0 (correction 10, Patryk): what it costs if these go is a 56px band blinking
   // on every change of the time, which no build or render test would notice.
   it("the band holds while a refused answer is re-checked, and nothing stale shows", () => {
     expect(FORM).toMatch(/const answeredNo=formAvail&&!formAvail\.ok\?formAvail:null;/);
-    expect(FORM, "from the render that starts the check, so never a commit behind").toMatch(/if\(!availScan\.pending\)\{\s*if\(lineOpen!==!!answeredNo\) setLineOpen\(!!answeredNo\);/);
-    expect(FORM).toMatch(/const lineChecking=availScan\.pending&&lineOpen;/);
-    expect(FORM).toMatch(/const lineShown=!!answeredNo\|\|lineChecking;/);
-    expect(FORM).toMatch(/const lineAvail=answeredNo\|\|heldAvail;/);
+    expect(FORM).toContain("const {answer:lineAvail,shown:lineShown,checking:lineChecking}=useLineBand(answeredNo,availScan.pending);");
+    const Band = stripComments(readFileSync(new URL("../src/hooks/useLineBand.js", import.meta.url), "utf8")).join("\n");
+    expect(Band, "from the render that starts the check, so never a commit behind").toMatch(/if \(!pending\) \{\s*if \(open !== !!refused\) setOpen\(!!refused\);/);
+    expect(Band).toMatch(/const checking = pending && open;/);
+    expect(Band).toMatch(/shown: !!refused \|\| checking, checking, answer: refused \|\| held/);
     expect(FORM).toMatch(/checking=\{lineChecking\}\s*leaving=\{!lineShown\}/);
     const Line = stripComments(readFileSync(new URL("../src/components/AvailLine.jsx", import.meta.url), "utf8")).join("\n");
     expect(Line, "the old answer cannot be tapped, focused or read out").toMatch(/<span ref=\{rowRef\} inert=\{answerHidden\}/);

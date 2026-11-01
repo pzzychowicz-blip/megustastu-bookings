@@ -8,7 +8,7 @@
 import { useState } from "react";
 import { Reveal, mkSolidBtn, OutlineChip, InlineAlert } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
-import { TimeChip } from "../AvailBanner";
+import { TimeChip } from "../TimeChip";
 import { clampConfidence, availabilityReply } from "../../lib/whatsapp";
 import { draftCheckLine } from "../../lib/draft-check";
 import { formatDay } from "../../lib/day";
