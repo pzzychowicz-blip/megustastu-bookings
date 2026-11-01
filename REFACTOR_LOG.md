@@ -39759,6 +39759,20 @@ is untouched: I built the ease first, found it could never run, and took it out.
 
 **Files:** `whatsapp/InboxPanel.jsx`, `tests/reserved-slots.test.js`.
 
+**Correction 28: the sentence under an armed button eases.** Patryk's choice for the last group of pop-ins was all of them, and this
+is the first. Four armed buttons explain themselves in a sentence that used to arrive and go in one frame: Remove on a person, Delete
+customer, Clear this range and a special day's Remove. Each is on a `Reveal` now. Measured at 998 × 507 at the 520ms of a disclosure:
+the person's sentence opens 0 → 38 and folds back, the customer's 0 → 59 and the log's 0 → 53, each with its opacity, in and out; the
+special day's opens 0 → 23 and goes with the modal, since nothing else disarms it. The Tags editor's hint was on a `Reveal` already.
+
+Two details decide whether it reads as an ease. The gap has to fold too, so each margin became padding inside the fold, and Admin's
+sentence left the wrapping row, because a `flexBasis: 100%` item there brings the row's `gap` with it the moment it mounts and takes it
+away the moment it unmounts. And `Reveal` keeps a leaving copy for its exit while another row can arm, so Admin's and Customers' one
+shared id goes on the copy that is armed: moving the arm from Patryk's row to Marta's read 38 → 0 on one and 0 → 38 on the other, in
+step, with one element holding the id.
+
+**Files:** `AdminSettings.jsx`, `CustomersSettings.jsx`, `ActivityLogModal.jsx`, `SpecialDayModal.jsx`, `tests/arm-guard.test.js`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

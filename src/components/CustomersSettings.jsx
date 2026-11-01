@@ -247,7 +247,12 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
                 staff are told to delete the contact there too (Patryk,
                 2026-10-15). Inside the same described element, so it is read
                 with the warning it qualifies. */}
-            {armed ? <div id={DELETE_WARN_ID} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", marginTop: 8 }}>Permanently removes this customer's personal data (name, phone, notes, tags, history) — no backups. Their bookings remain anonymised as “Data removed” for statistics. Tap again to confirm.{whatsappOn && c.phone ? <span style={{ display: "block", marginTop: 6 }}>Also delete them from the restaurant phone's contacts: MGT can't reach the phone.</span> : null}</div> : null}
+            {/* v18.14.0 (correction 28, Patryk): it eases, with its gap inside the fold.
+                The id only while armed: `Reveal` keeps a leaving copy for its exit,
+                and another row can arm inside that time. */}
+            <Reveal show={armed}>
+              <div id={armed ? DELETE_WARN_ID : undefined} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", paddingTop: 8 }}>Permanently removes this customer's personal data (name, phone, notes, tags, history) — no backups. Their bookings remain anonymised as “Data removed” for statistics. Tap again to confirm.{whatsappOn && c.phone ? <span style={{ display: "block", marginTop: 6 }}>Also delete them from the restaurant phone's contacts: MGT can't reach the phone.</span> : null}</div>
+            </Reveal>
           </div>
         </Reveal>
       </div>

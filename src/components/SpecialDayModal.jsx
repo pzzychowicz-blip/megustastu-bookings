@@ -180,11 +180,13 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
       <div role="alert">
         <Reveal show={!!refusal}>{refusal ? <InlineAlert id={ERROR_ID}>{refusal}</InlineAlert> : null}</Reveal>
       </div>
-      {editing && armed ? (
-        <div style={{ fontSize: T.body, color: S.muted, marginTop: 8 }}>
-          {rangeLabel(initial.draft, today) + " goes back to its weekday's hours."}
-        </div>
-      ) : null}
+      <Reveal show={editing && armed}>
+        {editing && armed ? (
+          <div style={{ fontSize: T.body, color: S.muted, paddingTop: 8 }}>
+            {rangeLabel(initial.draft, today) + " goes back to its weekday's hours."}
+          </div>
+        ) : null}
+      </Reveal>
     </AutoHeight></Overlay>
   );
 }

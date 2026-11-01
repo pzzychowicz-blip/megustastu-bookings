@@ -123,3 +123,32 @@ describe("a confirm's action", () => {
     expect(inbox).toMatch(/if \(!armSettled\(\)\) return; setConfirmBulkDelete\(false\); runBulk\("delete"\);/);
   });
 });
+
+// Correction 28: the sentence under an armed button eases open and closed, so its gap
+// sits inside the fold. Above or outside it, a margin or a row's `gap` would arrive and
+// go at once, which is the pop the Reveal exists to remove.
+describe("the sentence under an armed button", () => {
+  const WARNINGS = [
+    ["AdminSettings.jsx", "<Reveal show={armed}>"],
+    ["CustomersSettings.jsx", "<Reveal show={armed}>"],
+    ["ActivityLogModal.jsx", "<Reveal show={armed}>"],
+    ["SpecialDayModal.jsx", "<Reveal show={editing && armed}>"],
+  ];
+  const sourceOf = (name) => sources.find(([path]) => path.endsWith("/" + name))[1];
+  it.each(WARNINGS)("%s eases, with its gap inside the fold", (name, open) => {
+    const src = sourceOf(name);
+    const at = src.indexOf(open);
+    expect(at).toBeGreaterThan(-1);
+    // The element that folds, up to the end of its style: a line inside it may keep a margin.
+    const folds = src.slice(at, src.indexOf("}}>", at));
+    expect(folds).toContain("paddingTop");
+    expect(folds).not.toContain("marginTop");
+  });
+  it("is not in Admin's wrapping row, where the line gap would pop", () => {
+    expect(sourceOf("AdminSettings.jsx")).not.toContain('flexBasis: "100%"');
+  });
+  it("names its id only while armed where another row can arm during the exit", () => {
+    expect(sourceOf("AdminSettings.jsx")).toContain("id={armed ? removeWarnId : undefined}");
+    expect(sourceOf("CustomersSettings.jsx")).toContain("id={armed ? DELETE_WARN_ID : undefined}");
+  });
+});

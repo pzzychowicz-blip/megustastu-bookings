@@ -78,7 +78,8 @@ describe("Admin → People: Remove", () => {
 
   it("puts the sentence UNDER the row, tied to the button only while it exists", () => {
     expect(Admin).toMatch(/aria-describedby=\{armed \? removeWarnId : undefined\}/);
-    expect(Admin).toMatch(/<div id=\{removeWarnId\} style=\{\{ flexBasis: "100%"/);
+    expect(Admin).toMatch(/<div id=\{armed \? removeWarnId : undefined\} style=\{\{ paddingTop/);
+    expect(Admin.indexOf("<Reveal show={armed}>")).toBeGreaterThan(Admin.indexOf('"Confirm — remove"'));
   });
 
   it("is disarmed by every other action in People", () => {
@@ -311,7 +312,7 @@ describe("phase 62 — one red for every destructive control, and the trash mark
     const Cust = read("components/CustomersSettings.jsx");
     expect(Cust).toMatch(/aria-describedby=\{armed \? DELETE_WARN_ID : undefined\}/);
     const btn = Cust.indexOf('"Delete customer & all data"');
-    const warn = Cust.indexOf("<div id={DELETE_WARN_ID}");
+    const warn = Cust.indexOf("<div id={armed ? DELETE_WARN_ID : undefined}");
     expect(warn).toBeGreaterThan(btn);
     expect(Cust).not.toMatch(/"Confirm delete"/);
   });

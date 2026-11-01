@@ -787,11 +787,8 @@ export function AdminTabContent({
             const self = r.uid && r.uid === myUid;
             const armed = !!r.uid && r.uid === armedUid;
             return (
-              <div key={id} style={{
-                display: "flex", alignItems: "center", gap: SP.base, flexWrap: "wrap",
-                padding: SP.base + "px 0",
-                borderTop: "1px solid var(--border-soft)",
-              }}>
+              <div key={id} style={{ padding: SP.base + "px 0", borderTop: "1px solid var(--border-soft)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: SP.base, flexWrap: "wrap" }}>
                 <div style={{ flex: "1 1 160px", minWidth: 0 }}>
                   <div style={{ fontWeight: FW.semi, fontSize: T.body, color: "var(--text-primary)" }}>
                     {displayName(r)}
@@ -849,14 +846,20 @@ export function AdminTabContent({
                         aria-label={(armed ? "Confirm — remove " : "Remove ") + displayName(r)}
                         style={mkDangerBtn()}
                       ><TrashIcon size={IC.control} />{armed ? "Confirm — remove" : "Remove"}</button>}
-                      {armed ? (
-                        <div id={removeWarnId} style={{ flexBasis: "100%", fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)" }}>
-                          Deletes {displayName(r)}'s level and capabilities here. It does not lock them
-                          out: the next time they open the app they are back on this list with no
-                          level{enforceRoles ? ", which counts as staff" : ""}. Tap again to confirm.
-                        </div>
-                      ) : null}
                     </>}
+              </div>
+              {/* v18.14.0 (correction 28, Patryk): it eases open and closed, so
+                  it left the wrapping row, whose `gap` would have appeared and
+                  gone at once; the gap is this padding now, and folds with it.
+                  The id only while armed: `Reveal` keeps a leaving copy for its
+                  exit, and another row can arm inside that time. */}
+              <Reveal show={armed}>
+                <div id={armed ? removeWarnId : undefined} style={{ paddingTop: SP.base, fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)" }}>
+                  Deletes {displayName(r)}'s level and capabilities here. It does not lock them
+                  out: the next time they open the app they are back on this list with no
+                  level{enforceRoles ? ", which counts as staff" : ""}. Tap again to confirm.
+                </div>
+              </Reveal>
               </div>
             );
           })}

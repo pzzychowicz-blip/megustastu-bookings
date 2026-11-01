@@ -543,16 +543,19 @@ export function ActivityLogModal({
               </span>
             ) : null}
           </div>
-          {clearMsg && !armed ? (
-            <div style={{ fontSize: T.body, color: S.muted, marginTop: SP.base }}>{clearMsg}</div>
-          ) : null}
-          {armed ? (
-            <div id={warnId} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", marginTop: SP.base }}>
-              Permanently deletes every entry from {fromDay || "the beginning"} to {toDay || "now"} — including any
-              not loaded here, and whatever the filters above are showing. There are no backups.
-              The log will record that this happened. Tap again to confirm.
-            </div>
-          ) : null}
+          {/* v18.14.0 (correction 28, Patryk): both ease, with the gap inside the fold. */}
+          <Reveal show={!!clearMsg && !armed}>
+            {clearMsg ? <div style={{ fontSize: T.body, color: S.muted, paddingTop: SP.base }}>{clearMsg}</div> : null}
+          </Reveal>
+          <Reveal show={armed}>
+            {armed ? (
+              <div id={warnId} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", paddingTop: SP.base }}>
+                Permanently deletes every entry from {fromDay || "the beginning"} to {toDay || "now"} — including any
+                not loaded here, and whatever the filters above are showing. There are no backups.
+                The log will record that this happened. Tap again to confirm.
+              </div>
+            ) : null}
+          </Reveal>
         </div>
       ) : null}
 
