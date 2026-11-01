@@ -534,7 +534,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       d.sc.scrollTop = before + next.step;
       if (d.sc.scrollTop === before) { edgeLastRef.current = 0; d.carry = 0; return; }   // at the end
       setDragDy(dragDyOf(d));
-      if (setDragHover) setDragHover(tableAtY(d.lastY), b.id, homeTable);
+      if (setDragHover) setDragHover(tableAtY(d.lastY), b.id, homeTable, d.lastY);
     }
     edgeRafRef.current = requestAnimationFrame(edgeFrame);
   }
@@ -621,7 +621,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       const dd = dragRef.current;
       if (!dd || !dd.active) return;
       setDragDy(dragDyOf(dd));
-      if (setDragHover) setDragHover(tableAtY(dd.lastY), b.id, homeTable);
+      if (setDragHover) setDragHover(tableAtY(dd.lastY), b.id, homeTable, dd.lastY);
     });
   }
   function endDrag(e, commit) {
@@ -1075,6 +1075,12 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
 // The ruler's opaque surface under the role's tint, with the role's border as
 // the edge: the row wears the same tint, so the tint alone would leave the words
 // floating on it, and a tint over a block is unreadable.
+// v18.14.0 (correction 17): a check that changes the words fades the new ones in,
+// because they replace the old ones under a finger that has stopped moving, and
+// the change is the news. The row's tint eases on its own transition.
+const DROP_REST_MS = 200;  // still for this long, and the row asks the real plan
+const DROP_REST_SLOP = 8;  // a resting finger trembles; this far is a move
+const NO_CHECKS = {};      // one object, so the end of a drag cannot re-render it again
 function hintRole(hint) {
   return !hint || !hint.text ? null : hint.tone === "danger" ? ALERT_TONES.danger : ALERT_TONES.warn;
 }
@@ -1088,7 +1094,7 @@ function DropHint({ hint, sz }) {
       style={{ position: "sticky", left: SP.snug, zIndex: 31, width: "fit-content", maxWidth: "100%", height: "100%", display: "flex", alignItems: "center", pointerEvents: "none" }}
     >
       {role ? (
-        <div aria-hidden="true" style={{
+        <div key={hint.text} className={hint.corrects ? "mgt-appear" : undefined} aria-hidden="true" style={{
           padding: "4px 8px", borderRadius: R.pill, whiteSpace: "nowrap",
           fontSize: sz.legend, fontWeight: FW.semi, color: role.tone,
           background: "linear-gradient(" + role.tint + ", " + role.tint + "), var(--tl-ruler-bg)",
@@ -1482,6 +1488,7 @@ export const TimelineView = memo(function TimelineView({
   currency = "€", // v17.0.0: settings/general deposit marker
   onDropOnTable = null, // v17.0.0 correction: drag&drop move/swap handler (App)
   onDropPreview = null, // v18.14.0 (H5): what a drop on a row would do (App's previewDrop)
+  onDropCheck = null,   // v18.14.0 (correction 17): the same, with the real plan (App's checkDrop)
   onReshuffle = () => {},
   // v17.6.0: separation between bookings, in minutes (0 = feature off). A SCALAR
   // from App rather than the TURN_BUFFER live binding, because React.memo cannot
@@ -1533,15 +1540,43 @@ export const TimelineView = memo(function TimelineView({
   // which is no target. Two plain values rather than one object: a block reports
   // every frame, and a value that has not moved must not re-render the grid.
   const [dragOver, setDragOver] = useState(null);
-  function hoverRow(table, id, home) {
+  // v18.14.0 (correction 17, Patryk): what a settled finger has been told this drag,
+  // per row, and where it has been still since.
+  const [dropChecks, setDropChecks] = useState(NO_CHECKS);
+  const dropRest = useRef({ y: 0, at: 0 });
+  function hoverRow(table, id, home, y) {
     setDragHover(table);
     setDragOver(table == null || table === home ? null : id);
+    if (table == null) { setDropChecks(NO_CHECKS); return; }
+    if (Math.abs(y - dropRest.current.y) > DROP_REST_SLOP) dropRest.current = { y: y, at: performance.now() };
   }
   // Asked once per row, not per pointer frame: it changes with the row, and with
   // nothing else, for as long as the finger stays on one.
   const dropHint = useMemo(() => (
     dragHover != null && dragOver != null && onDropPreview ? onDropPreview(dragOver, dragHover) : null
   ), [dragHover, dragOver, onDropPreview]);
+  // v18.14.0 (correction 17, Patryk): with the Optimiser on, "Moves …" is a guess, and
+  // the real answer is too heavy for a drag (`dropPreview`'s header has the numbers).
+  // So the row asks once the finger has stopped: amber at once, then the plan once
+  // per row per drag. Stopped means still, not merely on the row, because a slow drag
+  // across rows spends longer than `DROP_REST_MS` on each, and this is the one call
+  // here that can hold a frame. A check that agrees leaves the row exactly as it was.
+  const unsureRow = dropHint && dropHint.unsure ? dragOver + "|" + dragHover : null;
+  const rowHint = (unsureRow && dropChecks[unsureRow]) || dropHint;
+  useEffect(() => {
+    if (!unsureRow || dropChecks[unsureRow] || !onDropCheck) return undefined;
+    let timer = 0;
+    function check() {
+      const left = dropRest.current.at + DROP_REST_MS - performance.now();
+      if (left > 0) { timer = setTimeout(check, left); return; }
+      const sure = onDropCheck(dragOver, dragHover);
+      if (!sure) return;
+      const said = sure.text === dropHint.text ? dropHint : { ...sure, corrects: true };
+      setDropChecks((c) => ({ ...c, [unsureRow]: said }));
+    }
+    timer = setTimeout(check, DROP_REST_MS);
+    return () => clearTimeout(timer);
+  }, [unsureRow, dropChecks, dropHint, dragOver, dragHover, onDropCheck]);
   const isToday = date === today;
   const totalMins = (GRID_CLOSE - OPEN) * 60;
   const gridW = Math.max(320, totalMins * zoom * 1.2);
@@ -2223,10 +2258,10 @@ export const TimelineView = memo(function TimelineView({
           // v18.14.0 (correction 2): the indoor tint is the row's resting ground,
           // so a hint replaces it and hands it back.
           backgroundColor: dragHover !== id ? (indoorTint && isIn(id) ? "var(--tl-indoor-bg)" : undefined)
-            : hintRole(dropHint) ? hintRole(dropHint).tint : "var(--bg-ac-hover)"
+            : hintRole(rowHint) ? hintRole(rowHint).tint : "var(--bg-ac-hover)"
         }}
       >
-        <DropHint hint={dragHover === id ? dropHint : null} sz={sz} />
+        <DropHint hint={dragHover === id ? rowHint : null} sz={sz} />
         <GridLines />
         {tblBlocks.map((bl, i) => <BlockBar key={"blk" + i} bl={bl} totalMins={totalMins} sz={sz} />)}
         {/* v17.8.0: waitlist ghosts — rendered BEFORE the real blocks so a live

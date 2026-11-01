@@ -138,6 +138,7 @@ function swapOf(site,nowMins,today){
 //   null                  no target here: its own row, or not a booking that moves
 //   {tone:"free"}         nobody in the way; the row keeps its blue
 //   {tone:"warn",text}    the drop goes through and moves somebody else
+//                         (`unsure`: a guess, see below)
 //   {tone:"danger",text}  the drop will be refused, and this is why
 //
 // **With the Optimiser OFF it is exact, and that is most of a service.** Nothing
@@ -148,16 +149,23 @@ function swapOf(site,nowMins,today){
 // this, the row said "Moves …" over every one of those refusals; DEV's evening
 // found it, where the same drag had gone through that morning.
 //
-// **With the Optimiser ON it has one known gap.** `planDrop` walks up to 8
-// candidates with a full optimiser trial each (70–500ms on a bad day), far too
-// heavy for a drag, so "Moves …" reads the FIRST candidate and no trial runs.
-// Where that trial would strand somebody, the release takes a lower candidate or
-// refuses with its toast, and nothing is written. Nothing else can differ: a free
-// row is always a plain move, a swap is always a swap and a red row is always
-// refused, which `tests/drop-plan.test.js` holds over generated days.
+// **With the Optimiser ON the first answer is a good guess, and the row checks it.**
+// `planDrop` walks up to 8 candidates with a full optimiser trial each, 48ms at
+// tablet speed on a normal day and up to 500 on a jammed one, far too heavy for a
+// drag. So "Moves …" reads the FIRST candidate, with `unsure` set, and no trial runs.
+// That guess was wrong on 4 of 79 rows on a normal Saturday and 48 of 79 on a
+// jammed day, where the release took a lower candidate or refused. `dropCheck` is the
+// answer with the real plan behind it (correction 17, Patryk): TimelineView asks it
+// once per row per drag, after the finger has been still for `DROP_REST_MS`. Nothing
+// else can differ: a free row is always a plain move, a swap is always a swap and
+// a red row is always refused, which `tests/drop-plan.test.js` holds over generated
+// days.
 const MAX_NAMES=3;
 function firstName(name){return String(name||"").trim().split(/\s+/)[0]||"A party";}
-export function dropPreview(ctx){
+function namesOf(list){
+  return list.slice(0,MAX_NAMES).map(function(b){return firstName(b.name);}).join(", ")+(list.length>MAX_NAMES?" +"+(list.length-MAX_NAMES):"");
+}
+function rowHint(ctx,trial){
   const site=dropSite(ctx);
   if(!site) return null;
   if(site.refuse) return {tone:"danger",text:site.refuse};
@@ -167,13 +175,13 @@ export function dropPreview(ctx){
   if(seated) return {tone:"danger",text:firstName(seated.name)+" is seated here"};
   const swap=swapOf(site,ctx.nowMins,ctx.today);
   if(swap) return {tone:"warn",text:"Swaps with "+swap.other.name};
-  const names=occ.slice(0,MAX_NAMES).map(function(b){return firstName(b.name);}).join(", ")+(occ.length>MAX_NAMES?" +"+(occ.length-MAX_NAMES):"");
-  if(!optimizerActiveFor(ctx.viewDate,ctx.autoOptimizer)){
-    const plan=planDrop(ctx);
-    if(plan&&plan.refuse) return {tone:"danger",text:"Can't move "+names};
-  }
-  return {tone:"warn",text:"Moves "+names};
+  if(!trial) return {tone:"warn",text:"Moves "+namesOf(occ),unsure:true};
+  const plan=planDrop(ctx);
+  if(plan.refuse) return {tone:"danger",text:"Can't move "+namesOf(occ)};
+  return plan.moved?{tone:"warn",text:"Moves "+namesOf(plan.moved)}:{tone:"free"};
 }
+export function dropPreview(ctx){return rowHint(ctx,!optimizerActiveFor(ctx.viewDate,ctx.autoOptimizer));}
+export function dropCheck(ctx){return rowHint(ctx,true);}
 
 export function planDrop(ctx){
   const id=ctx.id,targetId=ctx.targetId,bookings=ctx.bookings;
@@ -257,7 +265,7 @@ export function planDrop(ctx){
     const trial=transform(bookings);
     const stranded=dOcc.find(function(o){const t=trial.find(function(x){return x.id===o.id;});return !t||(t.tables||[]).length===0||t._conflict;});
     if(stranded) continue;
-    return {transform:transform,done:src.name+" moved to "+dSet.join("+")+" — "+dOcc.map(function(o){return o.name;}).join(", ")+" reassigned."};
+    return {transform:transform,moved:dOcc,done:src.name+" moved to "+dSet.join("+")+" — "+dOcc.map(function(o){return o.name;}).join(", ")+" reassigned."};
   }
   const seatedOcc=occ.find(function(b){return b.status==="seated";});
   if(seatedOcc) return {refuse:seatedOcc.name+" is seated on "+targetId+"'s tables — can't move them."};

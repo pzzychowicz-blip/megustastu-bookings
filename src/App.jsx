@@ -103,7 +103,7 @@ import { DateField, Overlay, ModalTitle, mkBtn, mkSolidBtn, mkDangerConfirm, Rev
 import { StatusToasts } from "./components/StatusToasts";
 import { RefusalToast } from "./components/RefusalToast";
 import { toastBox } from "./lib/toast-box";
-import { planDrop, dropPreview } from "./lib/drop-plan";
+import { planDrop, dropPreview, dropCheck } from "./lib/drop-plan";
 import { planAssign, planReassign, swapSlot, liveSwap } from "./lib/manual-assign";
 import { planStatus, planCancel, completeCleared, seatClashSnap } from "./lib/status-change";
 import { appBannerSections } from "./components/AppBanners";
@@ -2424,8 +2424,9 @@ export function BookingApp({uid}){
   }
   // v18.4.5 (#17): WHAT a drop does is `planDrop` (lib/drop-plan.js), which
   // returns its conclusion. App keeps the gate and the two side effects.
+  function dropCtx(id,targetId){return {id:id,targetId:targetId,liveBookings:liveBookings,bookings:bookings,viewDate:viewDate,nowMins:nowMins,today:today,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,user:getUser()};}
   function dropOnTable(id,targetId){if(refused("bookingAssign"))return;
-    const plan=planDrop({id:id,targetId:targetId,liveBookings:liveBookings,bookings:bookings,viewDate:viewDate,nowMins:nowMins,today:today,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,user:getUser()});
+    const plan=planDrop(dropCtx(id,targetId));
     if(!plan) return;
     if(plan.refuse){flashDragMsg(plan.refuse);return;}
     saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);});
@@ -2434,7 +2435,12 @@ export function BookingApp({uid}){
   // per row, through a `VA` wrapper, so this reads the list as it stands then.
   function previewDrop(id,targetId){
     if(!can("bookingAssign")) return null;
-    return dropPreview({id:id,targetId:targetId,liveBookings:liveBookings,bookings:bookings,viewDate:viewDate,nowMins:nowMins,today:today,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,user:getUser()});
+    return dropPreview(dropCtx(id,targetId));
+  }
+  // v18.14.0 (correction 17, Patryk): the real plan, for a row the finger has settled on.
+  function checkDrop(id,targetId){
+    if(!can("bookingAssign")) return null;
+    return dropCheck(dropCtx(id,targetId));
   }
   // The confirm dialog's ONE door. `delBooking` below is the guarantee; this is
   // so a staff member is refused at the point of intent rather than after
@@ -3442,7 +3448,7 @@ export function BookingApp({uid}){
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only the code's own change resumes; the door is read from its ref, and both doors read the form from formRef
   useEffect(function(){const door=resumeDoorRef.current;if(!door)return;resumeDoorRef.current=null;if(door==="waitlist") addFormToWaitlist();else doSave();},[form.phone]);
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,previewDrop,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
+  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,previewDrop,checkDrop,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -3451,6 +3457,7 @@ export function BookingApp({uid}){
       onNoShow:function(id){R.current.doCancelBooking(id,true);},
       onDropOnTable:function(id,targetId){return R.current.dropOnTable(id,targetId);},
       onDropPreview:function(id,targetId){return R.current.previewDrop(id,targetId);},
+      onDropCheck:function(id,targetId){return R.current.checkDrop(id,targetId);},
       onWalkin:function(tableId){R.current.openWalkin(tableId);},
       onManual:function(id){R.current.setManualTarget(id);},
       onBlock:function(id){R.current.setBlockTarget(id);},
@@ -3546,6 +3553,7 @@ export function BookingApp({uid}){
     onStatus={VA.onStatus}
     onDropOnTable={VA.onDropOnTable}
     onDropPreview={VA.onDropPreview}
+    onDropCheck={VA.onDropCheck}
     blocks={tableBlocks}
     onBlock={VA.onBlock}
     nowMins={nowMins}

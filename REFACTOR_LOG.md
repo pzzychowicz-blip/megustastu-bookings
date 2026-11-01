@@ -39498,6 +39498,57 @@ The picker can be scrolled, and at that moment its tables are busy anyway.
 `tests/booking-logic.test.js`, `tests/stretched-chips.test.js`, `GLOSSARY.md`, `DESIGN.md`, `src/components/CLAUDE.md`,
 `src/hooks/CLAUDE.md`, `ROADMAP.md`.
 
+**Correction 17: the row warning checks itself when the finger rests.** With the Optimiser on a row could say "Moves …"
+and the release could still refuse. `planDrop` is too heavy to run on every row, so H5 left that as a known gap. Measured
+for the first time, with the real `planDrop` over every booking on every row of DEV's Saturday:
+
+| Day | Guesses | Wrong | `planDrop` at 1× | At 4× CPU |
+|---|---|---|---|---|
+| Saturday, 12 bookings | 79 | 4 | median 11.8ms, max 27.5 | median 47.7ms, p90 61, max 70.6 |
+| Jammed, 26 bookings | 79 | 48 | median 50ms, max 117.5 | median 208.6ms, p90 327.9, max 495.5 |
+
+Of his three (a check when the finger rests, softer words, a check on entering each row) he took the first.
+
+- **Amber at once, as before, marked `unsure`.** Only that kind of hint is ever checked: a free row, a swap and a red row
+  were always exact.
+- **`dropCheck` is `dropPreview` with the trial switched on.** Both are one function, `rowHint`, so they cannot disagree
+  about anything but the trial. With the Optimiser off `dropPreview` is `dropCheck`, which fixes one small untruth on the
+  way: a lower candidate that was free read "Moves …" when the plan moved nobody.
+- **`planDrop`'s displacement says who it `moved`**, so a corrected row names the parties the release will move, and not
+  the first candidate's. That is what "the names correct" needed, and nothing else reads it.
+- **Once per row per drag**, held in `dropChecks` and forgotten when the drag ends. Back on a row, it answers at once.
+- **A check that agrees changes nothing on screen**: it stores the hint it checked, so no key, class or colour moves. One
+  that does not fades its words in on `--t-move`, and the row's tint eases.
+
+**"Still" had to mean still.** I told him the pause would come only while the finger was still, and a timer on the row
+alone would not have kept that: a slow drag spends more than 200ms on every row, and this is the one call that can hold a
+frame. So the wait is measured from the last time the finger's y moved more than `DROP_REST_SLOP` (8px). A real finger's
+tremble could not be measured here, because a CDP touch does not tremble, so 8 is a judgement; too low costs only that a
+trembling finger is never checked and the release says what it always said.
+
+Real paced touches, Optimiser on, 12:30 on DEV's Saturday, writes blocked, against the app's own running functions. The 79
+guesses held 4 wrong ones, all "Moves Pau" that would refuse:
+
+| | 1× | 4× CPU |
+|---|---|---|
+| Wrong guess, resting | amber, red at 227ms, the words 0 → 0.91 in 134ms | red, the check 49–55ms |
+| Right guess, resting | no change at all | no change at all |
+| One check took | 20–32ms, longest frame 33 | 49–60ms |
+| Off the row and back | amber on the next row, red again at once, no second check | the same |
+| Across rows at 61–68 px/s | 2–3 checks | 3 |
+| Across rows at 88–99 px/s | 0 | 0 |
+| Across rows at 107–232 px/s | 0 | 0 |
+
+The release on a row that turned red refused with its toast, and a right guess went through. The generated-days test now
+holds the check to the release on every row: red exactly when it refuses, and the moved parties by name.
+
+**What this does not do.** The check is one synchronous call, so on a jammed day at tablet speed the block can sit still
+for 200–500ms if the finger starts moving just as it runs. He accepted that when he chose this. It also sees the data as
+it was when the check ran, like the hint before it, and the release plans again from fresh data.
+
+**Files:** `lib/drop-plan.js`, `App.jsx`, `TimelineView.jsx`, `tests/drop-plan.test.js`, `DESIGN.md`, `GLOSSARY.md`,
+`src/components/CLAUDE.md`, `src/lib/CLAUDE.md`, `ROADMAP.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

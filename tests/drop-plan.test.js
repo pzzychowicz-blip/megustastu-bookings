@@ -10,7 +10,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { planDrop, dropPreview } from "../src/lib/drop-plan.js";
+import { planDrop, dropPreview, dropCheck } from "../src/lib/drop-plan.js";
 import { releaseSwapped } from "../src/lib/booking-save.js";
 import { ALL_TABLES } from "../src/lib/constants.js";
 import { comboCapBest } from "../src/lib/booking-logic.js";
@@ -153,6 +153,8 @@ describe("planDrop: which list it reads", () => {
 describe("dropPreview: the row under a dragged block", () => {
   const see = (list, id, targetId, more) => dropPreview(Object.assign(
     { id, targetId, liveBookings: list, viewDate: D, nowMins: 19 * 60, today: TODAY, tableBlocks: [] }, more || {}));
+  const checked = (list, id, targetId, more) => dropCheck(Object.assign(
+    { id, targetId, liveBookings: list, viewDate: D, nowMins: 19 * 60, today: TODAY, tableBlocks: [] }, more || {}));
 
   it("nothing to say for the party's own row, or a party that does not move", () => {
     expect(see([bk("a", "13:00", 2, ["3"])], "a", "3")).toBe(null);
@@ -171,12 +173,12 @@ describe("dropPreview: the row under a dragged block", () => {
       bk("b", "13:00", 2, ["7"], { name: "Yara Domínguez", duration: 60 }),
       bk("c", "14:30", 2, ["7"], { name: "Ariadna Puig", duration: 60 }),
     ];
-    expect(see(list, "a", "7")).toEqual({ tone: "warn", text: "Moves Yara, Ariadna" });
+    expect(see(list, "a", "7")).toEqual({ tone: "warn", text: "Moves Yara, Ariadna", unsure: true });
     const crowd = list.concat([
       bk("d", "16:00", 2, ["7"], { name: "Teo Vargas", duration: 60 }),
       bk("e", "17:30", 2, ["7"], { name: "Emil Kovacs", duration: 60 }),
     ]);
-    expect(see(crowd, "a", "7")).toEqual({ tone: "warn", text: "Moves Yara, Ariadna, Teo +1" });
+    expect(see(crowd, "a", "7")).toEqual({ tone: "warn", text: "Moves Yara, Ariadna, Teo +1", unsure: true });
   });
   it("a seated party says so, in red, where the drop will be refused", () => {
     const list = [bk("a", "13:00", 2, ["3"]), bk("b", "13:00", 2, ["4"], { name: "Yara Domínguez", status: "seated" })];
@@ -210,9 +212,14 @@ describe("dropPreview: the row under a dragged block", () => {
     const hint = see(list, "a", "4", { tableBlocks: blocks });
     expect(hint).toEqual({ tone: "danger", text: drop(list, "a", "4", { tableBlocks: blocks }).refuse });
   });
-  it("with the Optimiser on, no trial runs: it never reads the stored list", () => {
+  it("with the Optimiser on, the first answer is a guess and says so: it never reads the stored list", () => {
     const list = [bk("a", "13:00", 2, ["6"], { duration: 360 }), bk("b", "13:00", 2, ["7"], { name: "Yara Domínguez", duration: 60 }), bk("c", "14:30", 2, ["7"], { name: "Ariadna Puig", duration: 60 })];
-    expect(see(list, "a", "7", { bookings: null, autoOptimizer: true })).toEqual({ tone: "warn", text: "Moves Yara, Ariadna" });
+    expect(see(list, "a", "7", { bookings: null, autoOptimizer: true })).toEqual({ tone: "warn", text: "Moves Yara, Ariadna", unsure: true });
+  });
+  it("every other row is exact, so it asks for no check", () => {
+    expect(see([bk("a", "13:00", 2, ["3"])], "a", "4")).not.toHaveProperty("unsure");
+    const seated = [bk("a", "13:00", 2, ["3"]), bk("b", "13:00", 2, ["4"], { status: "seated", name: "Lena Brandt" })];
+    expect(see(seated, "a", "4")).not.toHaveProperty("unsure");
   });
 
   // The whole contract, on days dense enough to reach every branch. The seed is
@@ -222,7 +229,7 @@ describe("dropPreview: the row under a dragged block", () => {
     let x = 7919;
     const r = () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; };
     const pick = (a) => a[Math.floor(r() * a.length)];
-    const hits = { free: 0, swap: 0, moves: 0, red: 0 };
+    const hits = { free: 0, swap: 0, moves: 0, red: 0, checked: 0, corrected: 0 };
     for (let day = 0; day < 160; day++) {
       // Every second day is today with the Optimiser off, where the row is exact.
       const off = day % 2 === 1;
@@ -237,13 +244,21 @@ describe("dropPreview: the row under a dragged block", () => {
         const hint = see(list, ctx.id, ctx.targetId, Object.assign({ bookings: list, user: "u@x" }, more));
         expect(hint === null).toBe(plan === null);
         if (!hint) continue;
+        // What a settled finger is told is the release, on every row: red exactly when
+        // it refuses, and the parties it moves by name.
+        const sure = checked(list, ctx.id, ctx.targetId, Object.assign({ bookings: list, user: "u@x" }, more));
+        expect(sure.tone === "danger", "the check and the release").toBe(!!plan.refuse);
+        expect(sure).not.toHaveProperty("unsure");
+        if (plan.moved) expect(sure.text).toBe("Moves " + plan.moved.slice(0, 3).map((b) => b.name.split(" ")[0]).join(", ") + (plan.moved.length > 3 ? " +" + (plan.moved.length - 3) : ""));
+        if (hint.unsure) { hits.checked++; if (sure.text !== hint.text) hits.corrected++; } else expect(sure).toEqual(hint);
         if (hint.tone === "free") { hits.free++; expect(plan.done).toMatch(/ moved to [^—]*\.$/); }
         if (hint.tone === "danger") { hits.red++; expect(plan.refuse).toBeTruthy(); }
         if (/^Swaps/.test(hint.text)) { hits.swap++; expect(plan.done).toMatch(/tables swapped/); }
         if (/^Moves/.test(hint.text)) {
           hits.moves++;
-          // The one gap, Optimiser on only: no trial, so the release can take a
-          // lower set or strand. Off, the row ran the real plan.
+          // The guess, Optimiser on only: no trial, so the release can take a lower
+          // set or strand, and `sure` above is what tells the finger. Off, the row
+          // ran the real plan.
           if (off) expect(plan.done).toMatch(/moved to/);
           else expect(plan.refuse || plan.done).toMatch(/moved to|stranding/);
         }
@@ -259,8 +274,8 @@ describe("BookingApp's dropOnTable", () => {
 
   it("is the gate, the plan and the two side effects, and nothing else", () => {
     expect(fn).toMatch(/^function dropOnTable\(id,targetId\)\{if\(refused\("bookingAssign"\)\)return;/);
-    expect(fn).toMatch(/planDrop\(\{/);
-    expect(fn).toMatch(/liveBookings:liveBookings,bookings:bookings,/);
+    expect(fn).toMatch(/planDrop\(dropCtx\(id,targetId\)\)/);
+    expect(App, "the two lists stay separate arguments").toMatch(/function dropCtx\(id,targetId\)\{return \{id:id,targetId:targetId,liveBookings:liveBookings,bookings:bookings,/);
     // v18.14.0 (H5): the sentence comes when the write LANDS, on the Undo pill,
     // so a refused write is never shown as a move (the v15.4.0 rule, tighter).
     expect(fn).toContain('saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);});');
@@ -304,6 +319,10 @@ describe("BookingApp's saveMove", () => {
     expect(flat).toContain("onDropPreview:function(id,targetId){returnR.current.previewDrop(id,targetId);}");
     expect(flat).toContain('functionpreviewDrop(id,targetId){if(!can("bookingAssign"))returnnull;');
   });
+  it("the settled check takes the same two doors", () => {
+    expect(flat).toContain("onDropCheck:function(id,targetId){returnR.current.checkDrop(id,targetId);}");
+    expect(flat).toContain('functioncheckDrop(id,targetId){if(!can("bookingAssign"))returnnull;');
+  });
 });
 
 describe("TimelineView asks once per row", () => {
@@ -315,15 +334,29 @@ describe("TimelineView asks once per row", () => {
   it("keeps hover in two plain values, because a block reports every frame", () => {
     expect(View).toContain("setDragHover(table);");
     expect(View).toContain("setDragOver(table == null || table === home ? null : id);");
-    expect((View.match(/setDragHover\(tableAtY\([a-z.]+lastY\), b\.id, homeTable\)/g) || []).length).toBe(2);
+    expect((View.match(/setDragHover\(tableAtY\([a-z.]+lastY\), b\.id, homeTable, [a-z.]+lastY\)/g) || []).length).toBe(2);
     expect((View.match(/setDragHover=\{hoverRow\}/g) || []).length).toBe(2);
   });
   it("tints only the hovered row, and the tint eases both ways", () => {
     // v18.14.0 (correction 2): a row at rest may wear the indoor tint, and a hint
     // replaces it, so the hint is still the only thing the hovered row paints.
-    expect(View).toMatch(/backgroundColor: dragHover !== id \? \(indoorTint && isIn\(id\) \? "var\(--tl-indoor-bg\)" : undefined\)\s+: hintRole\(dropHint\) \? hintRole\(dropHint\)\.tint : "var\(--bg-ac-hover\)"/);
+    expect(View).toMatch(/backgroundColor: dragHover !== id \? \(indoorTint && isIn\(id\) \? "var\(--tl-indoor-bg\)" : undefined\)\s+: hintRole\(rowHint\) \? hintRole\(rowHint\)\.tint : "var\(--bg-ac-hover\)"/);
     expect(View).toContain('transition: "height " + M.shift + ", background-color " + M.tap,');
-    expect(View).toContain("<DropHint hint={dragHover === id ? dropHint : null} sz={sz} />");
+    expect(View).toContain("<DropHint hint={dragHover === id ? rowHint : null} sz={sz} />");
+  });
+  // v18.14.0 (correction 17, Patryk): a drag that stalls is worse than a row that is
+  // wrong for a moment, so these are the conditions on the one heavy call in a drag.
+  it("asks the real plan only for a guess, once per row, and only of a still finger", () => {
+    expect(View).toContain('const unsureRow = dropHint && dropHint.unsure ? dragOver + "|" + dragHover : null;');
+    expect(View).toContain("if (!unsureRow || dropChecks[unsureRow] || !onDropCheck) return undefined;");
+    expect(View, "still, not merely on the row").toMatch(/const left = dropRest\.current\.at \+ DROP_REST_MS - performance\.now\(\);\s+if \(left > 0\) \{ timer = setTimeout\(check, left\); return; \}/);
+    expect(View, "a finger leaving the row cancels it").toContain("return () => clearTimeout(timer);");
+    expect(View, "the end of a drag forgets every answer").toContain("if (table == null) { setDropChecks(NO_CHECKS); return; }");
+    expect((View.match(/onDropCheck\(/g) || []).length, "one caller").toBe(1);
+  });
+  it("a check that agrees changes nothing on the row, and one that does not fades in", () => {
+    expect(View).toContain("const said = sure.text === dropHint.text ? dropHint : { ...sure, corrects: true };");
+    expect(View).toContain('<div key={hint.text} className={hint.corrects ? "mgt-appear" : undefined} aria-hidden="true"');
   });
   it("the words sit above a dragged block, which is at 30", () => {
     expect(View).toMatch(/position: "sticky", left: SP\.snug, zIndex: 31,/);
