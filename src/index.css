@@ -455,8 +455,6 @@
   --fp-outline: rgba(70, 75, 90, 0.55);
   --fp-chair-outline: rgba(70, 75, 90, 0.4);
   --fp-grid: rgba(70, 75, 90, 0.22);               /* floor-plan minor grid (round 6) */
-  --cog-bg: rgba(120, 130, 150, 0.4);              /* settings cog button */
-  --cog-border: rgba(255, 255, 255, 0.45);
   /* ── v14.2.4: ListView cards ── */
   --bg-card-strong: rgba(255, 255, 255, 0.45);     /* default booking card */
   --bg-card-dim: rgba(255, 255, 255, 0.35);        /* seated/completed/cancelled card */
@@ -857,8 +855,6 @@
   --fp-outline: rgba(200, 205, 220, 0.4);
   --fp-chair-outline: rgba(200, 205, 220, 0.3);
   --fp-grid: rgba(200, 205, 220, 0.18);
-  --cog-bg: rgba(255, 255, 255, 0.1);
-  --cog-border: rgba(255, 255, 255, 0.14);
   /* ── v14.2.4: ListView cards (dark) ── */
   --bg-card-strong: rgba(255, 255, 255, 0.06);
   --bg-card-dim: rgba(255, 255, 255, 0.04);

@@ -39289,6 +39289,15 @@ same size at each.
 
 **Files:** `whatsapp/DraftCard.jsx`, `tests/wa-inbox-layout.test.js`.
 
+**Correction 8: the header's gear and search go quiet.** The regression pass found them: `--cog-bg` was not on the
+census of Correction 5, so they kept a darker disc and a shadow beside Follow, − and +, and the mock he approved
+showed them that way. He looked at the two side by side and chose quiet. `CHROME_BTN` is `mkBtn` on `BTN.quiet` now
+and both `--cog-*` tokens are gone. Read live, the two match Zoom in exactly in both themes: `rgba(255,255,255,.5)`,
+edge #c3cad6, ink #4a5568 and no shadow in Light, and `rgba(118,118,128,.24)`, `rgba(255,255,255,.12)`, #c7c7cc in Dark,
+at 36 × 36. A forced `:active` reads 0.96 on the gear and on Zoom in, the control, and a key focus draws the 2px ring.
+
+**Files:** `App.jsx`, `index.css`, `tests/quiet-buttons.test.js`, `DESIGN.md`, `GLOSSARY.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, at 998 × 507 and 570 in Light and 507 in Dark, across the main card,

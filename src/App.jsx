@@ -464,9 +464,13 @@ const DAY_DISMISS_KEYS=Object.freeze(["late","overlap","wait"]);
 // between "+ New" and the connection dot — finding a booking is something you
 // DO, like adding one.
 //
-// The style stays 36×36 on --cog-bg per v17.8.0's "44 is a floor, not a target":
-// both are still secondary chrome, now sitting beside 40px primary pills, and
-// equal width/height is what keeps --r-pill a true circle rather than an egg.
+// The style stays 36×36 per v17.8.0's "44 is a floor, not a target": both are still
+// secondary chrome, now sitting beside 40px primary pills, and equal width/height is
+// what keeps --r-pill a true circle rather than an egg.
+//
+// v18.14.0 (correction 8, Patryk): and they are quiet buttons. They were the last grey
+// discs on the screen, a darker fill and a shadow beside Follow, − and +, which had
+// gone quiet, so the two least urgent controls in the header were its heaviest.
 //
 // A module const in App.jsx rather than an atom or a surviving ViewTools.jsx:
 // both call sites are in this file, and exporting a style that nothing else
@@ -493,16 +497,10 @@ const MOBILE_BAR={
 // minHeight) + the bar's 8px padding top and bottom + its 1px top hairline +
 // the safe area. Measured: the bar stands 61px on a phone with no inset.
 const MOBILE_BAR_SPACER={flexShrink:0,height:"calc("+(H.touch+16+1)+"px + env(safe-area-inset-bottom, 0px))"};
-const CHROME_BTN={
-  background:"var(--cog-bg)",
-  border:"1px solid var(--cog-border)",
-  borderRadius:R.pill, width:36, height:36,
-  cursor:"pointer",
-  display:"flex", alignItems:"center", justifyContent:"center",
-  flexShrink:0, padding:0,
-  color:S.text,
-  boxShadow:"var(--shadow-btn)"
-};
+const CHROME_BTN=mkBtn({
+  background:BTN.quiet, width:H.chrome, height:H.chrome, minHeight:H.chrome, padding:0,
+  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0
+});
 
 // ── How far the date controls sit below the top of their row (v17.9.1) ────────
 // v18.14.0 (L5): the card no longer grows when the Summary opens (its body has a row

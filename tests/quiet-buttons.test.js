@@ -9,6 +9,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 import { mkBtn, mkSolidBtn } from "../src/components/atoms.jsx";
 import { BTN, H, T } from "../src/lib/constants";
 
@@ -64,6 +65,13 @@ describe("nothing goes round it", () => {
   it("no quiet solid hands its shadow back", () => {
     const back = all.filter(([, s]) => /mkSolidBtn\(BTN\.quiet, \{[^\n]*boxShadow/.test(s));
     expect(back.map(([f]) => f)).toEqual([]);
+  });
+});
+
+describe("the header's gear and search", () => {
+  it("are quiet buttons, and the disc they wore is gone", () => {
+    expect(appCode()).toMatch(/const CHROME_BTN\s*=\s*mkBtn\(\{\s*background:\s*BTN\.quiet/);
+    expect(read("index.css")).not.toMatch(/--cog-(bg|border)/);
   });
 });
 

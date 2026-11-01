@@ -373,7 +373,9 @@ explaining why is usually the one to read.
   `--btn-clear`, `--btn-reset`, `--btn-nav`, `--btn-dismiss`, `--btn-default` and the
   two slates are gone, because they were five names for this one job. A quiet button
   flips with its theme, so it may sit on anything: `tests/contrast.test.js` measures
-  its words on the seven surfaces it sits on, in both themes.
+  its words on the seven surfaces it sits on, in both themes. The header's gear and
+  search went last, and are `CHROME_BTN` in `App.jsx`: their own grey disc was the
+  heaviest thing beside Follow, − and +, for the two least urgent controls there.
   **What he kept solid:** Following (dark) and Optimiser ON (green), beside their
   quiet idle states; Undo, solid blue; the grey title pills; Completed on a button;
   Send, the moment it can send. Going between the two is one change, in and out:
