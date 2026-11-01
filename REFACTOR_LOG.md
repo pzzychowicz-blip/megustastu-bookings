@@ -39534,7 +39534,7 @@ guesses held 4 wrong ones, all "Moves Pau" that would refuse:
 | Wrong guess, resting | amber, red at 227ms, the words 0 → 0.91 in 134ms | red, the check 49–55ms |
 | Right guess, resting | no change at all | no change at all |
 | One check took | 20–32ms, longest frame 33 | 49–60ms |
-| Off the row and back | amber on the next row, red again at once, no second check | the same |
+| Off the row and back | amber on the next row, red again at once, no second check of that row | the same |
 | Across rows at 61–68 px/s | 2–3 checks | 3 |
 | Across rows at 88–99 px/s | 0 | 0 |
 | Across rows at 107–232 px/s | 0 | 0 |
@@ -39554,22 +39554,29 @@ it was when the check ran, like the hint before it, and the release plans again 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,
 across the main card, the form, the walk-in, List, Plan, Settings and, added for this pass, the inbox: no sideways
 overflow, `overscroll-behavior` none. In Light the only real text under 4.5:1 is amber 2.93–2.95 and yellow 1.84–1.85,
-Patryk's two exemptions, and "Tables: 3 / 4 / 5" at 4.46, which is in ROADMAP. The yellow now includes Add to waitlist
-on the availability line, at 1.85: `tests/contrast.test.js` names both of those buttons and `main` paints them on the
-same fill. The inbox has no text under 4.5:1 in either theme. Dark's lows are the values it already had, and Dark was
-not part of the decision: its accent 3.65 and 4.1, its faint 3.51–4.35.
+Patryk's two exemptions. The yellow includes Add to waitlist on the availability line, at 1.85, in the form and since
+Correction 16 in the walk-in: `tests/contrast.test.js` names both of those buttons and `main` paints them on the same
+fill. The inbox has no text under 4.5:1 in either theme. In Dark the same two exemptions read 3.56–3.57 and 2.17–2.18,
+and the only other low is the accent, 3.65 and 4.1, under its named exemption. "Tables: 3 / 4 / 5" left Light's list
+with Correction 11, and the faint text, the required mark and a field's prompt left Dark's with Correction 12.
 
 The audit also prints readings that are the rig's, and each was traced on the page. Clipped text samples as whatever
 is behind it. "Daily cutoff", "Auto-optimiser" and the walk-in's 11, 12 and 13, at 1.01–1.25, sit under a sheet's
 bottom edge, and scrolled into view they read 7.16–16.72. This pass ran at 20:20, where the form opens on a busy
-kitchen, so "Before:", its times, "Starting at this time:" and "Kitchen busy", at 1.02–1.5, sit below the body's clip;
-in view they read 15.3 and 7.53. "20:30" and "5" at 1.04–1.11 sit at y 566.5 of 570. Plan's "15:00" at 1.17 is past its
-ruler's left edge, at x −29.
+kitchen, so "Starting at this time:" and "Kitchen busy", at 1.02–1.5, sit below the body's clip; in view they read 15.3
+and 7.53. "20:30" and "5" at 1.04–1.11 sit at y 566.5 of 570. Plan's "15:00" at 1.17–1.59 is past its ruler's left edge,
+at x −29.
 
 One looked real: four names at 3.74–3.77, `#57340a` on amber. The sampler takes the colour that contrasts most with
 the fill as the ink, and the now line crossing those names beats white on amber, so it read the line. The names are
 white, H1's 2.93, and the line sits over the blocks at z 10 on `main` as well. The one target under 24px on any screen
 is the date field's inner `<input>`, and the pill round it is what a finger hits.
+
+Between this pass and the one before Corrections 11 to 17 the form and the inbox each lost four targets, and that is
+Correction 15: at 20:20 the four nearest times have gone. On the page at that clock the form reads "No table for 2 at
+20:30" with Add to waitlist, and its kitchen section, which listed "Before:" and five past times, reads "No
+kitchen-friendly alternatives found nearby." The draft card reads "No tables for 4 at 21:00" with no "Accept at:" row;
+its text holds that sentence twice because one copy is the card's live region, and the picture has one.
 
 **Every fix's rig again, on the final tree**, H7 to M4 at the heights each takes: 17 runs on 2026-11-01, on Saturday's
 page clock at 12:30 so that the Optimiser is on, read line by line and then diffed line by line against the first
@@ -39596,6 +39603,20 @@ records. Replayed with a page clock and writes blocked, nothing refuses at 9:00,
 lunch, with real DEV writes at 507 and 570: "Lena Fischer and Olga Petrova — tables swapped.", 2 blocks moved, 0 differ
 after Undo, 0 after a reload.
 
+**All of it again after Corrections 11 to 17**, which came after that pass, on the tree they left: the same 17 runs on
+the same clock, then `c8strip.py`, `rvt.py` at both heights, `c9flow.py`, `c10band.py` at both clocks and the three
+audits at 20:20, each diffed line by line against the pass above. All 17 exit 0, and the 68 lines of difference in their
+output are frame timing: the zoom group's sample offsets, `h5hover.py`'s and `l7.py`'s milliseconds, `h3flow.py`'s out
+series, and L4's mid-widths, where one run read a step of 10.6 against 5.4 and 5.6 on a single skipped sample. `h4.py`,
+`m5.py` and `m4a.py` are identical. `h5undo.py` wrote to DEV again and read the same: 3 blocks moved, 0 differ after
+Undo, 0 after a reload. `rvt.py` reads the same 33, 31 and 32, none born open.
+
+`c10band.py` now runs through `useLineBand`, the hook both forms take since Correction 16. Between two refused times the
+band holds 56 at both clocks and speeds. The answer's lowest is 0.69 and 0.28 at 16:00, 0.16 and 0 at 12:30, and the
+words stay at 0 except at 4× with the Optimiser on, where they reach 0.88, which is the case Correction 10 read at 0.82
+and the reason the words exist. From a time that fits to a refused one the band eases 0 → 56 with the answer at 1 and
+the words at 0, and folding back the words reach 0.04 at most.
+
 **Two things on the record.** Phase 1's commit, `c1ddb470`, went in with 2 lint errors, because its command did not
 stop on the gate. `84dc5227` fixed them, and every commit since has had the gate chained to it, so only a bisect
 landing on phase 1 itself sees red. And DEV's Activity log holds two crash entries, `ReferenceError: Presence is not
@@ -39607,10 +39628,12 @@ edge scroll · Undo after a real drag · the pinned line with Android's keyboard
 pull-to-refresh in a Chrome tab · whether the tablet vibrates, and the switch · Larger text at arm's length on the
 pass · automatic dark mode at sunset · the Summary and a refusal easing in on the tablet · the ⋯ menu by finger · the
 quiet buttons and the field edge in the dim room · the inbox's merged title row, and the composer with Android's
-keyboard up · "Checking the tables…" at the tablet's real speed.
+keyboard up · "Checking the tables…" at the tablet's real speed · the row warning's second look under a real finger,
+and whether 8px of slop survives a tremble · how long that look takes on a jammed day · the walk-in's line with
+Android's keyboard up · the new worker taking over, and its offline page.
 
-**Size:** main entry 450.01 kB (132.45 gz), 1.16 kB over the first close.
+**Size:** main entry 449.77 kB (132.54 gz), 0.92 kB over the first close.
 
-**The branch:** 34 commits on `origin/main`'s `77516a63`, this one included.
+**The branch:** 42 commits on `origin/main`'s `77516a63`, this one included.
 
 **Files:** `REFACTOR_LOG.md`, `ROADMAP.md`, `GLOSSARY.md`, `DESIGN.md`, `CLAUDE.md`, `src/components/CLAUDE.md`.

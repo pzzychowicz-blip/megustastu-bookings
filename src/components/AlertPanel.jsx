@@ -38,7 +38,8 @@
 // its own site (it approximates the mark-to-text gap with `SP.base` rather than
 // importing NOTIF_GAP). A component file has no such problem, so this one takes
 // the real numbers — which is also why `AvailBanner` moved out of atoms.jsx in
-// the same commit: it is one of the eight panes and needed this.
+// the same commit: it was one of the eight panes and needed this, until
+// v18.14.0's correction 16 retired it.
 //
 // ── Why this is not BannerRows, and when a caller still needs its hook ───────
 // `BannerRows` is bound to `useRevealRows` AND owns the strip's row geometry.
