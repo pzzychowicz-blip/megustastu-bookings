@@ -30,7 +30,7 @@
 // unchanged, just hoisted into renderCard() so both groups share it.
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { S, BLOCK_BG, BLOCK_INK, STATUS_BTN_BG, STATUS_COLORS, BTN, R, T, FW, IC, SP, ROW_FOLD } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, STATUS_BTN_BG, STATUS_COLORS, BTN, R, T, FW, IC, SP, M, ROW_FOLD } from "../lib/constants";
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { useLeavingOrder } from "../hooks/useLeavingOrder";
@@ -149,6 +149,17 @@ const UNIT_W = 18 + 8 + STATUS_COL;
 // now each card's own top margin, inside its `Reveal`, so it folds with the
 // card, and the list's -CARD_GAP top margin cancels the first one.
 const CARD_GAP = SP.mid;
+
+// v18.14.0 (correction 33, Patryk): a warning's rim arrives and leaves with nobody
+// pressing anything, so its colour takes M.move, as the timeline block's does (TL_RIM).
+// Its WIDTH cannot ease here: the padding gives back what a 3px border takes, and a
+// browser snaps a border to whole device pixels while padding runs smooth, so easing
+// the two together shook the card's content by 1px (measured, 33 → 32 → 33 at DPR 1).
+// So the width and the padding change in one step, while the colour is the plain
+// border's, which barely shows: at once on the way in, at the end on the way out. An
+// inline transition replaces `.mgt-ac-row`'s, so the hover tint is repeated here.
+const CARD_RIM_IN = "background-color " + M.tap + ", border-color " + M.move;
+const CARD_RIM_OUT = CARD_RIM_IN + ", border-width var(--t-move) step-end, padding var(--t-move) step-end";
 // A cell beside the name: as tall as the name's first line, content centred.
 const NAME_CELL = { display: "flex", alignItems: "center", minHeight: NAME_LINE };
 // The name's font, ONE object read by both the name span and the canvas that
@@ -953,6 +964,7 @@ export const ListView = memo(function ListView({
               // one (measured 2px apart: the time at 19 against 17, ⋯ at 577
               // against 579).
               borderRadius: R.card, padding: cardBw === 3 ? "12px 14px" : "14px 16px",
+              transition: cardBw === 3 ? CARD_RIM_IN : CARD_RIM_OUT,
               marginTop: gapAbove,
               position: "relative",
               opacity: (b.status === "completed" || b.status === "cancelled") ? 0.75 : 1,
@@ -974,8 +986,9 @@ export const ListView = memo(function ListView({
               }} />
             ) : null}
             <div style={{ position: "relative", zIndex: 1 }}>
-            {conflictEl}
-            {warnEl}
+            {/* v18.14.0 (correction 33, Patryk): each eases, so the cards under it slide. */}
+            <Reveal show={!!conflictEl}>{conflictEl}</Reveal>
+            <Reveal show={!!warnEl}>{warnEl}</Reveal>
             {/* v18.2.0: the TIME LEADS, in its own column. A List is read down
                 its start times during service, and they sat at the far right of
                 a wrapping header, after the name and up to ten flags, so their

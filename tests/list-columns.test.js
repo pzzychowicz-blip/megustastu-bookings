@@ -108,6 +108,24 @@ describe("the actions", () => {
 });
 
 describe("the card", () => {
+  // v18.14.0 (correction 33, Patryk): what comes with a warning eases, and the rim's
+  // width and padding change as one, because easing them shook the content by 1px.
+  it("holds each alert on a Reveal, so the cards under it slide", () => {
+    expect(List).toContain("<Reveal show={!!conflictEl}>{conflictEl}</Reveal>");
+    expect(List).toContain("<Reveal show={!!warnEl}>{warnEl}</Reveal>");
+  });
+  it("eases its rim's colour, and steps the width and the padding together", () => {
+    expect(List).toContain("transition: cardBw === 3 ? CARD_RIM_IN : CARD_RIM_OUT");
+    const rimIn = (List.match(/const CARD_RIM_IN = ([^;]*);/) || [])[1];
+    const rimOut = (List.match(/const CARD_RIM_OUT = ([^;]*);/) || [])[1];
+    expect(rimIn).toContain("background-color");
+    expect(rimIn).toContain("border-color");
+    expect(rimIn).not.toContain("border-width");
+    expect(rimIn).not.toContain("padding");
+    expect(rimOut).toContain("CARD_RIM_IN");
+    expect(rimOut).toContain("border-width var(--t-move) step-end");
+    expect(rimOut).toContain("padding var(--t-move) step-end");
+  });
   it("gives back in padding what a 3px border takes, so a seated card's columns start where a confirmed card's do", () => {
     expect(List).toMatch(/const cardBw = \(clash \|\| warn \|\| lateSt \|\| useStatusColor \|\| isPending\) \? 3 : 1;/);
     expect(List).toMatch(/border: cardBw \+ "px solid " \+ cardBrd,/);

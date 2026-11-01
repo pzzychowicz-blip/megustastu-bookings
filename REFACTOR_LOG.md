@@ -39847,6 +39847,20 @@ Settings tab's body does, and its height was already eased.
 **Files:** `FoldRows.jsx` (new), `AdminSettings.jsx`, `Reminders.jsx`, `Settings.jsx`, `TagListEditor.jsx`, `whatsapp/TemplatesEditor.jsx`,
 `tests/fold-rows.test.js` (new), `DESIGN.md`.
 
+**Correction 33: a List card's alerts ease, and so does its rim.** "No table assigned" and "Next booking…" were bare conditionals on the
+card, so one arriving pushed every card below it down 35px in a frame, with nobody pressing anything. Each now sits on a `Reveal`, and
+staged on DEV (the served module rewritten, because a warning is clock-driven and needs a table clash to exist) both open 0 → 35 with the
+next card sliding 265 → 300, and fold back the same way.
+
+The census cannot see a border, so I sampled the card while I was there: its rim went 1 → 3px and white → amber in a frame, which is what
+Correction 24 fixed on the block. My first version eased the width, as the block does, with the padding that pays for it. That shook the
+card's content: a browser snaps a border to whole device pixels while padding runs smooth, and the time's x read 33 → 32 → 33 at DPR 1.
+So only the colour eases. The width and the padding change in one step while the colour is the plain border's, which barely shows: at
+once on the way in, and on `step-end` at the end of the way out. Measured: x holds 33 in both directions, and the width steps at about 240ms
+on the way out.
+
+**Files:** `ListView.jsx`, `tests/list-columns.test.js`, `DESIGN.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

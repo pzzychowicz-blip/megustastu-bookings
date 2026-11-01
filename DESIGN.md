@@ -1821,7 +1821,11 @@ shows its time.**
   Reveal; "Reduce animations" takes all of it off. The print sheet draws none of this.
   A List card's flags do the same (`FlagSlot`), with their 8px inside the slot, because
   a flex gap stays beside a flag folded to nothing, and the box's negative margin hands
-  the last one's back, so the card's measured columns do not move.
+  the last one's back, so the card's measured columns do not move. The alert a card
+  carries opens the same way, and the card's rim takes M.move like a block's, but only
+  its COLOUR eases: the width and the padding that pays for it change in one step while
+  the colour is the plain border's. A browser snaps a border to whole device pixels and
+  runs padding smooth, so easing the two together shook the content by a pixel.
 - **What arrives in a row with a gap brings the gap with it (v18.14.0, Patryk).** A
   `Reveal` is a flex item even while closed, so the row's `gap` would pop while the thing
   eases. `RowSlot` takes the gap back with a negative margin and carries its own inside
