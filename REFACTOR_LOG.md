@@ -39419,6 +39419,23 @@ shows only on a cold start with no network, and the dev server has no worker.
 
 **Files:** `public/sw.js`, `tests/contrast.test.js`, `DESIGN.md` (its stale "shared accent" line), `ROADMAP.md`.
 
+**Correction 14: a Reshuffle that moves nobody says so.** The entry had two halves, and only one was real.
+
+- **"The line says No table when only a chosen zone is full": withdrawn.** It never does. 100,800 cases across 900 fill
+  patterns, party sizes 1–28, both Optimiser states, indoor and outdoor: auto and the preference fit together 46,232 times
+  and refuse together 54,568, and auto never fits where a preference refuses. A preference has been a wish since v18.3.1,
+  so a refusal means no zone had room, as the comment at the line already said. I had written the entry without measuring.
+- **The Reshuffle half was wider than written.** It read "Booking saved." with the Optimiser off and "Tables re-optimised."
+  with it on, and neither had happened. Both now read "No tables needed moving.", his words, through a new `savedToast`
+  kind. `flash`'s offer to the Undo pill keys on `k===true` now, because the old `k!=="saved"` would have told the pill
+  that tables had been re-optimised.
+
+On the running app with the Optimiser off, three Reshuffles at 16:00 each read the sentence. With it on the button is
+only offered by the strip's "Tables could be reshuffled", which DEV's data did not raise, so that state is the unit test's.
+
+**Files:** `lib/booking-logic.js`, `App.jsx`, `StatusToasts.jsx` (its comment), `tests/booking-logic.test.js`,
+`tests/drop-plan.test.js`, `GLOSSARY.md`, `ROADMAP.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

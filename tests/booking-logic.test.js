@@ -2208,6 +2208,11 @@ describe("savedToast", () => {
     expect(savedToast(true, true)).toBe("Tables re-optimised.");
     expect(savedToast(true, false)).toBe("Booking saved.");
   });
+
+  it("a Reshuffle that moved nobody says so, in both Optimiser states", () => {
+    expect(savedToast("unmoved", true)).toBe("No tables needed moving.");
+    expect(savedToast("unmoved", false)).toBe("No tables needed moving.");
+  });
 });
 
 // ── v18.0.0 session 8 (R6) — the kitchen asks about kitchen things ──────────

@@ -273,7 +273,7 @@ Where the real ambiguity lives.
 | What you see | Correct term | What it does |
 |---|---|---|
 | "Optimiser: ON" in the UI | **optimiser** (UI) / **optimizer** (code) | **A deliberate split.** UI copy is British (`Optimiser`, `Auto-optimiser`); every identifier is American (`autoOptimizer`, `optimizerActiveFor`, `settings/optimizer`). Don't "fix" either side. |
-| Tables rearranging themselves | **reshuffle** (`bookingsAfterAction`, `applyOpt`) | The optimiser reassigning tables to fit more in. Never touches seated or `_locked` bookings. |
+| Tables rearranging themselves | **reshuffle** (`bookingsAfterAction`, `applyOpt`) | The optimiser reassigning tables to fit more in. Never touches seated or `_locked` bookings. One that moves nobody says "No tables needed moving." |
 | "Daily cutoff" in Settings | **cutoff** (`settings/optimizer.cutoff`) | The hour the optimiser stops acting on today. Off at 15:00, back on at the new day. |
 | A party that walked in | **walk-in** | `_manual: true, _locked: true` — immune to the optimiser. |
 | The ⏳ N badge in the date-nav row | **waitlist** (`useWaitlist.js`) | Parties waiting for a table, FCFS by `createdAt`. A party being booked is **held** (v18.4.8): off the badge, the panel and the timeline on this device from Save until its booking lands, and back if the booking is discarded. |

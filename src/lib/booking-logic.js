@@ -335,8 +335,12 @@ export function histEntry(action,user){return {at:new Date().toISOString(),by:us
 // An action that suppressed the optimiser says `"saved"`; everything else keeps
 // the old derivation. A toast is presentation, but the sentence it prints is a
 // factual claim about what the app just did, and that part is testable.
+// v18.14.0 (correction 14): `"unmoved"`, a Reshuffle that found nothing to move.
+// It said "Booking saved." with the Optimiser off and "Tables re-optimised." with
+// it on, and neither had happened.
 export function savedToast(kind,optimiserActive){
   if(kind==="saved") return "Booking saved.";
+  if(kind==="unmoved") return "No tables needed moving.";
   return optimiserActive?"Tables re-optimised.":"Booking saved.";
 }
 // ── v18.0.0 session 8 (R6): does this save change what the KITCHEN sees? ────

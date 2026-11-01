@@ -1702,7 +1702,7 @@ export function BookingApp({uid}){
     // `flash` that arms one. Cleared with the flag so a flash that arms NO undo
     // cannot leave the note lying about for a later pill to pick up — the same
     // 3s bound the old live derivation had, now without the truncation.
-    flashNoteRef.current=(k!=="saved"&&active)?"tables re-optimised":"";
+    flashNoteRef.current=(k===true&&active)?"tables re-optimised":"";
     setReshuffled(k);
     setTimeout(function(){setReshuffled(false);flashNoteRef.current="";},3000);
   }
@@ -2357,7 +2357,7 @@ export function BookingApp({uid}){
 
   // v18.14.0 (H5): undoable, through `saveMove`. Nothing moved means no pill, so
   // the toast still answers the press.
-  function forceReshuffle(){saveMove(function(b){return applyOpt(b,viewDate,tableBlocks);},null,"reshuffle","Tables re-optimised.",flash);}
+  function forceReshuffle(){saveMove(function(b){return applyOpt(b,viewDate,tableBlocks);},null,"reshuffle","Tables re-optimised.",function(){flash("unmoved");});}
   // v18.5.1 (#17): the Overlap banner's Reassign. WHICH tables, and the four
   // refusals, are `planReassign` (lib/manual-assign.js).
   function reassignBooking(id){

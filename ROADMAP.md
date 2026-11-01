@@ -28,10 +28,6 @@ session and keeping it in sync.
   sits off screen. M4 reordered the form to get the picker on screen, and moving the
   banner was not in that fix.
 
-- **Two wordings the availability work left.** The line says "No table" when only a
-  chosen zone is full, and a Reshuffle that moves nobody with the Optimiser off reads
-  "Booking saved." Both are older than v18.14.0.
-
 - **`BookingApp` V2, V3 and V5** (`useInboxEntry`, `useWaitlistOffers`, `useBookingForm`). Designed in `MGT_Bookings_State_By_Domain_Design.md`, context folder. After WhatsApp go-live settles; each version needs its own approval and a fresh census first.
 
 - **WhatsApp coexistence: the rehearsal, then the restaurant's number.** The code

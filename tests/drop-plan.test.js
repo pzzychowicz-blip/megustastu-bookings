@@ -293,7 +293,7 @@ describe("BookingApp's saveMove", () => {
   it("carries all three kinds of move", () => {
     expect(flat).toContain('saveMove(plan.transform,id,"move",plan.done,');
     expect(flat).toContain('saveMove(plan.transform,bookingId,"assign",plan.done,');
-    expect(flat).toContain('saveMove(function(b){returnapplyOpt(b,viewDate,tableBlocks);},null,"reshuffle","Tablesre-optimised.",flash);');
+    expect(flat).toContain('saveMove(function(b){returnapplyOpt(b,viewDate,tableBlocks);},null,"reshuffle","Tablesre-optimised.",function(){flash("unmoved");});');
   });
   it("a sentence replaces the pill's label and leaves its note empty", () => {
     expect(flat).toContain('note:label?"":note,label:label||""');

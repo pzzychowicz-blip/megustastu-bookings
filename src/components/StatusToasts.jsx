@@ -52,7 +52,7 @@
 //  (permMsg left in v18.4.5: a refusal has its own layer, RefusalToast, above
 //   every modal — in here it was drawn under the dialog it was raised from.)
 //  reshuffled      — the post-save flag
-//  reshuffledMsg   — "Tables re-optimised." / "Booking saved." (computed in
+//  reshuffledMsg   — "Tables re-optimised." / "Booking saved." / "No tables needed moving." (computed in
 //                    App — it reads optimizerActiveFor(viewDate, autoOptimizer))
 //  loadShown       — the 6s "Connected to the server" banner flag (NOT a loaded
 //                    signal — see the loadBannerShown gotcha in CLAUDE.md)
