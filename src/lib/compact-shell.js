@@ -13,7 +13,9 @@
 //
 // What it does is App's (see `compact` and `toolbarFolded` there) and is not
 // animated, like `isMobile`: a screen does not change height in service, and on
-// Android the keyboard can only flip it behind a modal.
+// Android the keyboard can only flip it behind a modal. A modal that asks this
+// itself reads the height once (InboxPanel's `shortScreen`), or the keyboard flips
+// it under the field that raised the keyboard.
 export const COMPACT_HEIGHT = 640;
 
 export function isCompact(winH, isMobile) {

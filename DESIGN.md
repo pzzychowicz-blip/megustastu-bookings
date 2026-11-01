@@ -1835,6 +1835,12 @@ the first table row from 253px down to 162, which is 5 tables on opening instead
   header, after the name, on a horizontal `Reveal` so they leave and return with the
   view. Optimiser and Reshuffle into the opened Summary, left of its own actions. In
   a split each pane keeps its own toolbar.
+- **The inbox gets the same treatment (correction 9, Patryk):** a conversation is
+  there to be read. At 998 × 507 the title bar, the filter row and a header that
+  wrapped left the message no height at all, with a draft open. So with two panes
+  the panel takes the screen less 8px each way, Select, Needs action and search join
+  the title row, and the number leaves the conversation's header, because the list
+  beside it shows it.
 - **Why Optimiser is the half that goes:** in the evening the whole toolbar is 433px
   and the header has 352 left. The Optimiser has switched itself off by then, so
   it is the half nobody reaches for mid-service.

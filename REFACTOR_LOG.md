@@ -39273,7 +39273,8 @@ Light, which is what he approved, and `#2c2c2e` in Dark. The rows' three inks ar
 Not caused by this and not fixed here, because it is a separate job: a tall draft card does not fit a short screen. The
 header is the same height as before (it ends at the same pixel), and nothing else in that column moved in this version,
 but measured here on the only DEV thread, Send ends 12.7px past the panel's bottom at rest at 998×507, and while
-"Reading the message…" sits above the draft it ends 23px past at 998×570 and 79.7px past at 998×507.
+"Reading the message…" sits above the draft it ends 23px past at 998×570 and 79.7px past at 998×507. Correction 9
+fixed it, in this version, once he had seen it.
 
 **Files:** `whatsapp/ConversationMenu.jsx` (new), `whatsapp/ConversationView.jsx`, `whatsapp/InboxPanel.jsx`,
 `lib/whatsapp.js`, `lib/keyboard.js`, `index.css`, `tests/conversation-menu.test.js` (new),
@@ -39297,6 +39298,43 @@ edge #c3cad6, ink #4a5568 and no shadow in Light, and `rgba(118,118,128,.24)`, `
 at 36 × 36. A forced `:active` reads 0.96 on the gear and on Zoom in, the control, and a key focus draws the 2px ring.
 
 **Files:** `App.jsx`, `index.css`, `tests/quiet-buttons.test.js`, `DESIGN.md`, `GLOSSARY.md`.
+
+**Correction 9: a conversation gets its height back on a short screen.** The regression pass found what Correction 6
+had set aside, and the picture was worse than the 12.7px it had recorded. At 998 × 507, with a Regular's chip and a
+refused draft, the thread's box was 28px, which is its own padding, so the message had no height at all, and the
+composer ran off the panel. It is older than this version. He chose from six real renders, which measured 12, 47, 71
+and 106px for the message, and took all three of the changes they were built from.
+
+| 998 × 507, a draft with no table | Before | After |
+|---|---|---|
+| Panel | 25.3–481.6 | 8–499 |
+| The message's height | 0 | 106 |
+| Send against the panel's bottom | 12.7 past | 11 inside |
+| The same during a re-check, "Reading the message…" on screen | 79.7 past, message 0 | 11 inside, message 39 |
+| At 998 × 570 | message 33 | message 169 |
+
+- **The panel** takes the screen less 8px each way, so it still reads as a panel over the day.
+- **Select, Needs action and search** join the title row, as one element drawn in one of two places (`filterControls`).
+  The placeholder is "Search…" there, as on a phone.
+- **The number** leaves the conversation's header. That is what puts the header on one line, and it needs two panes,
+  because the list beside it is what shows the number instead.
+
+**Read once, when the panel opens, and this is the one thing here that is not obvious.** The flag is
+`useState(winH)`, not a live `winH`. Android's keyboard moves `innerHeight` (`resizes-content`), so on a tablet taller
+than 640 the keyboard would turn this on while the search box has focus, remount the box in its other parent, drop the
+focus and with it the keyboard, and turn it off again. The restaurant's tablet is short either way; a second, taller one
+is not. Measured at 1280 × 800, taking the height to 460 and back with the search box focused: the same node, still
+focused, and the layout did not change.
+
+At 640 and above nothing changed: 998 × 640, 998 × 700 and 1280 × 800 keep the two rows, the long placeholder and the
+number. So do 899 × 500, which has one pane, and a phone. A window of exactly 640 reads a smaller message (96) than 570
+does (169), because the layout stops there; a breakpoint does that, and no real screen sits on it. Exercised at 507 with
+real taps: typing filters the list and keeps focus, Needs action toggles, select mode draws its bar and Cancel restores
+it (106 → 57 → 106), and the keyboard's fold takes the title row away and brings it back, with the visual viewport held
+at 289.
+
+**Files:** `whatsapp/InboxPanel.jsx`, `whatsapp/ConversationView.jsx`, `lib/compact-shell.js`,
+`tests/wa-inbox-layout.test.js`, `DESIGN.md`, `GLOSSARY.md`, `src/CLAUDE.md`, `src/components/CLAUDE.md`.
 
 ### Closing the version
 

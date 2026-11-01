@@ -53,7 +53,7 @@ function DaySeparator({ label, enter }) {
 export function ConversationView({
   conv, messages, onBack, onSend, onSendMedia, onAccept, onDismiss, templates, bookings, showBack, phone,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
-  onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, compact,
+  onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, compact, hideNumber,
   onRecheck, regularMin, kbFold = false, onUnfold, onOpenPhoto,
   // v18.9.0: "Not a customer" (useWhatsApp.handleMute).
   onMute,
@@ -375,7 +375,7 @@ export function ConversationView({
       <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", flexShrink: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         {showBack ? <button onClick={onBack} className="mgt-hover-scale mgt-press" style={mkBtn({ background: BTN.quiet, width: 36, height: 36, minHeight: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: T.lead, flexShrink: 0, lineHeight: 1 })} title="Back" aria-label="Back to the conversation list"><ChevronLeftIcon size={IC.chrome} /></button> : null}
         <span style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", minWidth: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
-        {phoneDisplay ? <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span> : null}
+        {phoneDisplay && !hideNumber ? <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span> : null}
         {regularChip}
         {notOnPhone ? <OutlineChip tone="neutral" size="small" title="Save this number in the WhatsApp Business app's contacts and its name shows here">Not saved on the restaurant phone</OutlineChip> : null}
         {acceptedBadge}

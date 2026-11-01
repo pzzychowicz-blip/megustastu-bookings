@@ -101,7 +101,7 @@ describe("W4 — an unknown sender's number, once and formatted", () => {
   it("the grey number beside the title appears only under a name", () => {
     const named = [{ id: "b1", name: "Ana", phone: "+447811223344", date: "2026-01-01", time: "13:00", status: "completed" }];
     expect(conversationName(conv, named, {})).toEqual({ title: "Ana", phoneLine: "+44 7811223344", source: "booking" });
-    expect(View).toMatch(/\{phoneDisplay \? <span/);
+    expect(View).toMatch(/\{phoneDisplay && !hideNumber \? <span/);
   });
 
   it("v18.9.0: the phone's contact names it first, then the booking, then the WhatsApp profile", () => {
@@ -119,6 +119,30 @@ describe("W4 — an unknown sender's number, once and formatted", () => {
   });
 });
 
+// v18.14.0 (correction 9, Patryk). At 998 × 507 the thread's box was its own 28px of
+// padding, and Send ended 13px past the panel. What the three changes give back takes
+// a browser, and the log has it. This holds what would undo them without a word.
+describe("a conversation on a short screen", () => {
+  it("is the compact layout's own test, and both panes only", () => {
+    expect(Inbox).toMatch(/const shortScreen = twoPane && isCompact\(openedAt, false\);/);
+  });
+  it("reads the height once: the keyboard moves it on Android, and the search box remounts in its other parent", () => {
+    expect(Inbox).toMatch(/const \[openedAt\] = useState\(winH\);/);
+    expect(Inbox, "a live winH turns this on while the search box has focus").not.toMatch(/isCompact\(winH/);
+  });
+  it("gives the panel the screen, keeping 8px of the day above and below", () => {
+    expect(Inbox).toMatch(/const INBOX_PANEL_SHORT_SCREEN = \{ \.\.\.INBOX_PANEL, height: "calc\(100dvh - " \+ 2 \* SP\.base \+ "px\)" \};/);
+    expect(Inbox).toMatch(/panel=\{shortScreen \? INBOX_PANEL_SHORT_SCREEN : INBOX_PANEL\}/);
+  });
+  it("draws the filter controls in one place at a time, from one element", () => {
+    expect(Inbox.match(/\{filterControls\}/g)).toHaveLength(2);
+    expect(Inbox).toMatch(/\{shortScreen \? <div [^\n]*\{filterControls\}<\/div> : null\}/);
+  });
+  it("hands the conversation the one thing it needs to know", () => {
+    expect(Inbox).toMatch(/hideNumber=\{shortScreen\}/);
+  });
+});
+
 describe("W5 — the phone's inbox", () => {
   it("keeps Close in the top corner, with the text buttons on a line of their own", () => {
     expect(Inbox).toMatch(/<div style=\{\{ display: "flex", gap: 6, marginLeft: "auto", order: twoPane \? 0 : 2, flexBasis: twoPane \? "auto" : "100%" \}\}>/);
@@ -126,11 +150,11 @@ describe("W5 — the phone's inbox", () => {
   });
 
   it("hides the LIST's toolbar while a conversation replaces the list", () => {
-    expect(Inbox).toMatch(/\{twoPane \|\| !activeKey \? \(\s*<div style=\{\{ padding: "8px 14px"/);
+    expect(Inbox).toMatch(/\{!shortScreen && \(twoPane \|\| !activeKey\) \? \(\s*<div style=\{\{ padding: "8px 14px"/);
   });
 
   it("shortens the search placeholder where the long one was cut", () => {
-    expect(Inbox).toMatch(/placeholder=\{twoPane \? "Search name, number or message…" : "Search…"\}/);
+    expect(Inbox).toMatch(/placeholder=\{twoPane && !shortScreen \? "Search name, number or message…" : "Search…"\}/);
   });
 
   it("offers Enter / Shift+Enter only where there is a keyboard", () => {
