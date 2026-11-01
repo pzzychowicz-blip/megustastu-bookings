@@ -39821,6 +39821,32 @@ are: they answer typing, and Patryk's choice named this menu.
 
 **Files:** `CountryPicker.jsx`, `tests/country-menu.test.js` (new).
 
+**Correction 32: a row somebody removes folds.** The census saw a removed person take 182px out of the list in a frame, and a template
+106. Reading the code for those two found six more lists with the same shape that the crawl had never pressed. `FoldRows` is one list
+for all of them, on `useRevealRows` and `useLeavingOrder` as the List and the waitlist use them, with one difference: a newcomer eases
+open, because a List card arrives at full height only since FLIP slides the rest, and nothing here does.
+
+| List | Measured, in about 400ms |
+|---|---|
+| People | the row 182 → 0, "Invite someone" 1573.5 → 1391.5 |
+| Quick-reply templates | "+ Add template" 758.5 → 652.5 |
+| Reminders | the row 108 → 0, with its opacity |
+| Tags | the heading under it 584.5 → 517.5 |
+| Special days | "Add a special day" 847.5 → 803.5 |
+| Standing bookings | the note under it 385.5 → 329.5, staged by rewriting the served module, since DEV has no rule and a rule is only made once its booking lands |
+| Booking durations | "+ Add tier" 949.5 → 1020.5, and back |
+
+**Tiers have no ids**, and a stepper changes what would name one, so a tier's place is its id: the row that opens or folds is the last,
+and each tier's values move up a row at once. Its gap sits inside each row and a negative margin hands the last one back to the column.
+**Pinned countries** are chips, so the same list takes a `gap` and opens sideways on `RowSlot`; "+ Add country" changes line at once when
+a chip's room lets it, like the List's flags and the form's status buttons on a phone. **A list that empties** hands over to its empty
+line, which opens as the last row folds: staged on the standing rules, the note under them moved 329.5 → 287.8 → 288.5, a 0.7px overshoot
+from 385ms meeting 520ms, which I left. **The templates editor's swap** between its list and its form fades in with `mgt-fade-in`, as a
+Settings tab's body does, and its height was already eased.
+
+**Files:** `FoldRows.jsx` (new), `AdminSettings.jsx`, `Reminders.jsx`, `Settings.jsx`, `TagListEditor.jsx`, `whatsapp/TemplatesEditor.jsx`,
+`tests/fold-rows.test.js` (new), `DESIGN.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

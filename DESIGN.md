@@ -1829,6 +1829,13 @@ shows its time.**
   content keeps its width and is clipped, so a label cannot wrap on the way, and the
   leaving copy is inert. The form's status buttons hold one fixed order on these slots,
   and each of them, Clear and "was:" ease on `M.reveal`.
+- **A row somebody removes folds, and what sits below slides (v18.14.0, Patryk).**
+  `FoldRows` is the list for a surface with no FLIP: People, the quick-reply templates,
+  reminders, tags, special days, standing bookings and the duration tiers. A newcomer
+  opens on the same `ROW_FOLD`, where a List card arrives at full height, because FLIP
+  slides the List's cards and nothing slides these. Pinned countries are chips, so with
+  a `gap` the same list opens sideways on `RowSlot`. A list that empties hands over to its
+  empty line, which opens as the last row folds.
 - **An answer being re-checked leaves at once and keeps its room (v18.14.0, Patryk).**
   "Never show a stale answer" is about the answer. `TablesPreview` takes the form's
   tables to opacity 0 in the frame the check starts, holds their room so nothing beside

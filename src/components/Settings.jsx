@@ -30,6 +30,7 @@ import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
+import { FoldRows } from "./FoldRows";
 import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, InlineAlert, ALERT_TONES, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE, textWidth } from "./atoms";
 import { connectionLines } from "../lib/wa-coexist";
 import { useIntegrationStatus } from "../hooks/useIntegrationStatus";
@@ -275,11 +276,10 @@ function PinnedCountriesSetting({ gs, onSave }) {
     <div role="group" aria-labelledby="gs-pinned-label">
       <div id="gs-pinned-label" style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: SP.snug }}>Pinned countries</div>
       <div style={{ display: "flex", gap: SP.snug, flexWrap: "wrap", alignItems: "center" }}>
-        {list.map((iso) => {
+        <FoldRows items={list.filter(countryByIso)} idOf={(iso) => iso} gap={SP.snug}>{(iso) => {
           const c = countryByIso(iso);
-          if (!c) return null;
           return (
-            <OutlineChip key={iso} as="button" size="small" className="mgt-hover-scale"
+            <OutlineChip as="button" size="small" className="mgt-hover-scale"
               aria-label={"Unpin " + c.name}
               onClick={() => onSave({ pinnedCountries: list.filter((x) => x !== iso) })}
               style={{ minHeight: H.chip }}>
@@ -287,7 +287,7 @@ function PinnedCountriesSetting({ gs, onSave }) {
               <CloseIcon size={IC.inline} />
             </OutlineChip>
           );
-        })}
+        }}</FoldRows>
         {/* The list of countries to ADD leaves out the ones already pinned —
             offering Spain twice would let the second tap do nothing. */}
         <div style={{ position: "relative", width: 280 /* @canvas wide enough for a country name in the list */ }}>
@@ -296,9 +296,9 @@ function PinnedCountriesSetting({ gs, onSave }) {
             style={{ height: H.chip, padding: "0 12px", fontSize: T.body }} />
         </div>
       </div>
-      {list.length === 0 ? (
-        <div style={{ fontSize: T.body, color: "var(--text-muted)", marginTop: SP.snug }}>Nothing pinned — the code list starts at A.</div>
-      ) : null}
+      <Reveal show={list.length === 0}>
+        <div style={{ fontSize: T.body, color: "var(--text-muted)", paddingTop: SP.snug }}>Nothing pinned — the code list starts at A.</div>
+      </Reveal>
     </div>
   );
 }
@@ -349,16 +349,17 @@ function SpecialDaysList({ exceptions, onOpen }) {
       <div style={{ fontSize: T.body, color: "var(--text-faint)", marginTop: 2, marginBottom: SP.snug }}>
         Dates that are closed, or open with other hours. Bookings already made stay.
       </div>
-      {upcoming.length ? upcoming.map((ex) => (
-        <div key={ex.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: SP.snug, flexWrap: "wrap", padding: "6px 0" }}>
+      <FoldRows items={upcoming} idOf={(ex) => ex.id}>{(ex) => (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: SP.snug, flexWrap: "wrap", padding: "6px 0" }}>
           <span style={{ fontSize: T.body, color: "var(--text-primary)", flex: "1 1 200px" }}>{line(ex)}</span>
           <button type="button" className="mgt-hover-scale" onClick={() => onOpen(ex.id)}
             aria-label={"Change " + rangeLabel(ex, today)}
             style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.quiet })}>Change</button>
         </div>
-      )) : (
+      )}</FoldRows>
+      <Reveal show={upcoming.length === 0}>
         <div style={{ fontSize: T.body, color: "var(--text-muted)", padding: "6px 0" }}>None planned.</div>
-      )}
+      </Reveal>
       {past.length ? (
         <div style={{ opacity: PAUSED_FADE, marginTop: SP.snug }}>
           <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-muted)" }}>Past</div>
@@ -908,11 +909,16 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
         <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 4 }}>
           {/* Editable tier list + the catch-all row. Fixed-width first column
               so every row's "stay for" stepper aligns vertically. */}
-          {tiers.map((t, i) => {
+          {/* v18.14.0 (correction 32, Patryk): a tier has no id, so its place is its
+              id: the row that opens or folds is the last one, and each tier's values
+              move up a row at once. The list's gap sits inside each row, so it folds
+              too, and the margin hands the last one back to the column's own. */}
+          <div style={{ marginBottom: -14 }}>
+          <FoldRows items={tiers} idOf={(t, i) => String(i)}>{(t, i) => {
             const minMax = i > 0 ? tiers[i - 1].max + 1 : 1;
             const maxMax = i < tiers.length - 1 ? tiers[i + 1].max - 1 : 19;
             return (
-              <div key={i} style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end", paddingBottom: 14 }}>
                 <div style={{ width: 150 }}>
                   <HourStepper label="Parties up to" who={"Tier " + (i + 1)} value={t.max} fmt={upToLabel}
                     disableDec={t.max <= minMax} disableInc={t.max >= maxMax}
@@ -950,7 +956,8 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                 </div>
               </div>
             );
-          })}
+          }}</FoldRows>
+          </div>
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
             <div style={{ width: 150, height: H.chrome, display: "flex", alignItems: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>
               {tiers.length ? "Larger parties (" + restFrom + "+)" : "All parties"}
@@ -1102,9 +1109,10 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           </div>
           <AutoHeight>{recurring.enabled !== false ? (
             <div style={{ marginTop: 12 }}>
-              {(recurring.rules || []).length === 0 ? (
+              <Reveal show={(recurring.rules || []).length === 0}>
                 <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>No standing bookings yet.</div>
-              ) : (recurring.rules || []).map(function (r) {
+              </Reveal>
+              <FoldRows items={recurring.rules || []} idOf={(r) => r.id}>{function (r) {
                 const armed = armedRule === r.id;
                 // v18.2.0 phase 42: the rule's identity, written once — the
                 // switch and the Delete both name it, so they cannot disagree.
@@ -1121,7 +1129,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                 // phone (a 440px one is 38px short of sharing the line), beside
                 // it in the 600px-and-up card.
                 return (
-                  <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: R.inset, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: R.inset, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
                     {/* Phase 55 (round 3's L-3): a paused rule looks like a
                         paused reminder one tab over — BOTH lines at PAUSED_FADE
                         and an outline "Paused" tag. It faded the name alone (to
@@ -1161,7 +1169,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                     </div>
                   </div>
                 );
-              })}
+              }}</FoldRows>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>Generate ahead</span>
                 <MiniStepper label="weeks generated ahead" value={(recurring.horizonWeeks || 4)} fmt={(n) => String(n)}

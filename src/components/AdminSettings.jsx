@@ -22,6 +22,7 @@
 
 import { useState, useRef, useEffect, useId } from "react";
 import { BTN, R, T, FW, SP, H, IC } from "../lib/constants";
+import { FoldRows } from "./FoldRows";
 import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel, mkDangerBtn } from "./atoms";
 import { TrashIcon } from "./Icons";
 import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, isGranted, effectiveRole, displayName } from "../lib/roles";
@@ -782,12 +783,11 @@ export function AdminTabContent({
               Nobody has signed in yet. Invite someone below — they appear here the
               first time they sign in.
             </p>
-          : rows.map(function (r) {
-            const id = r.uid || r.inviteId;
+          : <FoldRows items={rows} idOf={function (r) { return r.uid || r.inviteId; }}>{function (r) {
             const self = r.uid && r.uid === myUid;
             const armed = !!r.uid && r.uid === armedUid;
             return (
-              <div key={id} style={{ padding: SP.base + "px 0", borderTop: "1px solid var(--border-soft)" }}>
+              <div style={{ padding: SP.base + "px 0", borderTop: "1px solid var(--border-soft)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: SP.base, flexWrap: "wrap" }}>
                 <div style={{ flex: "1 1 160px", minWidth: 0 }}>
                   <div style={{ fontWeight: FW.semi, fontSize: T.body, color: "var(--text-primary)" }}>
@@ -862,7 +862,7 @@ export function AdminTabContent({
               </Reveal>
               </div>
             );
-          })}
+          }}</FoldRows>}
       </Section>
 
       <Section>

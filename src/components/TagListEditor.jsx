@@ -44,6 +44,7 @@ import {
 import { genId, countLabel } from "../lib/booking-logic";
 import { markArmed, armSettled } from "../lib/arm-guard";
 import { Collapsible, InlineAlert, OutlineChip, Reveal, mkInp, mkBtn, mkDangerBtn, mkRemoveX } from "./atoms";
+import { FoldRows } from "./FoldRows";
 import { CloseIcon, TrashIcon } from "./Icons";
 
 // Where each kind lives, in the words the form and the Customers list bear out.
@@ -231,9 +232,9 @@ export function TagListEditor({ tagList, onSave, tagError, onClearError, canEdit
             <div style={{ fontSize: T.small, color: "var(--text-faint)", marginBottom: SP.base }}>{KIND_NOTE[kind]}</div>
             {canEdit ? (
               <div>
-                {tags.map(function (tag, i) {
-                  return <TagRow key={tag.id} tag={tag} index={i} kind={kind} tagList={tagList} onSave={onSave} armed={armedId === tag.id} onArm={arm} onDirty={onDirty} />;
-                })}
+                <FoldRows items={tags} idOf={function (t) { return t.id; }}>{function (tag, i) {
+                  return <TagRow tag={tag} index={i} kind={kind} tagList={tagList} onSave={onSave} armed={armedId === tag.id} onArm={arm} onDirty={onDirty} />;
+                }}</FoldRows>
                 <AddTagRow kind={kind} tagList={tagList} onSave={onSave} onDirty={onDirty} />
               </div>
             ) : (

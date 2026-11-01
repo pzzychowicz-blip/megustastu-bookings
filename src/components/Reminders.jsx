@@ -20,7 +20,8 @@
 // since v18.0.0 session 7's /code-review).
 
 import { BTN, R, T, FW, IC } from "../lib/constants";
-import { Toggle, mkBtn, mkDangerBtn, OutlineChip, PAUSED_FADE } from "./atoms";
+import { Toggle, Reveal, mkBtn, mkDangerBtn, OutlineChip, PAUSED_FADE } from "./atoms";
+import { FoldRows } from "./FoldRows";
 import { TrashIcon } from "./Icons";
 import { WEEKDAY_SHORT, formatDay } from "../lib/day";
 import { countLabel } from "../lib/booking-logic";
@@ -122,8 +123,14 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
 // of ReminderListItem cards.
 export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onToggle }) {
   const list = reminders || [];
-  const listEls = list.length === 0 ? (
-    <div style={{
+  // v18.14.0 (correction 32, Patryk): a reminder folds away, and the last one hands
+  // over to the empty state, which opens as it goes.
+  const listEls = (
+    <>
+    <FoldRows items={list} idOf={(r) => r.id}>{(r) => (
+      <ReminderListItem reminder={r} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} />
+    )}</FoldRows>
+    <Reveal show={list.length === 0}><div style={{
       textAlign: "center",
       padding: "24px 14px",
       color: "var(--text-muted)",
@@ -133,19 +140,8 @@ export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onTogg
       border: "1px dashed var(--border-soft)"
     }}>
       No reminders yet. Click &ldquo;+ New reminder&rdquo; to add one.
-    </div>
-  ) : (
-    <div>
-      {list.map((r) => (
-        <ReminderListItem
-          key={r.id}
-          reminder={r}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onToggle={onToggle}
-        />
-      ))}
-    </div>
+    </div></Reveal>
+    </>
   );
 
   return (

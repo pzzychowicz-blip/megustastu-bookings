@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { Overlay, ModalTitle, Fld, mkInp, mkArea, mkBtn, mkDangerBtn, AutoHeight } from "../atoms";
+import { FoldRows } from "../FoldRows";
 import { S, BTN, R, T, FW, IC } from "../../lib/constants";
 import { markArmed, armSettled } from "../../lib/arm-guard";
 import { TrashIcon } from "../Icons";
@@ -41,11 +42,11 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
   }
   function removeT(id) { setList(list.filter((t) => t.id !== id)); }
 
-  const rows = list.map((t) => {
+  const rows = <FoldRows items={list} idOf={(t) => t.id}>{(t) => {
     const armed = armedId === t.id;
     const name = t.labelEn + " / " + t.labelEs;
     return (
-    <div key={t.id} style={{ padding: "10px 12px", borderRadius: R.card, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", marginBottom: 8 }}>
+    <div style={{ padding: "10px 12px", borderRadius: R.card, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", marginBottom: 8 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-primary)", marginBottom: 2 }}>{t.labelEn + " / " + t.labelEs}</div>
@@ -70,7 +71,7 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
       </div>
     </div>
     );
-  });
+  }}</FoldRows>;
 
   const editFooter = (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
@@ -98,8 +99,9 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
           unclipped for that frame. Keying on the editing identity re-measures
           synchronously, pre-paint. Exactly Settings' `watch={tab}` case. */}
       <AutoHeight watch={editing === null ? "list" : "edit"}>
+      {/* v18.14.0 (correction 32, Patryk): the swap fades in, as a Settings tab's body does. */}
       {editing ? (
-        <div style={{ padding: "14px", borderRadius: R.card, background: "var(--wa-row-active-bg)", border: "1px solid var(--wa-row-active-border)" }}>
+        <div key="edit" className="mgt-fade-in" style={{ padding: "14px", borderRadius: R.card, background: "var(--wa-row-active-bg)", border: "1px solid var(--wa-row-active-border)" }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)", marginBottom: 10 }}>{editing === "__new__" ? "New template" : "Edit template"}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Fld label="Label (EN)">{(id) => <input id={id} className="mgt-hover-scale" value={form.labelEn} onChange={(e) => setForm(Object.assign({}, form, { labelEn: e.target.value }))} style={mkInp()} placeholder="Confirm" />}</Fld>
@@ -109,7 +111,7 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
           </div>
         </div>
       ) : (
-        <div>
+        <div key="list" className="mgt-fade-in">
           {rows}
           <button onClick={openNew} className="mgt-hover-scale mgt-press" style={mkBtn({ minHeight: 40, padding: "8px 14px", background: S.accent })}>+ Add template</button>
         </div>
