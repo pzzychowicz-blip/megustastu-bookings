@@ -491,7 +491,11 @@ explaining why is usually the one to read.
   pixel above it comes out of the text. **Where the armed label is the SHORTER
   one, the button keeps its resting width** (Customers' `DELETE_W`, phase 62):
   right-aligned, it otherwise shrank from its left edge (209 → 154px) and a
-  first tap there missed on the second.
+  first tap there missed on the second. **Any control whose width changes does the same
+  (v18.14.0, Patryk):** Follow keeps "Following"'s width (`FOLLOW_W`), a template's
+  buttons reserve the armed one, and the duration Reset has a slot on the field's label
+  line, because the stepper row cannot hold it: it wrapped "End:" and moved the form's
+  columns.
 - **Who asked decides which side the solid sits on (v18.14.0, Patryk).** A confirm that
   follows your own press of Delete, Cancel booking or Archive keeps `Back` on the left
   and the action on the right, because the right-hand button is what you came for. The

@@ -8,6 +8,11 @@
 import { BTN, T } from "../lib/constants";
 import { mkBtn, Reveal } from "./atoms";
 
+// v18.14.0 (correction 26, Patryk): "Following" at T.small with 10px of padding, 75.2
+// measured and rounded up. Follow keeps that width, or a tap on it moved the three zoom
+// buttons beside it 17px, under the thumb that was about to use them.
+const FOLLOW_W = 76;
+
 export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, followNow, setFollowNow, isToday }) {
   // Follow-now button: today only. Phase C1 — label flips between "Following"
   // and "Follow" so screen-readers and quick visual scans get the state from
@@ -25,7 +30,7 @@ export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, follo
       }}
       className="mgt-hover-scale mgt-press"
       style={mkBtn({
-        minHeight: 36, padding: "4px 10px", fontSize: T.small,
+        minHeight: 36, minWidth: FOLLOW_W, padding: "4px 10px", fontSize: T.small,
         // v17.8.0: the idle fill was a hard-coded copy of --app-btn-grey's old
         // value, so the contrast pass fixed every other secondary button and
         // left this one at 1.82:1 — the lowest on the screen, on the control

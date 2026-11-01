@@ -39725,6 +39725,28 @@ comes and goes at once. Only a phone can see either, on a card with more flags t
 
 **Files:** `ListView.jsx`, `tests/list-columns.test.js`, `DESIGN.md`.
 
+**Correction 26: three controls stop shoving their neighbours.** Patryk chose reserving the space over easing it, because a control
+that moves under the finger is the thing DESIGN.md's armed-button rule exists to stop.
+
+- **Follow** keeps "Following"'s width, 75.2 measured, `FOLLOW_W` 76. A tap on it moved the three zoom buttons 17px; the − now sits
+  at x 242 in both states.
+- **A template's buttons** reserve the armed width, 137.9 measured, `ARMED_W` 138, and "Confirm — delete" grows leftwards inside it.
+  Arming used to take 60px out of the row's text.
+- **The duration Reset** was not the simple case the census made it look. It sat at the end of the stepper row, which has no room for
+  it on a two-column form: "End:" wrapped onto two lines at 29.8px, and the column grew 14px on the form and 16 on the walk-in, moving
+  Date and Time on the tap that set a duration. Reserving that width in the row would have left Date at 292px and Time at 196 for
+  good. The booking form has an empty cell beside Duration, but the walk-in has Notes there, so neither form could lend the other its
+  answer. `DurationReset` sits on the field's label line instead, in both, on a fade, smaller than it was (28px tall, from 40) because
+  it is a rare action. At rest both forms are unchanged, and the columns read 244/244 at rest and with Reset at 998 and 668, and the
+  row 324 at 390.
+
+**What I told Patryk was wrong in one word.** The question said Reset and "(auto)" would share a slot. They are in different rows, and
+the census had listed them together because one tap moved both. Reset is above. "(auto)" is the Tables row, and what it does there is
+a different fault: the next correction.
+
+**Files:** `DurationReset.jsx` (new), `BookingFormModal.jsx`, `WalkinForm.jsx`, `TimelineZoomControls.jsx`,
+`whatsapp/TemplatesEditor.jsx`, `tests/reserved-slots.test.js` (new), `tests/a11y.test.js`, `DESIGN.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

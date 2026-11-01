@@ -10,6 +10,12 @@ import { S, BTN, R, T, FW, IC } from "../../lib/constants";
 import { markArmed, armSettled } from "../../lib/arm-guard";
 import { TrashIcon } from "../Icons";
 
+// v18.14.0 (correction 26, Patryk): the buttons' ARMED width, DESIGN.md's rule for a row
+// whose buttons sit beside its text: "Confirm — delete" at T.small with its mark, 137.9
+// measured and rounded up. Arming used to take 60px out of the text, so the row rewrapped
+// under the finger and the button could leave it.
+const ARMED_W = 138;
+
 export function TemplatesEditor({ templates, onSave, onClose }) {
   const [list, setList] = useState(() => templates.slice().map((t) => Object.assign({}, t)));
   const [editing, setEditing] = useState(null); // template id, or "__new__"
@@ -46,7 +52,8 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
           <div style={{ fontSize: T.body, color: "var(--text-muted)", marginBottom: 2 }}>{"EN: " + t.textEn}</div>
           <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>{"ES: " + t.textEs}</div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
+        <div style={{ minWidth: ARMED_W, display: "flex", justifyContent: "flex-end", flexShrink: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {/* v18.2.0: each names its template, the visible word leading,
               for the reason the reminder rows' do (tests/a11y.test.js). */}
           <button className="mgt-hover-scale" aria-label={"Edit (" + name + ")"} style={mkBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", background: BTN.quiet })} onClick={() => openEdit(t)}>Edit</button>
@@ -58,6 +65,7 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
               else { markArmed(); setArmedId(t.id); }
             }}
           ><TrashIcon size={IC.inline} />{armed ? "Confirm — delete" : "Delete"}</button>
+        </div>
         </div>
       </div>
     </div>

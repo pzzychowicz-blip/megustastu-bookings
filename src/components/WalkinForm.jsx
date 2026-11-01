@@ -37,6 +37,7 @@
 
 import { useState } from "react";
 import { stepPress } from "../lib/keyboard";
+import { DurationReset } from "./DurationReset";
 import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor, R, M, T, FW, H } from "../lib/constants";
 import {
   toMins, toTime, getDur,
@@ -501,7 +502,7 @@ export function WalkinForm({
           gap: 12
         }}>
           <Fld label="Duration">
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 6 }}>
               <button
                 className="mgt-hover-scale"
                 style={stepperBtnStyle}
@@ -528,16 +529,7 @@ export function WalkinForm({
               <span style={{ fontSize: T.body, color: S.muted, marginLeft: 4 }}>
                 {"End: " + toTime(toMins(wTime) + wDur)}
               </span>
-              {wf.customDur ? (
-                <button
-                  className="mgt-hover-scale mgt-press"
-                  style={mkBtn({ fontSize: T.body, background: BTN.quiet })}
-                  // v18.2.0: pointer-only like the steppers beside it; same fix.
-                  {...stepPress(() => setDraft({ ...wf, customDur: null }))}
-                >
-                  Reset
-                </button>
-              ) : null}
+              <DurationReset show={!!wf.customDur} onReset={() => setDraft({ ...wf, customDur: null })} />
             </div>
           </Fld>
           <Fld label="Notes">{(fid) => (

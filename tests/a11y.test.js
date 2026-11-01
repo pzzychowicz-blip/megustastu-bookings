@@ -1613,8 +1613,10 @@ describe("the booking form's steppers and the timeline zoom work from the keyboa
     const Keyboard = read("lib/keyboard.js");
     has(Keyboard, "lib/keyboard.js", /export function stepPress\(apply\)[\s\S]*?onClick:\s*function\s*\(e\)\s*\{\s*if\s*\(e\.detail === 0\) apply\(\);/,
       "stepPress must act on a click with detail 0 — the keyboard's — or Enter/Space step nothing");
+    expect(count(read("components/DurationReset.jsx"), /\{\.\.\.stepPress\(/g)).toBe(1);
     for (const [name, src] of [["BookingFormModal", BookingForm], ["WalkinForm", Walkin]]) {
-      expect(count(src, /\{\.\.\.stepPress\(/g), name + ": four steppers (guests − +, duration − +) and the duration Reset").toBe(5);
+      expect(count(src, /\{\.\.\.stepPress\(/g), name + ": four steppers (guests − +, duration − +)").toBe(4);
+      has(src, name, /<DurationReset show=/, "the duration Reset lives in DurationReset now, with its own stepPress");
       hasnt(src, name, /onPointerDown=/,
         "a control acting on pointerdown alone is back — Enter and Space fire click, never a pointer event");
     }

@@ -77,6 +77,7 @@ import { AlertPanel, AlertRow } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon, TrashIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
+import { DurationReset } from "./DurationReset";
 import { useLineBand } from "../hooks/useLineBand";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
 import { VoucherPicker } from "./VoucherPicker";
@@ -962,13 +963,7 @@ export function BookingFormModal({
   // aria-describedby can only ever name an element that is on screen.
   function invalidField(name){return !!error&&errorField===name;}
 
-  const resetDurBtn=form.customDur?<button
-    key="rd"
-    className="mgt-hover-scale mgt-press"
-    style={mkBtn({fontSize: T.body,background:BTN.quiet})}
-    /* v18.2.0: pointer-only like the steppers beside it — Enter and Space did
-       nothing — so it takes the same stepPress. */
-    {...stepPress(function(){setForm(function(f){return Object.assign({},f,{customDur:null});});})}>Reset</button>:null;
+  const resetDurBtn=<DurationReset show={!!form.customDur} onReset={function(){setForm(function(f){return Object.assign({},f,{customDur:null});});}} />;
   const endTime=form.time?toTime(toMins(form.time)+dur):"--";
 
   // v14.4.1: action row pinned to the modal bottom via Overlay's `footer` slot.
@@ -1120,7 +1115,7 @@ export function BookingFormModal({
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               aria-label="Increase number of guests"
-              {...stepPress(function(){const v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});})}>+</button></div></Fld><Fld label="Duration"><div style={{display:"flex",alignItems:"center",gap:6}}><button
+              {...stepPress(function(){const v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});})}>+</button></div></Fld><Fld label="Duration"><div style={{position:"relative",display:"flex",alignItems:"center",gap:6}}><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               aria-label="Decrease duration"
