@@ -196,6 +196,7 @@ The distinction is load-bearing: a **modal** is a dialog (scrim, focus trap,
 | Blurred backdrop + centred card | **modal** (`Overlay`, `atoms.jsx`) | Every modal in the app — see the note below. |
 | Full-screen sheet on a phone | **sheet** | `Overlay`'s `<600px` branch. No scrim, so no backdrop-click — the footer button is the only exit. |
 | Buttons pinned at the modal's bottom | **footer slot** (`footer={…}`) | Body scrolls above it. |
+| "Unsaved changes", with **Discard** and **Keep editing** | **discard confirm** (`discardModal`, `App.jsx`) | The one confirm nobody asked for: closing a surface with a draft raises it. Keep editing is the solid blue on the right, and Enter, Escape and a tap outside all take it. Discard is the red on the left. Six surfaces share it. |
 | A saturated button that commits or destroys — Save booking, Seat, Block, Delete, Discard, No show | **solid button** (`mkSolidBtn`, v17.15.0) | `mkBtn`'s counterpart for an action with consequences. `background` is required, so nobody answers the colour question by accident. Twelve hand-written copies before it, which had already produced one live disagreement: "No show" wore two different oranges. |
 | A pale button with a thin edge and grey words — Back, Close, Edit templates, a day arrow, the header's gear and search, Follow while it is off | **quiet button** (`BTN.quiet`; `mkBtn()` with no fill) | v18.14.0: every secondary grey in the app, one look: the field's pale fill and edge, `--text-secondary` words, no shadow, same size. The FILL decides, in `mkBtn` and `mkSolidBtn`, so `cond ? solid : BTN.quiet` carries its ink, edge and shadow with it. |
 | The red button that deletes, removes, voids, unblocks or clears, with a bin on Delete and Remove | **destructive button** (`mkDangerBtn`; in a confirm dialog `mkDangerConfirm`; the bin is `TrashIcon`) | v18.2.0 phase 62: ONE solid red (`--app-danger-solid`), at rest and armed; a two-tap confirm changes only its label ("Confirm — delete"). The editors' small icon-only ×s are the quiet exception: **editor ×** (`mkRemoveX`, phase 63), the danger tint, named for the item it removes. |
@@ -242,7 +243,7 @@ them:
 
 **What it deliberately does *not* own: Escape.** `useKeyboardShortcuts` handles
 that app-wide, acting on the top of the modal stack via `escapeAction`. So a
-guarded close — "Discard unsaved changes?" — must be named there too; wrapping
+guarded close — the "Unsaved changes" confirm — must be named there too; wrapping
 `onClose` at the mount site is a back door Escape walks straight past.
 
 **Why "every modal uses it" is enforced structurally.** The check is
@@ -521,7 +522,7 @@ Two surfaces, same defect, found five versions apart.
 - **`useWhatsApp.js` is a consumer of App's form-handoff contract.** It isn't a
   shared file, so a prod change to how the booking form opens breaks it
   silently. Its three form-openers must all go through App's `openForm()` — a
-  raw `setForm` reads as dirty immediately and pops "Discard unsaved changes?"
+  raw `setForm` reads as dirty immediately and pops "Unsaved changes"
   on an untouched Cancel. Its two EDIT openers open `draftFromBooking(booking)`,
   the draft `openEdit` opens (v18.3.4): a draft built by hand on `EMPTY_FORM`
   opened without the deposit and the voucher, and an unchanged Save wiped both.

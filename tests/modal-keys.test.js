@@ -10,6 +10,28 @@
 import { describe, it, expect } from "vitest";
 import { escapeAction, enterAction, MODAL_ENTER_ORDER } from "../src/lib/modal-keys.js";
 import { MODAL_Z } from "../src/hooks/useModalStack.js";
+import { appCode } from "./app-source.js";
+
+// v18.14.0 (correction 18, Patryk): the one confirm nobody asked for, so the way back
+// takes the right and the blue, and the words stop proposing the loss.
+describe("the unsaved-changes confirm", () => {
+  const app = appCode();
+  const at = app.indexOf("const discardModal=");
+  const modal = app.slice(at, app.indexOf("const manualModal=", at));
+  it("is found, and draws Discard first and the blue Keep editing last", () => {
+    expect(at).toBeGreaterThan(-1);
+    const discard = modal.indexOf(">Discard<");
+    const keep = modal.indexOf(">Keep editing<");
+    expect(discard).toBeGreaterThan(-1);
+    expect(keep).toBeGreaterThan(discard);
+    expect(modal.slice(discard, keep)).toContain("mkSolidBtn(S.accent)");
+  });
+  it("names the situation and says what discarding costs", () => {
+    expect(modal).toContain(">Unsaved changes<");
+    expect(modal).not.toContain("Discard unsaved changes?");
+    expect(modal).toContain("Discarding can't be undone.");
+  });
+});
 
 // The ctx: any name it is not given reads as a function that records its call.
 function recorder(values = {}) {
@@ -98,11 +120,17 @@ describe("enterAction", () => {
     MODAL_ENTER_ORDER.forEach((id) => expect(MODAL_Z).toContain(id));
   });
   it("each primary action runs once, with its own payload", () => {
-    expect(press("discard")).toEqual({ calls: [["doDiscard"]], prevented: 1 });
     expect(press("reminderdel", { confirmReminderDel: "r1" })).toEqual({ calls: [["doDeleteReminder", "r1"]], prevented: 1 });
     expect(press("del", { confirmDel: "b1" })).toEqual({ calls: [["delBooking", "b1"]], prevented: 1 });
     expect(press("prefpicker")).toEqual({ calls: [["setShowPrefPicker", false]], prevented: 1 });
     expect(press("walkin")).toEqual({ calls: [["saveWalkin"]], prevented: 1 });
+  });
+  // v18.14.0 (correction 18): it used to run doDiscard, measured on DEV: Escape, then
+  // Enter, and the walk-in was gone. Nobody asked to discard, so Enter goes back.
+  it("Enter on the discard confirm keeps editing, and never discards", () => {
+    const p = press("discard");
+    expect(p).toEqual({ calls: [["setConfirmDiscard", null]], prevented: 1 });
+    expect(p.calls.flat()).not.toContain("doDiscard");
   });
   it("the confirm closes before what it confirms runs", () => {
     expect(press("reshuffle").calls).toEqual([["setConfirmReshuffle", false], ["forceReshuffle"]]);

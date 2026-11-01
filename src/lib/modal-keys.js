@@ -90,7 +90,11 @@ export const MODAL_ENTER_ORDER=["discard","reminder","reminderdel","manual","kit
 // which leaves the next person adding a modal choosing which to copy.
 export function enterAction(K,id,e){
   switch(id){
-    case "discard":     e.preventDefault();K.doDiscard();return;
+    // v18.14.0 (correction 18, Patryk): Enter keeps editing. It used to discard,
+    // which put a lost draft one key after an Escape, while Overlay focuses the
+    // dialog rather than a button to keep exactly that from happening. A Discard
+    // someone tabbed to still takes its own Enter (`activatesItself`).
+    case "discard":     e.preventDefault();K.setConfirmDiscard(null);return;
     case "reminder":
       // Save only a valid draft; an invalid one swallows the key rather than
       // letting it reach the surface underneath.

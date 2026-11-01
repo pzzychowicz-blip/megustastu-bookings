@@ -431,11 +431,11 @@ explaining why is usually the one to read.
 - **Red means destructive, and only that (v18.2.0).** `--btn-dismiss` was the
   delete red, so "Dismiss" on the reshuffle suggestion and every banner row's ✕
   looked like Delete and Cancel beside them. It is now an ALIAS of
-  `--app-btn-slate`, the dialog secondary ("Back", "Keep editing") — one change,
+  `--app-btn-slate`, the dialog secondary ("Back") — one change,
   every dismiss in the app. Its other side was `BTN.cancel`, a red named for
   cancelling a BOOKING that kept being reached for as a dialog's "go back"; it
   had no users after phase 41 and phase 59 removed it. A dialog's go-back was
-  `--app-btn-slate` (`confirmKitchen`'s "Back", "Keep editing"). **Phase 36 did the same for `--btn-clear`**
+  `--app-btn-slate` (`confirmKitchen`'s "Back"). **Phase 36 did the same for `--btn-clear`**
   (the critique's X5): "Clear" empties a table selection — the booking form's,
   the walk-in form's, table assignment's, the preferred tables' — and was the
   delete red too. **Phase 78 did it for `--btn-reset`**, the booking and walk-in
@@ -486,6 +486,15 @@ explaining why is usually the one to read.
   one, the button keeps its resting width** (Customers' `DELETE_W`, phase 62):
   right-aligned, it otherwise shrank from its left edge (209 → 154px) and a
   first tap there missed on the second.
+- **Who asked decides which side the solid sits on (v18.14.0, Patryk).** A confirm that
+  follows your own press of Delete, Cancel booking or Archive keeps `Back` on the left
+  and the action on the right, because the right-hand button is what you came for. The
+  "Unsaved changes" confirm follows no such press: you tapped Back, ✕ or outside the
+  sheet, perhaps by mistake. So there the way back takes the right, in solid blue where
+  the thumb goes for Save, and Discard the left in its solid red, and Enter and Escape
+  both keep editing. Its title names the situation rather than proposing the loss, and
+  its second sentence says what the loss costs. Measured before: Escape then Enter wiped
+  a walk-in, and the quiet button (Correction 5) was the faintest thing beside the red.
 - **A surface that carries data is OPAQUE (v18.2.0, X2).** The Week / Month
   cells were `--bg-input` (half-transparent) over a translucent sheet, so the
   page behind the modal showed through and the timeline's orange blocks

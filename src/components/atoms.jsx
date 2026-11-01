@@ -256,7 +256,7 @@ export function mkDangerBtn(extra) {
 }
 
 // The same red on a confirm DIALOG's button ("Delete booking?" · Delete,
-// "Discard unsaved changes?" · Discard): mkSolidBtn's geometry, T.lead at
+// "Unsaved changes" · Discard): mkSolidBtn's geometry, T.lead at
 // H.touch, because it stands beside the dialog's 44px Back. Before phase 62
 // those buttons were three reds: `--app-danger-solid`, the translucent
 // `BTN.del` (reminders, conversations) and the inbox's `--wa-btn-cancel`.

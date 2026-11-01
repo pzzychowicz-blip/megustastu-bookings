@@ -2611,7 +2611,7 @@ export function BookingApp({uid}){
     // confirm needs its own Esc (dismiss) / Enter (discard) branches.
     // v17.5.0 correction: Esc closes the split-setup popup (it has no Cancel).
     setSplitMenuFor:setSplitMenuFor,
-    setConfirmDiscard:setConfirmDiscard,doDiscard:doDiscard,
+    setConfirmDiscard:setConfirmDiscard,
     requestCloseForm:requestCloseForm,requestCloseWalkin:requestCloseWalkin,requestCloseManual:requestCloseManual,
     // v17.8.0: the three surfaces added to the guard — same reason as above.
     requestCloseReminderEditor:requestCloseReminderEditor,requestCloseBlock:requestCloseBlock,requestCloseSettings:requestCloseSettings,
@@ -3758,13 +3758,14 @@ export function BookingApp({uid}){
   // anchors to the viewport inside a plain relative/z-index ancestor (only
   // transform/filter/perspective would break that). Order-proof by construction.
   //
-  // "Keep editing" is the quiet button, NOT a red: in this app's vocabulary
-  // "cancel" means cancel the BOOKING (BTN.cancel, red, removed v18.2.0). The
-  // delModal footer this is otherwise modelled on can afford that (its safe
-  // option is literally called Cancel); here the safe option sitting next to a
-  // red Discard would read as two danger buttons — the exact mis-tap this
-  // guard exists to prevent. Quiet is the house look for a neutral dialog
-  // secondary (see confirmKitchen's "Back").
+  // v18.14.0 (correction 18, Patryk): nobody here asked to lose anything. They
+  // tapped Back, ✕ or outside the sheet, perhaps by accident, and this appeared.
+  // So the way back takes the right and the solid blue, where the thumb goes for
+  // Save, and Discard stands on the left in its red. Every other confirm is the
+  // opposite on purpose: it follows your own press of Delete, so its right-hand
+  // button is what you asked for. Enter keeps editing (lib/modal-keys.js). The
+  // title names the situation rather than proposing the loss, and the second
+  // sentence says what the loss costs, which no version of this dialog used to.
   const DISCARD_BODY={
     form:"The booking you're editing hasn't been saved yet.",
     walkin:"This walk-in hasn't been saved yet.",
@@ -3774,12 +3775,12 @@ export function BookingApp({uid}){
     settings:"A setting you were editing hasn't been saved yet."
   };
   const discardModal=<div style={{position:"relative",zIndex:260}}><ModalPresence show={!!confirmDiscard}>{confirmDiscard?<Overlay /* @static-height one sentence out of DISCARD_BODY, fixed for the life of one open */ onClose={function(){setConfirmDiscard(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
-        className="mgt-hover-scale"
-        style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
-        onClick={function(){setConfirmDiscard(null);}}>Keep editing</button><button
         onClick={doDiscard}
         className="mgt-hover-scale"
-        style={mkDangerConfirm()}>Discard</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Discard unsaved changes?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
+        style={mkDangerConfirm()}>Discard</button><button
+        className="mgt-hover-scale"
+        style={mkSolidBtn(S.accent)}
+        onClick={function(){setConfirmDiscard(null);}}>Keep editing</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Unsaved changes</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{(DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet.")+" Discarding can't be undone."}</div></Overlay>:null}</ModalPresence></div>;
 
   const manualModal=<ModalPresence show={!!manualBooking}>{manualBooking?<ManualModal
     booking={manualBooking}

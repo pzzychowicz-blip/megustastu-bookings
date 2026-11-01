@@ -39549,6 +39549,34 @@ it was when the check ran, like the hint before it, and the release plans again 
 **Files:** `lib/drop-plan.js`, `App.jsx`, `TimelineView.jsx`, `tests/drop-plan.test.js`, `DESIGN.md`, `GLOSSARY.md`,
 `src/components/CLAUDE.md`, `src/lib/CLAUDE.md`, `ROADMAP.md`.
 
+**Correction 18: the way back from "Unsaved changes" is the obvious one.** Patryk sent the walk-in's confirm with one
+worry: it encourages anyone to tap Discard and lose the draft. It did, and part of that was this version's doing.
+Correction 5 made Keep editing a quiet button, so the safe answer became the faintest thing on the card, beside the only
+red, and the title proposed the loss ("Discard unsaved changes?"). His idea was to swap the buttons. I told him the swap
+alone would not be enough, because of a thing he could not have seen: **Enter discarded.** Measured on DEV: Escape on a
+dirty walk-in, then Enter, and the walk-in was gone, with no button in focus, since `Overlay` focuses the dialog.
+
+| | Was | Now |
+|---|---|---|
+| Buttons | Keep editing (quiet), Discard (red, right) | Discard (red), Keep editing (solid blue, right) |
+| Enter | Discards | Keeps editing |
+| Title | Discard unsaved changes? | Unsaved changes |
+| Sentence | This walk-in hasn't been saved yet. | The same, then "Discarding can't be undone." |
+
+The buttons were his choice of three I drew, and not the one I recommended: he kept both solid, because a destructive
+button is a solid red by his own rule, so nothing here needs an exception to it. The sentence's second half stands on all
+six surfaces. A Discard someone tabbed to still takes its own Enter (`activatesItself`), so the keyboard can still reach
+it on purpose. Live at 998 × 507: Discard at x 544 in `rgb(220, 38, 38)`, Keep editing at x 642 in `rgb(0, 102, 214)`,
+both 44 tall; Enter, Escape, a tap outside and Keep editing each came back to the walk-in, and only Discard closed it.
+
+**The other dialogs stay as they are, by his decision.** Delete booking, Delete reminder, Delete conversation, Cancel
+booking and Archive anyway keep Back on the left and the action on the right, because there somebody asked for the action
+and the dialog is checking it. That is the difference DESIGN.md now records: who asked decides which side the solid sits
+on. This confirm is the only one nobody asked for.
+
+**Files:** `App.jsx`, `lib/modal-keys.js`, `atoms.jsx` (its comment), `tests/modal-keys.test.js`, `DESIGN.md`,
+`GLOSSARY.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,
