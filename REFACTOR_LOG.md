@@ -38788,6 +38788,7 @@ the form and nothing is below it.
 **Left as it is, by the recorded rule:** the line collapses while a change is re-checked, because `useDeferredCompute`
 never shows a stale answer (Patryk's choice). Between two refused times it dips and returns: 56 → 41px at full speed,
 56 → 33px at 4× CPU, over about 200–330ms. Nothing under it moves, and the old banner moved the whole form.
+Correction 10 took the dip out, on better numbers than these.
 
 **Files:** new `AvailLine.jsx`, `AvailBanner.jsx`, `BookingFormModal.jsx`, `App.jsx`, `booking-logic.js`,
 `tests/booking-logic.test.js`, `tests/save-path.test.js`.
@@ -39374,28 +39375,50 @@ would be the blink this replaces, and the words say what it is.
 
 ### Closing the version
 
-**The scan's own audit, on the final tree**, at 998 × 507 and 570 in Light and 507 in Dark, across the main card,
-the form, the walk-in, List, Plan and Settings: no sideways overflow, `overscroll-behavior` none. In Light the only
-real text under 4.5:1 is amber 2.93 and yellow 1.84–1.86, Patryk's two exemptions, and "Tables: 3 / 4 / 5" at 4.46,
-which is in ROADMAP. Dark's lows are the values it already had, and Dark was not part of the decision: its accent
-3.65 and 4.1, its faint 3.51–4.35.
+**The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,
+across the main card, the form, the walk-in, List, Plan, Settings and, added for this pass, the inbox: no sideways
+overflow, `overscroll-behavior` none. In Light the only real text under 4.5:1 is amber 2.93–2.95 and yellow 1.84–1.85,
+Patryk's two exemptions, and "Tables: 3 / 4 / 5" at 4.46, which is in ROADMAP. The yellow now includes Add to waitlist
+on the availability line, at 1.85: `tests/contrast.test.js` names both of those buttons and `main` paints them on the
+same fill. The inbox has no text under 4.5:1 in either theme. Dark's lows are the values it already had, and Dark was
+not part of the decision: its accent 3.65 and 4.1, its faint 3.51–4.35.
 
-The audit also prints readings that are the rig's. Clipped text samples as whatever is behind it. "23:00" at 1:1
-sits past the ruler's clip (x 993, the clip ends at 969), and "Daily cutoff", "Auto-optimiser" and the walk-in's 11,
-12 and 13, at 1.01–1.25, sit under a sheet's bottom edge. Scrolled into view those read 7.16–16.72. The one target
-under 24px on any screen is the date field's inner `<input>`, and the pill round it is what a finger hits.
+The audit also prints readings that are the rig's, and each was traced on the page. Clipped text samples as whatever
+is behind it. "Daily cutoff", "Auto-optimiser" and the walk-in's 11, 12 and 13, at 1.01–1.25, sit under a sheet's
+bottom edge, and scrolled into view they read 7.16–16.72. This pass ran at 20:20, where the form opens on a busy
+kitchen, so "Before:", its times, "Starting at this time:" and "Kitchen busy", at 1.02–1.5, sit below the body's clip;
+in view they read 15.3 and 7.53. "20:30" and "5" at 1.04–1.11 sit at y 566.5 of 570. Plan's "15:00" at 1.17 is past its
+ruler's left edge, at x −29.
 
-**Every fix's rig again, on the final tree**, H7 to M4 at the heights each takes: 17 runs, 16 exit 0 with the readings
-above. M1 to L2 ran last, and the audit covers their colours. The 17th is `h5undo.py`, and there the app was right.
-Its drop, Lena Brandt onto row 1 today, was refused with "Can't re-seat the parties there without stranding one"
-because the pass ran in the evening: from 15:00 the Optimiser is off for today, the flaw H5 already records. Replayed
-with a page clock and writes blocked, nothing refuses at 9:00, 12:00 or 14:00, and it refuses at 15:00, 16:00, 16:20,
-16:50, 17:00 and 18:50. `drop-plan.js` has not changed since H5's commit, and `booking-logic.js` gained only
-`newBookingTime` and `nearestTimes`.
+One looked real: four names at 3.74–3.77, `#57340a` on amber. The sampler takes the colour that contrasts most with
+the fill as the ink, and the now line crossing those names beats white on amber, so it read the line. The names are
+white, H1's 2.93, and the line sits over the blocks at z 10 on `main` as well. The one target under 24px on any screen
+is the date field's inner `<input>`, and the pill round it is what a finger hits.
 
-Undo was proved again on a drop that is legal in the evening: tomorrow's lunch, where the Optimiser is on, with real
-DEV writes at 507 and 570. "Lena Fischer and Olga Petrova — tables swapped.", 2 blocks moved, 0 differ after Undo, 0
-after a reload.
+**Every fix's rig again, on the final tree**, H7 to M4 at the heights each takes: 17 runs on 2026-11-01, on Saturday's
+page clock at 12:30 so that the Optimiser is on, read line by line and then diffed line by line against the first
+pass, since an exit 0 only says a rig ran. Every difference is the clock or a correction. The clock: Optimiser ON in
+the Summary, no now pill before opening, amber "Moves Yara, Ariadna" where the evening read a refusal, other nearest
+times, and Save's refusal in its Optimiser-on wording. The corrections: the country codes 60 → 79 wide (Correction 3)
+and the line's dip gone (Correction 10). `h4.py`'s `toast/saved` read `None` because its regex knew only "saved"; the
+toast says "Tables re-optimised." at 472ms with the Optimiser on and "Booking saved." at 473ms with it off. M1 to L2
+ran last in the first pass, and the audit covers their colours. On the same tree:
+
+- `h5undo.py`, real DEV writes: "Lena Brandt moved to 1 — Yara Domínguez, Ariadna Puig reassigned.", 3 blocks moved, 0
+  differ after Undo, 0 after a reload.
+- `c8strip.py`: a newcomer row in the strip eases in and out, and the rows beside it hold still.
+- `rvt.py`, the tour at 4× CPU: 33 `Reveal`s at each height, none born open, 31 played in and 32 out.
+- `c9flow.py`: Correction 9's search, select mode, fold and keyboard, as measured there.
+- `c10band.py`, at 12:30 and 16:00, 1× and 4× CPU: the band eases 0 → 56 from a time that fits to a refused one with
+  the answer solid, and folds back with the words at 0.06 at most. That leg is needed because `h3flow.py`'s opening
+  series no longer opens anything: 2 at 21:00 is refused on this data at either clock, so the line is already open.
+
+The first pass, on 2026-10-31, ran in the evening, and `h5undo.py`'s drop was refused with "Can't re-seat the parties
+there without stranding one". The app was right: from 15:00 the Optimiser is off for today, the flaw H5 already
+records. Replayed with a page clock and writes blocked, nothing refuses at 9:00, 12:00 or 14:00, and it refuses at
+15:00, 16:00, 16:20, 16:50, 17:00 and 18:50. Undo was proved that day on a drop that is legal in the evening, tomorrow's
+lunch, with real DEV writes at 507 and 570: "Lena Fischer and Olga Petrova — tables swapped.", 2 blocks moved, 0 differ
+after Undo, 0 after a reload.
 
 **Two things on the record.** Phase 1's commit, `c1ddb470`, went in with 2 lint errors, because its command did not
 stop on the gate. `84dc5227` fixed them, and every commit since has had the gate chained to it, so only a bisect
@@ -39406,8 +39429,12 @@ entry is a defect in any commit.
 **Only the hardware can settle these, for Patryk after merge:** a finger on the sticky ruler during a fast swipe, and
 edge scroll · Undo after a real drag · the pinned line with Android's keyboard up · time-picker speed with M5 ·
 pull-to-refresh in a Chrome tab · whether the tablet vibrates, and the switch · Larger text at arm's length on the
-pass · automatic dark mode at sunset · the Summary and a refusal easing in on the tablet.
+pass · automatic dark mode at sunset · the Summary and a refusal easing in on the tablet · the ⋯ menu by finger · the
+quiet buttons and the field edge in the dim room · the inbox's merged title row, and the composer with Android's
+keyboard up · "Checking the tables…" at the tablet's real speed.
 
-**Size:** main entry 448.85 kB (131.86 gz).
+**Size:** main entry 450.01 kB (132.45 gz), 1.16 kB over the first close.
 
-**Files:** `REFACTOR_LOG.md`, `ROADMAP.md`, `GLOSSARY.md`, `DESIGN.md`, `CLAUDE.md`.
+**The branch:** 34 commits on `origin/main`'s `77516a63`, this one included.
+
+**Files:** `REFACTOR_LOG.md`, `ROADMAP.md`, `GLOSSARY.md`, `DESIGN.md`, `CLAUDE.md`, `src/components/CLAUDE.md`.
