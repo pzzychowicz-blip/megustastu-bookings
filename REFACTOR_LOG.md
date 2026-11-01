@@ -39799,6 +39799,15 @@ the List's flags, a status button that needs another line on a phone changes lin
 **Files:** `atoms.jsx` (`RowSlot`), `TablesPreview.jsx` (new), `BookingFormModal.jsx`, `PrefPickerModal.jsx`, `tests/row-slots.test.js`
 (new), `DESIGN.md`.
 
+**Correction 30: every chevron turns.** Five disclosures swapped between two icons in a frame while the panel beside them eased: the
+Summary's lid, a customer's row, a voucher's row, and the Regular chip on the form and in the inbox. `TurnChevron` (atoms) is one
+drawing that turns on `M.move`, the notification strip's speed, as Patryk chose. Measured on all five, both ways: 0° to 90° (the Summary
+0° to 180°) and back in about 225ms with no step. `tests/turn-chevron.test.js` fails the two-icon ternary itself, anywhere under
+`src/components`.
+
+**Files:** `atoms.jsx` (`TurnChevron`), `BookingFormModal.jsx`, `CustomersSettings.jsx`, `Summary.jsx`, `VouchersSettings.jsx`,
+`whatsapp/ConversationView.jsx`, `tests/turn-chevron.test.js` (new), `tests/summary-freeing.test.js`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

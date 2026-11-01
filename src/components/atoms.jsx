@@ -22,7 +22,7 @@ import { afterFrame, pageHidden } from "../lib/after-frame";
 import { openerFor } from "../lib/focus-return";
 import { raisesKeyboard } from "../lib/keyboard";
 import { lockPageScroll } from "../lib/scroll-lock";
-import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
+import { AlertIcon, ChevronDownIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
 // Return inline-style objects. Used wherever an `<input>` or `<button>` needs
@@ -1258,6 +1258,19 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
     <div role={presentational ? "presentation" : undefined} inert={inert === true} style={{ ...track, opacity: isOpen ? 1 : 0, ...(style || {}) }}>
       <div role={presentational ? "presentation" : undefined} style={innerStyle}>{children || last.current}</div>
     </div>
+  );
+}
+
+// ── TurnChevron — a disclosure's mark (v18.14.0, correction 30) ──────────────
+// One drawing that turns with its panel, on the notification strip's speed, where a
+// ternary of two icons swapped in a frame. It points right and turns down; with
+// `flip` it points down and turns up.
+export function TurnChevron({ open, size = IC.control, flip = false }) {
+  const Mark = flip ? ChevronDownIcon : ChevronRightIcon;
+  return (
+    <span aria-hidden="true" style={{ display: "inline-flex", transform: "rotate(" + (open ? (flip ? 180 : 90) : 0) + "deg)", transition: "transform " + M.move }}>
+      <Mark size={size} />
+    </span>
   );
 }
 

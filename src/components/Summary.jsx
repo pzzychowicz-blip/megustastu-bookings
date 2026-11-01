@@ -23,11 +23,11 @@ import { useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { daySummary, countLabel, depositSummary, depositParts } from "../lib/booking-logic";
 import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC, SP, H } from "../lib/constants";
-import { mkBtn, Reveal, TBadge } from "./atoms";
+import { mkBtn, Reveal, TBadge, TurnChevron } from "./atoms";
 import { OptimiserControls } from "./OptimiserControls";
 // v17.9.0: the local `hh` was one of six copies of this label — see lib/time-grid.js.
 import { hourLabel as hh } from "../lib/time-grid";
-import { ChevronDownIcon, ChevronUpIcon, PrintIcon } from "./Icons";
+import { PrintIcon } from "./Icons";
 function coversLabel(n){ return countLabel(n, "cover", "covers"); }
 function bookingsLabel(n){ return countLabel(n, "booking", "bookings"); }
 
@@ -318,7 +318,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                  numbers. The glyph is unchanged; only the box around it grew. */
               padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center" }}
           >
-            {open ? <ChevronUpIcon size={IC.control} /> : <ChevronDownIcon size={IC.control} />}
+            <TurnChevron open={open} flip />
           </button>
         </div>
       </div>

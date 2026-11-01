@@ -6,10 +6,10 @@
 
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, regularChipLabel, conversationName, conversationMenuIds, formatWindow, intentBannerVisible, isParsing, threadItems, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
-import { Reveal, mkBtn, mkSolidBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
+import { Reveal, TurnChevron, mkBtn, mkSolidBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { RecheckIcon, ArchiveIcon, DraftIcon, RestoreIcon, MuteIcon } from "./WaIcons";
-import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon, TrashIcon } from "../Icons";
+import { ChevronLeftIcon, ChevronDownIcon, CheckIcon, TrashIcon } from "../Icons";
 import { MessageBubble } from "./MessageBubble";
 import { ConversationMenu } from "./ConversationMenu";
 import { DraftCard } from "./DraftCard";
@@ -271,7 +271,7 @@ export function ConversationView({
   // copy taking its border from --suggest and its text from --success.
   const regularChip = match && match.regularCount >= 1
     ? (pastList.length
-      ? <OutlineChip tone="success" size="small" as="button" className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)}><span>{regularChipLabel(match.regularCount, regularMin)}</span>{histOpen ? <ChevronDownIcon size={IC.inline} /> : <ChevronRightIcon size={IC.inline} />}</OutlineChip>
+      ? <OutlineChip tone="success" size="small" as="button" className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)}><span>{regularChipLabel(match.regularCount, regularMin)}</span><TurnChevron open={histOpen} size={IC.inline} /></OutlineChip>
       : <OutlineChip tone="success" size="small">{regularChipLabel(match.regularCount, regularMin)}</OutlineChip>)
     : null;
   // Body rendered whenever there are other visits to show; Reveal (below) eases

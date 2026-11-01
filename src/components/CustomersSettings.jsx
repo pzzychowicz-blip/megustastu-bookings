@@ -23,10 +23,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { S, BTN, R, T, FW, IC, H } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, identityKey, isNoShow } from "../lib/customers";
-import { Section, OutlineChip, Reveal, mkInp, mkBtn, mkDangerBtn, SBadge } from "./atoms";
+import { Section, OutlineChip, Reveal, TurnChevron, mkInp, mkBtn, mkDangerBtn, SBadge } from "./atoms";
 import { formatDay, showsYear } from "../lib/day";
 import { guestsLabel, countLabel } from "../lib/booking-logic";
-import { ChevronDownIcon, ChevronRightIcon, WaitIcon, TrashIcon } from "./Icons";
+import { WaitIcon, TrashIcon } from "./Icons";
 import { TagListEditor } from "./TagListEditor";
 import { TagChips } from "./TagChips";
 import { tagLabels } from "../lib/tags";
@@ -207,7 +207,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           // v17.7.0 the hover rule no longer supplies one but still paints an
           // opaque --bg-hover-card, so a radius-less element would render that
           // fill as a hard-edged rectangle inside its own rounded card.
-          style={mkBtn({ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", padding: "6px 8px", minHeight: H.compact, background: "var(--bg-card)", border: "1px solid var(--border-soft)", borderRadius: R.card })}>{c.visits > 0 ? <OutlineChip tone="success">{countLabel(c.visits, "visit", "visits")}</OutlineChip> : null}{c.noShowCount > 0 ? <OutlineChip tone="warn">{countLabel(c.noShowCount, "no-show", "no-shows") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)"}</OutlineChip> : null}{wlCount > 0 ? <OutlineChip tone="neutral"><WaitIcon size={IC.inline} />{wlCount}</OutlineChip> : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></button></div>
+          style={mkBtn({ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", padding: "6px 8px", minHeight: H.compact, background: "var(--bg-card)", border: "1px solid var(--border-soft)", borderRadius: R.card })}>{c.visits > 0 ? <OutlineChip tone="success">{countLabel(c.visits, "visit", "visits")}</OutlineChip> : null}{c.noShowCount > 0 ? <OutlineChip tone="warn">{countLabel(c.noShowCount, "no-show", "no-shows") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)"}</OutlineChip> : null}{wlCount > 0 ? <OutlineChip tone="neutral"><WaitIcon size={IC.inline} />{wlCount}</OutlineChip> : null}<span style={{ display: "flex", color: S.muted }}><TurnChevron open={open} /></span></button></div>
         <Reveal show={open}>
           <div style={{ padding: "0 12px 12px" }}>
             {/* v18.5.0: this guest's tags, first: with a regular's thirty bookings

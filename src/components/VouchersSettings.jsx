@@ -35,8 +35,8 @@ import {
   MANUAL_CODE_MIN, MANUAL_CODE_MAX, expiryFrom, money,
 } from "../lib/vouchers";
 import { EXPIRY_MIN, EXPIRY_MAX } from "../hooks/useVoucherDefaults";
-import { Section, OutlineChip, Reveal, InlineAlert, Fld, SearchField, mkInp, mkBtn, mkDangerBtn } from "./atoms";
-import { ChevronDownIcon, ChevronRightIcon, CopyIcon, CheckIcon } from "./Icons";
+import { Section, OutlineChip, Reveal, TurnChevron, InlineAlert, Fld, SearchField, mkInp, mkBtn, mkDangerBtn } from "./atoms";
+import { CopyIcon, CheckIcon } from "./Icons";
 import { formatDay, localDay } from "../lib/day";
 import { countLabel } from "../lib/booking-logic";
 
@@ -225,7 +225,7 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
           <OutlineChip tone="neutral">{money(remainingOf(v), currency) + " left"}</OutlineChip>
           {v.origin === "manual" ? <OutlineChip tone="neutral">manual</OutlineChip> : null}
           <span style={{ display: "flex", color: S.muted }}>
-            {open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}
+            <TurnChevron open={open} />
           </span>
         </button>
       </div>

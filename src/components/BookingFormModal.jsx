@@ -70,12 +70,12 @@ import { keptRefusal, pickedRefusal } from "../lib/booking-save";
 import { WEEKDAY_LONG, formatDay } from "../lib/day";
 import { stepPress } from "../lib/keyboard";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
-import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, RowSlot, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, mkDangerBtn, AutoHeight, Reveal, Presence } from "./atoms";
+import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, RowSlot, TurnChevron, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, mkDangerBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AvailLine } from "./AvailLine";
 import { TimeChip } from "./TimeChip";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
-import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon, TrashIcon } from "./Icons";
+import { AssignIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon, TrashIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 import { TablesPreview } from "./TablesPreview";
 import { DurationReset } from "./DurationReset";
@@ -298,7 +298,7 @@ export function BookingFormModal({
   // sandbox's own /code-review extraction: prod re-inlined the same ternary
   // here, and the threshold it compares against is a settings value, so an
   // inline copy is a second place for `regularMin` to be read wrongly.
-  const chipMark=function(which){return histWhich===which?<ChevronDownIcon size={IC.inline} />:<ChevronRightIcon size={IC.inline} />;};
+  const chipMark=function(which){return <TurnChevron open={histWhich===which} size={IC.inline} />;};
   const regularChip=custMatch&&custMatch.regularCount>=1?<OutlineChip
     key="reg" tone="success" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("regular");}}><span>{regularChipLabel(custMatch.regularCount,regularMin)}</span>{chipMark("regular")}</OutlineChip>:null;
