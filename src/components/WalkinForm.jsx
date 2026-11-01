@@ -42,7 +42,7 @@ import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy, occupancyEnd, padEnd,
   findBest, findBestAny,
-  optimizerActiveFor, findTimes, formatSugg,
+  optimizerActiveFor, findTimes, formatSugg, earliestOffer,
   getKitchenLoad, findKitchenFriendlyTimes, startingPhrase,
   comboCapBest, nowTime, guestsLabel, countLabel, togglePick
 } from "../lib/booking-logic";
@@ -119,14 +119,15 @@ export function WalkinForm({
   // useDeferredCompute, so opening Walk-in is instantaneous even on a day
   // where the scan takes ~0.5s; the ⏳ cue shows past ~150ms.
   const wFitsNow = !!(findBest(wSize, "auto", wS, wE, wOther) || findBestAny(wSize, wS, wE, wOther));
+  const wNotBefore = earliestOffer(wDate, today, nowMins);
   const wSuggScan = useDeferredCompute(function () {
     if (wFitsNow) return null;
     const noResh = !optimizerActiveFor(wDate, autoOptimizer);
-    return formatSugg(findTimes(wDate, wSize, "auto", liveBookings, wDur, wS, tableBlocks, null, noResh), wS);
+    return formatSugg(findTimes(wDate, wSize, "auto", liveBookings, wDur, wS, tableBlocks, null, noResh, wNotBefore), wS);
     // wOther is rebuilt per render (not dep-safe); its inputs are covered by
     // liveBookings/tableBlocks + the wFitsNow boolean itself. The th signature
     // (/code-review) re-scans when another device edits today's hours live.
-  }, [wFitsNow, wSize, wDur, wS, liveBookings, tableBlocks, autoOptimizer, th.closed ? "closed" : th.open + "-" + th.close]);
+  }, [wFitsNow, wSize, wDur, wS, liveBookings, tableBlocks, autoOptimizer, th.closed ? "closed" : th.open + "-" + th.close, wNotBefore]);
   const wAutoCheck = wFitsNow ? null : wSuggScan.value;
   const wChecking = !wFitsNow && wSuggScan.pending;
 
@@ -183,7 +184,7 @@ export function WalkinForm({
   const wKitchenStarts = wKitchenLoad.starts + 1;
   const wKitchenBusy = wKitchenStarts >= KITCHEN_TABLE_LIMIT;
   const wKitchenSugg = wKitchenBusy
-    ? findKitchenFriendlyTimes(bookings, wDate, wSize, "auto", wDur, wTime, null, tableBlocks)
+    ? findKitchenFriendlyTimes(bookings, wDate, wSize, "auto", wDur, wTime, null, tableBlocks, wNotBefore)
     : null;
 
   // Renderer for the time-suggestion chips inside the kitchen section.

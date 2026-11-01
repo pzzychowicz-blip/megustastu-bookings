@@ -894,7 +894,16 @@ export function newBookingTime(date,today,nowMins){
   if(h.closed||date!==today||nowMins<open||nowMins>=h.close*60) return toTime(open);
   return toTime(Math.min(Math.floor(nowMins/15)*15+15,lastStartMins(h.close)));
 }
-export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noReshuffle){
+// v18.14.0 (correction 15, Patryk): the earliest start worth offering on `date`.
+// Neither time search ever looked at the clock, so at 20:20 a walk-in was offered
+// 18:45. Today it is this quarter hour, or the next; any other day has no floor, a
+// past day included, because entering a booking after the fact is not service.
+// On the quarter-hour grid, so a search's walk stays on it. It moves four times an
+// hour, so a scan that depends on it does not re-run on the 15-second tick.
+export function earliestOffer(date,today,nowMins){
+  return date===today?Math.ceil(nowMins/15)*15:0;
+}
+export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noReshuffle,notBefore){
   var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date
   if(h.closed) return []; // closed day → no valid times
   var aroundM=around||0;
@@ -914,7 +923,9 @@ export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noRes
     if(Date.now()-t0>BUDGET_MS) return false; // budget spent — skip the expensive trial
     return !!trialFits(existing,date,toTime(m),size,pref,dur,blocks,editId,null,noReshuffle);
   }
-  var first=h.open*60,last=lastStartMins(h.close);
+  // The floor is the walk's own start, not a filter on its results: a time typed
+  // before now still finds the ten after it, and those are the ones ahead of now.
+  var first=Math.max(h.open*60,notBefore||0),last=lastStartMins(h.close);
   var CAP=10; // formatSugg keeps 10 per side — scanning further is wasted work
   // Stay on the quarter-hour grid even when `around` isn't grid-aligned (the old
   // fixed-grid scan only ever produced grid slots): step outwards from the
@@ -977,7 +988,7 @@ export function startingPhrase(load){
   var g=(load&&load.guests)||0;
   return countLabel(n,"booking","bookings")+" · "+guestsLabel(g);
 }
-export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excludeId,blocks){
+export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excludeId,blocks,notBefore){
   var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date
   if(h.closed) return {before:[],after:[]}; // closed day → no times to suggest
   var times=Array.from({length:(h.close-h.open)*4},function(_,i){return h.open*60+i*15;});
@@ -989,6 +1000,7 @@ export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excl
   if(blocks) exSl=exSl.concat(getBlockSlots(blocks,date));
   times.forEach(function(m){
     if(m===aroundM) return;
+    if(m<(notBefore||0)) return; // v18.14.0 (correction 15): `earliestOffer`
     if(m>=24*60) return; // v14.5.0: never suggest a post-midnight start (24h-hours is extend-window only)
     if(m+dur>h.close*60) return;
     var load=getKitchenLoad(bookings,date,toTime(m),dur,excludeId);

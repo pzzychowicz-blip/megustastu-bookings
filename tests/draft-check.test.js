@@ -80,6 +80,16 @@ describe("draftAvailability answers what the booking form would", () => {
     expect(draftCheckLine(d, r)).toEqual({ tone: "danger", text: "No tables for 4 at 20:00" });
   });
 
+  it("a floor leaves only the times ahead, and the sentence alone when there are none", () => {
+    const list = fullEvening();
+    const d = { size: 4, date: D, time: "20:00" };
+    const late = draftAvailability(d, list, list, [], false, toMins("17:45"));
+    expect(late.alts).toEqual(["17:45", "18:00"]);
+    const none = draftAvailability(d, list, list, [], false, toMins("20:15"));
+    expect(none.alts).toEqual([]);
+    expect(draftCheckLine(d, none)).toEqual({ tone: "danger", text: "No tables for 4 at 20:00" });
+  });
+
   it("a completed visit counts as it does in the form's scan (by the length it was recorded with)", () => {
     // Completed at 20:00, so its recorded stay ends where the request starts.
     const list = ALL_TABLES.map((t) => bk({ time: "18:30", duration: 90, tables: [t.id], _locked: true, status: "completed" }));
@@ -266,10 +276,11 @@ describe("availabilityReply — the reply Suggest these puts in the box", () => 
 });
 
 describe("the card runs the check after the paint, never in render", () => {
-  it("through useDeferredCompute, keyed on the draft and the day's data but not the clock", () => {
+  it("through useDeferredCompute, keyed on the draft and the day's data but not the tick", () => {
     const hook = read("hooks", "useDraftCheck.js");
     expect(hook).toMatch(/useDeferredCompute\(function \(\) \{/);
-    expect(hook).toMatch(/\[applies, size, date, time, pref, bookings, tableBlocks, autoOptimizer, hoursSig\]/);
+    // `notBefore` is the quarter hour, for today only. `liveBookings` stays out.
+    expect(hook).toMatch(/\[applies, size, date, time, pref, bookings, tableBlocks, autoOptimizer, hoursSig, notBefore\]/);
     expect(hook).toMatch(/!optimizerActiveFor\(date, autoOptimizer\)/);
     const view = read("components", "whatsapp", "ConversationView.jsx");
     expect(view).toMatch(/const draftCheck = useDraftCheck\(conv, \{ bookings, liveBookings, tableBlocks, autoOptimizer \}\);/);

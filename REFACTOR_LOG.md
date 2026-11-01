@@ -39436,6 +39436,28 @@ only offered by the strip's "Tables could be reshuffled", which DEV's data did n
 **Files:** `lib/booking-logic.js`, `App.jsx`, `StatusToasts.jsx` (its comment), `tests/booking-logic.test.js`,
 `tests/drop-plan.test.js`, `GLOSSARY.md`, `ROADMAP.md`.
 
+**Correction 15: today, no time that has passed.** Not an entry: it turned up in the sheet for the walk-in, which offered
+18:45 to 19:30 at 20:20. Neither `findTimes` nor `findKitchenFriendlyTimes` ever looked at the clock, so at dinner the
+availability line and the kitchen's chips offered lunch, and H3 had put four of those times beside Save. His call: for
+today, only times still ahead, in the walk-in, the booking form and the WhatsApp draft card, and other days unchanged.
+
+- **One floor, `earliestOffer(date, today, nowMins)`, passed into both searches.** This quarter hour or the next today, and
+  0 otherwise, so a past date stays as it was: entering a booking after the fact is not service.
+- **It is where the walk starts, not a filter on the results.** A filter would have been wrong in the one case worth
+  thinking about: a time typed before now finds the ten after it, and those can all have passed while 19:30 is free.
+- **The draft card's check gains one dependency.** `useDraftCheck` keeps `liveBookings` out on purpose, so a card does
+  not re-check on the 15-second tick. The floor moves four times an hour and only for a request for today, and a card
+  still offering 20:00 at 20:30 is wrong rather than unsettled.
+- **The line's " No availability found." goes.** On a full evening a line with no times left is now the common case, and
+  "No table for 8 at 20:20 No availability found." says one thing twice, with no stop between. He had asked for the
+  sentence and Add to waitlist.
+
+On the running app at a 20:20 page clock: 8 at 21:00 and 2 at 21:00 read their sentence and Add to waitlist with no chips,
+where the first offered 18:45 to 19:30 before.
+
+**Files:** `lib/booking-logic.js`, `lib/draft-check.js`, `hooks/useDraftCheck.js`, `AvailLine.jsx`, `WalkinForm.jsx`,
+`BookingFormModal.jsx`, `tests/booking-logic.test.js`, `tests/draft-check.test.js`, `GLOSSARY.md`, `src/lib/CLAUDE.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

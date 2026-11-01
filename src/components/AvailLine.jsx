@@ -19,6 +19,10 @@
 // elsewhere; their height stays the row's, for wet hands. The tint and tone are
 // the pairing `tests/contrast.test.js` measures.
 //
+// v18.14.0 (correction 15, Patryk): today, no time that has passed (`earliestOffer`).
+// On a full evening that can leave none, and then the sentence is the whole answer,
+// with the waitlist beside it.
+//
 // v18.14.0 (correction 3, Patryk): where it wraps, on a phone, the buttons stretch
 // edge to edge in equal cells, and Add to waitlist is a full-width bar under the
 // times. Nothing measures for that: the sentence's growth outweighs the actions',
@@ -80,7 +84,6 @@ export function AvailLine({ text, warn, sugg, onTapTime, onAddToWaitlist, checki
       <span ref={rowRef} inert={answerHidden} style={{ gridArea: "1 / 1", minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.snug, opacity: answerHidden ? 0 : 1, transition: ANSWER_FADE }}>
         <span ref={sentenceRef} style={{ flex: SENTENCE_GROW + " 1 auto", minWidth: 0, fontSize: T.lead }}>
           {text}
-          {sugg && times.length === 0 ? <span style={{ fontWeight: FW.medium }}> No availability found.</span> : null}
         </span>
         <span ref={actionsRef} style={{ display: "flex", flexWrap: "wrap", flex: "1 1 auto", gap: SP.snug }}>
           {times.length > 0 ? (

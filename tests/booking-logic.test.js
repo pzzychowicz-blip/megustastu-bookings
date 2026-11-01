@@ -29,7 +29,7 @@ import {
   keepsHandTables, tablesKept, blockedTablesAt, handKeptRefusal,
   unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
   tablesFreeFor, trialFits, enteredPhone, kitchenRelevant, savedToast, lastStartMins,
-  optimizerActiveFor,
+  optimizerActiveFor, earliestOffer, findTimes, findKitchenFriendlyTimes,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -3367,6 +3367,45 @@ describe("nearestTimes", () => {
 });
 
 // v18.14.0 (M5): what a new booking opens at. The default week is 13:00–22:00.
+describe("earliestOffer", () => {
+  const D = "2099-06-17";
+  it("today, it is this quarter hour or the next", () => {
+    expect(earliestOffer(D, D, 20 * 60 + 20)).toBe(20 * 60 + 30);
+    expect(earliestOffer(D, D, 20 * 60 + 15)).toBe(20 * 60 + 15);
+  });
+  it("every other day has no floor, a past one included", () => {
+    expect(earliestOffer("2099-06-18", D, 20 * 60 + 20)).toBe(0);
+    expect(earliestOffer("2099-06-16", D, 20 * 60 + 20)).toBe(0);
+  });
+});
+
+// The floor is the walk's start rather than a filter on what it found, and the
+// second case is why: with ten fitting times after a typed 14:00, a filter would have
+// nothing left, while the times ahead of now are still free.
+describe("a floor on the time searches", () => {
+  const D = "2099-06-17";
+  const at = (h, m) => h * 60 + m;
+  const none = () => findTimes(D, 2, "auto", [], 90, at(20, 0), [], null, false);
+  it("findTimes offers nothing before it, on either side of the time asked for", () => {
+    const got = findTimes(D, 2, "auto", [], 90, at(20, 0), [], null, false, at(19, 30));
+    expect(Math.min(...got)).toBe(at(19, 30));
+    expect(got).toContain(at(20, 15));
+  });
+  it("findTimes still finds the times ahead when the time asked for has passed", () => {
+    const got = findTimes(D, 2, "auto", [], 90, at(14, 0), [], null, false, at(19, 30));
+    expect(got).toEqual([at(19, 30), at(19, 45), at(20, 0), at(20, 15), at(20, 30)]);
+  });
+  it("findTimes is unchanged with no floor, and empty past the last start", () => {
+    expect(findTimes(D, 2, "auto", [], 90, at(20, 0), [], null, false, 0)).toEqual(none());
+    expect(findTimes(D, 2, "auto", [], 90, at(20, 0), [], null, false, at(22, 15))).toEqual([]);
+  });
+  it("findKitchenFriendlyTimes offers nothing before it either", () => {
+    const got = findKitchenFriendlyTimes([], D, 2, "auto", 90, "20:00", null, [], at(19, 30));
+    expect(got.before.map((r) => r.timeStr)).toEqual(["19:30", "19:45"]);
+    expect(got.after.length).toBeGreaterThan(0);
+  });
+});
+
 describe("newBookingTime", () => {
   const D = "2099-06-17";
   const at = (h, m) => h * 60 + m;

@@ -39,7 +39,7 @@ import { useRef, useState, useMemo } from "react";
 import { KITCHEN_TABLE_LIMIT, STATUS_BTN_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC, SP, exitHold } from "../lib/constants";
 import {
   getDur, toMins, toTime,
-  trialFits, findTimes, formatSugg,
+  trialFits, findTimes, formatSugg, earliestOffer,
   getKitchenLoad, findKitchenFriendlyTimes, startingPhrase,
   optimizerActiveFor, seatingClosed,
   // v18.0.0 session 10: the predicate `applyOpt` itself branches on, so the
@@ -427,6 +427,7 @@ export function BookingFormModal({
   // the 15s tick. liveBookings is referentially stable across keystrokes since
   // App's v16.3.0 useMemo. `value` is null while (re-)checking, so no stale answer
   // is ever shown (Patryk-chosen); the line keeps its band meanwhile (`heldAvail`).
+  const notBefore=earliestOffer(form.date,today,nowMins);
   const availScan=useDeferredCompute(function(){
     if(!form.time) return null;
     if(fh.closed) return null; // closed day → no availability to compute
@@ -460,7 +461,7 @@ export function BookingFormModal({
     const noResh=!optimizerActiveFor(form.date,autoOptimizer);
     const tables=trialFits(liveBookings,form.date,form.time,size,form.preference||"auto",d,tableBlocks,editId,form.preferredTables,noResh);
     if(tables) return {ok:true,tables:tables,sugg:null};
-    const sugg=findTimes(form.date,size,form.preference,liveBookings,d,sm,tableBlocks,editId,noResh);
+    const sugg=findTimes(form.date,size,form.preference,liveBookings,d,sm,tableBlocks,editId,noResh,notBefore);
     return {ok:false,tables:null,sugg:formatSugg(sugg,sm)};
   },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,form.status,form._clearManual,bookings,liveBookings,tableBlocks,editId,autoOptimizer,hoursSig,swap,nowMins,today]);
   const formAvail=availScan.value;
@@ -733,8 +734,8 @@ export function BookingFormModal({
   // "Starting at this time: N bookings · N guests" line renders instantly; only
   // the suggested-times chips arrive post-paint.
   const kitchenScan=useDeferredCompute(function(){
-    return kitchenBusy?findKitchenFriendlyTimes(bookings,form.date,Number(form.size)||2,form.preference||"auto",form.customDur||getDur(Number(form.size)||2),form.time,editId,tableBlocks):null;
-  },[kitchenBusy,bookings,form.date,form.size,form.preference,form.customDur,form.time,editId,tableBlocks,hoursSig]);
+    return kitchenBusy?findKitchenFriendlyTimes(bookings,form.date,Number(form.size)||2,form.preference||"auto",form.customDur||getDur(Number(form.size)||2),form.time,editId,tableBlocks,notBefore):null;
+  },[kitchenBusy,bookings,form.date,form.size,form.preference,form.customDur,form.time,editId,tableBlocks,hoursSig,notBefore]);
   const kitchenSugg=kitchenScan.value;
   // v16.3.0 perf phase 2: the ⏳ cue — shown while a deferred scan is pending.
   // Its Reveal's ease (--t-reveal, 520ms) is the natural grace: a fast scan

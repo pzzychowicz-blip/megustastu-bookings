@@ -18,12 +18,15 @@
 // a dependency, because it is rebuilt on App's 15-second tick, and a card that
 // blanked and re-checked four times a minute would never be still. What the
 // tick changes is a seated party's live length, which a later booking change
-// picks up.
+// picks up. `notBefore` is the one thing the clock does move, four times an hour
+// and only for a request for today, and a card still offering 20:00 at 20:30 is
+// wrong rather than unsettled.
 
 import { useDeferredCompute } from "./useDeferredCompute";
 import { draftCheckable, draftAvailability } from "../lib/draft-check";
-import { optimizerActiveFor } from "../lib/booking-logic";
+import { earliestOffer, nowTime, optimizerActiveFor, toMins } from "../lib/booking-logic";
 import { hoursFor } from "../lib/constants";
+import { todayStr } from "../lib/day";
 
 export function useDraftCheck(conv, { bookings, liveBookings, tableBlocks, autoOptimizer }) {
   const applies = draftCheckable(conv);
@@ -34,9 +37,10 @@ export function useDraftCheck(conv, { bookings, liveBookings, tableBlocks, autoO
   const pref = d ? d.preference || null : null;
   const h = date ? hoursFor(date) : null;
   const hoursSig = h ? (h.closed ? "closed" : h.open + "-" + h.close) : "";
+  const notBefore = date ? earliestOffer(date, todayStr(), toMins(nowTime())) : 0;
   const scan = useDeferredCompute(function () {
     if (!applies) return null;
-    return draftAvailability({ size: size, date: date, time: time, preference: pref }, bookings, liveBookings, tableBlocks, !optimizerActiveFor(date, autoOptimizer));
-  }, [applies, size, date, time, pref, bookings, tableBlocks, autoOptimizer, hoursSig]);
+    return draftAvailability({ size: size, date: date, time: time, preference: pref }, bookings, liveBookings, tableBlocks, !optimizerActiveFor(date, autoOptimizer), notBefore);
+  }, [applies, size, date, time, pref, bookings, tableBlocks, autoOptimizer, hoursSig, notBefore]);
   return { applies: applies, value: applies ? scan.value : null, pending: applies && scan.pending };
 }
