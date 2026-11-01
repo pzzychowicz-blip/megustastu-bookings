@@ -525,9 +525,14 @@ export function InboxPanel({
   function tabBtn(key, label, badge) {
     const isActive = tab === key;
     return (
-      <button className="mgt-hover-scale" onClick={() => switchTab(key)} style={{ background: isActive ? "var(--bg-tab-active)" : "transparent", color: isActive ? "var(--text-primary)" : "var(--text-muted)", border: "none", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: isActive ? "var(--shadow-btn)" : "none" }}>
+      <button className="mgt-hover-scale" onClick={() => switchTab(key)} style={{ background: isActive ? "var(--bg-tab-active)" : "transparent", color: isActive ? "var(--text-primary)" : "var(--text-muted)", border: "none", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", display: "flex", alignItems: "center", boxShadow: isActive ? "var(--shadow-btn)" : "none" }}>
         {label}
-        {badge != null && badge > 0 ? <span style={{ fontSize: T.micro, fontWeight: FW.bold, padding: "0 6px", borderRadius: R.pill, background: isActive ? "var(--wa-unread-dot)" : "var(--app-btn-grey)", color: "var(--text-on-accent)", lineHeight: 1.4 }}>{badge}</span> : null}
+        {/* v18.14.0 (correction 27, Patryk): the first count on a tab opens sideways, its
+            6px with it, so the filter row beside the tabs slides rather than jumps 23px.
+            Nothing can reserve that width: a tab with no count is the common case. */}
+        <Reveal horizontal show={badge != null && badge > 0}>
+          {badge != null && badge > 0 ? <span style={{ marginLeft: 6, fontSize: T.micro, fontWeight: FW.bold, padding: "0 6px", borderRadius: R.pill, background: isActive ? "var(--wa-unread-dot)" : "var(--app-btn-grey)", color: "var(--text-on-accent)", lineHeight: 1.4 }}>{badge}</span> : null}
+        </Reveal>
       </button>
     );
   }

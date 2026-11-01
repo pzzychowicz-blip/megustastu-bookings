@@ -39,3 +39,12 @@ describe("the duration Reset", () => {
     for (const form of ["BookingFormModal.jsx", "WalkinForm.jsx"]) expect(read(form), form).toContain("<DurationReset show={!!");
   });
 });
+
+// Correction 27: nothing can reserve a count that is usually absent, so it eases.
+describe("the inbox's tab count", () => {
+  it("opens sideways with its gap inside it", () => {
+    const inbox = read("whatsapp/InboxPanel.jsx");
+    expect(inbox).toMatch(/<Reveal horizontal show=\{badge != null && badge > 0\}>/);
+    expect(inbox).toMatch(/style=\{\{ marginLeft: 6, fontSize: T\.micro/);
+  });
+});

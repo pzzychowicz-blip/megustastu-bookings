@@ -39729,7 +39729,7 @@ comes and goes at once. Only a phone can see either, on a card with more flags t
 that moves under the finger is the thing DESIGN.md's armed-button rule exists to stop.
 
 - **Follow** keeps "Following"'s width, 75.2 measured, `FOLLOW_W` 76. A tap on it moved the three zoom buttons 17px; the − now sits
-  at x 242 in both states.
+  at x 260 in both states.
 - **A template's buttons** reserve the armed width, 137.9 measured, `ARMED_W` 138, and "Confirm — delete" grows leftwards inside it.
   Arming used to take 60px out of the row's text.
 - **The duration Reset** was not the simple case the census made it look. It sat at the end of the stepper row, which has no room for
@@ -39746,6 +39746,18 @@ a different fault: the next correction.
 
 **Files:** `DurationReset.jsx` (new), `BookingFormModal.jsx`, `WalkinForm.jsx`, `TimelineZoomControls.jsx`,
 `whatsapp/TemplatesEditor.jsx`, `tests/reserved-slots.test.js` (new), `tests/a11y.test.js`, `DESIGN.md`.
+
+**Correction 27: the inbox's first count opens sideways.** Patryk's choice was that the inbox's two jumps ease, since neither can be
+reserved. One of the two was real. The first count on a tab took the filter row 23px in a frame; the count is on a horizontal `Reveal`
+now, with its 6px inside it, and the row slides from 292.6 to 315.8.
+
+**The other was a false alarm of mine.** The question said Archive jumped the conversation 36px. It does not: an archived conversation
+leaves its tab, so the pane closes (InboxPanel's "drop the selection" effect). The census matched rows by their text, and read the
+same conversation reopening under Archived, one header line taller, as one element moving. Accept does not change a header in place
+either, since it closes the inbox for the form. So nothing makes that header gain a line in front of anyone, and `ConversationView`
+is untouched: I built the ease first, found it could never run, and took it out.
+
+**Files:** `whatsapp/InboxPanel.jsx`, `tests/reserved-slots.test.js`.
 
 ### Closing the version
 
