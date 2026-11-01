@@ -940,6 +940,22 @@ describe("the conversation menu's words", () => {
   }
 });
 
+// v18.14.0 (correction 11): a heading's ink has no fill of its own, so the registry has
+// no row for it, and the outdoor one read 4.46:1 for as long as nothing asked. Both
+// pickers, the walk-in and Assign, draw it straight on the sheet.
+describe("the table picker's group headings on a dialog's sheet", () => {
+  const THEMES = { Light: LIGHT_VARS, Dark: DARK_VARS, "Light, Increase Contrast": LIGHT_MORE_VARS, "Dark, Increase Contrast": DARK_MORE_VARS };
+  for (const [theme, vars] of Object.entries(THEMES)) {
+    for (const ink of ["--tbl-out-text", "--tbl-ind-text"]) {
+      it(`${ink} reads in ${theme}`, () => {
+        const sheet = over(parse(vars["--bg-sheet"]), parse(vars["--bg-app"]));
+        const got = +ratio(parse(vars[ink]), sheet).toFixed(2);
+        expect(got, `${ink} in ${theme}: ${got}:1`).toBeGreaterThanOrEqual(NEED.label);
+      });
+    }
+  }
+});
+
 // ── A field's edge — a NON-TEXT boundary (v18.14.0, M6) ──────────────────────────
 // The party-size ring's shape again (below): there is no ink, so it is not a row in
 // FILLS. A white rim drew a field at 1.02:1 on a Section. M6 then held it to WCAG

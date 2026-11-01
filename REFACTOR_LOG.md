@@ -39373,6 +39373,18 @@ would be the blink this replaces, and the words say what it is.
 **Files:** `AvailLine.jsx`, `BookingFormModal.jsx`, `hooks/useDeferredCompute.js` (its comment), `tests/booking-logic.test.js`,
 `GLOSSARY.md`, `src/components/CLAUDE.md`.
 
+### The six entries this version parked (2026-11-01)
+
+Closing the version left six entries in ROADMAP. Patryk's instruction was to fix every one, and to decide each fork
+himself. All six were measured before he was asked, and that changed the list: **two of my entries were wrong, and I
+had written them from reasoning rather than a reading.** Corrections 11 onward are what came of it.
+
+**Correction 11: "Tables: 3 / 4 / 5" reaches the bar.** `--tbl-out-text` `#3f7f8c` → `#3e7e8b`, 4.46 → 4.53:1 on a
+dialog's sheet (`#fdfdfd`), where both pickers draw it. A heading's ink has no fill of its own, so the registry had no
+row for it. It has one now: both zones' headings, in all four themes.
+
+**Files:** `index.css`, `tests/contrast.test.js`, `ROADMAP.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

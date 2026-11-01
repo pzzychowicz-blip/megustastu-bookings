@@ -36,10 +36,6 @@ session and keeping it in sync.
   under white. A byte change there ships a new worker to every device, so it waits for
   a version that changes the worker anyway. Change it then.
 
-- **"Tables: 3 / 4 / 5" reads 4.46:1 on a dialog's sheet.** The outdoor group label in
-  the table picker, `--tbl-out-text` on `#fdfdfd`, 0.04 under the bar. It read lower on
-  the old glass, and it was not one of the scan's findings, so it was left alone.
-
 - **Dark's quiet edges.** v18.14.0's contrast work was decided for Light. In Dark,
   `--text-faint` reads 3.19:1 on a Section and 4.05 on the sheet, and a field's rim 1.44
   (its fill 1.25, which is what shows it). A Dark pass would start here.
