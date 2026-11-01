@@ -36,10 +36,6 @@ session and keeping it in sync.
   under white. A byte change there ships a new worker to every device, so it waits for
   a version that changes the worker anyway. Change it then.
 
-- **Dark's quiet edges.** v18.14.0's contrast work was decided for Light. In Dark,
-  `--text-faint` reads 3.19:1 on a Section and 4.05 on the sheet, and a field's rim 1.44
-  (its fill 1.25, which is what shows it). A Dark pass would start here.
-
 - **`BookingApp` V2, V3 and V5** (`useInboxEntry`, `useWaitlistOffers`, `useBookingForm`). Designed in `MGT_Bookings_State_By_Domain_Design.md`, context folder. After WhatsApp go-live settles; each version needs its own approval and a fresh census first.
 
 - **WhatsApp coexistence: the rehearsal, then the restaurant's number.** The code

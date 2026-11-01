@@ -255,10 +255,13 @@ explaining why is usually the one to read.
   have left it beside Following at 5.74:1, and a test held the step between the two.
   The quiet button ended that pair (below): idle is pale now. The rule stands for
   the next one: a pair that signals a state by darkness alone needs the same pin.
-  **`--text-faint` is held to 4.5:1 on the cards it sits on, in Light (v18.14.0).**
-  It is the ink of every Settings tab's help text and it read 2.7–3.0:1, because
-  it is no fill's partner and the registry enumerates fills. It has its own test,
-  which also holds it a step under `--text-muted`: two inks at one level are one ink.
+  **`--text-faint` is held to 4.5:1 on the cards it sits on, in both themes (v18.14.0).**
+  It is the ink of every Settings tab's help text and it read 2.7–3.0:1 in Light
+  and 3.51 in Dark, because it is no fill's partner and the registry enumerates
+  fills. It has its own test, which also holds it a step under `--text-muted`: two
+  inks at one level are one ink. `--field-prompt` is the same problem one surface
+  on: the word "Code" inside a field, 3.94:1 in Dark on the muted ink, so Dark gives
+  it the least that reaches the bar and Light keeps `--text-muted`.
   **A field's edge is visible and subtle, #c3cad6 in Light (v18.14.0, Patryk).**
   `--border-input` is a white rim that drew a field at 1.02:1 on a Section, so on a
   near-white card a text box was a label with nothing under it. The scan raised that

@@ -129,11 +129,13 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
         {/* v18.2.0 phase 19: with no country the pill reads "Code", muted
             like the chevron beside it and like the number box's placeholder
             — a prompt, not a value. It used to read "+", which nothing showed
-            because the booking form always passed a default country. */}
+            because the booking form always passed a default country.
+            v18.14.0 (correction 12): its own token, because in Dark the muted
+            ink reads 3.94:1 on a field's fill. */}
         {label ? <span>{label}</span> : cur ? <>
           <span aria-hidden="true">{flagOf(cur.iso)}</span>
           <span>{dialLabel(cur)}</span>
-        </> : <span style={{ color: S.muted }}>Code</span>}
+        </> : <span style={{ color: "var(--field-prompt)" }}>Code</span>}
         <span aria-hidden="true" style={{ color: S.muted, display: "flex" }}><ChevronDownIcon size={IC.inline} /></span>
       </button>
       {open ? (

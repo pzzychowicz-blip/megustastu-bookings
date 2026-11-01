@@ -39385,6 +39385,25 @@ row for it. It has one now: both zones' headings, in all four themes.
 
 **Files:** `index.css`, `tests/contrast.test.js`, `ROADMAP.md`.
 
+**Correction 12: Dark's small text reaches the bar.** The entry's numbers were wrong, and one half of it was not there.
+It said faint read 3.19 on a Section and 4.05 on the sheet, and a field's rim 1.44. Read from pixels on the running app
+instead of calculated: faint 3.51 on a Section (`#363638`), 4.11 on the sheet (`#2b2b2d`), 4.35 on the main card
+(`#24272d`), and the rim 1.81 on a Section, with the fill at 1.28. That is stronger than the 1.58 he chose for Light, so
+**the rim is withdrawn**. The same walk found two low readings the entry had not named.
+
+| Ink, in Dark | Before | After | Reading |
+|---|---|---|---|
+| `--text-faint` | `#8a8a8e` | `#9e9ea3` | 4.52 on a Section, 5.61 on the main card, still 1.10× under `--text-muted` |
+| `--text-required` (the `*`) | `#ff6b6b` | `#ff7575` | 4.35 → 4.62 on a Section |
+| "Code", in the country picker | `--text-muted`, 3.94 | `--field-prompt`, `#b3b3b9` | 4.57 on a field in a Section |
+
+Each after-reading is from the pixels at 998 × 507, in Settings and the booking form. "Code" takes its own token because
+raising `--text-muted` would have moved every muted word in Dark to fix one, and it stays `--text-muted` in Light, so
+Light does not move at all. Dark's blue keeps its named exemption, as he decided. `--text-faint`'s test covers both
+themes now, and the `*` and "Code" have one of their own.
+
+**Files:** `index.css`, `CountryPicker.jsx`, `tests/contrast.test.js`, `DESIGN.md`, `ROADMAP.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,
