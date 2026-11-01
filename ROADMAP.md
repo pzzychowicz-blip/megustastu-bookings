@@ -32,10 +32,6 @@ session and keeping it in sync.
   chosen zone is full, and a Reshuffle that moves nobody with the Optimiser off reads
   "Booking saved." Both are older than v18.14.0.
 
-- **The worker's offline page keeps `#007AFF`** (`OFFLINE_HTML`, `public/sw.js`), 4.02:1
-  under white. A byte change there ships a new worker to every device, so it waits for
-  a version that changes the worker anyway. Change it then.
-
 - **`BookingApp` V2, V3 and V5** (`useInboxEntry`, `useWaitlistOffers`, `useBookingForm`). Designed in `MGT_Bookings_State_By_Domain_Design.md`, context folder. After WhatsApp go-live settles; each version needs its own approval and a fresh census first.
 
 - **WhatsApp coexistence: the rehearsal, then the restaurant's number.** The code

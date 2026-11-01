@@ -397,7 +397,7 @@ explaining why is usually the one to read.
 
 ## UI / style rules
 
-- Translucent / glass, iOS-inspired surfaces; rounded corners; the shared accent (`#007AFF`).
+- Translucent / glass, iOS-inspired surfaces; rounded corners; the shared accent (`--accent`).
 - **`--bg-app` is ONE flat tint per theme (v17.9.0), not a gradient.** It was six
   near-identical desaturated blues spanning a MEASURED 3.86 L\* in light and 4.00
   in dark — at the edge of visibility across a viewport, so the app paid six

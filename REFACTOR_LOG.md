@@ -39404,6 +39404,21 @@ themes now, and the `*` and "Code" have one of their own.
 
 **Files:** `index.css`, `CountryPicker.jsx`, `tests/contrast.test.js`, `DESIGN.md`, `ROADMAP.md`.
 
+**Correction 13: the worker's offline page gets the same blue.** `#007AFF` → `#0066d6` in `OFFLINE_HTML`, 4.02 → 5.42:1
+under white. M1 had left it, because a byte change ships a new worker to every device, and he chose to take that now.
+**This is the version's one change a revert cannot reach**, so what it does and does not do, per the worker's four
+properties: nothing near the data path moves, because `fetch` and `activate` are untouched; `CACHE` keeps its name, so
+`activate` deletes nothing and the offline copy of the app stays; there is no `skipWaiting`, so the new worker installs on
+a device's next visit and takes over on the navigation after that, never under a shift in progress; and both ways out
+stand. The page follows the system theme and the button is one value, so it was checked against both pages: 4.79 on the
+light one and 3.31 on the dark one, where `#0a84ff`'s lighter fill would have dropped the white word to 3.65. A test now
+reads those three numbers out of the worker, and no token could have, because the page is a document of its own.
+
+The change itself was verified from the file. **What cannot be tested locally is the offline page on a device**: it
+shows only on a cold start with no network, and the dev server has no worker.
+
+**Files:** `public/sw.js`, `tests/contrast.test.js`, `DESIGN.md` (its stale "shared accent" line), `ROADMAP.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

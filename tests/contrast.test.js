@@ -976,6 +976,29 @@ describe("the table picker's group headings on a dialog's sheet", () => {
   }
 });
 
+// v18.14.0 (correction 13): the worker's offline page is a document of its own, so no
+// token reaches it and it kept the old blue, 4.02:1 under white, after M1. Its button
+// is one value on two pages, so it has to read against both.
+describe("the worker's offline page", () => {
+  const SW_SRC = stripComments(readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "..", "public", "sw.js"), "utf8"
+  )).join("\n");
+  const css = (re) => {
+    const m = re.exec(SW_SRC);
+    if (!m) throw new Error("the offline page's CSS changed shape: " + re);
+    return parse(m[1]);
+  };
+  const button = css(/button\{[^}]*background:(#[0-9a-fA-F]{6})/);
+  it("its button's white word clears the bar", () => {
+    expect(ratio({ r: 255, g: 255, b: 255, a: 1 }, button)).toBeGreaterThanOrEqual(NEED.button);
+  });
+  it("its button stands clear of the page in both themes", () => {
+    for (const page of [css(/html\{background:(#[0-9a-fA-F]{6})/), css(/prefers-color-scheme:dark\)\{html\{background:(#[0-9a-fA-F]{6})/)]) {
+      expect(ratio(button, page)).toBeGreaterThanOrEqual(3);
+    }
+  });
+});
+
 // ── A field's edge — a NON-TEXT boundary (v18.14.0, M6) ──────────────────────────
 // The party-size ring's shape again (below): there is no ink, so it is not a row in
 // FILLS. A white rim drew a field at 1.02:1 on a Section. M6 then held it to WCAG
