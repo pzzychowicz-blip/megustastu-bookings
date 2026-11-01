@@ -39604,6 +39604,39 @@ read DEV as it was: 28 customers with the 12-visits row at the top, 5 guest and 
 `whatsapp/TemplatesEditor.jsx`, `tests/destructive-buttons.test.js` (two pins on a handler's shape, which now also
 require the wait), `DESIGN.md`, `GLOSSARY.md`, `src/lib/CLAUDE.md`, `src/components/CLAUDE.md`.
 
+**Correction 20: a confirm's action waits too, and this closes a bug Correction 18 introduced.** Testing a double tap on
+the buttons that open a confirm found it. On a phone the form's Back is at x 168–236, y 788–832 and the confirm's Discard
+at x 152–242, y 788–832, exactly on top. Before Correction 18 that spot held Keep editing, so my swap put the red under a
+finger that was already tapping there. Real taps on a 390 × 844 phone, writes blocked:
+
+| Second tap after | Correction 18 | With this |
+|---|---|---|
+| 150ms | missed, the sheet still sliding | the same |
+| 220ms | draft lost | stays on the confirm |
+| 300ms | draft lost | stays on the confirm |
+| 400ms | draft lost | stays on the confirm |
+| 500ms, 550 or so with the rig's tap | draft lost | lands |
+| 650ms | draft lost | lands |
+
+The last two are the half second doing what it says. I told him a tap at 650ms still lands when he chose this, and a tap
+that late on a sheet that has finished arriving is somebody tapping the thing in front of them. The tablet's booking form
+was never exposed: Back is at y 421–465 and the confirm's footer at y 288–332, so a second tap lands on the scrim and only
+closes the confirm. Delete booking does not line up on either.
+
+He chose every confirm over Discard alone, because where a button lands depends on what opened it, and I had measured only
+two of them. `CONFIRM_MODALS` names seven modals and App marks the clock when one reaches the top of the stack. The eight
+actions (Discard, Delete, Cancel booking, No show, Reshuffle, Delete reminder, Archive anyway, Delete conversation) ask
+`armSettled()` as they are tapped, and the inbox's bulk delete marks and asks by hand, because it is not in the stack. Their
+looks and order stay as he decided. Enter is not guarded: it is a key, and it cannot land by accident on a button that
+just appeared.
+
+The first version was a wrapper, `onClick={afterArm(fn)}`. The tests passed and lint went from 0 errors to 21: a function
+called in render with a closure makes the React Compiler give up on `BookingApp`
+(`react-hooks/preserve-manual-memoization`), which is every memo in the file. The check now sits inside each handler.
+
+**Files:** `lib/arm-guard.js`, `App.jsx`, `whatsapp/InboxPanel.jsx`, `tests/arm-guard.test.js`, `DESIGN.md`, `GLOSSARY.md`,
+`src/lib/CLAUDE.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

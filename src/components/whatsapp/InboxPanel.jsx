@@ -37,6 +37,7 @@ import { disconnectSentence } from "../../lib/wa-coexist";
 import { BTN, R, T, FW, M, IC, H, SP } from "../../lib/constants";
 // v18.2.0 /code-review: "3 selected", "Delete 3 conversations?" keep their count and word together.
 import { countLabel } from "../../lib/booking-logic";
+import { markArmed, armSettled } from "../../lib/arm-guard";
 import { raisesKeyboard } from "../../lib/keyboard";
 import { lockPageScroll } from "../../lib/scroll-lock";
 
@@ -686,7 +687,7 @@ export function InboxPanel({
               {tab === "archived" ? (
                 <>
                   <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-btn-handled)" : BTN.quiet, { padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />Restore</button>
-                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={selected.size ? mkDangerBtn({ gap: 4, padding: "6px 12px", minHeight: H.compact, fontSize: T.body, whiteSpace: "nowrap" }) : mkSolidBtn(BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: 0.6 })} ><TrashIcon size={IC.inline} />Delete</button>
+                  <button onClick={() => { if (selected.size) { markArmed(); setConfirmBulkDelete(true); } }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={selected.size ? mkDangerBtn({ gap: 4, padding: "6px 12px", minHeight: H.compact, fontSize: T.body, whiteSpace: "nowrap" }) : mkSolidBtn(BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: 0.6 })} ><TrashIcon size={IC.inline} />Delete</button>
                 </>
               ) : (
                 <button onClick={() => runBulk("archive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-green-dark)" : BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 })} ><ArchiveIcon size={IC.inline} />Archive</button>
@@ -713,7 +714,7 @@ export function InboxPanel({
             onClose={() => setConfirmBulkDelete(false)}
             footer={<div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
               <button onClick={() => setConfirmBulkDelete(false)} className="mgt-hover-scale mgt-press" style={mkBtn({ background: BTN.quiet })}>Cancel</button>
-              <button onClick={() => { setConfirmBulkDelete(false); runBulk("delete"); }} className="mgt-hover-scale mgt-press" style={mkDangerBtn()}><TrashIcon size={IC.control} />Delete {selected.size}</button>
+              <button onClick={() => { if (!armSettled()) return; setConfirmBulkDelete(false); runBulk("delete"); }} className="mgt-hover-scale mgt-press" style={mkDangerBtn()}><TrashIcon size={IC.control} />Delete {selected.size}</button>
             </div>}
           >
             <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", marginBottom: 8 }}>{"Delete " + countLabel(selected.size, "conversation", "conversations") + "?"}</div>

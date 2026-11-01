@@ -10,7 +10,9 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { ARM_GUARD_MS, armSettled, markArmed } from "../src/lib/arm-guard.js";
+import { ARM_GUARD_MS, CONFIRM_MODALS, armSettled, markArmed } from "../src/lib/arm-guard.js";
+import { MODAL_Z } from "../src/hooks/useModalStack.js";
+import { appCode } from "./app-source.js";
 
 describe("the wait after arming", () => {
   it("is half a second", () => {
@@ -70,7 +72,7 @@ describe("every two-tap button", () => {
     });
   });
   it("asks and marks nowhere else", () => {
-    sources.filter(([path]) => !SITES[path]).forEach(([path, source]) => {
+    sources.filter(([path]) => !SITES[path] && !path.endsWith("InboxPanel.jsx")).forEach(([path, source]) => {
       expect(source, path).not.toContain("armSettled(");
       expect(source, path).not.toContain("markArmed(");
     });
@@ -82,5 +84,32 @@ describe("every two-tap button", () => {
     const arm = tiers.slice(tiers.indexOf("const armTierRemove"));
     expect(arm.indexOf("armSettled()")).toBeLessThan(arm.indexOf("removeTier(i)"));
     expect(arm.indexOf("removeTier(i)")).toBeLessThan(arm.indexOf("markArmed()"));
+  });
+});
+
+// Correction 20: a confirm opens where the finger may still be. On a phone the booking
+// form's Back sits exactly under the confirm's Discard, and a second tap lost the draft.
+describe("a confirm's action", () => {
+  it("names real modals", () => {
+    CONFIRM_MODALS.forEach((id) => expect(MODAL_Z, id).toContain(id));
+  });
+  it("starts the clock when a confirm reaches the top", () => {
+    expect(appCode()).toMatch(/useEffect\(function\(\)\{if\(CONFIRM_MODALS\.includes\(topModalId\)\)markArmed\(\);\},\[topModalId\]\)/);
+  });
+  it("waits on every button that acts, in App and in the inbox's bulk delete", () => {
+    const app = appCode();
+    [
+      "if(armSettled())doDiscard();",
+      "if(armSettled())delBooking(confirmDel);",
+      "if(!armSettled())return;doCancelBooking(confirmCancel,true);",
+      "if(!armSettled())return;doCancelBooking(confirmCancel,false);",
+      "if(!armSettled())return;setConfirmReshuffle(false);forceReshuffle();",
+      "if(armSettled())doDeleteReminder(confirmReminderDel);",
+      "if(!armSettled())return;wa.doArchive(confirmArchive);",
+      "if(armSettled())wa.doDeleteConversation(confirmDeleteConv);",
+    ].forEach((call) => expect(app, call).toContain(call));
+    const inbox = sources.find(([path]) => path.endsWith("InboxPanel.jsx"))[1];
+    expect(inbox).toMatch(/markArmed\(\); setConfirmBulkDelete\(true\)/);
+    expect(inbox).toMatch(/if \(!armSettled\(\)\) return; setConfirmBulkDelete\(false\); runBulk\("delete"\);/);
   });
 });

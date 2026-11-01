@@ -23,3 +23,12 @@ export function markArmed(now = performance.now()) {
 export function armSettled(now = performance.now()) {
   return now - armedAt >= ARM_GUARD_MS;
 }
+
+// v18.14.0 (correction 20, Patryk): a confirm is the same thing as an armed button,
+// because it opens where the finger may still be. Measured on a phone: the booking
+// form's Back sits exactly under the confirm's Discard, so a second tap 220ms or more
+// after the first lost the draft. App marks the clock when one of these reaches the
+// top of the modal stack, and each action asks `armSettled()` as it is tapped. Inside
+// the handler, not through a wrapper called in render: that made the React Compiler
+// give up on BookingApp, 21 lint errors for one helper.
+export const CONFIRM_MODALS = ["discard", "del", "cancel", "reminderdel", "reshuffle", "wadelete", "waarchive"];

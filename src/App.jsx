@@ -69,6 +69,7 @@ import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { dueOccurrences, withOccurrences } from "./lib/recurring";
 import { planDelete, planUndo, planCustomerDelete, withUndoDelta } from "./lib/delete-undo";
+import { CONFIRM_MODALS, markArmed, armSettled } from "./lib/arm-guard";
 import { planSettle, settleEffects, carryTransform } from "./lib/voucher-settle";
 import { useSchemaGate } from "./hooks/useSchemaGate";
 import UpdateRequired from "./components/UpdateRequired";
@@ -2518,6 +2519,8 @@ export function BookingApp({uid}){
   // silences the single-letter shortcuts like any modal.
   const anyModal=modalStack.length>0||schemaBlocked;
   const topModalId=topModal(modalStack);
+  // v18.14.0 (correction 20): a confirm counts as armed from the moment it is on top.
+  useEffect(function(){if(CONFIRM_MODALS.includes(topModalId))markArmed();},[topModalId]);
 
   // v17.3.3: the global keyboard shortcuts (precedence rules, every key) and
   // the v17.3.1 neutral-space List-deselect mousedown listener were extracted
@@ -3747,7 +3750,7 @@ export function BookingApp({uid}){
         className="mgt-hover-scale"
         style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
         onClick={function(){setConfirmDel(null);}}>Back</button><button
-        onClick={function(){delBooking(confirmDel);}}
+        onClick={function(){if(armSettled())delBooking(confirmDel);}}
         className="mgt-hover-scale"
         style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This can't be undone. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence>;
 
@@ -3775,7 +3778,7 @@ export function BookingApp({uid}){
     settings:"A setting you were editing hasn't been saved yet."
   };
   const discardModal=<div style={{position:"relative",zIndex:260}}><ModalPresence show={!!confirmDiscard}>{confirmDiscard?<Overlay /* @static-height one sentence out of DISCARD_BODY, fixed for the life of one open */ onClose={function(){setConfirmDiscard(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
-        onClick={doDiscard}
+        onClick={function(){if(armSettled())doDiscard();}}
         className="mgt-hover-scale"
         style={mkDangerConfirm()}>Discard</button><button
         className="mgt-hover-scale"
@@ -4143,10 +4146,10 @@ export function BookingApp({uid}){
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmCancel(null);}}>Back</button><button
-              onClick={function(){doCancelBooking(confirmCancel,true);setShowForm(false);}}
+              onClick={function(){if(!armSettled())return;doCancelBooking(confirmCancel,true);setShowForm(false);}}
               className="mgt-hover-scale"
               style={mkSolidBtn(BTN.orange,{display:"inline-flex",alignItems:"center",gap:6})}><NoShowIcon size={IC.control} />No show</button><button
-              onClick={function(){doCancelBooking(confirmCancel,false);setShowForm(false);}}
+              onClick={function(){if(!armSettled())return;doCancelBooking(confirmCancel,false);setShowForm(false);}}
               className="mgt-hover-scale"
               style={mkSolidBtn(BLOCK_BG.cancelled)}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>The booking stays on the day, marked cancelled. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay /* @static-height one sentence, computed when it opens and not after */ onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
@@ -4177,7 +4180,7 @@ export function BookingApp({uid}){
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button
-              onClick={function(){setConfirmReshuffle(false);forceReshuffle();}}
+              onClick={function(){if(!armSettled())return;setConfirmReshuffle(false);forceReshuffle();}}
               className="mgt-hover-scale"
               style={mkSolidBtn(BTN.orange)}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div></Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
         // legend row or by pressing `?` anywhere no modal is open.
@@ -4292,7 +4295,7 @@ export function BookingApp({uid}){
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmReminderDel(null);}}>Back</button><button
-              onClick={function(){doDeleteReminder(confirmReminderDel);}}
+              onClick={function(){if(armSettled())doDeleteReminder(confirmReminderDel);}}
               className="mgt-hover-scale"
               style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete reminder?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
         reminderEditor?<ReminderEditor
@@ -4360,14 +4363,14 @@ export function BookingApp({uid}){
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmArchive(null);}}>Back</button><button
-              onClick={function(){wa.doArchive(confirmArchive);setConfirmArchive(null);}}
+              onClick={function(){if(!armSettled())return;wa.doArchive(confirmArchive);setConfirmArchive(null);}}
               className="mgt-hover-scale"
               style={mkSolidBtn(BTN.orange,{minHeight:H.touch})}>Archive anyway</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Archive conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{bk?("This conversation is linked to a booking on "+formatDay(bk.date)+" at "+bk.time+". Archiving won't cancel the booking."):"Archive this conversation?"}</div></Overlay>;
         })():null}{confirmDeleteConv?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmDeleteConv(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmDeleteConv(null);}}>Back</button><button
-              onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
+              onClick={function(){if(armSettled())wa.doDeleteConversation(confirmDeleteConv);}}
               className="mgt-hover-scale"
               style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
           ctx={{waSettings:waSettings,conversations:wa.conversations,messagesMap:wa.messagesMap,watchMessages:wa.watchMessages,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.simAppendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend,patchMessage:wa.patchMessage,contacts:wa.contacts,waLink:wa.waLink,simSetContacts:wa.simSetContacts}}
