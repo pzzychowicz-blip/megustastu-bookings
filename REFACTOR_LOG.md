@@ -39692,6 +39692,22 @@ so a Reveal that has never opened returns early.
 
 **Files:** `TimelineView.jsx`, `blockFlags.jsx`, `atoms.jsx`, `tests/block-layout.test.js`, `DESIGN.md`.
 
+**Correction 24: the note corner, the warning border and the clash band ease too.** The other three, the ones that take no room.
+The corner stays mounted at nothing and grows from the block's own corner, with its pencil fading. The border was a shorthand going
+from `none` to `3px solid` in one frame; it is always solid now, 0 or 3px, with its width and colour on `M.move` in both `TL_MOVE`
+and `TL_SETTLE`. `border` became `rim`, the colour alone, and `fold` reads it. The band keeps a leaving copy through `useRevealRows`,
+per row, and its id carries its geometry, so a span that has gone can still be drawn on the way out. A band and a border are one
+change, so the band fades on the border's token.
+
+Measured frame by frame at 998 × 507, in and out. The corner through the real form's Notes, 0 to 11px, and the pencil's opacity with
+it. DEV holds no clash, so border and band were staged by rewriting the module as served to the rig's browser, nothing in the repo:
+3px and `rgb(220, 38, 38)` arrive and leave through `rgba(220, 38, 38, 0.97)` and `0.09` in about 240ms, the bands go 0.8 and 0.09
+at the same sample, and 13 drawn bands leave 0. Chrome paints a border's width in whole device pixels, so the width comes in three
+steps with the colour easing across them. A band on a real clash has not been seen on a real day, and neither has the "~Nm" pill:
+that one is driven by the clock and was read from the code, the same slot as the flags.
+
+**Files:** `TimelineView.jsx`, `tests/block-layout.test.js`, `tests/guest-tags.test.js`, `DESIGN.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

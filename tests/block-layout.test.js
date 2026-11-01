@@ -200,11 +200,25 @@ describe("two-line blocks", () => {
     expect(tv).toMatch(/paddingLeft: 6, overflowX: "clip"/);
   });
   it("the fold gives way to the name, not the name to the fold", () => {
-    expect(tv).toMatch(/const fold = !twoLine \? 14 : border === "none" \? 11 : 8;/);
+    expect(tv).toMatch(/const fold = !twoLine \? 14 : rim \? 8 : 11;/);
     expect(tv).toMatch(/flex: "1 1 0%", minWidth: 0, paddingLeft: 6, overflowX/);
   });
   it("the clash band drops clear of the time on a two-line day", () => {
     expect(tv).toMatch(/twoLine=\{!chipsOn\}/);
-    expect(tv).toMatch(/transform: twoLine \? "translateY\(3px\)" : "none", transition: "transform " \+ M\.reveal/);
+    expect(tv).toMatch(/transform: twoLine \? "translateY\(3px\)" : "none", opacity: open \? 1 : 0,\s*transition: "transform " \+ M\.reveal/);
+  });
+  // v18.14.0 (correction 24, Patryk): three things that took no room and snapped.
+  it("the warning border eases: always solid, 0 or 3px", () => {
+    expect(tv).toMatch(/borderStyle: "solid", borderWidth: rim \? 3 : 0, borderColor: rim \|\| "transparent"/);
+    expect(tv).toMatch(/const TL_MOVE = [^\n]*\+ TL_RIM;/);
+    expect(tv).toMatch(/const TL_SETTLE = [^\n]*\+ TL_RIM;/);
+  });
+  it("the note corner stays mounted and grows from nothing", () => {
+    expect(tv).toMatch(/borderTop: \(hasNote \? fold : 0\) \+ "px solid/);
+    expect(tv).toMatch(/opacity: hasNote \? 1 : 0, transition: "opacity " \+ M\.reveal/);
+  });
+  it("a clash band fades out from an id that carries its geometry", () => {
+    expect(tv).toMatch(/useRevealRows\(spans\.map\(\(sp\) => sp\.from \+ "-" \+ sp\.to\), date, \{ speed: "move", quiet \}\)/);
+    expect(tv).not.toContain('key={"cb" + i}');
   });
 });

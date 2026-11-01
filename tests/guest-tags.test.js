@@ -847,7 +847,7 @@ describe("the timeline block's note corner", () => {
   const TL = stripComments(readFileSync(new URL("../src/components/TimelineView.jsx", import.meta.url), "utf8")).join("\n");
   it("is drawn for a note OR a tag", () => {
     expect(TL).toContain("const hasNote = !!((b.notes && b.notes.trim()) || tags);");
-    expect(TL).toMatch(/\{hasNote \? \(/);
+    expect(TL).toMatch(/\(hasNote \? fold : 0\) \+ "px solid/);
   });
   it("is handed the same tag line the block's title shows", () => {
     expect(TL.match(/tags=\{tagLine\(bookingTags\(b, guestTags, tagList\)\)\}/g).length).toBe(2);

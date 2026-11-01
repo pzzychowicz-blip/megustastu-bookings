@@ -71,7 +71,10 @@ import { afterFrame, everyFrame, pageHidden } from "../lib/after-frame";
 // the :has() ghost rule in index.css depends on exactly that.
 // (Below the imports: it worked above them only because imports hoist, which is
 // the kind of thing that stops being true the day a circular import appears.)
-const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", height " + M.shift + ", transform " + M.tap;
+// v18.14.0 (correction 24, Patryk): and the warning border, which arrives and leaves
+// with nobody pressing anything, so it takes M.move in both constants.
+const TL_RIM = ", border-width " + M.move + ", border-color " + M.move;
+const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", height " + M.shift + ", transform " + M.tap + TL_RIM;
 // v18.3.0 (M4): a RELEASED block travelling home. TL_MOVE's transform runs on
 // M.tap because at rest a transform is the hover lift answering a pointer — but
 // after a drag the same property carries the block back from wherever the
@@ -84,7 +87,7 @@ const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", height " + M.shift
 // every frame it animates (a 24px blur here, on the tablet, on a gesture used
 // every service), and the eye is on the block travelling home; the drag shadow
 // drops on the release frame, as it did before phase 4.
-const TL_SETTLE = "left " + M.shift + ", width " + M.shift + ", height " + M.shift + ", transform " + M.shift + ", opacity " + M.shift;
+const TL_SETTLE = "left " + M.shift + ", width " + M.shift + ", height " + M.shift + ", transform " + M.shift + ", opacity " + M.shift + TL_RIM;
 
 // v17.9.0: the hour-pill look, once. Three places in this file paint a time on
 // --tl-hour-pill — the ruler's hour labels, a block's start-time chip, and a
@@ -267,11 +270,11 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // both bookings claim. Adding a red-adjacent hue here would have made the
   // border the distinguishing signal, which is the colour-only-status mistake
   // this release exists to fix.
-  const border = clash
-    ? "3px solid var(--tl-block-warn)"
+  const rim = clash
+    ? "var(--tl-block-warn)"
     : warn
-      ? (warn.overdue ? "3px solid var(--tl-block-warn)" : "3px solid var(--tl-block-warn-soon)")
-      : (late ? "3px solid var(--tl-block-late)" : "none");
+      ? (warn.overdue ? "var(--tl-block-warn)" : "var(--tl-block-warn-soon)")
+      : (late ? "var(--tl-block-late)" : null);
   // v15.8.2: note marker — bookings with a note get a subtle "dog-ear" folded
   // corner. Kept OUT of the label string so it never truncates on narrow blocks.
   // v18.5.1 (Patryk): a booking with a tag shows the corner too, note or no
@@ -332,7 +335,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // On two lines the name starts where the fold is, and its inset is the one-line
   // block's (Patryk), so the fold gives way. A 3px border takes it further in,
   // because the fold is clipped to the padding box while the name moves with it.
-  const fold = !twoLine ? 14 : border === "none" ? 11 : 8;
+  const fold = !twoLine ? 14 : rim ? 8 : 11;
   const { showRing, flags: railFlags } = visibleRail(
     d * pxPerMin,
     HANDLE_PX + (twoLine ? sz.lineTwoPx : sz.nameMinPx + (showChip ? sz.chipPx : 0)) + (freeMin != null ? sz.freePx : 0)
@@ -866,7 +869,9 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         // v18.3.0 (O1): the other half of "inert while leaving", as on the
         // ghost — a press aimed at the grid behind a fading block reaches it.
         pointerEvents: leaving ? "none" : undefined,
-        border: border || RIM_SOLID,
+        // v18.14.0 (correction 24, Patryk): always a solid border, 0 or 3px, so it can
+        // ease. The shorthand went from "none" to 3px in one frame.
+        borderStyle: "solid", borderWidth: rim ? 3 : 0, borderColor: rim || "transparent",
         WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none",
         // v17.0.0 round 7 (Android fix): without this, the browser claims any
         // vertical touch movement on a block for page scroll and fires
@@ -904,24 +909,23 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
           shrink to stay that true). A small dark note/pencil glyph nests
           in the corner where the triangle is thickest. Near-solid white + dark icon give
           strong contrast on every saturated BLOCK_BG fill in both themes. */}
-      {hasNote ? (
-        <>
-          <div style={{
-            position: "absolute", top: 0, left: 0, width: 0, height: 0,
-            borderTop: fold + "px solid rgba(255,255,255,0.95)",  /* @fixed-fill */
-            borderRight: fold + "px solid transparent",
-            pointerEvents: "none", transition: "border-width " + M.reveal
-          }} />
-          <svg viewBox="0 0 24 24" width={fold < 11 ? 6 : 8} height={fold < 11 ? 6 : 8} style={{
-            position: "absolute", top: "0.5px", left: "0.5px", pointerEvents: "none"
-          }}>
-            <path
-              d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
-              fill={"#1f2937" /* @fixed-fill */}
-            />
-          </svg>
-        </>
-      ) : null}
+      {/* v18.14.0 (correction 24, Patryk): always drawn, at nothing without a note, so
+          the corner grows from the block's own corner and the pencil fades with it. */}
+      <div style={{
+        position: "absolute", top: 0, left: 0, width: 0, height: 0,
+        borderTop: (hasNote ? fold : 0) + "px solid rgba(255,255,255,0.95)",  /* @fixed-fill */
+        borderRight: (hasNote ? fold : 0) + "px solid transparent",
+        pointerEvents: "none", transition: "border-width " + M.reveal
+      }} />
+      <svg viewBox="0 0 24 24" width={fold < 11 ? 6 : 8} height={fold < 11 ? 6 : 8} style={{
+        position: "absolute", top: "0.5px", left: "0.5px", pointerEvents: "none",
+        opacity: hasNote ? 1 : 0, transition: "opacity " + M.reveal
+      }}>
+        <path
+          d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+          fill={"#1f2937" /* @fixed-fill */}
+        />
+      </svg>
       {/* ── v17.9.0 (Patryk): WHO on the left, WHAT ABOUT THEM on the right ────
           The block used to interleave the two: a ★ between the time and the
           name, the party size in brackets inside the name string, and the rest
@@ -1197,14 +1201,15 @@ function GridLines() {
 // clear the label" moves. Measured: at the old height the stripe covered the lower
 // half of "20:30". It drops 3px onto the bottom border, clear of the digits, and
 // the casing is what keeps it a stripe there rather than a thicker border.
-function ClashBand({ from, to, totalMins, twoLine = false }) {
+function ClashBand({ from, to, totalMins, twoLine = false, open = true }) {
   const left = pct(from);
   const w = Math.max(((to - from) / totalMins) * 100, 0.5) + "%";
   return (
     <div aria-hidden="true" style={{
       position: "absolute", bottom: 8, height: 4,   /* @canvas */
       left, width: w,
-      transform: twoLine ? "translateY(3px)" : "none", transition: "transform " + M.reveal,
+      transform: twoLine ? "translateY(3px)" : "none", opacity: open ? 1 : 0,
+      transition: "transform " + M.reveal + ", opacity " + M.move,
       background: "var(--tl-clash-a)",
       // /code-review fix: a 1px casing, because the red core does NOT contrast
       // with the fills it is drawn on — 1.02:1 on a seated block, 1.34 on a
@@ -1217,6 +1222,19 @@ function ClashBand({ from, to, totalMins, twoLine = false }) {
       pointerEvents: "none"
     }} />
   );
+}
+
+const NO_SPANS = [];
+
+// v18.14.0 (correction 24, Patryk): a row's bands fade in and out, on the border's
+// speed, so the two read as one change. An id carries a band's whole geometry, which is
+// what lets a span that has gone be drawn on its way out.
+function ClashBands({ spans, totalMins, twoLine, date, quiet }) {
+  const { renderIds, openIds } = useRevealRows(spans.map((sp) => sp.from + "-" + sp.to), date, { speed: "move", quiet });
+  return renderIds.map((id) => {
+    const [from, to] = id.split("-").map(Number);
+    return <ClashBand key={id} from={from} to={to} totalMins={totalMins} twoLine={twoLine} open={openIds.has(id)} />;
+  });
 }
 
 function BlockBar({ bl, totalMins, sz }) {
@@ -2326,9 +2344,7 @@ export const TimelineView = memo(function TimelineView({
         {leavingCells.filter((s) => (s.b.tables || []).includes(id)).map((s) => cellFor(s.b, id, s))}
         {/* LAST in the row, so it paints over the blocks — the whole point is
             that it marks the span the later block is hiding the earlier one on. */}
-        {(clashSpans[id] || []).map((sp, i) => (
-          <ClashBand key={"cb" + i} from={sp.from} to={sp.to} totalMins={totalMins} twoLine={!chipsOn} />
-        ))}
+        <ClashBands spans={clashSpans[id] || NO_SPANS} totalMins={totalMins} twoLine={!chipsOn} date={date} quiet={catchingUp} />
       </div>
     );
   });

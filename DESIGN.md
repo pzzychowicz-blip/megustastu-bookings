@@ -1809,6 +1809,12 @@ shows its time.**
   `Reveal`, in rail order (`RAIL_KEYS`), so one that arrives or leaves opens sideways
   and the name slides with it. The slots take the chip's speed, so on a zoom a flag and
   the chip are the same fraction of the way at every frame: measured 26% at 138ms.
+  Three things take no room. The note corner stays mounted at nothing and grows from
+  the block's own corner on `M.reveal`, with its pencil fading. The warning border is
+  always a solid border of 0 or 3px, and the clash band fades on a leaving copy, both on
+  `M.move`, because nobody pressed anything and the two are one change. Under the OS's
+  reduced motion the widths snap and the colours and fades stay, like every other
+  Reveal; "Reduce animations" takes all of it off. The print sheet draws none of this.
 - **A typed 60-minute booking at 1×** (about 79px) has less room than the chip, which
   is cut at the handle rather than dropped. It is the one place a time is cut.
 
