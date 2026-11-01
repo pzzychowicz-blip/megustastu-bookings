@@ -259,15 +259,20 @@ explaining why is usually the one to read.
   It is the ink of every Settings tab's help text and it read 2.7–3.0:1, because
   it is no fill's partner and the registry enumerates fills. It has its own test,
   which also holds it a step under `--text-muted`: two inks at one level are one ink.
-  **A field's edge is a control's boundary, 3:1 in Light (v18.14.0).** WCAG 1.4.11
-  again, and the same blind spot, since a boundary has no ink. `--border-input` is a
-  white rim that drew a field at 1.02:1 on a Section, so on a near-white card a text
-  box was a label with nothing under it. `--field-edge` is the field's own token,
-  because `--border-input` also rims stat cells and rows that are not controls.
-  `mkInp` reads it, so `DateField` and `SearchField` do; so do `LayoutSettings`' two
-  small inputs, the WhatsApp composer and the header's date pill. A new field built
-  without `mkInp` takes it by hand. Focus stays the 2px `--focus-ring`, a long way
-  from the edge. Dark keeps its rim, because its fill is what shows a field there.
+  **A field's edge is visible and subtle, #c3cad6 in Light (v18.14.0, Patryk).**
+  `--border-input` is a white rim that drew a field at 1.02:1 on a Section, so on a
+  near-white card a text box was a label with nothing under it. The scan raised that
+  to WCAG 1.4.11's 3:1, and #7a8494 did clear it, as a near-black outline round every
+  field beside a Confirm card and a Needs action row at 1.3:1. Patryk took the outline
+  back: a field at rest is that same quiet edge, about 1.6:1 on a Section, and 3:1 is
+  what Increase Contrast gives (`--text-muted`). This is his decision against the
+  letter of 1.4.11, recorded so it is not raised again. `--field-edge` is the field's
+  own token, because `--border-input` also rims stat cells and rows that are not
+  controls. `mkInp` reads it, so `DateField` and `SearchField` do; so do
+  `LayoutSettings`' two small inputs, the WhatsApp composer and the header's date pill.
+  A new field built without `mkInp` takes it by hand. Focus stays the 2px
+  `--focus-ring`, a long way from the edge. Dark keeps its rim, because its fill is
+  what shows a field there.
   **The amber pair is a RECORDED EXEMPTION, not a pass**, and the 2026-10-31 scan
   did not change that: it raised white on amber (H1) and on yellow (M2), and Patryk
   kept both exactly as they are. Do not re-raise them. Confirmed sits at

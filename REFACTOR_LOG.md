@@ -39193,6 +39193,17 @@ the mock had not shown). Both still ease in and out through their `Reveal`s on a
 **Files:** `AvailLine.jsx`, `atoms.jsx`, `BookingFormModal.jsx`, `lib/phone-countries.js`, `tests/stretched-chips.test.js`,
 `tests/phone-countries.test.js`, `GLOSSARY.md`, `src/components/CLAUDE.md`.
 
+**Correction 4: a field's edge is subtle again, reversing M6.** He compared M6's commit with the Confirm card and
+the Needs action row, whose borders are visible and subtle, and did not like the black outlines. `--field-edge` is
+#c3cad6 in Light, from #7a8494, the same quiet edge as those two (1.26 and 1.32:1). It is 1.33:1 on the page, 1.46
+on the main card, 1.58 on a Section and 1.62 on a sheet, so M6's 3:1 no longer holds at rest, by his decision, and
+DESIGN.md records that. Increase Contrast keeps the strong edge: read live, `rgb(90,100,116)` on the time, name and
+date pill, and the test still holds that one at 3:1. At rest they read `rgb(195,202,214)`, Dark's stay
+`rgba(255,255,255,.12)`, and a key focus still draws the 2px outline. The test now fences the edge from both sides,
+1.3 to 2, so neither the white rim nor the outline can come back by accident.
+
+**Files:** `index.css`, `tests/contrast.test.js`, `DESIGN.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, at 998 × 507 and 570 in Light and 507 in Dark, across the main card,

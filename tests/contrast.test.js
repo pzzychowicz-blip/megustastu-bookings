@@ -940,10 +940,13 @@ describe("--text-faint on the cards it sits on, in Light", () => {
 });
 
 // ── A field's edge — a NON-TEXT boundary (v18.14.0, M6) ──────────────────────────
-// The party-size ring's shape again (below): WCAG 1.4.11 asks 3:1 of a control's
-// boundary, there is no ink, so it is not a row in FILLS. A white rim drew a field at
-// 1.02:1 on a Section. These are the surfaces fields sit on, the page itself included,
-// because the date pill in the header is one. Light only: Dark's fill shows the field.
+// The party-size ring's shape again (below): there is no ink, so it is not a row in
+// FILLS. A white rim drew a field at 1.02:1 on a Section. M6 then held it to WCAG
+// 1.4.11's 3:1, and Patryk took that back on seeing it (correction 4): a near-black
+// outline round every field. So a field at rest is a quiet edge, above the white rim
+// and well below an outline, and 3:1 is Increase Contrast's. These are the surfaces
+// fields sit on, the page itself included, because the date pill in the header is
+// one. Light only: Dark's fill shows the field.
 describe("a field's edge against what it sits on, in Light", () => {
   const app = parse(LIGHT_VARS["--bg-app"]);
   const sheet = over(parse(LIGHT_VARS["--bg-sheet"]), app);
@@ -954,10 +957,11 @@ describe("a field's edge against what it sits on, in Light", () => {
     "the page": app,
   };
   for (const [what, bg] of Object.entries(SURFACES)) {
-    it(`clears 3:1 on ${what}, and Increase Contrast does not weaken it`, () => {
+    it(`is a quiet edge on ${what}, and clears 3:1 with Increase Contrast`, () => {
       const rest = ratio(parse(LIGHT_VARS["--field-edge"]), bg);
-      expect(rest).toBeGreaterThanOrEqual(3);
-      expect(ratio(parse(LIGHT_MORE_VARS["--field-edge"]), bg)).toBeGreaterThanOrEqual(rest);
+      expect(rest, `at rest on ${what}: ${rest.toFixed(2)}:1`).toBeGreaterThanOrEqual(1.3);
+      expect(rest, `at rest on ${what}: ${rest.toFixed(2)}:1`).toBeLessThan(2);
+      expect(ratio(parse(LIGHT_MORE_VARS["--field-edge"]), bg)).toBeGreaterThanOrEqual(3);
     });
   }
   it("the header's date pill and mkInp both draw it", () => {

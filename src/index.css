@@ -250,10 +250,12 @@
   /* v18.14.0 (M6): the edge of a real field, its own token because --border-input
      also rims stat cells and rows that are not controls. That white rim drew a
      field at 1.02:1 on a Section, so on a near-white card a text box was a label
-     with nothing under it. WCAG 1.4.11 asks 3:1 of a control's boundary, and this
-     clears it on every surface a field sits on, the page included (3.05). Dark has
-     a visible fill and keeps its rim. Focus stays a 2px ring in --focus-ring. */
-  --field-edge: #7a8494;
+     with nothing under it. Correction 4 (Patryk): M6's #7a8494 cleared WCAG 1.4.11's
+     3:1 and drew a near-black outline round every field, beside a Confirm card and
+     a Needs action row at 1.3:1, so this is the same quiet edge, visible and subtle.
+     3:1 is Increase Contrast's, below. Dark has a visible fill and keeps its rim.
+     Focus stays a 2px ring in --focus-ring. */
+  --field-edge: #c3cad6;
   --border-kbd: rgba(180, 190, 210, 0.55);
   --border-glass: rgba(255, 255, 255, 0.3);      /* white rim on filled btns / Toggle */
   /* v17.13.0 — the hairline rim on a THEME-INVARIANT solid fill, and the
