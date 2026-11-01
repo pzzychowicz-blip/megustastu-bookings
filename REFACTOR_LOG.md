@@ -39670,6 +39670,28 @@ armed, a tap at 120ms stays armed, it disarms after three seconds, and a tap aft
 
 **Files:** `ParkedDiscard.jsx` (new), `AppBanners.jsx`, `tests/arm-guard.test.js`, `DESIGN.md`, `GLOSSARY.md`.
 
+**Correction 23: a block's flags ease in and out.** Patryk's first complaint in this round: "When new flags appear or disappear on
+booking blocks there's no transitions." DESIGN.md says the same thing of any element ("if the answer is 'the node just unmounts',
+that is the bug, not the design"), so the audit went through every element that appears, disappears or moves, by reading the code
+and by a census: a script taps through 19 surfaces and records every element that arrives, leaves or jumps between frames, 1,412
+rows. A row or two per tap is a real snap; many rows per tap is an ease faster than the sampling. It cannot see a drag, anything
+driven by time, a write from another device or a style-only change, so those were read from the code.
+
+On the blocks seven things snapped, on a save and on a zoom: the flags, the clash mark, line 2's ring, the "~Nm" pill, the note
+corner, the warning border and the clash band. This correction is the first four, the ones that take room. Each holds a slot now,
+a horizontal `Reveal` in rail order, and the name slides with it; `RAIL_KEYS` beside `railFlagsOf` lists the slots, and a test
+fails when the two differ, because a missing key would be a flag counted against the block's width and never drawn. The slots run
+at the chip's speed, which keeps the two together on a zoom.
+
+Measured frame by frame through the real form at 998 × 507: a deposit opens from 0 to 18px with its opacity and closes the same
+way, in about 450ms of visible motion on the 520ms token. Through a zoom on a block with more flags than fit, "Locked" reads 4.7
+of 18 at 138ms and the chip 11.4 of 43.5, the same 26%, and they stay together to the end in both directions.
+
+A closed `Reveal` used to start a timer on mount for a fold it had no reason to run, and a day would now hold a few hundred of them,
+so a Reveal that has never opened returns early.
+
+**Files:** `TimelineView.jsx`, `blockFlags.jsx`, `atoms.jsx`, `tests/block-layout.test.js`, `DESIGN.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,

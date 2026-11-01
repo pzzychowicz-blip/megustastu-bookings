@@ -1188,6 +1188,9 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
       });
       return function () { cancelAnimationFrame(r1); cancelAnimationFrame(r2); if (stopHold) stopHold(); };
     }
+    // Nothing to fold, and no hold to run. A timeline block keeps closed slots for
+    // its flags, so a day's load would otherwise start a timer per slot per block.
+    if (!mounted) return undefined;
     setOpen(false);
     setRevealed(false);   // clip immediately so the collapse hides cleanly
     if (pageHidden()) { setMounted(false); return undefined; }

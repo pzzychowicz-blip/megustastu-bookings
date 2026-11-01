@@ -149,7 +149,22 @@ describe("the fixture matches the component (v18.2.0 phase 22)", () => {
 
   it("there is ONE list, in its own module, and the grid imports it", () => {
     expect(tv).not.toMatch(/function railFlagsOf\(/);
-    expect(tv).toMatch(/import \{ railFlagsOf \} from "\.\/blockFlags";/);
+    expect(tv).toMatch(/import \{ railFlagsOf, RAIL_KEYS \} from "\.\/blockFlags";/);
+  });
+
+  // v18.14.0 (correction 23, Patryk): a key missing from the slots is a flag that is
+  // counted against the block's width and never drawn, and nothing would say so.
+  it("every flag has a slot, in rail order", () => {
+    const keys = [...bf.match(/export const RAIL_KEYS = \[([^\]]*)\]/)[1].matchAll(/"(\w+)"/g)].map((m) => m[1]);
+    expect(keys).toEqual(RAIL.map((f) => f.k));
+  });
+
+  it("the flags, the clash mark, the ring and the pill open sideways, and none snaps", () => {
+    expect(tv).toMatch(/<Reveal key=\{k\} horizontal show=\{!!f\} style=\{\{ flexShrink: 0 \}\}>/);
+    expect(tv).toMatch(/<Reveal horizontal show=\{!!clash\} style=\{\{ flexShrink: 0 \}\}>/);
+    expect(tv).toMatch(/<Reveal horizontal show=\{showRing\} style=\{\{ flexShrink: 0 \}\}>/);
+    expect(tv).toMatch(/<Reveal horizontal show=\{freeMin != null\} style=\{\{ flexShrink: 0 \}\}>/);
+    expect(tv).not.toContain("railFlags.map(");
   });
 });
 

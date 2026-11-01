@@ -44,7 +44,7 @@ import {
   S, TBL, TIMELINE_TABLES, R, M, T, FW, IC, SP, RIM_SOLID, exitHold } from "../lib/constants";
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { toMins, toTime, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf } from "../lib/booking-logic";
-import { railFlagsOf } from "./blockFlags";
+import { railFlagsOf, RAIL_KEYS } from "./blockFlags";
 import { noShowMap, identityKey, bookingTags, tagLine } from "../lib/customers";
 import { Reveal, useFlip, SizeRing, ModalPresence, Presence, ALERT_TONES } from "./atoms";
 import { TimelineZoomControls } from "./TimelineZoomControls";
@@ -425,9 +425,20 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         <BlockFlag title={STATUS_LABEL[b.status] || b.status}>
           <StatusIcon status={b.status} size={IC.control} />
         </BlockFlag>
-        {railFlags.map((f) => (
-          <BlockFlag key={f.k} title={f.title}>{f.icon}</BlockFlag>
-        ))}
+        {/* v18.14.0 (correction 23, Patryk): a slot per flag, in rail order, so one
+            that arrives or leaves opens sideways and the name slides with it.
+            Mapped from `railFlags` they snapped, on a save and on a zoom, while the
+            chip beside them eased. They take the chip's speed, which is what keeps
+            the two in step on a zoom. A flag gone from the list leaves on the copy
+            its Reveal kept. */}
+        {RAIL_KEYS.map((k) => {
+          const f = railFlags.find((x) => x.k === k);
+          return (
+            <Reveal key={k} horizontal show={!!f} style={{ flexShrink: 0 }}>
+              {f ? <BlockFlag title={f.title}>{f.icon}</BlockFlag> : null}
+            </Reveal>
+          );
+        })}
         {/* The double-booked marker sits LAST among the markers, nearest the
             handle. v17.9.0's rail order is facts first, exception states last
             (deposit, preferred, then locked / repeat-no-show / overstaying), and
@@ -436,12 +447,14 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
             `railFlags` because it is never dropped; the title names the other
             party, which is the question anyone who sees this marker asks next and
             the one thing the stripe cannot say. */}
-        {clash ? (
-          <BlockFlag title={"Double-booked with " + clash.names.join(", ")
-            + (clash.tables.length ? " on " + (clash.tables.length === 1 ? "table " : "tables ") + clash.tables.join(", ") : "")}>
-            <ClashIcon size={IC.control} />
-          </BlockFlag>
-        ) : null}
+        <Reveal horizontal show={!!clash} style={{ flexShrink: 0 }}>
+          {clash ? (
+            <BlockFlag title={"Double-booked with " + clash.names.join(", ")
+              + (clash.tables.length ? " on " + (clash.tables.length === 1 ? "table " : "tables ") + clash.tables.join(", ") : "")}>
+              <ClashIcon size={IC.control} />
+            </BlockFlag>
+          ) : null}
+        </Reveal>
     </>
   );
 
@@ -1005,7 +1018,9 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
               fontSize: sz.time, flexShrink: 0, lineHeight: sz.timeLine + "px", fontWeight: FW.medium,
               pointerEvents: "none"
             }}>{b.time}</span>
-            {showRing ? <SizeRing n={b.size} style={{ marginLeft: 4, ...sz.ringStyle }} /> : null}
+            <Reveal horizontal show={showRing} style={{ flexShrink: 0 }}>
+              <SizeRing n={b.size} style={{ marginLeft: 4, ...sz.ringStyle }} />
+            </Reveal>
             {marks}
           </span>
         </Reveal>
@@ -1015,15 +1030,17 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
           its scheduled end shows "~Nm" (translucent, like the start-time chip).
           Flex item before the assign handle (no absolute overlap of the name); the
           seated block is near full width this late, so there's room. */}
-      {freeMin != null ? (
-        <span style={{
-          flexShrink: 0, marginRight: 2, padding: "2px 4px", borderRadius: R.pill,
-          fontSize: sz.time, fontWeight: FW.bold, lineHeight: sz.timeLine + "px", fontVariantNumeric: "tabular-nums",
-          whiteSpace: "nowrap", position: "relative",
-          background: "var(--blk-wash)",
-          pointerEvents: "none"
-        }}>{"~" + freeMin + "m"}</span>
-      ) : null}
+      <Reveal horizontal show={freeMin != null} style={{ flexShrink: 0 }}>
+        {freeMin != null ? (
+          <span style={{
+            flexShrink: 0, marginRight: 2, padding: "2px 4px", borderRadius: R.pill,
+            fontSize: sz.time, fontWeight: FW.bold, lineHeight: sz.timeLine + "px", fontVariantNumeric: "tabular-nums",
+            whiteSpace: "nowrap", position: "relative",
+            background: "var(--blk-wash)",
+            pointerEvents: "none"
+          }}>{"~" + freeMin + "m"}</span>
+        ) : null}
+      </Reveal>
       {/* The manual-assign handle. v17.9.0: the ASCII "=" became the AssignIcon
           the Assign buttons in the form and the List card already use — the same
           action reached from three surfaces should not be a drawn icon in two of

@@ -1804,6 +1804,11 @@ shows its time.**
 - **It eases both ways**, on a zoom or a status change: the chip, ring and rail close
   on horizontal `Reveal`s as line 2 opens, and the name rises because the group is
   centred. The fold's size and the band's drop take the same `M.reveal`.
+- **Each mark on a block eases in and out on its own (v18.14.0, Patryk).** The flags,
+  the clash mark, line 2's ring and the "~Nm" pill each hold a slot, a horizontal
+  `Reveal`, in rail order (`RAIL_KEYS`), so one that arrives or leaves opens sideways
+  and the name slides with it. The slots take the chip's speed, so on a zoom a flag and
+  the chip are the same fraction of the way at every frame: measured 26% at 138ms.
 - **A typed 60-minute booking at 1×** (about 79px) has less room than the chip, which
   is cut at the handle rather than dropped. It is the one place a time is cut.
 

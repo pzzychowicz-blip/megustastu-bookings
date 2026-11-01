@@ -27,6 +27,12 @@ import { isLocked, countLabel, offZone, offZoneLabel } from "../lib/booking-logi
 import { money } from "../lib/vouchers";
 import { StarIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, IndoorIcon, OutdoorIcon, AlertIcon } from "./Icons";
 
+// v18.14.0 (correction 23): the slots a block keeps for them, so a flag eases in and
+// out rather than snapping. The same order as the list below, and
+// tests/block-layout.test.js fails when the two differ, because a key missing here
+// would be a flag that is counted and never drawn.
+export const RAIL_KEYS = ["dep", "zone", "pref", "lock", "ns", "over"];
+
 export function railFlagsOf(b, noShows, warn, currency) {
   const depositAmt = Number(b.deposit) || 0;
   const zone = b.preference === "indoor" || b.preference === "outdoor" ? b.preference : null;
