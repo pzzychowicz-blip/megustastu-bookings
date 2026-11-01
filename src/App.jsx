@@ -70,6 +70,7 @@ import { dirtyDates, reconcile } from "./lib/reconcile";
 import { dueOccurrences, withOccurrences } from "./lib/recurring";
 import { planDelete, planUndo, planCustomerDelete, withUndoDelta, deleteWords, cancelWords } from "./lib/delete-undo";
 import { CONFIRM_MODALS, markArmed, armSettled } from "./lib/arm-guard";
+import { afterIdle } from "./lib/after-frame";
 import { planSettle, settleEffects, carryTransform } from "./lib/voucher-settle";
 import { useSchemaGate } from "./hooks/useSchemaGate";
 import UpdateRequired from "./components/UpdateRequired";
@@ -141,12 +142,24 @@ import { BlockModal }  from "./components/BlockModal";
 // build (sessionStorage flag prevents a reload loop if the network is really
 // down) and render a readable fallback meanwhile. A successful load clears the
 // flag so a LATER genuine failure can reload again.
+//
+// v18.14.0 (correction 34, Patryk): `preload` fetches a chunk before anybody asks for
+// it. Once it is here the thenable below answers inside the call, so React.lazy renders
+// without suspending and a first open is a whole one. A bare thenable, because a real
+// promise answers a microtask late and lazy suspends on that. It leans on how lazy reads
+// a thenable, which tests/settings-preload.test.js runs; if that ever changes, the cost
+// is the one frame of fallback we had. A failed preload says nothing: the open then takes
+// the ordinary path, with its reload and its readable error.
 function lazyChunk(load,name){
-  return lazy(function(){
-    return load().then(function(m){
-      try{sessionStorage.removeItem("mgt-chunk-reload");}catch{/* ignore */}
-      return m;
-    }).catch(function(err){
+  let ready=null;
+  function loaded(m){
+    ready=m;
+    try{sessionStorage.removeItem("mgt-chunk-reload");}catch{/* ignore */}
+    return m;
+  }
+  const chunk=lazy(function(){
+    if(ready) return {then:function(ok){ok(ready);}};
+    return load().then(loaded).catch(function(err){
       console.error("[chunk] failed to load "+name,err);
       try{
         if(!sessionStorage.getItem("mgt-chunk-reload")){
@@ -159,6 +172,8 @@ function lazyChunk(load,name){
       }};
     });
   });
+  chunk.preload=function(){load().then(loaded).catch(function(){/* ignore */});};
+  return chunk;
 }
 const SettingsContent = lazyChunk(function(){return import("./components/Settings").then(function(m){return {default:m.SettingsContent};});},"Settings");
 // v18.0.0 phase 3: LAZY, and measured. A static import here put the whole
@@ -1130,6 +1145,14 @@ export function BookingApp({uid}){
     loadStalled, readError, hasConnected, forceReconnect,
     firstLoadCount, readDatabaseRoot,
   } = usePersistence({ autoOptimizer, nowMins });
+
+  // v18.14.0 (correction 34, Patryk): the one lazy surface whose frame is drawn before
+  // its chunk. Settings' Overlay and Close are App's, so a first open was a bare footer
+  // that jumped 283px when the chunk landed. It loads once the day has.
+  useEffect(function(){
+    if(!bookingsReady) return undefined;
+    return afterIdle(function(){SettingsContent.preload();});
+  },[bookingsReady]);
 
   // v18.0.0 phase 5: `useRoles` moved UP to here, from below `useVouchers`. It
   // needs only `setWriteWarning` (the line above), and `hasModule` has to be in

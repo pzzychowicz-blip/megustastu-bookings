@@ -39861,6 +39861,26 @@ on the way out.
 
 **Files:** `ListView.jsx`, `tests/list-columns.test.js`, `DESIGN.md`.
 
+**Correction 34: Settings opens at full size.** The other lazy surfaces sit wholly inside their `Suspense`, so they show nothing until they
+are here and then play their entrance. Settings is the one whose frame is App's, so its first open after a load was a bare footer that
+jumped when the chunk landed. `lazyChunk` gains `preload`, and App calls it for Settings at the first idle moment after the day has loaded.
+A preload takes 138.7 kB once per version, outside the startup bundle, and it also ends the first-tap failure after a deploy for this
+one screen, since the chunk is fetched while its build is still the live one.
+
+Measured at 998 × 570, first open three seconds after a load, with a control that removes only the preload call from the served `App.jsx`:
+
+| | Dialog height | Close's y |
+|---|---|---|
+| Control | 173 until 352ms, then 513 in one frame | 144.5, then 484.5 |
+| Preload | 513 from its first frame, through the card's own entrance | 484.5 |
+
+Once the chunk is here, `lazy` is handed a thenable that answers inside the call, because a real promise answers a microtask late and `lazy`
+suspends on that. That leans on how React reads a thenable, so `tests/settings-preload.test.js` runs both with `renderToString`, and if
+it ever changes the cost is the frame of fallback we had. **Left as it is:** a tap before the preload lands, in the first couple of seconds
+after a load, takes the old path. A failed preload is silent, and the open then has the ordinary reload and readable error.
+
+**Files:** `App.jsx`, `lib/after-frame.js` (`afterIdle`), `tests/settings-preload.test.js` (new), `src/CLAUDE.md`, `src/lib/CLAUDE.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,
