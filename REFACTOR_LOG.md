@@ -39280,6 +39280,15 @@ but measured here on the only DEV thread, Send ends 12.7px past the panel's bott
 `tests/wa-inbox-layout.test.js`, `tests/destructive-buttons.test.js`, `tests/contrast.test.js`, `DESIGN.md`,
 `GLOSSARY.md`, `src/CLAUDE.md`, `src/components/CLAUDE.md`.
 
+**Correction 7: the draft card's Add to waitlist goes right.** Its own row at the right, on the compact bar and in the
+tall card. It is `marginLeft: auto` for the wrapping row and `alignSelf: flex-end` for the tall card's column, and
+`justifyContent: flex-end` for Suggest beside it, because a group that wraps fills its line and its rows would start
+at the left again. Read live, its right edge is the row's right edge at 998×570 and 998×507 (956, level with Dismiss),
+1280×900 and 1600×1000 (the column, 1210 and 1370) and 375×812 (349). Only the row's place moved: the button is the
+same size at each.
+
+**Files:** `whatsapp/DraftCard.jsx`, `tests/wa-inbox-layout.test.js`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, at 998 × 507 and 570 in Light and 507 in Dark, across the main card,

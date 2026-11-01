@@ -210,3 +210,13 @@ describe("the conversation header has one action and the ⋯", () => {
     expect(header).toContain('<div style={{ display: "flex", gap: 6, flexShrink: 0, justifyContent: "flex-end" }}>');
   });
 });
+
+// v18.14.0 (correction 7, Patryk): the draft card's Add to waitlist goes right, on the
+// compact bar's wrapping row (`marginLeft`) and in the tall card's column (`alignSelf`).
+// `justifyContent` is for Suggest beside it: a group that wraps fills its line, and its
+// rows would otherwise start at the left again.
+describe("Add to waitlist sits at the draft card's right", () => {
+  it("in both shapes of the card, and inside itself", () => {
+    expect(Draft).toContain('<div style={Object.assign({}, row, { marginLeft: "auto", alignSelf: "flex-end", justifyContent: "flex-end" })}>');
+  });
+});
