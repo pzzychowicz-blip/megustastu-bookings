@@ -39155,6 +39155,24 @@ fill's partner in the registry. Screen only, by his decision: `TimelineSheet` dr
 
 **Files:** `index.css`, `TimelineView.jsx`, `tests/contrast.test.js`, `DESIGN.md`, `GLOSSARY.md`.
 
+**Correction 2: the indoor tables are tinted, and a switch turns it off.** A shade of the indoor badges' own purple
+behind the indoor rows and their labels, 8% in Light and 12% in Dark, both his numbers. `--tl-indoor-bg` is written
+as `rgba(var(--tbl-ind-rgb), …)`, so a new purple moves it. "Tint indoor tables" sits in Settings → App → Timeline
+under Larger text, this device only, on by default and stored only when off (`mgt-tl-indoortint`), so nothing is
+added to what is stored and `SCHEMA` does not move. TimelineView takes `indoorTint` as a scalar for the memo. A row
+hint replaces the tint and hands it back: dragged over table 12 the row read `--warn-bg`, the other three stayed
+purple, and back on the home row all four were purple again before the finger lifted. The label cell gained
+`background-color` in its transition, because its row already had one and it would have snapped beside a fade.
+The switch eased both ways with the two parts in step (.08 → .055 → .035 → .004 → 0 off, 0 → .055 → .067 → .075 →
+.08 on), and off survived a reload. Real pixels: the ground is #e5e3ef in Light against #eef1f7 beside it, #32283d
+in Dark against #212328. The badge's fill is 0.8 alpha, so the tint reaches under the number: white on the badge
+reads 5.92:1 in Light and 6.05 in Dark, and a new test holds that in both themes. Not on the printed Timeline, by
+his decision; a test keeps both names out of `TimelineSheet`.
+
+**Files:** `index.css`, `useShellPrefs.js`, `App.jsx`, `Settings.jsx`, `TimelineView.jsx`, `tests/indoor-tint.test.js`,
+`tests/contrast.test.js`, `tests/drop-plan.test.js`, `DESIGN.md`, `GLOSSARY.md`, `src/hooks/CLAUDE.md`,
+`src/components/CLAUDE.md`.
+
 ### Closing the version
 
 **The scan's own audit, on the final tree**, at 998 × 507 and 570 in Light and 507 in Dark, across the main card,

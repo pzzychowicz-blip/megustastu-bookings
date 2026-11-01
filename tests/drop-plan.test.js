@@ -319,7 +319,9 @@ describe("TimelineView asks once per row", () => {
     expect((View.match(/setDragHover=\{hoverRow\}/g) || []).length).toBe(2);
   });
   it("tints only the hovered row, and the tint eases both ways", () => {
-    expect(View).toContain('backgroundColor: dragHover !== id ? undefined : hintRole(dropHint) ? hintRole(dropHint).tint : "var(--bg-ac-hover)"');
+    // v18.14.0 (correction 2): a row at rest may wear the indoor tint, and a hint
+    // replaces it, so the hint is still the only thing the hovered row paints.
+    expect(View).toMatch(/backgroundColor: dragHover !== id \? \(indoorTint && isIn\(id\) \? "var\(--tl-indoor-bg\)" : undefined\)\s+: hintRole\(dropHint\) \? hintRole\(dropHint\)\.tint : "var\(--bg-ac-hover\)"/);
     expect(View).toContain('transition: "height " + M.shift + ", background-color " + M.tap,');
     expect(View).toContain("<DropHint hint={dragHover === id ? dropHint : null} sz={sz} />");
   });

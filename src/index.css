@@ -418,6 +418,10 @@
   /* v18.14.0 correction 1 (Patryk): the Unplaced row's ground, the red of its word
      and its dashed line, so the row reads as a problem before a word is read. */
   --tl-unplaced-bg: rgba(220, 60, 60, 0.08);
+  /* v18.14.0 correction 2 (Patryk): the indoor rows' ground, a shade of the indoor
+     badges' own purple, so the two zones read apart before a number is read.
+     Settings' Tint indoor tables turns it off on this device. */
+  --tl-indoor-bg: rgba(var(--tbl-ind-rgb), 0.08);
   --tl-block-warn: #dc2626;                        /* booking overdue border */
   --tl-block-warn-soon: #f59e0b;                   /* booking due-soon border */
   /* v17.0.0 round 10 (Patryk): the RUNNING-LATE border used to reuse
@@ -853,6 +857,7 @@
   --tl-now-line: rgba(10, 132, 255, 0.85);
   --tl-unassigned-border: rgba(255, 120, 120, 0.45);
   --tl-unplaced-bg: rgba(255, 120, 120, 0.1);
+  --tl-indoor-bg: rgba(var(--tbl-ind-rgb), 0.12);
   /* block warn borders, blocked-stripe + badge, popup are theme-invariant
      (saturated, white text — read on both); only scrim/card/bg flip */
   --tl-popup-bg: rgba(44, 44, 46, 0.95);

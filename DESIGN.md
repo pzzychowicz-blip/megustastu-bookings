@@ -1713,6 +1713,14 @@ booking keeps its own colour on it (Patryk, 2026-11-01, against changing the blo
 - **The Unplaced row is rose**, `--tl-unplaced-bg`, the red of its word and its dashed
   line, in both columns. It is `unplacedEdge`'s fill, so it stops on the dashed line and
   eases with the row. "Unplaced" reads 6.62:1 on it in Light and 7.21 in Dark.
+- **The indoor rows are a shade of the indoor purple**, `--tl-indoor-bg`, 8% in Light and
+  12% in Dark, on the grid row and its label, so the zone is one band. Written from
+  `--tbl-ind-rgb`, so the two cannot drift. It is the row's resting ground: a drag's hint
+  replaces it and hands it back. "Tint indoor tables" turns it off, per device, on by
+  default. White on an indoor badge, whose fill lets the tint through, reads 5.92:1 in
+  Light and 6.05 in Dark.
+
+Both are screen only. The printed Timeline is drawn by `TimelineSheet` and has neither.
 
 ### Two-line blocks (v18.14.0)
 A block used to lose its time on any day where one block could not fit the chip

@@ -1435,6 +1435,7 @@ export function BookingApp({uid}){
     swEnabled,onToggleSw,
     tlSettings,onSetTlSetting,
     largeText,onToggleLargeText,
+    indoorTint,onToggleIndoorTint,
     vibrateOnDrag,onToggleVibrate,
     split,focusedPane,setFocusedPane,applySplit,fitTimeline,
     confirmSplit,swapSides,toggleSplitDir,exitSplit,setSplitRatio,
@@ -3572,6 +3573,7 @@ export function BookingApp({uid}){
     onReshuffle={VA.onReshuffle}
     toolbarFolded={toolbarFolded}
     largeText={largeText}
+    indoorTint={indoorTint}
     turnBuffer={turnBuffer}
     waitGhosts={waitGhosts}
     onBookWait={VA.onBookWait}
@@ -4202,6 +4204,8 @@ export function BookingApp({uid}){
             onSetTlSetting={onSetTlSetting}
             largeText={largeText}
             onToggleLargeText={onToggleLargeText}
+            indoorTint={indoorTint}
+            onToggleIndoorTint={onToggleIndoorTint}
             vibrateOnDrag={vibrateOnDrag}
             onToggleVibrate={onToggleVibrate}
             weekHours={weekHours}

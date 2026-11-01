@@ -1510,6 +1510,8 @@ export const TimelineView = memo(function TimelineView({
   toolbarFolded = false,
   // v18.14.0 (H2): Larger text, this device's setting. A scalar, so the memo holds.
   largeText = false,
+  // v18.14.0 (correction 2): Tint indoor tables, the same kind of setting.
+  indoorTint = true,
 }) {
   const sz = largeText ? TL_LARGE : TL_NORMAL;
   const scrollRef = useRef(null);
@@ -2064,7 +2066,10 @@ export const TimelineView = memo(function TimelineView({
               paddingRight: 6,
               borderBottom: "2px solid var(--tl-row-border)",
               cursor: "pointer", boxSizing: "border-box",
-              transition: "height " + M.shift
+              // v18.14.0 (correction 2): the row's tint reaches the label, so the
+              // zone is one band, and it eases when the switch flips.
+              backgroundColor: indoorTint && indoor ? "var(--tl-indoor-bg)" : undefined,
+              transition: "height " + M.shift + ", background-color " + M.tap
             }}
           >
             <span className="mgt-hover-scale" style={{
@@ -2215,7 +2220,10 @@ export const TimelineView = memo(function TimelineView({
           // drag&drop target highlight (subtle accent tint while hovered).
           // v18.14.0 (H5): amber when the drop would move somebody, red when it
           // would be refused, so a busy row no longer looks like an empty one.
-          backgroundColor: dragHover !== id ? undefined : hintRole(dropHint) ? hintRole(dropHint).tint : "var(--bg-ac-hover)"
+          // v18.14.0 (correction 2): the indoor tint is the row's resting ground,
+          // so a hint replaces it and hands it back.
+          backgroundColor: dragHover !== id ? (indoorTint && isIn(id) ? "var(--tl-indoor-bg)" : undefined)
+            : hintRole(dropHint) ? hintRole(dropHint).tint : "var(--bg-ac-hover)"
         }}
       >
         <DropHint hint={dragHover === id ? dropHint : null} sz={sz} />

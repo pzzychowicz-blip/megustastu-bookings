@@ -777,6 +777,22 @@ describe("the Unplaced word on its rose ground", () => {
   }
 });
 
+// v18.14.0 (correction 2): the indoor table's number sits on its row's tint, and the
+// badge's fill is 0.8 alpha, so the tint is under the number too. In Dark it lightens
+// the badge a little, which is the direction that could fail.
+describe("the indoor table number on its tinted row", () => {
+  for (const theme of ["light", "dark"]) {
+    it(`reads in ${theme}`, () => {
+      const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+      const rgb = vars["--tbl-ind-rgb"];
+      const row = over(parse(vars["--tl-indoor-bg"].replace("var(--tbl-ind-rgb)", rgb)), parse(vars["--tl-ruler-bg"]));
+      const badge = over(parse(`rgba(${rgb}, 0.8)`), row);
+      const got = +ratio(parse(vars["--text-on-accent"]), badge).toFixed(2);
+      expect(got, `the indoor number in ${theme}: ${got}:1`).toBeGreaterThanOrEqual(NEED.label);
+    });
+  }
+});
+
 // v18.14.0 (H5): the words on a row under a dragged block. The pill is its role's
 // tint over the ruler's opaque surface, because the row under it wears the same
 // tint and a tint alone would float. The surface is the point of the test: over

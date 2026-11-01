@@ -12,6 +12,7 @@
 //   swEnabled, onToggleSw                                   the offline shell's switch
 //   tlSettings, onSetTlSetting                              Timeline zoom and follow
 //   largeText, onToggleLargeText                            Larger text on the Timeline
+//   indoorTint, onToggleIndoorTint                          Tint indoor tables on the Timeline
 //   vibrateOnDrag, onToggleVibrate                          Vibrate on drag (lib/haptics.js)
 //   split, focusedPane, setFocusedPane, applySplit,
 //   fitTimeline, confirmSplit, swapSides, toggleSplitDir,
@@ -189,6 +190,12 @@ const LARGE_TEXT_KEY="mgt-tl-largetext";
 function readLargeText(){
   try{return localStorage.getItem(LARGE_TEXT_KEY)==="1";}catch{return false;}
 }
+// v18.14.0 (correction 2): per-device "Tint indoor tables", the same reasoning as
+// Larger text. Default on, so only "0" is ever stored.
+const INDOOR_TINT_KEY="mgt-tl-indoortint";
+function readIndoorTint(){
+  try{return localStorage.getItem(INDOOR_TINT_KEY)!=="0";}catch{return true;}
+}
 export function readTlSettings(){
   const B=TL_SETTING_BOUNDS;
   const maxZoom=readTlNum(B.maxZoom);
@@ -288,6 +295,14 @@ export function useShellPrefs({
       if(next) localStorage.setItem(LARGE_TEXT_KEY,"1"); else localStorage.removeItem(LARGE_TEXT_KEY);
     }catch{/* ignore */}
     setLargeText(next);
+  }
+  const [indoorTint,setIndoorTint]=useState(readIndoorTint);
+  function onToggleIndoorTint(){
+    const next=!indoorTint;
+    try{
+      if(next) localStorage.removeItem(INDOOR_TINT_KEY); else localStorage.setItem(INDOOR_TINT_KEY,"0");
+    }catch{/* ignore */}
+    setIndoorTint(next);
   }
   // v17.0.0 correction: per-device app width (see readAppWidth above).
   const [appWidth,setAppWidth]=useState(readAppWidth);
@@ -566,6 +581,7 @@ export function useShellPrefs({
     swEnabled, onToggleSw,
     tlSettings, onSetTlSetting,
     largeText, onToggleLargeText,
+    indoorTint, onToggleIndoorTint,
     vibrateOnDrag, onToggleVibrate,
     split, focusedPane, setFocusedPane, applySplit, fitTimeline,
     confirmSplit, swapSides, toggleSplitDir, exitSplit, setSplitRatio,
