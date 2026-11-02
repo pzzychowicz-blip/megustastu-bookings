@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import {
-  formatSugg, nearestTimes, newBookingTime,
+  formatSugg, lineTimes, newBookingTime,
   toMins, toTime, overlaps, genId, getDur, statusOrder,
   comboCap, comboCapBest, sanitize, sanitizeAll, isReadableTime, diffBooking,
   lateState, lateMins, freeingSoon, daySummary, rangeStats,
@@ -3342,27 +3342,27 @@ describe("pickedRefusal: what Save will say about the tables picked in the form"
 });
 
 // v18.14.0 (H3): what the booking form's availability line offers.
-describe("nearestTimes", () => {
+describe("lineTimes", () => {
   const sugg = formatSugg([1080, 1095, 1110, 1125, 1170, 1185, 1200, 1215], 1140); // 18:00–18:45 · 19:30–20:15, around 19:00
 
   it("takes two each side of the time asked for, in clock order", () => {
-    expect(nearestTimes(sugg, 4)).toEqual(["18:30", "18:45", "19:30", "19:45"]);
+    expect(lineTimes(sugg, 4)).toEqual(["18:30", "18:45", "19:30", "19:45"]);
   });
 
   it("makes the number up from the other side when one runs short", () => {
-    expect(nearestTimes({ earlier: ["18:45"], later: ["19:30", "19:45", "20:00", "20:15"] }, 4)).toEqual(["18:45", "19:30", "19:45", "20:00"]);
-    expect(nearestTimes({ earlier: ["18:00", "18:15", "18:30", "18:45"], later: ["19:30"] }, 4)).toEqual(["18:15", "18:30", "18:45", "19:30"]);
-    expect(nearestTimes({ earlier: [], later: ["19:30", "19:45", "20:00", "20:15", "20:30"] }, 4)).toEqual(["19:30", "19:45", "20:00", "20:15"]);
-    expect(nearestTimes({ earlier: ["18:00", "18:15", "18:30", "18:45", "19:00"], later: [] }, 4)).toEqual(["18:15", "18:30", "18:45", "19:00"]);
+    expect(lineTimes({ earlier: ["18:45"], later: ["19:30", "19:45", "20:00", "20:15"] }, 4)).toEqual(["18:45", "19:30", "19:45", "20:00"]);
+    expect(lineTimes({ earlier: ["18:00", "18:15", "18:30", "18:45"], later: ["19:30"] }, 4)).toEqual(["18:15", "18:30", "18:45", "19:30"]);
+    expect(lineTimes({ earlier: [], later: ["19:30", "19:45", "20:00", "20:15", "20:30"] }, 4)).toEqual(["19:30", "19:45", "20:00", "20:15"]);
+    expect(lineTimes({ earlier: ["18:00", "18:15", "18:30", "18:45", "19:00"], later: [] }, 4)).toEqual(["18:15", "18:30", "18:45", "19:00"]);
   });
 
   it("offers what there is when there are fewer than asked for", () => {
-    expect(nearestTimes({ earlier: ["18:45"], later: ["19:30"] }, 4)).toEqual(["18:45", "19:30"]);
-    expect(nearestTimes({ earlier: [], later: [] }, 4)).toEqual([]);
+    expect(lineTimes({ earlier: ["18:45"], later: ["19:30"] }, 4)).toEqual(["18:45", "19:30"]);
+    expect(lineTimes({ earlier: [], later: [] }, 4)).toEqual([]);
   });
 
   it("takes a named refusal's null sugg", () => {
-    expect(nearestTimes(null, 4)).toEqual([]);
+    expect(lineTimes(null, 4)).toEqual([]);
   });
 });
 

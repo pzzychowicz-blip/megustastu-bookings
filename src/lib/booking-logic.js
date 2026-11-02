@@ -957,7 +957,7 @@ export function formatSugg(sugg,around){
 // clock order: half each side of the time asked for, and where one side runs
 // short the other makes up the number. `sugg` is `formatSugg`'s, each side
 // ascending, so the nearest are the END of `earlier` and the START of `later`.
-export function nearestTimes(sugg,count){
+export function lineTimes(sugg,count){
   const earlier=sugg?sugg.earlier:[];
   const later=sugg?sugg.later:[];
   const fromLater=Math.min(later.length,Math.max(Math.ceil(count/2),count-earlier.length));

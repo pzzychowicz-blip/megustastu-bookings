@@ -57,7 +57,7 @@
 
 import { useRef } from "react";
 import { BLOCK_BG, FW, H, IC, M, R, SP, T } from "../lib/constants";
-import { nearestTimes } from "../lib/booking-logic";
+import { lineTimes } from "../lib/booking-logic";
 import { useSharesLine } from "../hooks/useSharesLine";
 import { ALERT_TONES, InlineAlert, mkBtn } from "./atoms";
 import { TimeChip } from "./TimeChip";
@@ -72,7 +72,7 @@ const WORDS_FADE_IN = "opacity " + M.move + " var(--t-tap)";
 
 export function AvailLine({ text, warn, sugg, onTapTime, onAddToWaitlist, checking = false, leaving = false }) {
   const role = ALERT_TONES[warn ? "warn" : "danger"];
-  const times = nearestTimes(sugg, LINE_TIMES);
+  const times = lineTimes(sugg, LINE_TIMES);
   const rowRef = useRef(null);
   const sentenceRef = useRef(null);
   const actionsRef = useRef(null);

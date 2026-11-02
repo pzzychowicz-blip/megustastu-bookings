@@ -40119,3 +40119,7 @@ booking taken out of `saveBookings` under the finger, writes answered locally, a
 clears it, because any block's `endDrag` does, which is why the first attempts at this read clean. A change of day clears it too, because
 that remounts the grid. The block's unmount now cancels its frames and its 800ms timer, and clears the row if it was the one being
 dragged. After it, the row clears as the block leaves, with the finger still down.
+
+**Two exports were both called `nearestTimes`.** H3's `(sugg, count)` in `booking-logic.js` and the WhatsApp check's older `(times, around,
+max)` in `draft-check.js`: the same name, different arguments, and neither module's callers would notice an import from the wrong one
+until a line came back empty. H3's is `lineTimes` now, the name of what it serves. A rename and nothing else.
