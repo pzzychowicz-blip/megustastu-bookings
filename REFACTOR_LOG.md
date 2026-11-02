@@ -40098,3 +40098,9 @@ mount effect sets `overflow:hidden` on `html`, so `body` keeps its own overflow 
 app, with the layout forced to Lock off, a block focused under the ruler landed at 32 with the rule on `body`, and stayed at 21 on `html`
 or with no rule at all. So the move was made, measured and reverted. What stays is a comment saying why it is on `body`, and a test that
 holds it there, at `SCROLL_CLEAR_RULER`, beside the two inline styles it depends on.
+
+**The country menu, reopened during its exit, took no typing.** The menu fades out on the node it faded in on, so a tap inside those 260ms
+kept that node, and `autoFocus` belongs to a mount. Measured 80ms into the exit: the menu came back with focus still on the pill, and
+typing "bel" reached nothing. The menu now has a key that every open raises, so a reopen is a new node and the box takes focus in the
+tap's own commit, which is what iOS needs for its keyboard. The pop-in restarts from nothing either way, because swapping the class on
+the old node restarted the same keyframes. After it, the same taps leave the focus in the search box, and "bel" lands there.

@@ -53,6 +53,10 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
   // The list stays as it is for the exit, so `q` clears when that ends, and the
   // leaving copy is inert, so neither a tap nor a Tab can land in it.
   const [leaving, setLeaving] = useState(false);
+  // The menu's key, one more on every open. A tap during the exit would keep the
+  // leaving node, and `autoFocus` belongs to a mount: focus stayed on the pill, the
+  // box drew no caret and typing reached nothing, measured 80ms into the exit.
+  const [opens, setOpens] = useState(0);
   const rootRef = useRef(null);
   const btnRef = useRef(null);
   const listRef = useRef(null);
@@ -91,6 +95,7 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
     setActive(at < 0 ? 0 : at);
     setLeaving(false);
     setQ("");
+    setOpens(function (n) { return n + 1; });
     setOpen(true);
   }
 
@@ -152,7 +157,7 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
         <span aria-hidden="true" style={{ color: S.muted, display: "flex" }}><ChevronDownIcon size={IC.inline} /></span>
       </button>
       {open || leaving ? (
-        <div className={open ? "mgt-pop-in" : "mgt-pop-out"} inert={!open} style={Object.assign({}, AC_MENU, { transformOrigin: "top left", display: "flex", flexDirection: "column", overflowY: "hidden", maxHeight: 320 /* @canvas the search box plus AC_MENU's 264 of list */ })}>
+        <div key={opens} className={open ? "mgt-pop-in" : "mgt-pop-out"} inert={!open} style={Object.assign({}, AC_MENU, { transformOrigin: "top left", display: "flex", flexDirection: "column", overflowY: "hidden", maxHeight: 320 /* @canvas the search box plus AC_MENU's 264 of list */ })}>
           <div style={{ padding: SP.base, borderBottom: "1px solid var(--border-soft)", flexShrink: 0 }}>
             <input
               autoFocus
