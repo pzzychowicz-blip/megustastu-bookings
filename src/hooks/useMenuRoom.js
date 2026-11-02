@@ -26,7 +26,7 @@
 // is for a port that reaches past the keyboard, the page itself above all.
 
 import { useLayoutEffect } from "react";
-import { scrollParentY } from "../lib/edge-scroll";
+import { scrollPort } from "../lib/edge-scroll";
 
 // The search box and a row and a half: below that the list is a slit. A menu on
 // a screen with less room than this stays this tall and runs under the footer,
@@ -46,9 +46,9 @@ export function useMenuRoom(menuRef, open, tall) {
   useLayoutEffect(function () {
     const menu = menuRef.current;
     if (!open || !menu) return undefined;
-    // Found once, while the menu is at its tallest: a menu that fits is what
-    // can leave the port with nothing to scroll, and `scrollParentY` skips that.
-    const port = scrollParentY(menu);
+    // By style, never by "has something to scroll" (`scrollParentY`): a form that
+    // fits now is the port all the same once the keyboard has shrunk it.
+    const port = scrollPort(menu);
     const vv = window.visualViewport;
     function measure() {
       const anchor = menu.offsetParent;

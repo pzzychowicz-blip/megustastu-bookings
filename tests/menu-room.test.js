@@ -36,6 +36,12 @@ describe("the hook", () => {
     expect(hook).not.toContain("offsetTop");
     expect(hook).not.toContain("innerHeight");
   });
+  // A form that fits has nothing to scroll, and `scrollParentY` would pass over it
+  // to the root, which no `scroll` listener hears. The keyboard then arrives.
+  it("finds its port by style, so a form that fits when the menu opens still counts", () => {
+    expect(hook).toContain("const port = scrollPort(menu);");
+    expect(hook).not.toContain("scrollParentY");
+  });
   it("measures from the anchor, because the menu's own rect is mid-animation", () => {
     expect(hook).toContain("menu.offsetParent");
     expect(hook).not.toContain("menu.getBoundingClientRect");
