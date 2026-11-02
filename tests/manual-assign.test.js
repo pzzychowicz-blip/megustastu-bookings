@@ -132,7 +132,7 @@ describe("planAssign: done", () => {
   });
   it("names whoever a swap took tables from", () => {
     expect(planAssign({ bookingId: "a", tables: ["2"], locked: true, affected: [{ id: "b", tables: ["2"] }], bookings: list, viewDate: "x", tableBlocks: [] }).done)
-      .toBe("Lena Brandt moved to 2 — Yara Domínguez reassigned.");
+      .toBe("Lena Brandt moved to 2 — Yara Domínguez moved.");
   });
 });
 
@@ -152,7 +152,7 @@ describe("App's manualAssign is the plan and its three effects", () => {
   // only for a swap that moved nobody, since the pill has the sentence otherwise.
   it("writes through saveMove, closes the picker, and has a flash only for a day it reshuffled", () => {
     const flat = body.replace(/\s+/g, "");
-    expect(flat).toContain('saveMove(plan.transform,bookingId,"assign",plan.done,plan.reshuffles?flash:null);setManualTarget(null);');
+    expect(flat).toContain('saveMove(plan.transform,bookingId,"assign",plan.done,plan.reshuffles?flash:null,plan);setManualTarget(null);');
   });
 });
 

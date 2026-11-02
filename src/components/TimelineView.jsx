@@ -2585,7 +2585,9 @@ export const TimelineView = memo(function TimelineView({
           marginBottom: 8, gap: 8, flexWrap: "wrap"
         }}>
           {optBtns || <div />}
-          {zoomBtns}
+          {/* v18.14.2 (Patryk): on a phone this wraps to a line of its own, where
+              `space-between` has nothing to spread it against and leaves it left. */}
+          <div style={{ marginLeft: "auto" }}>{zoomBtns}</div>
         </div>
       )}
       {/* v17.8.0: the "Closed this day" notice that used to sit here moved to

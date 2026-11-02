@@ -40195,3 +40195,67 @@ functions with `fetch` stubbed before it counted.
 and the full gate caught it, so `b5585fff` is red on that test. Fixed in a new commit; run the whole suite per commit, it takes four seconds.
 
 **After the review:** main entry 454.67 kB (134.20 gz), unchanged; 4,274 tests; 0 lint errors, 63 warnings; style OK; 12 commits over `origin/main`'s `7393c867`, this one included.
+
+## v18.14.2 — the top of the header's buttons, in the installed app
+
+**Date:** 2026-11-02 · **Branch:** `fix/v18.14.2-compact-top-strip`
+
+**Files:** `src/App.jsx` (the shell's padding, the version) · `src/index.css` (a comment) · `tests/compact-shell.test.js` · `DESIGN.md` · `src/CLAUDE.md`.
+No persisted node, no rule, no `SCHEMA` raise. Patch: a v18.14.0 regression on the tablet's installed app.
+
+**What Patryk saw:** on the restaurant tablet the tops of Follow, zoom, the view switcher, Walk-in and + New were cut off in a straight line.
+
+**The cause, measured over CDP on the tablet's installed app (PROD, read only):** the page is 998 × 594. Walk-in's top is 8, and `elementsFromPoint` at
+y 8–11 returns `.mgt-edge` first, at y 12 the button. The strip is 12px tall, fixed, z-index 150, and paints over the page in `display-mode: standalone`
+(v18.3.1, for iOS's scroll edge effect). Its comment rested on "12px is the phone shell's top padding", which was true when it was written. v18.14.0's
+compact shell took the top padding to 8px, so 4px of every 40px control went under the strip, and the strip took their taps as well. Chrome tabs have
+no strip, and every v18.14.0 measurement ran in one, so the rig could not see it.
+
+**The fix (Patryk's choice over shrinking the strip):** compact's top padding is 12px. The strip keeps the height tested on iOS, and its comment's claim is
+true again. At 998 × 507 the 4px cost no table row: 8 rows show before and after. A pin in `tests/compact-shell.test.js` reads the strip's height out of the
+stylesheet and each of the three shells' top padding out of `App.jsx`; it fails on 8.
+
+**Verified on the tablet, DEV tab, with the strip forced on by a temporary style (a Chrome tab cannot report `standalone`; CDP's `display-mode` emulation had no effect
+there):** Walk-in and + New at 11.99, Follow at 13.99, and the top row of each answers `elementFromPoint` with the button. The 11.99 is the tablet's 1.924 device pixel ratio.
+
+**Verified on iPadOS 27, iPad Pro 13-inch simulator, as an installed app (`display-mode: standalone`, the real strip, DEV):** in a window 1058 × 476, the compact layout, Walk-in's top is
+exactly 12, Follow's is 14, and the button tops are whole at full resolution. Full screen and larger windows keep their 16px shell (Walk-in at 17). Nothing is offscreen at 1376 × 1000, 1032 × 1344,
+1322 × 936, 1092 × 840, 804 × 936 or 760 × 936. So 12px holds in real WebKit with the real strip, which the tablet could not show: its strip was a forced style. The 11-inch was not run as its own
+device; its widths fall inside the range above. **A hand-made web clip without its `ApplicationManifest` reads `navigator.standalone` true and `display-mode: standalone` false**, so the strip stays hidden,
+and that produced a false blur finding here until the clip was rebuilt from a real one.
+
+**Four more from those checks, and two rows Patryk marked on the screenshots.** He chose each.
+
+- **The drop's message (and the table picker's).** With the Optimiser on, `bookingsAfterAction` can re-seat the whole day, and the pill named only the party that gave up its table: "David moved to 8 — Reilly
+  reassigned." with most of the day moved. It is now finished when the write lands, from who really changed tables (`landedSentence`, `lib/delete-undo.js`), because a held write replays on a fresh list. Two names at
+  most, then a count. Measured on the same drop: "David moved to 8 — Reilly and 7 others moved.", and the eight were read back block by block; the two Victorias on that day are two bookings.
+  A swap and a free table keep their own sentence: nothing else moves there.
+- **The country menu.** With the keyboard up on the iPad it spanned 173–495 while the Save bar started at 413, so the last rows could not be tapped. `useMenuRoom` writes the menu's `maxHeight` from the room left and
+  follows the keyboard and the form's scroll, without a state, because a state would re-render 249 rows a frame. Afterwards it spanned 173–406 and Zimbabwe, the last row, answered `elementFromPoint`, with the keyboard
+  arriving after the menu had opened. **On the tablet, a DEV tab in Chrome (998 wide), the room is what it is:** with the keyboard up the page is 231px tall, 63px are left under the field, and the menu keeps `MENU_ROOM_MIN`'s
+  120 (86–207, list 59), running under the footer, so about one row shows and the last rows take a scroll of the form, as they did before. The restaurant's installed app has 87px more without Chrome's bars, which
+  by the arithmetic gives the menu about 150, two or three rows. That figure is calculated, not measured: DEV does not run in the WebAPK, so it is the device check after this deploys.
+- **The country search's autocorrect.** "pol" raised iOS's "Pół" bubble, which outlived the form. `autoCorrect`, `autoCapitalize` and `spellCheck` are off on that field.
+- **Left as it is, Patryk's call:** in a resized iPad window the system's window buttons cover the top of the Settings gear. Full screen is clear, `env(safe-area-inset-*)` reads 0 there, and the restaurant has no iPad.
+- **The draft card's Accept & open and Dismiss** sit on the right, as the compact bar's already did: 758 of the card's inner 759.
+- **Follow and zoom** stay on the right when a phone wraps them under the Optimiser, where `space-between` has nothing to spread a lone item against: 350 of the row's 350 at 375 wide.
+
+**`/code-review` over the branch raised nine.** Five fixed, one left as a device check, three closed.
+
+- **Fixed: the other three lists.** The menu fix had gone on the country menu alone. The name, phone and voucher lists drew `AC_MENU` themselves and ran on under the Save bar, and the name list is the one a phone booking
+  opens every time. `AcMenu` is that sheet with `useMenuRoom` on it, so no list draws one without the other, and `CountryPicker` stays its own because it fades and holds a search box. **Measured on the tablet, a DEV tab in Chrome,
+  keyboard up, "an" typed (15 rows):** the list took 120 rather than 264 and spanned 86–207 with Save at 169, the floor again. One real swipe on the form took it to 150, ending at 155, and its last row answered `elementFromPoint`, so
+  the floor's comment holds on the device. **The iPad's reading of the name list could not be taken:** the simulator's text input dropped a letter each time, and the next went to the page and fired the `A` shortcut. The country menu's
+  iPad reading stands for the shared hook.
+- **Fixed: the menu's port.** `scrollParentY` passes over a form with nothing to scroll yet, and over the root, so a form that fitted when the menu opened was never watched once the keyboard shrank it. `useMenuRoom` finds its port by
+  style, through `scrollPort`, moved to `lib/edge-scroll.js` from `atoms.jsx` so there is one copy.
+- **Fixed: a count, and a test.** Two comments said six others moved; it was seven. And nothing held `post()` to the replay's list, though a held write's sentence is read from it.
+- **Fixed: the row's hint before the drop.** The pill after a drop said who really moved and the row before it still named only who was in the way: "Moves Reilly" over a drop that moved eight. I sent this to `ROADMAP.md` in the ship run, and Patryk
+  had it fixed in the version. That entry also claimed the fix would run the Optimiser under a settled finger and wanted costing, which was wrong: `dropCheck` already runs `planDrop`, whose trial is the answer. `planDrop` now hands it out as `post`, and the settled row
+  reads `movedNames` over it, the function the pill uses, so it adds no optimiser pass and the two counts cannot differ. Over the generated days the hint is held to the list `transform` writes. **Measured on the tablet, DEV tab, Optimiser on, a paced touch drag of
+  Victoria from table 1 onto Rosanna's row:** "Moves Rosanna, Mike, Andrea +2". The touch was cancelled and all 11 bookings stayed as they were. The first answer before the finger settles stays the cheap guess, marked `unsure`, as it was.
+- **Left as a device check:** the floor on a short screen. Its overflow is measured in a Chrome tab; the room in the installed app is still the calculation above.
+- **Closed:** "Victoria and Victoria moved." is a true sentence, the two are two bookings. `saveMove`'s six arguments are a matter of reading, with pins in three tests. `SearchField`'s autocorrect: the review asked whether other searches
+  raise the same bubble, nothing was measured, and it is an iOS bubble on an app the restaurant runs on Android.
+
+**After:** main entry 455.52 kB (134.47 gz); 4,299 tests; 0 lint errors, 63 warnings; style OK.

@@ -84,16 +84,50 @@ export function planDelete(ctx){
 // the stale gate replays on a fresh `prev`, so what it moved can only be read
 // inside the transform, on the list it really ran on. `memoByPrev` keeps that to
 // one optimiser pass per list, as `planDelete` does.
-// → {transform, delta(), age()}   `delta` answers for the transform's latest run;
-//   `age` is the ms since this was made, for a landing too late to offer an Undo.
+// → {transform, delta(), post(), age()}   `delta` and `post` answer for the
+//   transform's latest run; `age` is the ms since this was made, for a landing
+//   too late to offer an Undo.
 export function withUndoDelta(transform,deltaOf){
   const at=Date.now();
-  let delta=[];
+  let delta=[],after=[];
   return {
-    transform:memoByPrev(function(prev){const post=transform(prev);delta=deltaOf(prev,post);return post;}),
+    transform:memoByPrev(function(prev){const post=transform(prev);delta=deltaOf(prev,post);after=post;return post;}),
     delta:function(){return delta;},
+    post:function(){return after;},
     age:function(){return Date.now()-at;},
   };
+}
+
+// ── What a move says ─────────────────────────────────────────────────────────
+// v18.14.2. With the Optimiser on, a drop or an assign can re-seat the whole day,
+// and the pill named only the party that gave up its table: "David moved to 8 —
+// Reilly reassigned." while seven others had moved too, measured on an iPad. So the
+// sentence is finished when the write lands, from what really moved, for the same
+// reason the Undo is armed there: a held write replays on a fresh list.
+//
+// `delta` holds the tables everyone had, `post` what they have. A delta entry can
+// be a party that only changed some other field, so the tables are compared, as
+// a set, because the optimiser may hand the same ones back in another order.
+// `first` are the parties the action itself displaced, who lead the sentence.
+function sameTables(a,b){return (a.tables||[]).slice().sort().join("+")===(b.tables||[]).slice().sort().join("+");}
+export function movedNames(delta,post,id,first){
+  const byId={};
+  (post||[]).forEach(function(b){byId[b.id]=b;});
+  const moved=(delta||[]).filter(function(b){const now=byId[b.id];return b.id!==id&&now&&!sameTables(b,now);});
+  const led=(first||[]).map(function(f){return moved.find(function(b){return b.id===f.id;});}).filter(Boolean);
+  return led.concat(moved.filter(function(b){return led.indexOf(b)<0;})).map(function(b){return b.name;}).filter(Boolean);
+}
+// Two names at most: the pill is one line under a thumb. Patryk's choice, over a
+// bare count and over the old sentence.
+export function moveSentence(lead,names){
+  if(!names.length) return lead+".";
+  if(names.length===1) return lead+" — "+names[0]+" moved.";
+  if(names.length===2) return lead+" — "+names[0]+" and "+names[1]+" moved.";
+  return lead+" — "+names[0]+" and "+(names.length-1)+" others moved.";
+}
+// A plan with no `lead` (a swap, a free table, a reshuffle) already says all of it.
+export function landedSentence(plan,sentence,delta,post,id){
+  return plan&&plan.lead?moveSentence(plan.lead,movedNames(delta,post,id,plan.moved)):sentence;
 }
 
 // ── planUndo ─────────────────────────────────────────────────────────────────

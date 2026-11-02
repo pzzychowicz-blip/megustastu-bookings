@@ -12,6 +12,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { planDrop, dropPreview, dropCheck } from "../src/lib/drop-plan.js";
 import { releaseSwapped } from "../src/lib/booking-save.js";
+import { movedNames } from "../src/lib/delete-undo.js";
 import { ALL_TABLES } from "../src/lib/constants.js";
 import { comboCapBest } from "../src/lib/booking-logic.js";
 import { todayStr, addDays } from "../src/lib/day.js";
@@ -98,7 +99,8 @@ describe("planDrop: one party in the way", () => {
     // `a` has no table, so there is no set to hand `b` in exchange.
     const list = [bk("a", "19:00", 2, []), bk("b", "19:00", 2, ["4"], { _manual: true, _locked: true })];
     const plan = drop(list, "a", "4");
-    expect(plan.done).toBe("A moved to 4 — B reassigned.");
+    expect(plan.done).toBe("A moved to 4 — B moved.");
+    expect(plan.lead).toBe("A moved to 4");
     const out = plan.transform(list);
     expect(byId(out, "a")).toMatchObject({ tables: ["4"], _manual: true, _locked: true });
     const b = byId(out, "b");
@@ -180,6 +182,24 @@ describe("dropPreview: the row under a dragged block", () => {
     ]);
     expect(see(crowd, "a", "7")).toEqual({ tone: "warn", text: "Moves Yara, Ariadna, Teo +1", unsure: true });
   });
+  // v18.14.2: "Moves Reilly" over a drop that moved eight, measured on an iPad. With
+  // the Optimiser on the trial re-seats more than the parties in the way.
+  it("once checked, it counts everyone the trial re-seats, not only who was in the way", () => {
+    const list = [
+      bk("a", "13:00", 2, ["6"], { duration: 360 }),
+      bk("b", "13:00", 2, ["7"], { name: "Yara Domínguez", duration: 60 }),
+      bk("c", "14:30", 2, ["7"], { name: "Ariadna Puig", duration: 60 }),
+      bk("d", "13:00", 2, ["13"], { name: "Teo Vargas" }),
+      bk("e", "15:00", 2, ["12"], { name: "Emil Kovacs" }),
+      bk("f", "14:00", 2, ["11"], { name: "Lena Brandt" }),
+    ];
+    const on = { autoOptimizer: true, bookings: list, user: "u@x", nowMins: 600 };
+    const plan = drop(list, "a", "7");
+    expect(plan.moved.map((b) => b.id)).toEqual(["b", "c"]);
+    expect(see(list, "a", "7", { autoOptimizer: true }).text).toBe("Moves Yara, Ariadna");
+    expect(checked(list, "a", "7", on)).toEqual({ tone: "warn", text: "Moves Yara, Ariadna, Teo +2" });
+    expect(plan.post.map((b) => b.id)).toEqual(plan.transform(list).map((b) => b.id));
+  });
   it("a seated party says so, in red, where the drop will be refused", () => {
     const list = [bk("a", "13:00", 2, ["3"]), bk("b", "13:00", 2, ["4"], { name: "Yara Domínguez", status: "seated" })];
     expect(see(list, "a", "4")).toEqual({ tone: "danger", text: "Yara is seated here" });
@@ -229,7 +249,7 @@ describe("dropPreview: the row under a dragged block", () => {
     let x = 7919;
     const r = () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; };
     const pick = (a) => a[Math.floor(r() * a.length)];
-    const hits = { free: 0, swap: 0, moves: 0, red: 0, checked: 0, corrected: 0 };
+    const hits = { free: 0, swap: 0, moves: 0, red: 0, checked: 0, corrected: 0, wider: 0 };
     for (let day = 0; day < 160; day++) {
       // Every second day is today with the Optimiser off, where the row is exact.
       const off = day % 2 === 1;
@@ -249,7 +269,13 @@ describe("dropPreview: the row under a dragged block", () => {
         const sure = checked(list, ctx.id, ctx.targetId, Object.assign({ bookings: list, user: "u@x" }, more));
         expect(sure.tone === "danger", "the check and the release").toBe(!!plan.refuse);
         expect(sure).not.toHaveProperty("unsure");
-        if (plan.moved) expect(sure.text).toBe("Moves " + plan.moved.slice(0, 3).map((b) => b.name.split(" ")[0]).join(", ") + (plan.moved.length > 3 ? " +" + (plan.moved.length - 3) : ""));
+        if (plan.moved) {
+          // Read from the write itself, so the row and the release cannot differ.
+          const names = movedNames(list, plan.transform(list), ctx.id, plan.moved);
+          expect(names.slice(0, plan.moved.length).sort(), "those in the way lead").toEqual(plan.moved.map((b) => b.name).sort());
+          expect(sure.text).toBe("Moves " + names.slice(0, 3).map((n) => n.split(" ")[0]).join(", ") + (names.length > 3 ? " +" + (names.length - 3) : ""));
+          if (names.length > plan.moved.length) hits.wider++;
+        }
         if (hint.unsure) { hits.checked++; if (sure.text !== hint.text) hits.corrected++; } else expect(sure).toEqual(hint);
         if (hint.tone === "free") { hits.free++; expect(plan.done).toMatch(/ moved to [^—]*\.$/); }
         if (hint.tone === "danger") { hits.red++; expect(plan.refuse).toBeTruthy(); }
@@ -278,7 +304,7 @@ describe("BookingApp's dropOnTable", () => {
     expect(App, "the two lists stay separate arguments").toMatch(/function dropCtx\(id,targetId\)\{return \{id:id,targetId:targetId,liveBookings:liveBookings,bookings:bookings,/);
     // v18.14.0 (H5): the sentence comes when the write LANDS, on the Undo pill,
     // so a refused write is never shown as a move (the v15.4.0 rule, tighter).
-    expect(fn).toContain('saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);});');
+    expect(fn).toContain('saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);},plan);');
     expect(fn.split("\n").length).toBeLessThan(12);
   });
 });
@@ -295,7 +321,7 @@ describe("BookingApp's saveMove", () => {
     expect(fn).toMatch(/onLanded:function\(\)\{/);
     const landed = fn.slice(fn.indexOf("onLanded"));
     expect(landed).toContain("const delta=move.delta();");
-    expect(landed).toContain("armUndo(delta,id,kind,false,sentence);");
+    expect(landed).toContain("armUndo(delta,id,kind,false,landedSentence(plan,sentence,delta,move.post(),id));");
     expect(fn.slice(0, fn.indexOf("onLanded")), "nothing is armed at the dispatch").not.toContain("armUndo(");
   });
   it("a write that moved nobody still answers the press, and a late landing offers nothing", () => {
@@ -406,7 +432,7 @@ describe("planDrop: what a displaced party is left with", () => {
       bk("b", "18:00", 2, ["4", "5"], { _manual: true, _locked: true }),
       bk("c", "20:00", 2, ["4"], { _manual: true, _locked: true })];
     const plan = drop(list, "a", "4");
-    expect(plan.done).toBe("A moved to 4 — B, C reassigned.");
+    expect(plan.done).toBe("A moved to 4 — B and C moved.");
     const out = plan.transform(list);
     expect(byId(out, "a").tables).toEqual(["4"]);
     for (const id of ["b", "c"]) {

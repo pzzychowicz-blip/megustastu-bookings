@@ -6,7 +6,7 @@
 // screen: on the tablet i3 and i4 sit below an 800px screen, and on a phone
 // everything from table 6 down.
 //
-// Pure except `scrollParentY` / `scrollBounds`, which read the DOM. The loop
+// Pure except `scrollParentY` / `scrollPort` / `scrollBounds`, which read the DOM. The loop
 // that drives them lives in TimelineView's TimelineBlock, because it has to
 // move the drag's own translateY by exactly what it scrolled.
 
@@ -51,6 +51,20 @@ export function scrollParentY(el) {
   }
   const root = document.scrollingElement;
   return root && root.scrollHeight > root.clientHeight + 1 ? root : null;
+}
+
+// The nearest ancestor that scrolls BY STYLE, with or without anything to scroll
+// yet. Moved here from atoms.jsx (v18.14.2), which clamps an animation to it. A
+// box asks this where it wants what will clip it, so a form that happens to fit
+// right now still counts: the keyboard is about to shrink it.
+export function scrollPort(box) {
+  let p = box.parentElement;
+  while (p && p !== document.body) {
+    const oy = getComputedStyle(p).overflowY;
+    if (oy === "auto" || oy === "scroll") return p;
+    p = p.parentElement;
+  }
+  return null;
 }
 
 // Where the scrollport is visible, in viewport coordinates. The body and the

@@ -54,7 +54,8 @@ import {
   isRedeemedBy, attachRefusal, attachedElsewhere, searchVouchers, money,
 } from "../lib/vouchers";
 import { formatDay } from "../lib/day";
-import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
+import { useAcRow, AC_ROW } from "../hooks/useAcRow";
+import { AcMenu } from "./AcMenu";
 import { Fld, OutlineChip, Reveal, InlineAlert, mkInp, mkBtn, reduceMotionOn } from "./atoms";
 
 const STATE_TONE = { open: "success", spent: "neutral", expired: "warn", void: "danger" };
@@ -158,7 +159,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
   // swipe that scrolls the list does not pick a voucher. (`matches` is built
   // above the early return, for the scroll-into-view effect.)
   const menu = menuOpen ? (
-    <div ref={menuRef} style={AC_MENU}>
+    <AcMenu menuRef={menuRef}>
       {matches.map(function (v) {
         // Phase 47 (V-2): a voucher on another live booking says so in the
         // list, from `attachedElsewhere` — the same question `attachRefusal`
@@ -190,7 +191,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
           </div>
         );
       })}
-    </div>
+    </AcMenu>
   ) : null;
 
   return (

@@ -22,6 +22,7 @@ import { afterFrame, pageHidden } from "../lib/after-frame";
 import { openerFor } from "../lib/focus-return";
 import { raisesKeyboard } from "../lib/keyboard";
 import { lockPageScroll } from "../lib/scroll-lock";
+import { scrollPort } from "../lib/edge-scroll";
 import { AlertIcon, ChevronDownIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
@@ -1336,16 +1337,6 @@ export function clampRange(live, next, cap) {
   const from = cap == null ? live : Math.min(live, cap);
   const to = cap == null ? next : Math.min(next, cap);
   return { from: from, to: to, pending: to === next ? null : next, moves: to !== from };
-}
-
-function scrollPort(box) {
-  let p = box.parentElement;
-  while (p && p !== document.body) {
-    const oy = getComputedStyle(p).overflowY;
-    if (oy === "auto" || oy === "scroll") return p;
-    p = p.parentElement;
-  }
-  return null;
 }
 
 // ── The visible cap (v17.9.1) ────────────────────────────────────────────────

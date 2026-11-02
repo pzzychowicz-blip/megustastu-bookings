@@ -68,7 +68,7 @@ import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStac
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { dueOccurrences, withOccurrences } from "./lib/recurring";
-import { planDelete, planUndo, planCustomerDelete, withUndoDelta, deleteWords, cancelWords } from "./lib/delete-undo";
+import { planDelete, planUndo, planCustomerDelete, withUndoDelta, landedSentence, deleteWords, cancelWords } from "./lib/delete-undo";
 import { CONFIRM_MODALS, markArmed, armSettled } from "./lib/arm-guard";
 import { afterIdle } from "./lib/after-frame";
 import { planSettle, settleEffects, carryTransform } from "./lib/voucher-settle";
@@ -449,7 +449,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.14.1"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.14.2"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -2456,12 +2456,14 @@ export function BookingApp({uid}){
   //   A landing later than the pill would have lasted offers nothing. It would
   // restore snapshots taken before whatever has happened since, and it would
   // appear long after anyone was looking.
-  function saveMove(transform,id,kind,sentence,quiet){
+  // v18.14.2: a `plan` with a `lead` has its sentence finished here, from what the
+  // write moved (`landedSentence`), where a whole-day re-seat can be seen.
+  function saveMove(transform,id,kind,sentence,quiet,plan){
     const move=withUndoDelta(transform,undoDelta);
     return saveBookings(move.transform,false,Object.assign(id==null?{}:goneReport(id),{onLanded:function(){
       const delta=move.delta();
       if(!delta.length){if(quiet)quiet();return;}
-      if(move.age()<=(generalSettings.undoSecs||10)*1000) armUndo(delta,id,kind,false,sentence);
+      if(move.age()<=(generalSettings.undoSecs||10)*1000) armUndo(delta,id,kind,false,landedSentence(plan,sentence,delta,move.post(),id));
     }}));
   }
   // v18.4.5 (#17): WHAT a drop does is `planDrop` (lib/drop-plan.js), which
@@ -2471,7 +2473,7 @@ export function BookingApp({uid}){
     const plan=planDrop(dropCtx(id,targetId));
     if(!plan) return;
     if(plan.refuse){flashDragMsg(plan.refuse);return;}
-    saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);});
+    saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);},plan);
   }
   // v18.14.0 (H5): what the row under a dragged block says. TimelineView asks once
   // per row, through a `VA` wrapper, so this reads the list as it stands then.
@@ -2964,7 +2966,7 @@ export function BookingApp({uid}){
   // (lib/manual-assign.js); this keeps the write, the close and the flash.
   function manualAssign(bookingId,tables,locked,affected){
     const plan=planAssign({bookingId:bookingId,tables:tables,locked:locked,affected:affected,bookings:bookings,viewDate:viewDate,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,user:getUser()});
-    saveMove(plan.transform,bookingId,"assign",plan.done,plan.reshuffles?flash:null);
+    saveMove(plan.transform,bookingId,"assign",plan.done,plan.reshuffles?flash:null,plan);
     setManualTarget(null);
   }
 
@@ -3882,7 +3884,10 @@ export function BookingApp({uid}){
       style={Object.assign({background:"var(--bg-app)",
         // v18.3.0 (N7): a phone's side paddings clear the notch in landscape;
         // the side insets are 0 in portrait, so portrait is unchanged.
-        padding:isMobile?"12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))":compact?"8px 16px 0":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"},
+        // v18.14.2: no shell's top padding may be under .mgt-edge's 12px. An
+        // installed app paints that strip OVER whatever sits in it, and compact's
+        // 8px left the top 4px of the header's buttons under it.
+        padding:isMobile?"12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))":compact?"12px 16px 0":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"},
         /* v17.5.0: shellFixed → a 100dvh flex column whose inner region scrolls,
            so the header + date rows stay put. Off = the original growing block.
            v17.5.0 correction: NO overflow:hidden here. It clipped the List

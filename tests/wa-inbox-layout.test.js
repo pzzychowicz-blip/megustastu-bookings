@@ -24,6 +24,12 @@ const View = read("components/whatsapp/ConversationView.jsx");
 const Row = read("components/whatsapp/ConversationRow.jsx");
 
 describe("W1 — the draft bar never hides what it asks you to accept", () => {
+  // v18.14.2 (Patryk): the full card's Accept & open and Dismiss sat on the left, and
+  // the compact bar's on the right. One card, two places for the same two buttons.
+  it("keeps Accept & open and Dismiss on the right, in the full card as in the bar", () => {
+    expect(Draft).toMatch(/justifyContent: "flex-end", gap: 8, flexWrap: "wrap" \}\}>\s*<button\s+onClick=\{\(\) => onAccept\(\)\}/);
+    expect(Draft).toMatch(/gap: 8, marginLeft: "auto", flexShrink: 0/);
+  });
   it("gives the details a basis of their own content, and no shrink", () => {
     expect(Draft).toMatch(/gap: 8, flex: "1 0 auto", maxWidth: "100%", minWidth: 0, cursor: hasDetail \? "pointer" : "default"/);
     expect(Draft, "flex: 1 with min-width 0 is what let the controls squeeze it").not.toMatch(/gap: 8, flex: 1, minWidth: 0, cursor: hasDetail/);

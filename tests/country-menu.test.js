@@ -35,10 +35,16 @@ describe("the country menu", () => {
   // Measured: reopened 80ms into the exit, focus stayed on the pill and typing "bel"
   // reached nothing, because `autoFocus` runs at a mount and that node never left.
   it("is a new menu for every open, so the search box takes the focus on a reopen too", () => {
-    expect(src).toContain('<div key={opens} className={open ? "mgt-pop-in" : "mgt-pop-out"}');
+    expect(src).toContain('<div ref={menuRef} key={opens} className={open ? "mgt-pop-in" : "mgt-pop-out"}');
     expect(src).toContain("autoFocus");
     const open = src.slice(src.indexOf("function openList("));
     expect(open.indexOf("setOpens(")).toBeGreaterThan(-1);
     expect(open.indexOf("setOpens(")).toBeLessThan(open.indexOf("setOpen(true)"));
+  });
+  // v18.14.2, on an iPad: "pol" raised iOS's "Pół" bubble, and it outlived the form.
+  it("asks the keyboard to leave a country's name as it was typed", () => {
+    expect(src).toContain('autoCorrect="off"');
+    expect(src).toContain('autoCapitalize="none"');
+    expect(src).toContain("spellCheck={false}");
   });
 });

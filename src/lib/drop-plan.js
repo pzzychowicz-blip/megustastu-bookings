@@ -11,7 +11,9 @@
 //                 | { refuse }            the toast's text; nothing is written
 //                 | { transform, done }   `saveBookings(transform)`, and `done`
 //                                         is the sentence the Undo pill carries
-//                                         when that lands (v18.14.0)
+//                                         when that lands (v18.14.0). A displacement
+//                                         adds `moved`, `lead` and `post`, the
+//                                         trial's list (v18.14.2)
 //
 //   dropPreview(ctx) → null | { tone, text }   v18.14.0 (H5): what the row under
 //                                         a dragged block says before the
@@ -50,6 +52,7 @@ import {
   bookingsAfterAction, optimizerActiveFor, histEntry as defaultHistEntry,
 } from "./booking-logic.js";
 import { releaseSwapped } from "./booking-save.js";
+import { moveSentence, movedNames } from "./delete-undo.js";
 
 // ── dropSite: what stands at the target ──────────────────────────────────────
 // v18.14.0 (H5): the first half of `planDrop`, moved up here unchanged, so the
@@ -162,9 +165,10 @@ function swapOf(site,nowMins,today){
 // days.
 const MAX_NAMES=3;
 function firstName(name){return String(name||"").trim().split(/\s+/)[0]||"A party";}
-function namesOf(list){
-  return list.slice(0,MAX_NAMES).map(function(b){return firstName(b.name);}).join(", ")+(list.length>MAX_NAMES?" +"+(list.length-MAX_NAMES):"");
+function shortNames(names){
+  return names.slice(0,MAX_NAMES).map(function(n){return firstName(n);}).join(", ")+(names.length>MAX_NAMES?" +"+(names.length-MAX_NAMES):"");
 }
+function namesOf(list){return shortNames(list.map(function(b){return b.name;}));}
 function rowHint(ctx,trial){
   const site=dropSite(ctx);
   if(!site) return null;
@@ -178,7 +182,10 @@ function rowHint(ctx,trial){
   if(!trial) return {tone:"warn",text:"Moves "+namesOf(occ),unsure:true};
   const plan=planDrop(ctx);
   if(plan.refuse) return {tone:"danger",text:"Can't move "+namesOf(occ)};
-  return plan.moved?{tone:"warn",text:"Moves "+namesOf(plan.moved)}:{tone:"free"};
+  // v18.14.2: everyone the plan's own trial re-seats, not only who was in the way:
+  // the row said "Moves Reilly" over a drop that moved eight. It costs no pass, the
+  // trial has run, and it is the count the pill says after the release.
+  return plan.moved?{tone:"warn",text:"Moves "+shortNames(movedNames(ctx.bookings,plan.post,ctx.id,plan.moved))}:{tone:"free"};
 }
 export function dropPreview(ctx){return rowHint(ctx,!optimizerActiveFor(ctx.viewDate,ctx.autoOptimizer));}
 export function dropCheck(ctx){return rowHint(ctx,true);}
@@ -265,7 +272,10 @@ export function planDrop(ctx){
     const trial=transform(bookings);
     const stranded=dOcc.find(function(o){const t=trial.find(function(x){return x.id===o.id;});return !t||(t.tables||[]).length===0||t._conflict;});
     if(stranded) continue;
-    return {transform:transform,moved:dOcc,done:src.name+" moved to "+dSet.join("+")+" — "+dOcc.map(function(o){return o.name;}).join(", ")+" reassigned."};
+    // v18.14.2: `done` is what is known now, `lead` what `saveMove` finishes from
+    // what the write really moved (`landedSentence`, lib/delete-undo.js).
+    const lead=src.name+" moved to "+dSet.join("+");
+    return {transform:transform,moved:dOcc,post:trial,lead:lead,done:moveSentence(lead,dOcc.map(function(o){return o.name;}))};
   }
   const seatedOcc=occ.find(function(b){return b.status==="seated";});
   if(seatedOcc) return {refuse:seatedOcc.name+" is seated on "+targetId+"'s tables — can't move them."};

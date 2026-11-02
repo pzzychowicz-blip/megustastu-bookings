@@ -1893,9 +1893,12 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; }
    Checked on the device with a probe page added to the Home Screen: the
    header is blurred without the strip and sharp with it.
 
-   - 12px is the phone shell's top padding (App's outer div), so at rest it
-     covers nothing, and it is taller than the probe's depth. Content that
-     scrolls up under it disappears 12px early, as under a status bar.
+   - 12px is the phone and compact shells' top padding (App's outer div), so
+     at rest it covers nothing, and it is taller than the probe's depth. A
+     shell with less padding loses the top of its header to this strip, which
+     is what v18.14.0's compact 8px did until v18.14.2; tests/compact-shell.test.js
+     holds them together. Content that scrolls up under it disappears 12px
+     early, as under a status bar.
    - Standalone only: a Safari tab has no such blur, and on the desktop a
      band over scrolled content would be a change for nothing. The Android
      tablet's installed app gets it too, where it is the page colour over

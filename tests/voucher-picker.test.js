@@ -29,7 +29,7 @@ describe("V-1 — the list scrolls itself into view when it opens", () => {
 
   it("scrolls the NEAREST way, on open only, and without a glide under Reduce animations", () => {
     expect(Picker).toMatch(/menuRef\.current\.scrollIntoView\(\{ block: "nearest", behavior: reduceMotionOn\(\) \? "auto" : "smooth" \}\);\s*\}, \[menuOpen\]\);/);
-    expect(Picker).toMatch(/<div ref=\{menuRef\} style=\{AC_MENU\}>/);
+    expect(Picker).toMatch(/<AcMenu menuRef=\{menuRef\}>/);
   });
 });
 
