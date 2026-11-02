@@ -40223,3 +40223,19 @@ exactly 12, Follow's is 14, and the button tops are whole at full resolution. Fu
 1322 × 936, 1092 × 840, 804 × 936 or 760 × 936. So 12px holds in real WebKit with the real strip, which the tablet could not show: its strip was a forced style. The 11-inch was not run as its own
 device; its widths fall inside the range above. **A hand-made web clip without its `ApplicationManifest` reads `navigator.standalone` true and `display-mode: standalone` false**, so the strip stays hidden,
 and that produced a false blur finding here until the clip was rebuilt from a real one.
+
+**Four more from those checks, and two rows Patryk marked on the screenshots.** He chose each.
+
+- **The drop's message (and the table picker's).** With the Optimiser on, `bookingsAfterAction` can re-seat the whole day, and the pill named only the party that gave up its table: "David moved to 8 — Reilly
+  reassigned." with most of the day moved. It is now finished when the write lands, from who really changed tables (`landedSentence`, `lib/delete-undo.js`), because a held write replays on a fresh list. Two names at
+  most, then a count. Measured on the same drop: "David moved to 8 — Reilly and 7 others moved.", and the eight were read back block by block; the two Victorias on that day are two bookings.
+  A swap and a free table keep their own sentence: nothing else moves there.
+- **The country menu.** With the keyboard up on the iPad it spanned 173–495 while the Save bar started at 413, so the last rows could not be tapped. `useMenuRoom` writes the menu's `maxHeight` from the room left and
+  follows the keyboard and the form's scroll, without a state, because a state would re-render 249 rows a frame. Afterwards it spanned 173–406 and Zimbabwe, the last row, answered `elementFromPoint`, with the keyboard
+  arriving after the menu had opened. **Not measured on the tablet**: it was unplugged by then, so the tablet's numbers are the device check for this version.
+- **The country search's autocorrect.** "pol" raised iOS's "Pół" bubble, which outlived the form. `autoCorrect`, `autoCapitalize` and `spellCheck` are off on that field.
+- **Left as it is, Patryk's call:** in a resized iPad window the system's window buttons cover the top of the Settings gear. Full screen is clear, `env(safe-area-inset-*)` reads 0 there, and the restaurant has no iPad.
+- **The draft card's Accept & open and Dismiss** sit on the right, as the compact bar's already did: 758 of the card's inner 759.
+- **Follow and zoom** stay on the right when a phone wraps them under the Optimiser, where `space-between` has nothing to spread a lone item against: 350 of the row's 350 at 375 wide.
+
+**After:** main entry 456.24 kB (134.70 gz); 4,295 tests; 0 lint errors, 63 warnings; style OK.
