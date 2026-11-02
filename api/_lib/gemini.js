@@ -336,11 +336,17 @@ function geminiFailure(message, status) {
 
 function isTemporary(status) { return status === 429 || status >= 500; }
 
+// A failure a second attempt might not meet: askGemini asks `.temporary`.
+function temporaryFailure(message, status) {
+  return Object.assign(geminiFailure(message, status), { temporary: true });
+}
+
 async function attemptGemini(key, model, body) {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  let res, data;
   try {
-    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + key, {
+    res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + key, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -348,19 +354,18 @@ async function attemptGemini(key, model, body) {
     });
     // Read under the same timer: a stalled body is a timeout. Anything else
     // that stops it is an error page, not Google's JSON.
-    const data = await res.json().catch((e) => { if (e.name === "AbortError") throw e; return {}; });
-    if (res.ok) return { data };
-    const temporary = isTemporary(res.status);
-    const message = (data.error && data.error.message) || ("Gemini error " + res.status);
-    return { temporary, failure: geminiFailure(message, temporary ? 503 : 502) };
+    data = await res.json().catch((e) => { if (e.name === "AbortError") throw e; return {}; });
   } catch (e) {
     // Never e.message: the request URL carries the key.
-    return { temporary: true, failure: e.name === "AbortError"
-      ? geminiFailure("Gemini took too long to answer. Try again in a minute.", 504)
-      : geminiFailure("Could not reach Gemini.", 503) };
+    throw e.name === "AbortError"
+      ? temporaryFailure("Gemini took too long to answer. Try again in a minute.", 504)
+      : temporaryFailure("Could not reach Gemini.", 503);
   } finally {
     clearTimeout(timer);
   }
+  if (res.ok) return data;
+  const message = (data.error && data.error.message) || ("Gemini error " + res.status);
+  throw isTemporary(res.status) ? temporaryFailure(message, 503) : geminiFailure(message, 502);
 }
 
 // The answer's JSON, or a throw (above). Every Gemini call goes through this.
@@ -368,13 +373,13 @@ async function attemptGemini(key, model, body) {
 // which is still worth one: see the measurement above.
 async function askGemini(key, body) {
   const model = geminiModel();
-  const first = await attemptGemini(key, model, body);
-  if (!first.failure) return first.data;
-  if (!first.temporary) throw first.failure;
-  console.warn("[gemini] " + model + " answered " + first.failure.status + " — second try on " + FALLBACK_MODEL + ".");
-  const second = await attemptGemini(key, FALLBACK_MODEL, body);
-  if (second.failure) throw second.failure;
-  return second.data;
+  try {
+    return await attemptGemini(key, model, body);
+  } catch (e) {
+    if (!e.temporary) throw e;
+    console.warn("[gemini] " + model + " answered " + e.status + " — second try on " + FALLBACK_MODEL + ".");
+  }
+  return attemptGemini(key, FALLBACK_MODEL, body);
 }
 
 function candidateText(data) {
