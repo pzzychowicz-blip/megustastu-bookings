@@ -54,6 +54,11 @@ describe("the toolbar has one home at a time", () => {
     expect(App).toMatch(/show=\{toolbarFolded\}/);
     expect(App).toMatch(/showOptimiser=\{toolbarFolded&&viewDate===todayStr\(\)\}/);
   });
+  // v18.14.2 (Patryk): a phone wraps Follow and zoom under the Optimiser, and alone on
+  // a line `space-between` leaves an item at the start.
+  it("keeps Follow and zoom on the right when they wrap to a line of their own", () => {
+    expect(Timeline).toContain('<div style={{ marginLeft: "auto" }}>{zoomBtns}</div>');
+  });
   it("the Summary takes scalars and stable functions, never an element (its memo)", () => {
     expect(App).not.toMatch(/optimiser=\{</i);
     expect(SummarySrc).toMatch(/<OptimiserControls autoOptimizer=\{autoOptimizer\}/);
