@@ -112,6 +112,20 @@ describe("the second try", () => {
   });
 });
 
+describe("the log", () => {
+  it("says what happened, which the caller's status cannot", async () => {
+    answers(() => http(429, {}), () => http(200, reply("hola")));
+    await generateCustomerReply([], "es");
+    expect(console.warn).toHaveBeenLastCalledWith(expect.stringContaining("failed (429) — second try on " + FALLBACK_MODEL));
+
+    const reset = Object.assign(new TypeError("fetch failed to ?key=" + KEY), { cause: { code: "ECONNRESET" } });
+    answers(() => Promise.reject(reset), () => http(200, reply("hola")));
+    await generateCustomerReply([], "es");
+    expect(console.warn).toHaveBeenLastCalledWith(expect.stringContaining("failed (ECONNRESET)"));
+    expect(console.warn.mock.lastCall[0]).not.toContain(KEY);
+  });
+});
+
 describe("when both tries fail", () => {
   it("a message is still saved, without a draft", async () => {
     answers(busy);

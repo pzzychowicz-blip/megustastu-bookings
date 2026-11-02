@@ -337,8 +337,12 @@ function geminiFailure(message, status) {
 function isTemporary(status) { return status === 429 || status >= 500; }
 
 // A failure a second attempt might not meet: askGemini asks `.temporary`.
-function temporaryFailure(message, status) {
-  return Object.assign(geminiFailure(message, status), { temporary: true });
+// `why` is what happened, for the log, since `status` is what WE answer: a 429,
+// a 500 and a dropped socket are all 503 to a caller and three different days to
+// whoever reads Vercel's logs. Google's status, "timeout", or the connection's
+// error code.
+function temporaryFailure(message, status, why) {
+  return Object.assign(geminiFailure(message, status), { temporary: true, why });
 }
 
 async function attemptGemini(key, model, body) {
@@ -360,14 +364,14 @@ async function attemptGemini(key, model, body) {
   } catch (e) {
     // Never e.message: the request URL carries the key.
     throw e.name === "AbortError"
-      ? temporaryFailure("Gemini took too long to answer. Try again in a minute.", 504)
-      : temporaryFailure("Could not reach Gemini.", 503);
+      ? temporaryFailure("Gemini took too long to answer. Try again in a minute.", 504, "timeout")
+      : temporaryFailure("Could not reach Gemini.", 503, (e.cause && e.cause.code) || e.name);
   } finally {
     clearTimeout(timer);
   }
   if (res.ok) return data;
   const message = (data && data.error && data.error.message) || ("Gemini error " + res.status);
-  throw isTemporary(res.status) ? temporaryFailure(message, 503) : geminiFailure(message, 502);
+  throw isTemporary(res.status) ? temporaryFailure(message, 503, res.status) : geminiFailure(message, 502);
 }
 
 // The answer's JSON, or a throw (above). Every Gemini call goes through this.
@@ -379,7 +383,7 @@ async function askGemini(key, body) {
     return await attemptGemini(key, model, body);
   } catch (e) {
     if (!e.temporary) throw e;
-    console.warn("[gemini] " + model + " answered " + e.status + " — second try on " + FALLBACK_MODEL + ".");
+    console.warn("[gemini] " + model + " failed (" + e.why + ") — second try on " + FALLBACK_MODEL + ".");
   }
   return attemptGemini(key, FALLBACK_MODEL, body);
 }
