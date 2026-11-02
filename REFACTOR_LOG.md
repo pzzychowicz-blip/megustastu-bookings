@@ -40240,4 +40240,19 @@ and that produced a false blur finding here until the clip was rebuilt from a re
 - **The draft card's Accept & open and Dismiss** sit on the right, as the compact bar's already did: 758 of the card's inner 759.
 - **Follow and zoom** stay on the right when a phone wraps them under the Optimiser, where `space-between` has nothing to spread a lone item against: 350 of the row's 350 at 375 wide.
 
-**After:** main entry 456.24 kB (134.70 gz); 4,295 tests; 0 lint errors, 63 warnings; style OK.
+**`/code-review` over the branch raised nine.** Four fixed, one deferred, one left as a device check, three closed.
+
+- **Fixed: the other three lists.** The menu fix had gone on the country menu alone. The name, phone and voucher lists drew `AC_MENU` themselves and ran on under the Save bar, and the name list is the one a phone booking
+  opens every time. `AcMenu` is that sheet with `useMenuRoom` on it, so no list draws one without the other, and `CountryPicker` stays its own because it fades and holds a search box. **Measured on the tablet, a DEV tab in Chrome,
+  keyboard up, "an" typed (15 rows):** the list took 120 rather than 264 and spanned 86–207 with Save at 169, the floor again. One real swipe on the form took it to 150, ending at 155, and its last row answered `elementFromPoint`, so
+  the floor's comment holds on the device. **The iPad's reading of the name list could not be taken:** the simulator's text input dropped a letter each time, and the next went to the page and fired the `A` shortcut. The country menu's
+  iPad reading stands for the shared hook.
+- **Fixed: the menu's port.** `scrollParentY` passes over a form with nothing to scroll yet, and over the root, so a form that fitted when the menu opened was never watched once the keyboard shrank it. `useMenuRoom` finds its port by
+  style, through `scrollPort`, moved to `lib/edge-scroll.js` from `atoms.jsx` so there is one copy.
+- **Fixed: a count, and a test.** Two comments said six others moved; it was seven. And nothing held `post()` to the replay's list, though a held write's sentence is read from it.
+- **Deferred:** a timeline row's hint still names one party where the drop re-seats the day. It is a behaviour change beyond this patch: `ROADMAP.md`.
+- **Left as a device check:** the floor on a short screen. Its overflow is measured in a Chrome tab; the room in the installed app is still the calculation above.
+- **Closed:** "Victoria and Victoria moved." is a true sentence, the two are two bookings. `saveMove`'s six arguments are a matter of reading, with pins in three tests. `SearchField`'s autocorrect: the review asked whether other searches
+  raise the same bubble, nothing was measured, and it is an iOS bubble on an app the restaurant runs on Android.
+
+**After:** main entry 455.44 kB (134.44 gz); 4,298 tests; 0 lint errors, 63 warnings; style OK.
