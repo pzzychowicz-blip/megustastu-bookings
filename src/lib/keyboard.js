@@ -61,6 +61,20 @@ export function activatesItself(el) {
   return !!role && SELF_ACTIVATING_ROLES.includes(role);
 }
 
+// ── nextMenuIndex ─────────────────────────────────────────────
+// v18.14.0: which row of a menu a key moves to, `null` for a key that is not the
+// menu's. ↑ and ↓ wrap, as a menu's do. `at` is -1 when focus is on none of the rows,
+// which is where a menu opened by a tap starts, so ↓ lands on the first and ↑ on
+// the last.
+export function nextMenuIndex(at, key, count) {
+  if (count < 1) return null;
+  if (key === "ArrowDown") return at < 0 ? 0 : (at + 1) % count;
+  if (key === "ArrowUp") return at < 0 ? count - 1 : (at - 1 + count) % count;
+  if (key === "Home") return 0;
+  if (key === "End") return count - 1;
+  return null;
+}
+
 // ── stepPress ────────────────────────────────────────────────────────────────
 // v18.2.0: the press handlers for a − / + stepper button (the booking form's
 // and the walk-in form's guests and duration).

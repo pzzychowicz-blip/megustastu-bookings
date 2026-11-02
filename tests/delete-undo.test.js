@@ -7,8 +7,8 @@
 // same return value and the same written list every time; that comparison is
 // in REFACTOR_LOG, since it needs the old code. These are the cases that stay:
 // one per outcome, each asserting what is ASKED or what is WRITTEN.
-import { describe, it, expect } from "vitest";
-import { planDelete, planUndo, planCustomerDelete } from "../src/lib/delete-undo.js";
+import { describe, it, expect, vi } from "vitest";
+import { planDelete, planUndo, planCustomerDelete, withUndoDelta, deleteWords, cancelWords } from "../src/lib/delete-undo.js";
 import { undoSnapshots } from "../src/lib/booking-logic.js";
 import { guestTagMap, guestTagsOf } from "../src/lib/customers.js";
 import { sanitizeVoucher } from "../src/lib/vouchers.js";
@@ -29,6 +29,32 @@ function del(id, bookings, more) {
     redeemAsked: false, vouchersOn: true, vouchersByCode: {},
   }, more || {}));
 }
+
+// v18.14.0 (correction 21, Patryk): a confirm says what is true.
+describe("what the Delete and Cancel confirms say", () => {
+  const today = todayStr();
+  const TABLES = " Tables will be re-optimised afterwards.";
+  it("Delete names the Undo it is about to offer, for as long as the setting says", () => {
+    expect(deleteWords({ date: today }, 10, true)).toBe("You can undo this for 10\u00a0seconds." + TABLES);
+    expect(deleteWords({ date: today }, 45, false)).toBe("You can undo this for 45\u00a0seconds.");
+  });
+  it("names the re-optimise only where it happens: today with the Optimiser off, it does not", () => {
+    expect(cancelWords({ date: today }, true)).toBe("The booking stays on the day, marked cancelled." + TABLES);
+    expect(cancelWords({ date: today }, false)).toBe("The booking stays on the day, marked cancelled.");
+  });
+  it("reads the booking's own date: the Optimiser's off switch is today's alone", () => {
+    expect(cancelWords({ date: "2099-01-01" }, false)).toContain(TABLES);
+  });
+  it("claims nothing about a booking it cannot find", () => {
+    expect(deleteWords(null, 10, true)).toBe("You can undo this for 10\u00a0seconds.");
+  });
+  it("is what App draws, and the old sentences are gone", () => {
+    const app = appCode();
+    expect(app).toContain("deleteWords(delBooked,generalSettings.undoSecs||10,autoOptimizer)");
+    expect(app).toContain("cancelWords(cancelBooked,autoOptimizer)");
+    expect(app).not.toContain("This can't be undone. Tables");
+  });
+});
 
 describe("planDelete", () => {
   it("removes the booking and nobody else", () => {
@@ -135,11 +161,78 @@ describe("planUndo", () => {
     expect(byId(back, "a").tables).toEqual(["1"]);
     expect(byId(back, "c").tables).toEqual(["1"]);       // the reconciliation effect's to resolve
   });
+  // v18.14.0 (H5): a move put back as it stood, every party in it.
+  it("a move and an assign restore every party, and only the one acted on gets a note", () => {
+    const prev = [bk("a", "13:00", ["1"]), bk("b", "13:00", ["2"]), bk("c", "14:00", ["3"])];
+    const post = [
+      Object.assign({}, prev[0], { tables: ["2"], _manual: true, _locked: true }),
+      Object.assign({}, prev[1], { tables: ["3"] }),
+      Object.assign({}, prev[2], { tables: ["1"] }),
+    ];
+    for (const [kind, note] of [["move", "move undone"], ["assign", "table change undone"]]) {
+      const back = undo({ snapshots: undoSnapshots(prev, post), primaryId: "a", kind }).transform(post);
+      expect(back.map((x) => x.tables)).toEqual([["1"], ["2"], ["3"]]);
+      expect(byId(back, "a")._locked).toBe(prev[0]._locked);
+      expect(byId(back, "a").history).toEqual([{ action: note, by: "u@x" }]);
+      expect(byId(back, "b").history).toEqual([]);
+    }
+  });
+  it("a reshuffle acted on nobody, so everything comes back with no note at all", () => {
+    const prev = [bk("a", "13:00", ["1"]), bk("b", "13:00", ["2"])];
+    const post = [Object.assign({}, prev[0], { tables: ["2"] }), Object.assign({}, prev[1], { tables: ["1"] })];
+    const plan = undo({ snapshots: undoSnapshots(prev, post), primaryId: null, kind: "reshuffle" });
+    expect(plan.date).toBe(TODAY);
+    const back = plan.transform(post);
+    expect(back.map((x) => x.tables)).toEqual([["1"], ["2"]]);
+    expect(back.map((x) => x.history)).toEqual([[], []]);
+  });
   it("with no primary among the snapshots, the first one names the date", () => {
     const tomorrow = new Date(TODAY + "T00:00:00Z"); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
     const T = tomorrow.toISOString().slice(0, 10);
     const plan = undo({ snapshots: [bk("x", "13:00", ["1"], { date: T })], primaryId: "elsewhere", kind: "edit" });
     expect(plan.date).toBe(T);
+  });
+});
+
+// v18.14.0 (H5). The Undo is armed when the write lands, and a held write
+// replays on a fresh list, so the delta has to be read inside the transform.
+describe("withUndoDelta", () => {
+  const moveA = (list) => list.map((b) => b.id === "a" ? Object.assign({}, b, { tables: ["9"] }) : b);
+  const delta = (prev, post) => undoSnapshots(prev, post);
+
+  it("has nothing to say until the transform has run", () => {
+    expect(withUndoDelta(moveA, delta).delta()).toEqual([]);
+  });
+  it("answers for the list the write really ran on, after a replay on a fresh one", () => {
+    const first = [bk("a", "13:00", ["1"])];
+    const fresh = [bk("a", "13:00", ["2"])];
+    const move = withUndoDelta(moveA, delta);
+    move.transform(first);
+    expect(move.delta()[0].tables).toEqual(["1"]);
+    move.transform(fresh);
+    expect(move.delta()[0].tables).toEqual(["2"]);
+  });
+  it("runs the transform once per list, so the delta and the write share one optimiser pass", () => {
+    let runs = 0;
+    const move = withUndoDelta((list) => { runs++; return moveA(list); }, delta);
+    const list = [bk("a", "13:00", ["1"])];
+    const post = move.transform(list);
+    expect(move.transform(list)).toBe(post);
+    expect(runs).toBe(1);
+  });
+  it("knows how old it is, for a landing too late to offer an Undo", () => {
+    vi.useFakeTimers();
+    try {
+      const move = withUndoDelta(moveA, delta);
+      expect(move.age()).toBe(0);
+      vi.advanceTimersByTime(11000);
+      expect(move.age()).toBe(11000);
+    } finally { vi.useRealTimers(); }
+  });
+  it("an action that moved nobody leaves an empty delta, which arms nothing", () => {
+    const move = withUndoDelta((list) => list, delta);
+    move.transform([bk("a", "13:00", ["1"])]);
+    expect(move.delta()).toEqual([]);
   });
 });
 

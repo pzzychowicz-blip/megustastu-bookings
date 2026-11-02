@@ -68,7 +68,8 @@ describe("W2 — two jobs, two names, two marks", () => {
 // the shape of Archive beside Re-check.
 describe("W3 — the words are on the buttons, not in a tooltip", () => {
   it("Re-check says Re-check, and Checking… while it runs", () => {
-    expect(View).toMatch(/<RecheckIcon size=\{IC\.inline\} \/><\/span>\s*\{running \? "Checking…" : "Re-check"\}\s*<\/button>/);
+    // v18.14.0 (correction 6): a row of the ⋯ menu, word and mark as before.
+    expect(View).toMatch(/recheck: \{ label: running \? "Checking…" : "Re-check", icon: RecheckIcon,/);
     expect(View, "no longer a bare square").not.toMatch(/width: H\.chrome, height: H\.chrome, minHeight: H\.chrome, padding: 0, cursor: running/);
   });
 
@@ -100,7 +101,7 @@ describe("W4 — an unknown sender's number, once and formatted", () => {
   it("the grey number beside the title appears only under a name", () => {
     const named = [{ id: "b1", name: "Ana", phone: "+447811223344", date: "2026-01-01", time: "13:00", status: "completed" }];
     expect(conversationName(conv, named, {})).toEqual({ title: "Ana", phoneLine: "+44 7811223344", source: "booking" });
-    expect(View).toMatch(/\{phoneDisplay \? <span/);
+    expect(View).toMatch(/\{phoneDisplay && !hideNumber \? <span/);
   });
 
   it("v18.9.0: the phone's contact names it first, then the booking, then the WhatsApp profile", () => {
@@ -118,6 +119,30 @@ describe("W4 — an unknown sender's number, once and formatted", () => {
   });
 });
 
+// v18.14.0 (correction 9, Patryk). At 998 × 507 the thread's box was its own 28px of
+// padding, and Send ended 13px past the panel. What the three changes give back takes
+// a browser, and the log has it. This holds what would undo them without a word.
+describe("a conversation on a short screen", () => {
+  it("is the compact layout's own test, and both panes only", () => {
+    expect(Inbox).toMatch(/const shortScreen = twoPane && isCompact\(openedAt, false\);/);
+  });
+  it("reads the height once: the keyboard moves it on Android, and the search box remounts in its other parent", () => {
+    expect(Inbox).toMatch(/const \[openedAt\] = useState\(winH\);/);
+    expect(Inbox, "a live winH turns this on while the search box has focus").not.toMatch(/isCompact\(winH/);
+  });
+  it("gives the panel the screen, keeping 8px of the day above and below", () => {
+    expect(Inbox).toMatch(/const INBOX_PANEL_SHORT_SCREEN = \{ \.\.\.INBOX_PANEL, height: "calc\(100dvh - " \+ 2 \* SP\.base \+ "px\)" \};/);
+    expect(Inbox).toMatch(/panel=\{shortScreen \? INBOX_PANEL_SHORT_SCREEN : INBOX_PANEL\}/);
+  });
+  it("draws the filter controls in one place at a time, from one element", () => {
+    expect(Inbox.match(/\{filterControls\}/g)).toHaveLength(2);
+    expect(Inbox).toMatch(/\{shortScreen \? <div [^\n]*\{filterControls\}<\/div> : null\}/);
+  });
+  it("hands the conversation the one thing it needs to know", () => {
+    expect(Inbox).toMatch(/hideNumber=\{shortScreen\}/);
+  });
+});
+
 describe("W5 — the phone's inbox", () => {
   it("keeps Close in the top corner, with the text buttons on a line of their own", () => {
     expect(Inbox).toMatch(/<div style=\{\{ display: "flex", gap: 6, marginLeft: "auto", order: twoPane \? 0 : 2, flexBasis: twoPane \? "auto" : "100%" \}\}>/);
@@ -125,11 +150,11 @@ describe("W5 — the phone's inbox", () => {
   });
 
   it("hides the LIST's toolbar while a conversation replaces the list", () => {
-    expect(Inbox).toMatch(/\{twoPane \|\| !activeKey \? \(\s*<div style=\{\{ padding: "8px 14px"/);
+    expect(Inbox).toMatch(/\{!shortScreen && \(twoPane \|\| !activeKey\) \? \(\s*<div style=\{\{ padding: "8px 14px"/);
   });
 
   it("shortens the search placeholder where the long one was cut", () => {
-    expect(Inbox).toMatch(/placeholder=\{twoPane \? "Search name, number or message…" : "Search…"\}/);
+    expect(Inbox).toMatch(/placeholder=\{twoPane && !shortScreen \? "Search name, number or message…" : "Search…"\}/);
   });
 
   it("offers Enter / Shift+Enter only where there is a keyboard", () => {
@@ -189,18 +214,33 @@ describe("the inbox's disconnection banner (v18.9.0)", () => {
   });
 });
 
-// v18.9.0 follow-up, measured on DEV at 375×812: an archived thread has four
-// actions (Re-check · Restore · Not a customer · Delete), and they ran 40px
-// past the screen (Delete at x 337–415). The group inside wraps, but the box
-// around it does not shrink, so its width was the buttons' one-line width.
-// Capped at the header's width it wraps: Delete at 282–360 on a second row,
-// and at 1280 the row is one line as before.
-describe("the conversation header's actions stay on a phone's screen", () => {
-  it("caps the box around the actions at the header's width", () => {
-    expect(View).toContain('<div style={{ marginLeft: "auto", flexShrink: 0, maxWidth: "100%" }}>{headerActionBtns}</div>');
+// v18.9.0 follow-up, measured on DEV at 375×812: an archived thread had four actions,
+// and they ran 40px past the screen, so the group was made to wrap. v18.14.0 (correction
+// 6, Patryk): it has two, Archive or Restore and the ⋯, which fit (Archive 235–318, ⋯
+// 324–360 at 375), so the wrapping went with the other three.
+describe("the conversation header has one action and the ⋯", () => {
+  const header = View.slice(View.indexOf("const headerActionBtns"), View.indexOf("const disabled = "));
+  it("in that order, whichever the action is", () => {
+    expect(header.indexOf("<RestoreIcon")).toBeGreaterThan(-1);
+    expect(header.indexOf("<ArchiveIcon")).toBeGreaterThan(header.indexOf("<RestoreIcon"));
+    expect(header.indexOf("<ConversationMenu")).toBeGreaterThan(header.indexOf("<ArchiveIcon"));
   });
-  it("lets the actions themselves wrap, right-aligned, in both states", () => {
-    const groups = View.match(/headerActionBtns = \(\s*<div style=\{\{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" \}\}>/g) || [];
-    expect(groups.length).toBe(2);
+  it("the rest are not buttons of the header any more", () => {
+    expect(header).not.toMatch(/Not a customer<\/button>|Delete<\/button>|Re-check/);
+    expect(View).not.toMatch(/mkDangerBtn/);
+  });
+  it("sits at the header's right, unwrapped", () => {
+    expect(View).toContain('<div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>');
+    expect(header).toContain('<div style={{ display: "flex", gap: 6, flexShrink: 0, justifyContent: "flex-end" }}>');
+  });
+});
+
+// v18.14.0 (correction 7, Patryk): the draft card's Add to waitlist goes right, on the
+// compact bar's wrapping row (`marginLeft`) and in the tall card's column (`alignSelf`).
+// `justifyContent` is for Suggest beside it: a group that wraps fills its line, and its
+// rows would otherwise start at the left again.
+describe("Add to waitlist sits at the draft card's right", () => {
+  it("in both shapes of the card, and inside itself", () => {
+    expect(Draft).toContain('<div style={Object.assign({}, row, { marginLeft: "auto", alignSelf: "flex-end", justifyContent: "flex-end" })}>');
   });
 });

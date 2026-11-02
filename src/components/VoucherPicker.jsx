@@ -128,7 +128,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
               onClick={function () { onChange(""); setErr(""); }}
               aria-label={"Remove voucher " + formatCode(code) + " from this booking"}
               className="mgt-hover-scale"
-              style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, borderRadius: R.pill, marginLeft: "auto" })}>
+              style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.quiet, borderRadius: R.pill, marginLeft: "auto" })}>
               Remove
             </button>
           )}
@@ -204,8 +204,8 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
               tapping one can never produce the refusal the picker would show a
               moment later. Capped at three: this is a prompt, not a catalogue,
               and the typed field below is still there for the rest. */}
-          {suggestions && suggestions.length ? (
-            <div style={{ marginBottom: 8 }}>
+          <Reveal show={!!(suggestions && suggestions.length)}>{suggestions && suggestions.length ? (
+            <div style={{ paddingBottom: 8 }}>
               {suggestions.slice(0, 3).map(function (s) {
                 return (
                   <div key={s.code}
@@ -228,14 +228,14 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
                       onClick={function () { attach(s.code); }}
                       aria-label={"Attach voucher " + formatCode(s.code) + " to this booking"}
                       className="mgt-hover-scale"
-                      style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, borderRadius: R.pill, marginLeft: "auto" })}>
+                      style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.quiet, borderRadius: R.pill, marginLeft: "auto" })}>
                       Attach
                     </button>
                   </div>
                 );
               })}
             </div>
-          ) : null}
+          ) : null}</Reveal>
           <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
             <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
               <input
@@ -257,7 +257,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
             </div>
             <button type="button" onClick={function () { attach(); }}
               className="mgt-hover-scale"
-              style={mkBtn({ fontSize: T.body, background: BTN.nav, borderRadius: R.pill })}>
+              style={mkBtn({ fontSize: T.body, background: BTN.quiet, borderRadius: R.pill })}>
               Attach
             </button>
           </div>

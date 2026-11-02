@@ -130,8 +130,8 @@ describe("the surfaces read the ONE rule", () => {
   it("the drop target starts the table rows at the Unplaced box's LIVE bottom (v18.3.2, O4)", () => {
     // `unplacedH` is where the box is heading; while it eases, only its live
     // bottom says where the rows are, or a drop lands a row off.
-    expect(Timeline).toMatch(/const top = u \? u\.getBoundingClientRect\(\)\.bottom : el\.getBoundingClientRect\(\)\.top \+ 24 \+ unplacedH;/);
-    expect(Timeline).toMatch(/const unplacedH = unplacedHeight\(unplacedLanes\.length, ROW_H, UNPLACED_GAP\);/);
+    expect(Timeline).toMatch(/const top = u \? u\.getBoundingClientRect\(\)\.bottom : gridTop \+ unplacedH;/);
+    expect(Timeline).toMatch(/const unplacedH = unplacedHeight\(unplacedLanes\.length, sz\.rowH, UNPLACED_GAP\);/);
   });
 
   it("no cell keys its FLIP id on tables[0] any more", () => {
@@ -197,7 +197,7 @@ describe("the Unplaced row eases open and shut (v18.3.2, O4)", () => {
 
   it("the box eases on --t-shift only while the row is moving", () => {
     expect(TL).toMatch(/const unplacedEasing = unplacedRow\.moving;/);
-    expect(TL).toMatch(/const unplacedBox = \{\s*position: "relative",\s*height: unplacedH \+ "px",\s*transition: unplacedEasing \? "height " \+ M\.shift : "none"\s*\};/);
+    expect(TL).toMatch(/const unplacedBox = \{\s*position: "relative",\s*height: unplacedH \+ "px",\s*transition: unplacedEasing \|\| sizeEasing \? "height " \+ M\.shift : "none"\s*\};/);
   });
 
   it("the label column clips while it eases; the grid column never does, and lifts", () => {
@@ -209,8 +209,8 @@ describe("the Unplaced row eases open and shut (v18.3.2, O4)", () => {
     expect(TL).toMatch(/const unplacedGridBox = \{ \.\.\.unplacedBox, zIndex: unplacedEasing && unplacedRow\.grow \? 1 : undefined \};/);
   });
 
-  it("the edge (line and grid lines) follows the eased box less the gap, and clips", () => {
-    expect(TL).toMatch(/const unplacedEdge = \{\s*position: "absolute", top: 0, left: 0, right: 0,\s*height: "calc\(100% - " \+ UNPLACED_GAP \+ "px\)",\s*overflow: "hidden"\s*\};/);
+  it("the edge (line, grid lines and rose ground) follows the eased box less the gap, and clips", () => {
+    expect(TL).toMatch(/const unplacedEdge = \{\s*position: "absolute", top: 0, left: 0, right: 0,\s*height: "calc\(100% - " \+ UNPLACED_GAP \+ "px\)",\s*overflow: "hidden",\s*background: "var\(--tl-unplaced-bg\)"\s*\};/);
     expect(TL).toMatch(/<div style=\{unplacedEdge\}>\{unplacedLine\}<GridLines \/><\/div>/);
     expect(TL).toMatch(/<div style=\{unplacedEdge\}>\{unplacedLine\}<\/div>/);
     // One set of grid lines for the row, so they never overflow onto the
@@ -218,7 +218,7 @@ describe("the Unplaced row eases open and shut (v18.3.2, O4)", () => {
     const lane = TL.slice(TL.indexOf('<div key={"ul" + li}'));
     expect(lane.slice(0, lane.indexOf("</div>")), "a lane draws no grid lines of its own").not.toMatch(/<GridLines \/>/);
     // The word keeps its centre: the line's 1px used to come out of its box.
-    expect(TL).toMatch(/height: \(heldLanes \* ROW_H - 1\) \+ "px",/);
+    expect(TL).toMatch(/height: \(heldLanes \* sz\.rowH - 1\) \+ "px",/);
   });
 
   it("a replacement, a catch-up or a hidden page goes straight to the new height", () => {

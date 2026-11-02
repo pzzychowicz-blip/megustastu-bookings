@@ -558,10 +558,21 @@ export function setTurnBuffer(cfg){
 }
 
 export var ROW_H=44,LABEL_W=58;
+// v18.14.0 (H6): the sticky ruler covers the top of the Timeline's scrollport, so
+// a block reached by keyboard must not land under it (WCAG 2.4.11, Focus Not
+// Obscured). The ruler's 24px and a gap. `main` and SplitLayout's panes take this,
+// and the body's copy is in index.css.
+export var SCROLL_CLEAR_RULER=32;
 // v17.0.0: 5th status `pending` (awaiting confirmation) — yellow family;
 // confirmed recolored to accent blue in index.html (the yellow moved to pending).
 export var STATUS_COLORS={confirmed:{bg:"rgba(var(--status-confirmed-rgb),0.15)",text:"var(--status-confirmed-text)",border:"rgba(var(--status-confirmed-rgb),0.35)"},pending:{bg:"rgba(var(--status-pending-rgb),0.15)",text:"var(--status-pending-text)",border:"rgba(var(--status-pending-rgb),0.35)"},seated:{bg:"rgba(var(--status-seated-rgb),0.15)",text:"var(--status-seated-text)",border:"rgba(var(--status-seated-rgb),0.35)"},completed:{bg:"rgba(var(--status-completed-rgb),0.12)",text:"var(--status-completed-text)",border:"rgba(var(--status-completed-rgb),0.3)"},cancelled:{bg:"rgba(var(--status-cancelled-rgb),0.12)",text:"var(--status-cancelled-text)",border:"rgba(var(--status-cancelled-rgb),0.3)"}};
 export var BLOCK_BG={confirmed:"var(--block-confirmed)",pending:"var(--block-pending)",seated:"var(--block-seated)",completed:"var(--block-completed)",cancelled:"var(--block-cancelled)"};
+// v18.14.0 (M1) — the fill of a BUTTON that sets a status. Four of the five are the
+// block's own fill. Completed is not: its pale grey is accepted at 2.19:1 on a block,
+// whose position and width carry the status, and a button has only its word (it read
+// 2.31:1 live in the quick-status popup). Anything that paints a status on a block,
+// a badge or a legend keeps BLOCK_BG.
+export var STATUS_BTN_BG=Object.assign({},BLOCK_BG,{completed:"var(--btn-completed)"});
 // v17.8.0 — the INK each block fill carries. A fill and the text on it are one
 // decision, and splitting them across two files is how "Save pending" shipped
 // white-on-yellow at 1.83:1. Pair them here; tests/contrast.test.js measures
@@ -892,7 +903,7 @@ export var EMPTY_FORM={name:"",phone:"+",get date(){return todayStr();},time:"13
 // ── Button colour tokens ──────────────────────────────────────────────────────
 // Phase B1 addition: BTN was previously defined inline in App.jsx; moved here
 // so component files (atoms.jsx and future B2–B5 extractions) can import it.
-export var BTN={tables:"var(--btn-tables)",edit:"var(--btn-edit)",del:"var(--btn-del)",clear:"var(--btn-clear)",reset:"var(--btn-reset)",today:"var(--btn-today)",nav:"var(--btn-nav)",dismiss:"var(--btn-dismiss)",orange:"var(--btn-orange)"};
+export var BTN={tables:"var(--btn-tables)",edit:"var(--btn-edit)",del:"var(--btn-del)",today:"var(--btn-today)",orange:"var(--btn-orange)",quiet:"var(--btn-quiet)"};
 
 // ── Table groupings for UI pickers ────────────────────────────────────────────
 // Phase B2: shared from here (consumed by TableGrid + App.jsx's Preferred picker).

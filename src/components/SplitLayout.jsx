@@ -20,7 +20,7 @@
 //   paneA / paneB  — the view elements
 
 import { useRef, useState } from "react";
-import { R, M, H, SPLIT_DIVIDER_PX } from "../lib/constants";
+import { R, M, H, SPLIT_DIVIDER_PX, SCROLL_CLEAR_RULER } from "../lib/constants";
 
 const MIN_RATIO = 0.2;
 const MAX_RATIO = 0.8;
@@ -151,13 +151,15 @@ export function SplitLayout({ dir = "v", ratio = 0.5, onRatio, focused = "a", on
       >
         <div style={{
           flex: 1, minWidth: 0, minHeight: 0,
-          overflow: "auto", WebkitOverflowScrolling: "touch",
+          overflow: "auto", WebkitOverflowScrolling: "touch", scrollPaddingTop: SCROLL_CLEAR_RULER,
           // Hover-lift gutter: a scrolling pane clips at its padding box, and
           // the List cards inside scale 1.08 on hover (= 4% of card width per
           // side), so without this the lift is cut off at the pane edge.
-          paddingInline: "4%", paddingBlock: 12,
+          // v18.14.0 (H6): the top gap is a child, not padding, as in App's <main>:
+          // Chrome measures `position: sticky` from inside a scroller's padding.
+          paddingInline: "4%", paddingBottom: 12,
           borderRadius: R.card,
-        }}>{node}</div>
+        }}><div style={{ paddingTop: 12 }} />{node}</div>
         {CORNERS.map((c) => (
           <div key={c.k} style={Object.assign({
             position: "absolute", width: MARK, height: MARK,

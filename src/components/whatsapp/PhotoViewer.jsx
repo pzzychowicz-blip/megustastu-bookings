@@ -13,7 +13,7 @@
 
 import { useWaMedia } from "../../hooks/useWaMedia";
 import { formatClockTime, mediaLabel } from "../../lib/whatsapp";
-import { S, R, T, FW, SP, IC } from "../../lib/constants";
+import { BTN, S, R, T, FW, SP, IC } from "../../lib/constants";
 import { Overlay, AutoHeight, mkBtn } from "../atoms";
 import { PhotoIcon } from "./WaIcons";
 
@@ -40,7 +40,7 @@ export function PhotoViewer({ photo, onClose }) {
           style={mkBtn({ minHeight: 44, padding: "10px 18px", boxSizing: "border-box", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" })}>Save photo</a>
       ) : null}
       <button className="mgt-hover-scale mgt-press" onClick={onClose}
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}>Done</button>
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}>Done</button>
     </div>
   );
   let body;

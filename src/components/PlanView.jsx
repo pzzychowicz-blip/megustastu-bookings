@@ -38,10 +38,11 @@
 // Blur budget: no backdrop-filter here — popovers use the opaque popup tokens.
 
 import { useState, useRef, useEffect, memo } from "react";
-import { S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
+import { BTN, S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
 import { freeWindow } from "../lib/plan-avail";
 import { bandZoom, clampZoom, clampPan } from "../lib/plan-zoom"; // v18.3.0 phase 14: the zoom and pan limits
+import { hitBoxes, PHONE_HIT } from "../lib/plan-hit"; // v18.14.0 (L2)
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
@@ -417,6 +418,7 @@ export const PlanView = memo(function PlanView({
   // INTERSECTION down the chain, so a `none` on the svg would keep a phone's
   // vertical swipe dead on Android.
   const narrow = isMobile;
+  const hits = narrow ? hitBoxes(tables.filter((t) => fp.tables[t.id]).map((t) => ({ id: t.id, ...fp.tables[t.id] })), PHONE_HIT) : null;
   const touchAct = !gesturesEnabled ? "auto" : narrow ? "pan-y" : "none";
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -622,6 +624,20 @@ export const PlanView = memo(function PlanView({
   }
   function clearPress() { if (pressRef.current) { clearTimeout(pressRef.current); pressRef.current = null; } }
 
+  // v18.14.0 (L2): what a table answers to, in one place, because a phone's finger
+  // target answers the same way as the drawn table.
+  function tableTap(id) {
+    return {
+      onClick: (e) => { if (!movedRef.current) { popByKeyRef.current = !!e && (e.type === "keydown" || e.detail === 0); setTablePop(id); } },
+      onPointerDown: (ev) => { if (ev.pointerType === "touch") startPress(id); },
+      onContextMenu: (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        const b = targetBookingFor(id);
+        if (b) setQuick(b);
+      },
+    };
+  }
+
   function fillFor(id) {
     // v17.0.0 correction: blocked = the Timeline BlockBar identity (red 45°
     // stripes, --tl-blocked-a/b), not grey-dashed — one "blocked" look app-wide.
@@ -742,7 +758,7 @@ export const PlanView = memo(function PlanView({
           {isToday ? (
             <button className="mgt-hover-scale"
               onClick={() => { setSliderTouched(false); setSlider(clampExact(nowMins)); reCentre(true); }}
-              style={mkBtn({ fontSize: T.small, minHeight: 28, padding: "2px 10px", background: atNow ? S.accent : "var(--app-btn-grey)" })}>Now</button>
+              style={mkBtn({ fontSize: T.small, minHeight: 28, padding: "2px 10px", background: atNow ? S.accent : BTN.quiet })}>Now</button>
           ) : null}
         </span>
         <span style={{
@@ -790,6 +806,15 @@ export const PlanView = memo(function PlanView({
               <line key={"w" + i} x1={wl.x1} y1={wl.y1} x2={wl.x2} y2={wl.y2} stroke="var(--text-muted)" strokeWidth={7} strokeLinecap="round" />
             ))}
             {(fp.doors || []).map((d, i) => <DoorGlyph key={"d" + i} door={d} />)}
+            {/* v18.14.0 (L2): on a phone a table is drawn 21.5px wide, so each has a
+                finger-sized box. Painted BELOW every table, so a tap on a drawn table
+                can only ever be that table, and the boxes meet halfway across each
+                gap (lib/plan-hit.js). A mouse does not need it (.mgt-plan-hit). The
+                pan and pinch are the svg's, so a drag from a box moves the plan. */}
+            {hits ? tables.map((t) => {
+              const box = hits[t.id];
+              return box ? <rect key={"hit" + t.id} className="mgt-plan-hit" x={box.x} y={box.y} width={box.w} height={box.h} fill="transparent" {...tableTap(t.id)} /> : null;
+            }) : null}
             {tables.map((t) => {
               const e = fp.tables[t.id];
               if (!e) return null;
@@ -850,13 +875,7 @@ export const PlanView = memo(function PlanView({
                   // passes no shapeStyle. Any inline transition on an element
                   // that also has a class-driven one must name both properties.
                   shapeStyle={{ transition: "fill " + M.status + ", stroke " + M.status + ", filter " + M.tap }}
-                  onClick={(e) => { if (!movedRef.current) { popByKeyRef.current = !!e && (e.type === "keydown" || e.detail === 0); setTablePop(t.id); } }}
-                  onPointerDown={(ev) => { if (ev.pointerType === "touch") startPress(t.id); }}
-                  onContextMenu={(ev) => {
-                    ev.preventDefault(); ev.stopPropagation();
-                    const b = targetBookingFor(t.id);
-                    if (b) setQuick(b);
-                  }}>
+                  {...tableTap(t.id)}>
                   {/* v17.15.7: the status MARK — a second channel for a fill that
                       was the status and nothing else. The same WCAG 1.4.1 defect
                       v17.11.0 fixed on the timeline block, sitting unnoticed four

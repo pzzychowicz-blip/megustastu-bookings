@@ -41,12 +41,14 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, mem
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
-  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
+  S, TBL, TIMELINE_TABLES, R, M, T, FW, IC, SP, RIM_SOLID, exitHold } from "../lib/constants";
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { toMins, toTime, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf } from "../lib/booking-logic";
-import { railFlagsOf } from "./blockFlags";
+import { railFlagsOf, RAIL_KEYS } from "./blockFlags";
 import { noShowMap, identityKey, bookingTags, tagLine } from "../lib/customers";
-import { mkBtn, Presence, Reveal, useFlip, SizeRing, ModalPresence } from "./atoms";
+import { Reveal, useFlip, SizeRing, ModalPresence, Presence, ALERT_TONES } from "./atoms";
+import { TimelineZoomControls } from "./TimelineZoomControls";
+import { OptimiserControls } from "./OptimiserControls";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { useEnterLeave } from "../hooks/useEnterLeave";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
@@ -54,11 +56,12 @@ import { useEnterLeave } from "../hooks/useEnterLeave";
 import { WaitIcon, ClashIcon, AssignIcon, StatusIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
+import { pulse } from "../lib/haptics";
 import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
-import { visibleRail } from "../lib/block-layout";
+import { visibleRail, twoLineBlock } from "../lib/block-layout";
 import { unplacedOf, primaryGridTable, packLanes, unplacedHeight } from "../lib/unplaced";
-import { edgeVelocity, edgeStep, scrollParentY, scrollBounds } from "../lib/edge-scroll";
+import { edgeVelocity, edgeStep, scrollParentY, scrollBounds, rowProbeY } from "../lib/edge-scroll";
 import { afterFrame, everyFrame, pageHidden } from "../lib/after-frame";
 
 // A block moves in two ways at once and they are NOT the same kind of motion:
@@ -68,7 +71,10 @@ import { afterFrame, everyFrame, pageHidden } from "../lib/after-frame";
 // the :has() ghost rule in index.css depends on exactly that.
 // (Below the imports: it worked above them only because imports hoist, which is
 // the kind of thing that stops being true the day a circular import appears.)
-const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", transform " + M.tap;
+// v18.14.0 (correction 24, Patryk): and the warning border, which arrives and leaves
+// with nobody pressing anything, so it takes M.move in both constants.
+const TL_RIM = ", border-width " + M.move + ", border-color " + M.move;
+const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", height " + M.shift + ", transform " + M.tap + TL_RIM;
 // v18.3.0 (M4): a RELEASED block travelling home. TL_MOVE's transform runs on
 // M.tap because at rest a transform is the hover lift answering a pointer — but
 // after a drag the same property carries the block back from wherever the
@@ -81,7 +87,7 @@ const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", transform " + M.ta
 // every frame it animates (a 24px blur here, on the tablet, on a gesture used
 // every service), and the eye is on the block travelling home; the drag shadow
 // drops on the release frame, as it did before phase 4.
-const TL_SETTLE = "left " + M.shift + ", width " + M.shift + ", transform " + M.shift + ", opacity " + M.shift;
+const TL_SETTLE = "left " + M.shift + ", width " + M.shift + ", height " + M.shift + ", transform " + M.shift + ", opacity " + M.shift + TL_RIM;
 
 // v17.9.0: the hour-pill look, once. Three places in this file paint a time on
 // --tl-hour-pill — the ruler's hour labels, a block's start-time chip, and a
@@ -122,6 +128,27 @@ const FREE_PX = 36;      // the "~Nm" table-turn pill + its margin (v17.9.1)
 const CLASH_PX = 18;     // the double-booked marker + its margin (v17.11.0)
 const STATUS_PX = 18;    // the status mark + its margin (v17.11.0) — on EVERY block
 const NAME_MIN_PX = 55;  // ~6 characters and an ellipsis
+// v18.14.0 (D1): what a two-line block spends before its second line's marks: the
+// inset, the chip, and enough over for a 3px warn border's two extra sides.
+const LINE_TWO_PX = 52;
+
+// ── v18.14.0 (H2): Larger text ───────────────────────────────────────────────
+// One geometry per text size, chosen once in TimelineView and handed down, so no
+// block can disagree with the row it sits in. The widths above are measurements of
+// this file's DOM at the normal size, and the large set is the same measurements
+// taken again. Names, times and table numbers go up two steps, the rest of the
+// Timeline one, and the icons stay: they are read by shape. The print sheet has its
+// own geometry and is not touched.
+const TL_NORMAL = {
+  rowH: ROW_H, name: T.small, time: T.micro, timeLine: 12, label: T.small, note: T.micro, legend: T.small,
+  ring: 18, ringStyle: null,
+  chipPx: CHIP_PX, ringPx: RING_PX, freePx: FREE_PX, nameMinPx: NAME_MIN_PX, lineTwoPx: LINE_TWO_PX, nowClear: 38
+};
+const TL_LARGE = {
+  rowH: 52, name: T.lead, time: T.body, timeLine: 14, label: T.lead, note: T.small, legend: T.body,
+  ring: 22, ringStyle: { width: 22, height: 22, fontSize: T.body },   /* @canvas */
+  chipPx: 49, ringPx: 28, freePx: 44, nameMinPx: 70, lineTwoPx: 58, nowClear: 44
+};
 
 // v17.9.1: the rail's flags as DATA, so "how many fit" and "which ones
 // survive" are two questions with two separate answers.
@@ -148,9 +175,9 @@ const NAME_MIN_PX = 55;  // ~6 characters and an ellipsis
 // before anything else.
 // v18.4.0: `railFlagsOf` lives in ./blockFlags.jsx, where the printed timeline
 // (TimelineSheet) reads the same list.
-function chipRoomFor(b, noShows, warn, clash) {
+function chipRoomFor(b, noShows, warn, clash, sz) {
   const flags = railFlagsOf(b, noShows, warn, "").length;
-  return CHIP_PX + HANDLE_PX + RING_PX + NAME_MIN_PX + STATUS_PX + (clash ? CLASH_PX : 0) + FLAG_PX * flags;
+  return sz.chipPx + HANDLE_PX + sz.ringPx + sz.nameMinPx + STATUS_PX + (clash ? CLASH_PX : 0) + FLAG_PX * flags;
 }
 
 // v17.9.1: what a block can afford to show at its current width is decided by
@@ -223,7 +250,7 @@ function BlockFlag({ title, children }) {
 // the waitlist ghost's exit, and INERT: WaitGhost's `leaving` branch, property
 // for property. `arriving` puts a booking new to the day on the ghost's entrance.
 // TimelineView's useEnterLeave decides both; see there.
-function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, clash = null, late = null, noShows = 0, tags = "", showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null, seedFlip = null, handOffQuick = null, leaving = false, arriving = false, focusFallbackRef = null }) {
+function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, clash = null, late = null, noShows = 0, tags = "", showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null, seedFlip = null, handOffQuick = null, leaving = false, arriving = false, focusFallbackRef = null, sz = TL_NORMAL }) {
   const d = liveBarDur(b, nowMins, today);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
@@ -243,11 +270,11 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // both bookings claim. Adding a red-adjacent hue here would have made the
   // border the distinguishing signal, which is the colour-only-status mistake
   // this release exists to fix.
-  const border = clash
-    ? "3px solid var(--tl-block-warn)"
+  const rim = clash
+    ? "var(--tl-block-warn)"
     : warn
-      ? (warn.overdue ? "3px solid var(--tl-block-warn)" : "3px solid var(--tl-block-warn-soon)")
-      : (late ? "3px solid var(--tl-block-late)" : "none");
+      ? (warn.overdue ? "var(--tl-block-warn)" : "var(--tl-block-warn-soon)")
+      : (late ? "var(--tl-block-late)" : null);
   // v15.8.2: note marker — bookings with a note get a subtle "dog-ear" folded
   // corner. Kept OUT of the label string so it never truncates on narrow blocks.
   // v18.5.1 (Patryk): a booking with a tag shows the corner too, note or no
@@ -301,17 +328,26 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // and grows, so anything droppable is invisible for the first stretch of
   // every visit — which for this marker would mean it disappears exactly while
   // a host is deciding where to put the party who just walked in.
+  // v18.14.0 (D1): a two-line block's name has a line to itself, so line 2's start
+  // takes the name's place in this sum, and the ring and flags still drop in the
+  // ladder's order.
+  const twoLine = twoLineBlock(b.status, showChip);
+  // On two lines the name starts where the fold is, and its inset is the one-line
+  // block's (Patryk), so the fold gives way. A 3px border takes it further in,
+  // because the fold is clipped to the padding box while the name moves with it.
+  const fold = !twoLine ? 14 : rim ? 8 : 11;
   const { showRing, flags: railFlags } = visibleRail(
     d * pxPerMin,
-    HANDLE_PX + NAME_MIN_PX + (showChip ? CHIP_PX : 0) + (freeMin != null ? FREE_PX : 0)
+    HANDLE_PX + (twoLine ? sz.lineTwoPx : sz.nameMinPx + (showChip ? sz.chipPx : 0)) + (freeMin != null ? sz.freePx : 0)
       + STATUS_PX + (clash ? CLASH_PX : 0),
-    RING_PX, FLAG_PX, allFlags
+    sz.ringPx, FLAG_PX, allFlags
   );
   // v16.0.0: at-a-glance start-time chip. Compact translucent pill before the
   // name. The show/hide decision (`showChip`) is made ONCE at the TimelineView
   // level for the WHOLE day — all blocks show chips or none do (a mixed grid
   // read messy in live QA). marginLeft clears the v15.8.2 dog-ear corner so a
-  // noted booking's fold never overlaps.
+  // noted booking's fold never overlaps. v18.14.0 (D1): a day without this chip
+  // wears the time on line 2 instead, so a block always shows it.
   // v16.1.1: wrapped in a HORIZONTAL Reveal (eases occupied width 0↔full) rather
   // than Presence (transform slide). Presence only translated the chip, so the
   // flexbox reserved/released the chip's width in one frame and the sibling name
@@ -351,10 +387,78 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
           weight carries emphasis so size (or here, opacity) does not have to. */}
       <span style={{
         ...HOUR_PILL,
-        flexShrink: 0, marginLeft: 6, lineHeight: "12px", fontWeight: FW.medium,
+        fontSize: sz.time, flexShrink: 0, marginLeft: 6, lineHeight: sz.timeLine + "px", fontWeight: FW.medium,
         pointerEvents: "none", position: "relative"
       }}>{b.time}</span>
     </Reveal>
+  );
+
+  // The rail's marks, drawn once and placed by the line count: at the end of the
+  // line on a one-line block, after the ring on line 2 on a two-line one.
+  const marks = (
+    <>
+        {/* v17.9.0: the flag rail — the four markers that used to be appended to
+            the label string, plus the ★ that was floating on the left. Order is
+            Patryk's: deposit, preferred, then the exception flags, then the
+            Assign handle. All flexShrink:0 — the name truncates, these survive.
+            v17.9.1: …up to the point where they stop fitting, at which they are
+            dropped rather than clipped on top of each other. See blockBudget. */}
+        {/* v17.11.0: the STATUS mark leads the rail — on every block, never
+            dropped, and the one marker here that is not conditional.
+
+            A block's status was `BLOCK_BG[b.status]` and nothing else: no text,
+            no mark, a WCAG 1.4.1 failure that three of the review's seven passes
+            found independently. The legend at the bottom of the view is a lookup,
+            not an in-context indicator, and it does nothing at all for a screen
+            reader. `StatusIcon` shipped in v17.10.0 for exactly this and went
+            onto buttons only.
+
+            It leads because it is not a flag: the flags say what is unusual about
+            a booking, and this says what the booking IS. It is also the only part
+            of the rail that answers the question the three views used to answer
+            three different ways — List names the status in a badge, Plan uses
+            occupancy fills, and Timeline said it in colour alone.
+
+            Fixed cost, like the clash marker, for the same reason: a seated block
+            is drawn at its LIVE duration, so it starts a few pixels wide and
+            grows, and a droppable status mark would be missing from every block
+            for the first stretch of every visit — i.e. exactly while the party is
+            being seated. `role="img"` + `aria-label` come from BlockFlag, so the
+            status finally reaches the accessibility tree too. */}
+        <BlockFlag title={STATUS_LABEL[b.status] || b.status}>
+          <StatusIcon status={b.status} size={IC.control} />
+        </BlockFlag>
+        {/* v18.14.0 (correction 23, Patryk): a slot per flag, in rail order, so one
+            that arrives or leaves opens sideways and the name slides with it.
+            Mapped from `railFlags` they snapped, on a save and on a zoom, while the
+            chip beside them eased. They take the chip's speed, which is what keeps
+            the two in step on a zoom. A flag gone from the list leaves on the copy
+            its Reveal kept. */}
+        {RAIL_KEYS.map((k) => {
+          const f = railFlags.find((x) => x.k === k);
+          return (
+            <Reveal key={k} horizontal show={!!f} style={{ flexShrink: 0 }}>
+              {f ? <BlockFlag title={f.title}>{f.icon}</BlockFlag> : null}
+            </Reveal>
+          );
+        })}
+        {/* The double-booked marker sits LAST among the markers, nearest the
+            handle. v17.9.0's rail order is facts first, exception states last
+            (deposit, preferred, then locked / repeat-no-show / overstaying), and
+            a clash is the most severe exception of all — so it takes the end of
+            that run rather than jumping the queue to the front. Outside
+            `railFlags` because it is never dropped; the title names the other
+            party, which is the question anyone who sees this marker asks next and
+            the one thing the stripe cannot say. */}
+        <Reveal horizontal show={!!clash} style={{ flexShrink: 0 }}>
+          {clash ? (
+            <BlockFlag title={"Double-booked with " + clash.names.join(", ")
+              + (clash.tables.length ? " on " + (clash.tables.length === 1 ? "table " : "tables ") + clash.tables.join(", ") : "")}>
+              <ClashIcon size={IC.control} />
+            </BlockFlag>
+          ) : null}
+        </Reveal>
+    </>
   );
 
   // v18.3.0 (O1): a block that UNMOUNTS while holding focus hands it to the grid
@@ -401,7 +505,17 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // timestamp (0 = not running), for a time-based speed on any refresh rate.
   const edgeRafRef = useRef(0);
   const edgeLastRef = useRef(0);
-  useEffect(() => () => { cancelAnimationFrame(edgeRafRef.current); }, []);
+  // v18.14.0 (/code-review): a block can leave under a held drag, when another device
+  // deletes or moves it. No pointerup reaches it then, so `endDrag` never ran, and the
+  // row kept its warning about a party that had gone. Measured past the release, until
+  // the next tap.
+  useEffect(() => () => {
+    cancelAnimationFrame(edgeRafRef.current);
+    cancelAnimationFrame(dragRafRef.current);
+    clearTimeout(dragHoldTimer.current);
+    if (dragRef.current && dragRef.current.active && setDragHover) setDragHover(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, at unmount: `hoverRow` is new each render and only calls setters, and watching it would tear a live drag down
+  }, []);
   // v18.3.0 (M4): non-zero for exitHold("shift") after a released drag, while
   // the block travels home on TL_SETTLE (see there). A COUNT of releases, not a
   // boolean, so each release restarts the hold, and the hold is timed from the
@@ -446,7 +560,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       d.sc.scrollTop = before + next.step;
       if (d.sc.scrollTop === before) { edgeLastRef.current = 0; d.carry = 0; return; }   // at the end
       setDragDy(dragDyOf(d));
-      if (setDragHover) setDragHover(tableAtY(d.lastY));
+      if (setDragHover) setDragHover(tableAtY(d.lastY), b.id, homeTable, d.lastY);
     }
     edgeRafRef.current = requestAnimationFrame(edgeFrame);
   }
@@ -504,6 +618,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         // release without moving lands on the home row (no drop) and the
         // phase 4 settle lowers it again.
         setDragDy(0);
+        pulse();                           // v18.14.0 (L7): the finger is on the block, so tell the hand
         // React 17+ roots attach touchmove passively — a native non-passive
         // listener is the only way to stop the page scrolling mid-drag.
         const prevent = (ev) => { ev.preventDefault(); };
@@ -532,7 +647,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       const dd = dragRef.current;
       if (!dd || !dd.active) return;
       setDragDy(dragDyOf(dd));
-      if (setDragHover) setDragHover(tableAtY(dd.lastY));
+      if (setDragHover) setDragHover(tableAtY(dd.lastY), b.id, homeTable, dd.lastY);
     });
   }
   function endDrag(e, commit) {
@@ -576,6 +691,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       if (c) seedFlip(b.id, d.el.getBoundingClientRect().top - c.getBoundingClientRect().top);
     }
     if (target && target !== homeTable) {
+      pulse();                             // v18.14.0 (L7)
       // Swallowed deliberately, and only here: the teardown above has already
       // run, so the block recovers either way, and an uncaught handler error
       // would be just as silent in production while risking the batch these
@@ -750,7 +866,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       title={leaving || !tags ? undefined : tags}
       {...handlers}
       style={{
-        position: "absolute", top: 3, height: ROW_H - 8 + "px",
+        position: "absolute", top: 3, height: sz.rowH - 8 + "px",
         left, width: w,
         background: bgc, borderRadius: 10, overflow: "hidden",   /* @canvas */
         // v17.8.0: the block owns its ink; every text child inherits it via
@@ -763,7 +879,9 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         // v18.3.0 (O1): the other half of "inert while leaving", as on the
         // ghost — a press aimed at the grid behind a fading block reaches it.
         pointerEvents: leaving ? "none" : undefined,
-        border: border || RIM_SOLID,
+        // v18.14.0 (correction 24, Patryk): always a solid border, 0 or 3px, so it can
+        // ease. The shorthand went from "none" to 3px in one frame.
+        borderStyle: "solid", borderWidth: rim ? 3 : 0, borderColor: rim || "transparent",
         WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none",
         // v17.0.0 round 7 (Android fix): without this, the browser claims any
         // vertical touch movement on a block for page scroll and fires
@@ -797,27 +915,27 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       {/* v15.8.2: top-LEFT dog-ear note marker (clear of the right-edge "=" handle). The
           block's overflow:hidden + borderRadius clip it into a clean folded corner. The
           white triangle (14px) sits in the top ~14px of the 36px block, so it never
-          overlaps the vertically-centred guest name. A small dark note/pencil glyph nests
+          overlaps the vertically-centred guest name (`fold`: on two lines it must
+          shrink to stay that true). A small dark note/pencil glyph nests
           in the corner where the triangle is thickest. Near-solid white + dark icon give
           strong contrast on every saturated BLOCK_BG fill in both themes. */}
-      {hasNote ? (
-        <>
-          <div style={{
-            position: "absolute", top: 0, left: 0, width: 0, height: 0,
-            borderTop: "14px solid rgba(255,255,255,0.95)",  /* @fixed-fill */
-            borderRight: "14px solid transparent",
-            pointerEvents: "none"
-          }} />
-          <svg viewBox="0 0 24 24" width="8" height="8" style={{
-            position: "absolute", top: "0.5px", left: "0.5px", pointerEvents: "none"
-          }}>
-            <path
-              d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
-              fill={"#1f2937" /* @fixed-fill */}
-            />
-          </svg>
-        </>
-      ) : null}
+      {/* v18.14.0 (correction 24, Patryk): always drawn, at nothing without a note, so
+          the corner grows from the block's own corner and the pencil fades with it. */}
+      <div style={{
+        position: "absolute", top: 0, left: 0, width: 0, height: 0,
+        borderTop: (hasNote ? fold : 0) + "px solid rgba(255,255,255,0.95)",  /* @fixed-fill */
+        borderRight: (hasNote ? fold : 0) + "px solid transparent",
+        pointerEvents: "none", transition: "border-width " + M.reveal
+      }} />
+      <svg viewBox="0 0 24 24" width={fold < 11 ? 6 : 8} height={fold < 11 ? 6 : 8} style={{
+        position: "absolute", top: "0.5px", left: "0.5px", pointerEvents: "none",
+        opacity: hasNote ? 1 : 0, transition: "opacity " + M.reveal
+      }}>
+        <path
+          d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+          fill={"#1f2937" /* @fixed-fill */}
+        />
+      </svg>
       {/* ── v17.9.0 (Patryk): WHO on the left, WHAT ABOUT THEM on the right ────
           The block used to interleave the two: a ★ between the time and the
           name, the party size in brackets inside the name string, and the rest
@@ -873,83 +991,70 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
           The group also pushes the flag rail right on its own, so there is no
           spacer element and no marginLeft:auto that would have to be moved onto
           whichever conditional flag happens to render first. */}
-      <span style={{
-        flex: "1 1 0%", minWidth: 0, paddingLeft: 6,
-        display: "flex", alignItems: "center", position: "relative"
+      <div style={{
+        flex: "1 1 0%", minWidth: 0, paddingLeft: 6, overflowX: "clip",
+        display: "flex", flexDirection: "column", position: "relative"
       }}>
-        <span style={{
-          minWidth: 0, fontSize: T.small, fontWeight: FW.bold,
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
-        }}>{b.name}</span>
-        {/* The party size. It was "(6)" inside the name string, which put a pair
-            of parentheses in the middle of the block's one bold text run and
-            made the size the first thing the ellipsis took after the name. A
-            ring is the same fact at a glance and it is flexShrink:0, so it
-            survives. Transparent fill: it is a count, not a status, and a
-            filled pill here would compete with the time chip. */}
-        {showRing ? <SizeRing n={b.size} style={{ marginLeft: 6 }} /> : null}
-      </span>
-      {/* v17.9.0: the flag rail — the four markers that used to be appended to
-          the label string, plus the ★ that was floating on the left. Order is
-          Patryk's: deposit, preferred, then the exception flags, then the
-          Assign handle. All flexShrink:0 — the name truncates, these survive.
-          v17.9.1: …up to the point where they stop fitting, at which they are
-          dropped rather than clipped on top of each other. See blockBudget. */}
-      {/* v17.11.0: the STATUS mark leads the rail — on every block, never
-          dropped, and the one marker here that is not conditional.
-
-          A block's status was `BLOCK_BG[b.status]` and nothing else: no text,
-          no mark, a WCAG 1.4.1 failure that three of the review's seven passes
-          found independently. The legend at the bottom of the view is a lookup,
-          not an in-context indicator, and it does nothing at all for a screen
-          reader. `StatusIcon` shipped in v17.10.0 for exactly this and went
-          onto buttons only.
-
-          It leads because it is not a flag: the flags say what is unusual about
-          a booking, and this says what the booking IS. It is also the only part
-          of the rail that answers the question the three views used to answer
-          three different ways — List names the status in a badge, Plan uses
-          occupancy fills, and Timeline said it in colour alone.
-
-          Fixed cost, like the clash marker, for the same reason: a seated block
-          is drawn at its LIVE duration, so it starts a few pixels wide and
-          grows, and a droppable status mark would be missing from every block
-          for the first stretch of every visit — i.e. exactly while the party is
-          being seated. `role="img"` + `aria-label` come from BlockFlag, so the
-          status finally reaches the accessibility tree too. */}
-      <BlockFlag title={STATUS_LABEL[b.status] || b.status}>
-        <StatusIcon status={b.status} size={IC.control} />
-      </BlockFlag>
-      {railFlags.map((f) => (
-        <BlockFlag key={f.k} title={f.title}>{f.icon}</BlockFlag>
-      ))}
-      {/* The double-booked marker sits LAST among the markers, nearest the
-          handle. v17.9.0's rail order is facts first, exception states last
-          (deposit, preferred, then locked / repeat-no-show / overstaying), and
-          a clash is the most severe exception of all — so it takes the end of
-          that run rather than jumping the queue to the front. Outside
-          `railFlags` because it is never dropped; the title names the other
-          party, which is the question anyone who sees this marker asks next and
-          the one thing the stripe cannot say. */}
-      {clash ? (
-        <BlockFlag title={"Double-booked with " + clash.names.join(", ")
-          + (clash.tables.length ? " on " + (clash.tables.length === 1 ? "table " : "tables ") + clash.tables.join(", ") : "")}>
-          <ClashIcon size={IC.control} />
-        </BlockFlag>
-      ) : null}
+        <span style={{ display: "flex", alignItems: "center", minWidth: 0 }}>
+          <span style={{
+            minWidth: 0, fontSize: sz.name, fontWeight: FW.bold,
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+          }}>{b.name}</span>
+          {/* The party size. It was "(6)" inside the name string, which put a pair
+              of parentheses in the middle of the block's one bold text run and
+              made the size the first thing the ellipsis took after the name. A
+              ring is the same fact at a glance and it is flexShrink:0, so it
+              survives. Transparent fill: it is a count, not a status, and a
+              filled pill here would compete with the time chip. */}
+          {/* The negative margin is what keeps this row the height of the name. The
+              ring is 18 tall to the name's 13, and this Reveal is on the row while
+              line 2 eases, so without it line 2 steps 2.5px as the Reveal goes.
+              `overflowX: clip` above is for the same reason: `hidden` would cut the
+              ring's top and bottom off, where `clip` leaves the other axis alone. */}
+          <Reveal horizontal show={showRing && !twoLine} style={{ flexShrink: 0, marginBlock: -2.5 /* @canvas */ }}>
+            <SizeRing n={b.size} style={{ marginLeft: 6, ...sz.ringStyle }} />
+          </Reveal>
+        </span>
+        {/* v18.14.0 (D1): line 2. A day whose blocks cannot all fit the chip used
+            to drop the time from every block, and ring and flags then cut the
+            names shorter still. Now that day is two-line: the name alone above,
+            and the time, ring, status and flags under it, the time at the name's
+            own left edge. A change of zoom eases: this line opens as the one-line
+            rail and chip close, and the name rises with it because the group is
+            centred in the block. */}
+        <Reveal show={twoLine}>
+          <span style={{
+            display: "flex", alignItems: "center",
+            height: sz.ring, marginBottom: 2
+          }}>
+            <span style={{
+              ...HOUR_PILL,
+              fontSize: sz.time, flexShrink: 0, lineHeight: sz.timeLine + "px", fontWeight: FW.medium,
+              pointerEvents: "none"
+            }}>{b.time}</span>
+            <Reveal horizontal show={showRing} style={{ flexShrink: 0 }}>
+              <SizeRing n={b.size} style={{ marginLeft: 4, ...sz.ringStyle }} />
+            </Reveal>
+            {marks}
+          </span>
+        </Reveal>
+      </div>
+      <Reveal horizontal show={!twoLine} style={{ flexShrink: 0 }}>{marks}</Reveal>
       {/* v16.3.0: table-turn countdown pill — a seated block within ~15 min of
           its scheduled end shows "~Nm" (translucent, like the start-time chip).
           Flex item before the assign handle (no absolute overlap of the name); the
           seated block is near full width this late, so there's room. */}
-      {freeMin != null ? (
-        <span style={{
-          flexShrink: 0, marginRight: 2, padding: "2px 4px", borderRadius: R.pill,
-          fontSize: T.micro, fontWeight: FW.bold, lineHeight: "12px", fontVariantNumeric: "tabular-nums",
-          whiteSpace: "nowrap", position: "relative",
-          background: "var(--blk-wash)",
-          pointerEvents: "none"
-        }}>{"~" + freeMin + "m"}</span>
-      ) : null}
+      <Reveal horizontal show={freeMin != null} style={{ flexShrink: 0 }}>
+        {freeMin != null ? (
+          <span style={{
+            flexShrink: 0, marginRight: 2, padding: "2px 4px", borderRadius: R.pill,
+            fontSize: sz.time, fontWeight: FW.bold, lineHeight: sz.timeLine + "px", fontVariantNumeric: "tabular-nums",
+            whiteSpace: "nowrap", position: "relative",
+            background: "var(--blk-wash)",
+            pointerEvents: "none"
+          }}>{"~" + freeMin + "m"}</span>
+        ) : null}
+      </Reveal>
       {/* The manual-assign handle. v17.9.0: the ASCII "=" became the AssignIcon
           the Assign buttons in the form and the List card already use — the same
           action reached from three surfaces should not be a drawn icon in two of
@@ -989,6 +1094,45 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         <AssignIcon size={IC.control} />
       </button>
     </div>
+  );
+}
+
+// ── DropHint — v18.14.0 (H5): the row says what the release will do ──────────
+// Sits at the row's left end and stays there as the row scrolls, and above the
+// dragged block (30), which would otherwise cover it whenever a party starts at
+// the left of the view. `aria-hidden` because a drag is pointer-only, and the
+// toast that follows the release is the announced result.
+//
+// The ruler's opaque surface under the role's tint, with the role's border as
+// the edge: the row wears the same tint, so the tint alone would leave the words
+// floating on it, and a tint over a block is unreadable.
+// v18.14.0 (correction 17): a check that changes the words fades the new ones in,
+// because they replace the old ones under a finger that has stopped moving, and
+// the change is the news. The row's tint eases on its own transition.
+const DROP_REST_MS = 200;  // still for this long, and the row asks the real plan
+const DROP_REST_SLOP = 8;  // a resting finger trembles; this far is a move
+const NO_CHECKS = {};      // one object, so the end of a drag cannot re-render it again
+function hintRole(hint) {
+  return !hint || !hint.text ? null : hint.tone === "danger" ? ALERT_TONES.danger : ALERT_TONES.warn;
+}
+function DropHint({ hint, sz }) {
+  const role = hintRole(hint);
+  return (
+    <Presence
+      show={!!role}
+      inClass="mgt-appear"
+      outClass="mgt-ghost-out"
+      style={{ position: "sticky", left: SP.snug, zIndex: 31, width: "fit-content", maxWidth: "100%", height: "100%", display: "flex", alignItems: "center", pointerEvents: "none" }}
+    >
+      {role ? (
+        <div key={hint.text} className={hint.corrects ? "mgt-appear" : undefined} aria-hidden="true" style={{
+          padding: "4px 8px", borderRadius: R.pill, whiteSpace: "nowrap",
+          fontSize: sz.legend, fontWeight: FW.semi, color: role.tone,
+          background: "linear-gradient(" + role.tint + ", " + role.tint + "), var(--tl-ruler-bg)",
+          border: "1px solid " + (hint.tone === "danger" ? "var(--danger-border)" : "var(--warn-border)")
+        }}>{hint.text}</div>
+      ) : null}
+    </Presence>
   );
 }
 
@@ -1062,13 +1206,20 @@ function GridLines() {
 // exact minute the earlier booking finishes — the fact the later block is
 // painting over. Verified live: the stripe ends at Pau's right edge, 72px short
 // of Rita's, on a pair where Pau is otherwise invisible past 20:30.
-function ClashBand({ from, to, totalMins }) {
+//
+// v18.14.0 (D1): on a two-line day the label fills the block, so "low enough to
+// clear the label" moves. Measured: at the old height the stripe covered the lower
+// half of "20:30". It drops 3px onto the bottom border, clear of the digits, and
+// the casing is what keeps it a stripe there rather than a thicker border.
+function ClashBand({ from, to, totalMins, twoLine = false, open = true }) {
   const left = pct(from);
   const w = Math.max(((to - from) / totalMins) * 100, 0.5) + "%";
   return (
     <div aria-hidden="true" style={{
       position: "absolute", bottom: 8, height: 4,   /* @canvas */
       left, width: w,
+      transform: twoLine ? "translateY(3px)" : "none", opacity: open ? 1 : 0,
+      transition: "transform " + M.reveal + ", opacity " + M.move,
       background: "var(--tl-clash-a)",
       // /code-review fix: a 1px casing, because the red core does NOT contrast
       // with the fills it is drawn on — 1.02:1 on a seated block, 1.34 on a
@@ -1083,21 +1234,34 @@ function ClashBand({ from, to, totalMins }) {
   );
 }
 
-function BlockBar({ bl, totalMins }) {
+const NO_SPANS = [];
+
+// v18.14.0 (correction 24, Patryk): a row's bands fade in and out, on the border's
+// speed, so the two read as one change. An id carries a band's whole geometry, which is
+// what lets a span that has gone be drawn on its way out.
+function ClashBands({ spans, totalMins, twoLine, date, quiet }) {
+  const { renderIds, openIds } = useRevealRows(spans.map((sp) => sp.from + "-" + sp.to), date, { speed: "move", quiet });
+  return renderIds.map((id) => {
+    const [from, to] = id.split("-").map(Number);
+    return <ClashBand key={id} from={from} to={to} totalMins={totalMins} twoLine={twoLine} open={openIds.has(id)} />;
+  });
+}
+
+function BlockBar({ bl, totalMins, sz }) {
   const bS = bl.allDay ? OPEN * 60 : toMins(bl.from);
   const bE = bl.allDay ? GRID_CLOSE * 60 : toMins(bl.to);
   const left = pct(bS);
   const w = Math.max(((bE - bS) / totalMins) * 100, 0.5) + "%";
   return (
     <div style={{
-      position: "absolute", top: 1, height: ROW_H - 4 + "px",
-      left, width: w,
+      position: "absolute", top: 1, height: sz.rowH - 4 + "px",
+      left, width: w, transition: "height " + M.shift,
       background: "repeating-linear-gradient(45deg,var(--tl-blocked-a),var(--tl-blocked-a) 4px,var(--tl-blocked-b) 4px,var(--tl-blocked-b) 8px)",
       borderRadius: 4, opacity: 0.6,   /* @canvas */
       display: "flex", alignItems: "center", justifyContent: "center",
       pointerEvents: "none"
     }}>
-      <span style={{ fontSize: T.micro, fontWeight: FW.bold, color: "var(--text-on-accent)", textTransform: "uppercase", letterSpacing: 1 }}>
+      <span style={{ fontSize: sz.note, fontWeight: FW.bold, color: "var(--text-on-accent)", textTransform: "uppercase", letterSpacing: 1 }}>
         blocked
       </span>
     </div>
@@ -1134,7 +1298,7 @@ function BlockBar({ bl, totalMins }) {
 //
 // Hoisted to module scope per CLAUDE.md's inline-sub-component rule (a component
 // defined inside another's body is a new TYPE every render → full remount).
-function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusFallbackRef = null }) {
+function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusFallbackRef = null, sz = TL_NORMAL }) {
   // v17.15.3: a LEAVING cell is still mounted (useRevealRows holds it so this
   // fade can finish) but its ghost is already gone from waitGhosts, so `g` is
   // undefined. Cache the last real one, the `last.current` idiom Presence uses
@@ -1183,7 +1347,7 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
   // no flags and no handle, and its time chip is unconditional because the time
   // IS the proposal (a ghost without one says nothing).
   const { showRing } = visibleRail(
-    mins * pxPerMin, CHIP_PX + FLAG_PX + NAME_MIN_PX, RING_PX, FLAG_PX, []
+    mins * pxPerMin, sz.chipPx + FLAG_PX + sz.nameMinPx, sz.ringPx, FLAG_PX, []
   );
   // v17.8.0 correction: group hover-lift, TimelineBlock's mechanism verbatim.
   // A ghost for a party that needs two tables renders one cell per row exactly
@@ -1253,7 +1417,7 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
         + (g.resh ? " — fits after re-optimising" : "") + ". Tap to book."}
       style={{
         // Geometry, radius, border, shadow: TimelineBlock's, verbatim.
-        position: "absolute", top: 3, height: (ROW_H - 8) + "px",
+        position: "absolute", top: 3, height: (sz.rowH - 8) + "px",
         left: pct(gS), width: Math.max((mins / totalMins) * 100, 0.3) + "%",
         background: BLOCK_BG.pending, borderRadius: 10, overflow: "hidden",   /* @canvas */
         // v17.15.3: the other half of "inert while leaving" — the handlers are
@@ -1275,12 +1439,13 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
       }}
     >
       {/* The start-time chip, in TimelineBlock's exact chip style. A real block
-          shows it only when the whole day's blocks are wide enough (the
-          all-or-nothing `chipsOn` rule); a ghost always does, because the time
+          wears it on the name's line only when the whole day's blocks are wide
+          enough (the all-or-nothing `chipsOn` rule), and otherwise under the name;
+          a ghost has one line and always shows it there, because the time
           is the entire proposal — a ghost without one says nothing useful. */}
       <span style={{
         ...HOUR_PILL,
-        flexShrink: 0, marginLeft: 6, lineHeight: "12px", fontWeight: FW.medium
+        fontSize: sz.time, flexShrink: 0, marginLeft: 6, lineHeight: sz.timeLine + "px", fontWeight: FW.medium
       }}>{g.time}</span>
       {/* v17.8.0 correction: the ⏳ sits BETWEEN the time and the name, not
           trailing it. Trailing, it was the first thing the ellipsis ate — the
@@ -1300,13 +1465,20 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
         display: "flex", alignItems: "center", position: "relative"
       }}>
         <span style={{
-          minWidth: 0, fontSize: T.small, fontWeight: FW.bold,
+          minWidth: 0, fontSize: sz.name, fontWeight: FW.bold,
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
         }}>{g.name}</span>
-        {showRing ? <SizeRing n={g.size} style={{ marginLeft: 6 }} /> : null}
+        {showRing ? <SizeRing n={g.size} style={{ marginLeft: 6, ...sz.ringStyle }} /> : null}
       </span>
     </div>
   );
+}
+
+// v18.14.0 (H6): keeps the ruler's clipped inner over the grid's minute. Out here
+// because a function in the component body that calls it stops counting as stable
+// to the deps rule, which `centerNow` has to.
+function syncRuler(grid, clip) {
+  if (grid && clip) clip.scrollLeft = grid.scrollLeft;
 }
 
 // v17.1.0 perf: React.memo — BookingApp re-renders on every form keystroke /
@@ -1360,6 +1532,8 @@ export const TimelineView = memo(function TimelineView({
   setAutoOptimizer = () => {},
   currency = "€", // v17.0.0: settings/general deposit marker
   onDropOnTable = null, // v17.0.0 correction: drag&drop move/swap handler (App)
+  onDropPreview = null, // v18.14.0 (H5): what a drop on a row would do (App's previewDrop)
+  onDropCheck = null,   // v18.14.0 (correction 17): the same, with the real plan (App's checkDrop)
   onReshuffle = () => {},
   // v17.6.0: separation between bookings, in minutes (0 = feature off). A SCALAR
   // from App rather than the TURN_BUFFER live binding, because React.memo cannot
@@ -1384,8 +1558,19 @@ export const TimelineView = memo(function TimelineView({
   // The memo-busting layout identity (App's `layout` state; the note above the component).
   // /code-review: read here too, as one of useEnterLeave's deps.
   layoutSig = null,
+  // v18.14.0 (H7): App draws this card's toolbar elsewhere (lib/compact-shell.js).
+  toolbarFolded = false,
+  // v18.14.0 (H2): Larger text, this device's setting. A scalar, so the memo holds.
+  largeText = false,
+  // v18.14.0 (correction 2): Tint indoor tables, the same kind of setting.
+  indoorTint = true,
 }) {
+  const sz = largeText ? TL_LARGE : TL_NORMAL;
   const scrollRef = useRef(null);
+  // v18.14.0 (H6): the sticky ruler and its clipped inner, which `syncRuler` holds
+  // at the grid's scrollLeft.
+  const rulerRef = useRef(null);
+  const rulerClipRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
   const [quickStatus, setQuickStatus] = useState(null);
   // /code-review: the drag closes the card as a HAND-OFF (ModalPresence's
@@ -1396,6 +1581,47 @@ export const TimelineView = memo(function TimelineView({
   function handOffQuick() { setQuickHandoff(true); setQuickStatus(null); }
   // v17.0.0 correction: the table row a drag currently hovers (highlight).
   const [dragHover, setDragHover] = useState(null);
+  // v18.14.0 (H5): the booking dragged over that row, null over its own row,
+  // which is no target. Two plain values rather than one object: a block reports
+  // every frame, and a value that has not moved must not re-render the grid.
+  const [dragOver, setDragOver] = useState(null);
+  // v18.14.0 (correction 17, Patryk): what a settled finger has been told this drag,
+  // per row, and where it has been still since.
+  const [dropChecks, setDropChecks] = useState(NO_CHECKS);
+  const dropRest = useRef({ y: 0, at: 0 });
+  function hoverRow(table, id, home, y) {
+    setDragHover(table);
+    setDragOver(table == null || table === home ? null : id);
+    if (table == null) { setDropChecks(NO_CHECKS); return; }
+    if (Math.abs(y - dropRest.current.y) > DROP_REST_SLOP) dropRest.current = { y: y, at: performance.now() };
+  }
+  // Asked once per row, not per pointer frame: it changes with the row, and with
+  // nothing else, for as long as the finger stays on one.
+  const dropHint = useMemo(() => (
+    dragHover != null && dragOver != null && onDropPreview ? onDropPreview(dragOver, dragHover) : null
+  ), [dragHover, dragOver, onDropPreview]);
+  // v18.14.0 (correction 17, Patryk): with the Optimiser on, "Moves …" is a guess, and
+  // the real answer is too heavy for a drag (`dropPreview`'s header has the numbers).
+  // So the row asks once the finger has stopped: amber at once, then the plan once
+  // per row per drag. Stopped means still, not merely on the row, because a slow drag
+  // across rows spends longer than `DROP_REST_MS` on each, and this is the one call
+  // here that can hold a frame. A check that agrees leaves the row exactly as it was.
+  const unsureRow = dropHint && dropHint.unsure ? dragOver + "|" + dragHover : null;
+  const rowHint = (unsureRow && dropChecks[unsureRow]) || dropHint;
+  useEffect(() => {
+    if (!unsureRow || dropChecks[unsureRow] || !onDropCheck) return undefined;
+    let timer = 0;
+    function check() {
+      const left = dropRest.current.at + DROP_REST_MS - performance.now();
+      if (left > 0) { timer = setTimeout(check, left); return; }
+      const sure = onDropCheck(dragOver, dragHover);
+      if (!sure) return;
+      const said = sure.text === dropHint.text ? dropHint : { ...sure, corrects: true };
+      setDropChecks((c) => ({ ...c, [unsureRow]: said }));
+    }
+    timer = setTimeout(check, DROP_REST_MS);
+    return () => clearTimeout(timer);
+  }, [unsureRow, dropChecks, dropHint, dragOver, dragHover, onDropCheck]);
   const isToday = date === today;
   const totalMins = (GRID_CLOSE - OPEN) * 60;
   const gridW = Math.max(320, totalMins * zoom * 1.2);
@@ -1406,6 +1632,19 @@ export const TimelineView = memo(function TimelineView({
   // v17.1.0 perf: noShowMap walks EVERY booking (all dates — grows with
   // history); memo on the bookings ref so it no longer reruns per render.
   const nsMap = useMemo(() => noShowMap(bookings), [bookings]);
+
+  // v18.14.0 (H6): the ruler cannot sit inside the grid's scroller and stick to
+  // the page: that scroller clips both axes (`overflow-x: auto` makes y auto
+  // too), so `position: sticky` would stick to IT. So the ruler is a strip of its
+  // own, above the rows, and this keeps its inner over the same minute as the
+  // grid. The swipe itself runs off the main thread, so during a fling the ruler
+  // can trail by a frame and settles at rest.
+  //
+  // A new width changes where the scroll lands without a scroll event of its own
+  // to rely on, and a remount starts the clip at 0.
+  useLayoutEffect(() => {
+    syncRuler(scrollRef.current, rulerClipRef.current);
+  }, [gridW, date]);
 
   // ── Follow-now scroll synchronisation ────────────────────────────────────
   // When followNow is on (today only), keep the current minute ~30 min from
@@ -1431,6 +1670,9 @@ export const TimelineView = memo(function TimelineView({
       const el = scrollRef.current;
       if (!el) return;
       el.scrollLeft = fraction * el.scrollWidth;
+      // In this frame, not on the scroll event: that lands in the next one, and
+      // the ruler would trail the now-line through the whole ease.
+      syncRuler(el, rulerClipRef.current);
       if (performance.now() - start < 500) {
         followRafRef.current = requestAnimationFrame(step);
       }
@@ -1446,6 +1688,7 @@ export const TimelineView = memo(function TimelineView({
       if (scrollPosRef) scrollPosRef.current = fraction * gridW;
     } else if (scrollPosRef && scrollPosRef.current > 0) {
       scrollRef.current.scrollLeft = scrollPosRef.current;
+      syncRuler(scrollRef.current, rulerClipRef.current);
     }
     return () => cancelAnimationFrame(followRafRef.current);
     // v18.3.2 (the stale-closure triage): `totalMins` joins the list. `gridW`
@@ -1459,6 +1702,7 @@ export const TimelineView = memo(function TimelineView({
     if (scrollRef.current && scrollPosRef) {
       scrollPosRef.current = scrollRef.current.scrollLeft;
     }
+    syncRuler(scrollRef.current, rulerClipRef.current);
     if (quickStatus) setQuickStatus(null);
   }
 
@@ -1568,7 +1812,7 @@ export const TimelineView = memo(function TimelineView({
   // Rows sit below the header strip AND, when it is there, below the Unplaced
   // row — `tableForClientY` needs the offset, or every drop lands rows low.
   const UNPLACED_GAP = 4;
-  const unplacedH = unplacedHeight(unplacedLanes.length, ROW_H, UNPLACED_GAP);
+  const unplacedH = unplacedHeight(unplacedLanes.length, sz.rowH, UNPLACED_GAP);
   // v18.3.2 (O4): the row EASES to that height, in both columns at once, so
   // the table rows below it, their labels and their blocks travel together.
   // Measured on DEV before: it mounted at full height, so the labels and row
@@ -1610,10 +1854,19 @@ export const TimelineView = memo(function TimelineView({
   // block: a booking placed again is on its table, and useFlip carries it
   // there on the same curve as this height, so it does not move on screen.
   const heldLanes = Math.max(unplacedCount, unplacedRow.held);
+  // v18.14.0 (H2): the row's height also follows the text size, and it eases with
+  // the table rows beside it, which carry the same transition at all times. This
+  // box needs the hold because a date change must still snap it.
+  const [easedRowH, setEasedRowH] = useState(sz.rowH);
+  const sizeEasing = easedRowH !== sz.rowH;
+  useEffect(function () {
+    if (!sizeEasing) return undefined;
+    return afterFrame(function () { setEasedRowH(sz.rowH); }, exitHold("shift"));
+  }, [sizeEasing, sz.rowH]);
   const unplacedBox = {
     position: "relative",
     height: unplacedH + "px",
-    transition: unplacedEasing ? "height " + M.shift : "none"
+    transition: unplacedEasing || sizeEasing ? "height " + M.shift : "none"
   };
   // The label column clips while the row eases, so "Unplaced" never draws over
   // the 1A label sliding under it. The grid column does not: clipped, a booking
@@ -1630,10 +1883,14 @@ export const TimelineView = memo(function TimelineView({
   // the row eases it follows the box, so the line travels with the table rows
   // and the grid lines (semi-transparent) are never drawn twice over theirs. It
   // clips, so below 1px the line is gone rather than lying on the header's edge.
+  // v18.14.0 (correction 1): it carries the row's rose ground too, so the tint
+  // stops on the dashed line and eases with the row, and neither column needs
+  // a hold of its own.
   const unplacedEdge = {
     position: "absolute", top: 0, left: 0, right: 0,
     height: "calc(100% - " + UNPLACED_GAP + "px)",
-    overflow: "hidden"
+    overflow: "hidden",
+    background: "var(--tl-unplaced-bg)"
   };
   // Drawn over the last lane's last pixel, never below the lanes, so the box,
   // the label column and `unplacedH` agree to the pixel (v18.2.0 measured: a
@@ -1669,9 +1926,14 @@ export const TimelineView = memo(function TimelineView({
   //
   // Same all-or-nothing shape as before (one mixed grid read messy in live QA);
   // the per-block part is only what each block needs, and the worst one decides.
+  //
+  // v18.14.0 (D1): off no longer means no time. It means the day is two-line
+  // (`twoLineBlock`), so the time moves under the name instead of leaving, and the
+  // name gets the whole line. At Patryk's 1.5x a 90-minute block is 162px against
+  // the 180 this needs, so in service that is the usual layout, not the exception.
   const confirmedDay = day.filter((b) => b.status === "confirmed" || b.status === "pending");
   const chipsOn = confirmedDay.length > 0 && confirmedDay.every(function (b) {
-    return liveBarDur(b, nowMins, today) * pxPerMin >= chipRoomFor(b, nsMap[identityKey(b)] || 0, warnings[b.id], !!clashes[b.id]);
+    return liveBarDur(b, nowMins, today) * pxPerMin >= chipRoomFor(b, nsMap[identityKey(b)] || 0, warnings[b.id], !!clashes[b.id], sz);
   });
 
   // ── v18.3.0 (O1): a booking leaving or joining the day fades ────────────────
@@ -1816,7 +2078,7 @@ export const TimelineView = memo(function TimelineView({
   // the label that comes back as the clock moves on eases in, not snaps.
   // (`nowInRange` is declared further down; this reads the same condition
   // inline rather than a const above its declaration — the TDZ gotcha.)
-  const NOW_PILL_CLEAR = 38;
+  const NOW_PILL_CLEAR = sz.nowClear;
   const nowShown = isToday && nowMins >= OPEN * 60 && nowMins <= GRID_CLOSE * 60;
   const headerLabels = QUARTER_HOURS
     .filter((m) => isHourMark(m) && m < GRID_CLOSE * 60)
@@ -1829,6 +2091,7 @@ export const TimelineView = memo(function TimelineView({
           aria-hidden={covered ? "true" : undefined}
           style={{
             ...HOUR_PILL,
+            fontSize: sz.time,
             position: "absolute", top: 3, left: center + "%", transform: "translateX(-50%)",
             pointerEvents: "none", zIndex: 1,
             opacity: covered ? 0 : 1, transition: "opacity " + M.tap
@@ -1841,15 +2104,8 @@ export const TimelineView = memo(function TimelineView({
 
   // ── Labels column (left) — sticky table IDs + optional Unplaced row ──────
   const labelCol = (
-    // v14.3.1 (Fix 3): paddingTop mirrors the grid scroller's padding so the
-    // 24px header + ROW_H rows line up with the grid column after the pad.
-    <div style={{ width: LABEL_W + "px", flexShrink: 0, paddingTop: 8 }}>
-      <div style={{
-        height: 24,   /* @canvas */ background: "var(--tl-header-strip)",
-        borderRadius: "6px 0 0 0",
-        borderBottom: "2px solid var(--tl-header-border)",
-        boxSizing: "border-box"
-      }} />
+    // v18.14.0 (H6): its corner of the header moved to the ruler strip.
+    <div style={{ width: LABEL_W + "px", flexShrink: 0 }}>
       {/* v18.2.0: the Unplaced row leads, directly under the header — it holds
           the bookings the rows below cannot show, so it is the first thing to
           read rather than the last thing below eleven rows of tables.
@@ -1860,14 +2116,16 @@ export const TimelineView = memo(function TimelineView({
           <>
             <div style={unplacedEdge}>{unplacedLine}</div>
             {/* Less the line's 1px, which this box's own border took when the
-                line was drawn here, so the word stays where it always was. */}
+                line was drawn here, so the word stays where it always was.
+                Positioned, or the absolute tint above it paints over the word. */}
             <div style={{
-              height: (heldLanes * ROW_H - 1) + "px",
+              position: "relative",
+              height: (heldLanes * sz.rowH - 1) + "px",
               display: "flex", alignItems: "center", justifyContent: "flex-end",
               paddingRight: 6,
               boxSizing: "border-box"
             }}>
-              <span style={{ fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}>
+              <span style={{ fontSize: sz.note, fontWeight: FW.semi, color: "var(--danger-text)" }}>
                 Unplaced
               </span>
             </div>
@@ -1883,15 +2141,19 @@ export const TimelineView = memo(function TimelineView({
             key={id}
             onClick={() => { if (onBlock) onBlock(id); }}
             style={{
-              height: ROW_H + "px",
+              height: sz.rowH + "px",
               display: "flex", alignItems: "center", justifyContent: "flex-end",
               paddingRight: 6,
               borderBottom: "2px solid var(--tl-row-border)",
-              cursor: "pointer", boxSizing: "border-box"
+              cursor: "pointer", boxSizing: "border-box",
+              // v18.14.0 (correction 2): the row's tint reaches the label, so the
+              // zone is one band, and it eases when the switch flips.
+              backgroundColor: indoorTint && indoor ? "var(--tl-indoor-bg)" : undefined,
+              transition: "height " + M.shift + ", background-color " + M.tap
             }}
           >
             <span className="mgt-hover-scale" style={{
-              fontSize: T.small, fontWeight: FW.semi, padding: "2px 0", borderRadius: R.pill,
+              fontSize: sz.label, fontWeight: FW.semi, padding: "2px 0", borderRadius: R.pill,
               background: hasBlock ? "var(--tl-blocked-badge)" : indoor ? TBL.ind.bg : TBL.out.bg,
               color: hasBlock ? "var(--text-on-accent)" : indoor ? TBL.ind.text : TBL.out.text,
               border: "1px solid " + (hasBlock ? "var(--tl-blocked-badge-border)" : indoor ? TBL.ind.border : TBL.out.border),
@@ -1928,8 +2190,10 @@ export const TimelineView = memo(function TimelineView({
     const el = flipRef.current;
     if (!el) return null;
     const u = unplacedRef.current;
-    const top = u ? u.getBoundingClientRect().bottom : el.getBoundingClientRect().top + 24 + unplacedH;
-    const idx = Math.floor((clientY - top) / ROW_H);
+    const gridTop = el.getBoundingClientRect().top;
+    const top = u ? u.getBoundingClientRect().bottom : gridTop + unplacedH;
+    const ruler = rulerRef.current;
+    const idx = Math.floor((rowProbeY(clientY, ruler ? ruler.getBoundingClientRect().bottom : null, gridTop) - top) / sz.rowH);
     return idx >= 0 && idx < TIMELINE_TABLES.length ? TIMELINE_TABLES[idx].id : null;
   }
 
@@ -1966,14 +2230,14 @@ export const TimelineView = memo(function TimelineView({
           className={fx}
           aria-hidden="true"
           style={{
-            position: "absolute", top: 3, height: (ROW_H - 8) + "px",
+            position: "absolute", top: 3, height: (sz.rowH - 8) + "px",
             left: pct(tStart),
             width: Math.max((tMins / totalMins) * 100, 0.3) + "%",
             background: BLOCK_BG[b.status] || BLOCK_BG.confirmed,
             opacity: 0.28,
             borderRadius: "0 10px 10px 0",
             boxSizing: "border-box", pointerEvents: "none",
-            transition: "left " + M.shift + ", width " + M.shift
+            transition: "left " + M.shift + ", width " + M.shift + ", height " + M.shift
           }}
         />
       );
@@ -1990,7 +2254,7 @@ export const TimelineView = memo(function TimelineView({
           // Never on a leaving copy: one element per id in useFlip's map.
           data-flip-id={primary && !snap ? b.id + "__ghost" : undefined}
           style={{
-            position: "absolute", top: 3, height: (ROW_H - 8) + "px",
+            position: "absolute", top: 3, height: (sz.rowH - 8) + "px",
             left: gLeft, width: gW,
             background: "transparent", borderRadius: 10,   /* @canvas */
             border: "2px dashed " + BLOCK_BG.seated,
@@ -2009,7 +2273,7 @@ export const TimelineView = memo(function TimelineView({
         <Fragment key={"leaving-" + b.id}>
           {tail}
           {ghost}
-          <TimelineBlock leaving b={b} pxPerMin={pxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={snap.warnings} clash={snap.clash} currency={currency} late={snap.late} noShows={snap.noShows} showChip={snap.chip} freeMin={primary ? snap.freeMin : null} />
+          <TimelineBlock sz={sz} leaving b={b} pxPerMin={pxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={snap.warnings} clash={snap.clash} currency={currency} late={snap.late} noShows={snap.noShows} showChip={snap.chip} freeMin={primary ? snap.freeMin : null} />
         </Fragment>
       );
     }
@@ -2017,7 +2281,7 @@ export const TimelineView = memo(function TimelineView({
       <Fragment key={b.id}>
         {tail}
         {ghost}
-        <TimelineBlock arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />
+        <TimelineBlock sz={sz} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={hoverRow} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />
       </Fragment>
     );
   }
@@ -2030,15 +2294,21 @@ export const TimelineView = memo(function TimelineView({
       <div
         key={id}
         style={{
-          height: ROW_H + "px", position: "relative",
+          height: sz.rowH + "px", position: "relative",
           borderBottom: "2px solid var(--tl-row-border)",
-          boxSizing: "border-box",
-          // drag&drop target highlight (subtle accent tint while hovered)
-          background: dragHover === id ? "var(--bg-ac-hover)" : undefined
+          boxSizing: "border-box", transition: "height " + M.shift + ", background-color " + M.tap,
+          // drag&drop target highlight (subtle accent tint while hovered).
+          // v18.14.0 (H5): amber when the drop would move somebody, red when it
+          // would be refused, so a busy row no longer looks like an empty one.
+          // v18.14.0 (correction 2): the indoor tint is the row's resting ground,
+          // so a hint replaces it and hands it back.
+          backgroundColor: dragHover !== id ? (indoorTint && isIn(id) ? "var(--tl-indoor-bg)" : undefined)
+            : hintRole(rowHint) ? hintRole(rowHint).tint : "var(--bg-ac-hover)"
         }}
       >
+        <DropHint hint={dragHover === id ? rowHint : null} sz={sz} />
         <GridLines />
-        {tblBlocks.map((bl, i) => <BlockBar key={"blk" + i} bl={bl} totalMins={totalMins} />)}
+        {tblBlocks.map((bl, i) => <BlockBar key={"blk" + i} bl={bl} totalMins={totalMins} sz={sz} />)}
         {/* v17.8.0: waitlist ghosts — rendered BEFORE the real blocks so a live
             booking always paints on top of a preview. */}
         {ghostKeysFor(id).map((k) => {
@@ -2057,6 +2327,7 @@ export const TimelineView = memo(function TimelineView({
           // the openIds removal.
           return (
             <WaitGhost
+              sz={sz}
               key={"wg" + k}
               g={cell ? cell.g : null}
               leaving={!cell}
@@ -2083,9 +2354,7 @@ export const TimelineView = memo(function TimelineView({
         {leavingCells.filter((s) => (s.b.tables || []).includes(id)).map((s) => cellFor(s.b, id, s))}
         {/* LAST in the row, so it paints over the blocks — the whole point is
             that it marks the span the later block is hiding the earlier one on. */}
-        {(clashSpans[id] || []).map((sp, i) => (
-          <ClashBand key={"cb" + i} from={sp.from} to={sp.to} totalMins={totalMins} />
-        ))}
+        <ClashBands spans={clashSpans[id] || NO_SPANS} totalMins={totalMins} twoLine={!chipsOn} date={date} quiet={catchingUp} />
       </div>
     );
   });
@@ -2105,12 +2374,12 @@ export const TimelineView = memo(function TimelineView({
     <>
       <div style={unplacedEdge}>{unplacedLine}<GridLines /></div>
       {Array.from({ length: heldLanes }, (_, li) => unplacedLanes[li] || []).map((lane, li) => (
-        <div key={"ul" + li} style={{ height: ROW_H + "px", position: "relative", boxSizing: "border-box" }}>
-          {lane.map((b) => <TimelineBlock key={b.id} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />)}
+        <div key={"ul" + li} style={{ height: sz.rowH + "px", position: "relative", boxSizing: "border-box", transition: "height " + M.shift }}>
+          {lane.map((b) => <TimelineBlock sz={sz} key={b.id} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={hoverRow} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />)}
           {/* v18.3.0 (O1): a booking that left while in THIS lane. v18.3.2
               (O4): a lane the row is easing away from is still drawn, so the
               last booking leaving it fades there while the row shrinks. */}
-          {leavingCells.filter((s) => s.lane === li).map((s) => <TimelineBlock key={"leaving-" + s.b.id} leaving b={s.b} pxPerMin={pxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={s.warnings} clash={s.clash} currency={currency} late={s.late} noShows={s.noShows} showChip={s.chip} />)}
+          {leavingCells.filter((s) => s.lane === li).map((s) => <TimelineBlock sz={sz} key={"leaving-" + s.b.id} leaving b={s.b} pxPerMin={pxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={s.warnings} clash={s.clash} currency={currency} late={s.late} noShows={s.noShows} showChip={s.chip} />)}
         </div>
       ))}
     </>
@@ -2129,20 +2398,67 @@ export const TimelineView = memo(function TimelineView({
       }}
     >
       <div style={{
-        position: "absolute", top: 3, left: "50%", transform: "translateX(-50%)",
-        fontSize: T.micro, fontWeight: FW.semi, color: "var(--text-on-accent)",
-        background: "var(--tl-now-pill)",
-        padding: "2px 4px", borderRadius: R.pill, whiteSpace: "nowrap", zIndex: 11,
-        boxShadow: "var(--shadow-btn)"
-      }}>
-        {toTime(nowMins)}
-      </div>
-      <div style={{
-        position: "absolute", top: 11, bottom: 0, left: "50%", transform: "translateX(-50%)",
+        position: "absolute", top: 0, bottom: 0, left: "50%", transform: "translateX(-50%)",
         width: 2, background: "var(--tl-now-line)"
       }} />
     </div>
   ) : null;
+  // v18.14.0 (H6): the pill rides the ruler, so "now" stays readable with the
+  // ruler stuck. The line under it stays with the rows.
+  const nowPill = nowInRange ? (
+    <div style={{
+      position: "absolute", top: 3, left: pct(nowMins), transform: "translateX(-50%)",
+      fontSize: sz.time, fontWeight: FW.semi, color: "var(--text-on-accent)",
+      background: "var(--tl-now-pill)",
+      padding: "2px 4px", borderRadius: R.pill, whiteSpace: "nowrap", zIndex: 11,
+      boxShadow: "var(--shadow-btn)"
+    }}>
+      {toTime(nowMins)}
+    </div>
+  ) : null;
+
+  // ── The sticky ruler (v18.14.0, H6) ──────────────────────────────────────
+  // Scrolled to tables 6–13 the ruler was 198px above the screen, so a booking
+  // late in the day could not be read against the clock. It sticks to the nearest
+  // scrollport, whichever that is: `main` with the lock on, a pane in a split, the
+  // body with it off, which is why this is not the Timeline owning its own
+  // vertical scroll: that needs a definite height, which only two of the three
+  // have, and it would have pinned the notification strip above the grid.
+  // Opaque (DESIGN.md: a surface that carries data), because rows pass under it.
+  // `top` is its own padding negated, so that gap scrolls away and the ticks sit
+  // at the very top. `data-sticky-top` is how a drag's edge scroll finds it.
+  const rulerPad = toolbarFolded ? SP.tight : SP.base;
+  const ruler = (
+    <div ref={rulerRef} data-sticky-top="" style={{
+      position: "sticky", top: -rulerPad, zIndex: 20, display: "flex",
+      paddingTop: rulerPad, background: "var(--tl-ruler-bg)"
+    }}>
+      <div style={{
+        width: LABEL_W + "px", flexShrink: 0,
+        height: 24,   /* @canvas */ background: "var(--tl-header-strip)",
+        borderRadius: "6px 0 0 0",
+        borderBottom: "2px solid var(--tl-header-border)",
+        boxSizing: "border-box"
+      }} />
+      {/* The same side padding and the same inner width as the grid's scroller, so
+          the two share a scroll range and one scrollLeft means one minute. */}
+      <div ref={rulerClipRef} style={{ flex: 1, minWidth: 0, overflow: "hidden", padding: "0 8px" }}>
+        <div style={{
+          width: gridW + "px", minWidth: "100%", transition: "width " + M.shift,
+          position: "relative",
+          borderBottom: "2px solid var(--tl-header-border)",
+          background: "var(--tl-header-strip)",
+          borderRadius: "0 6px 0 0",
+          height: 24,   /* @canvas */ overflow: "visible", boxSizing: "border-box"
+        }}>
+          {headerLines}
+          <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, borderLeft: "2px solid var(--tl-gridline-hour)" }} />
+          {headerLabels}
+          {nowPill}
+        </div>
+      </div>
+    </div>
+  );
 
   // ── Grid column (right, scrollable) ──────────────────────────────────────
   const gridCol = (
@@ -2157,9 +2473,10 @@ export const TimelineView = memo(function TimelineView({
       tabIndex={-1}
       className="mgt-tl-scroll"
       // v14.3.1 (Fix 3): pad the scroller so a hover-scaled block at the grid
-      // edges (first/last minute, top/bottom row) doesn't clip on any side.
-      // labelCol gets a matching paddingTop so its rows stay aligned with the grid.
-      style={{ flex: 1, overflowX: "auto", overflowY: "hidden", padding: 8 }}
+      // edges (first/last minute, bottom row) doesn't clip on any side. No top
+      // pad since v18.14.0: the top row's lift stays inside its 3px gutter, and
+      // the ruler above is what a pad would separate it from.
+      style={{ flex: 1, overflowX: "auto", overflowY: "hidden", padding: "0 8px 8px" }}
     >
       {/* v15.8.0: width transitions so a zoom change (+/− / 1× / Follow) eases to
           the new scale. Blocks/gridlines are %-positioned against this width, so
@@ -2171,17 +2488,6 @@ export const TimelineView = memo(function TimelineView({
       {/* v18.3.0 (M1): `data-flip-root` lets a dropped block find this
           container without a second ref, to seed its release position. */}
       <div ref={flipRef} data-flip-root="" style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width " + M.shift }}>
-        <div style={{
-          position: "relative",
-          borderBottom: "2px solid var(--tl-header-border)",
-          background: "var(--tl-header-strip)",
-          borderRadius: "0 6px 0 0",
-          height: 24,   /* @canvas */ overflow: "visible", boxSizing: "border-box"
-        }}>
-          {headerLines}
-          <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, borderLeft: "2px solid var(--tl-gridline-hour)" }} />
-          {headerLabels}
-        </div>
         {unplacedGrid}
         {gridRows}
         {nowLine}
@@ -2190,114 +2496,16 @@ export const TimelineView = memo(function TimelineView({
   );
 
   // ── Header controls (top row above the grid) ─────────────────────────────
-  // Follow-now button: today only. Phase C1 — label flips between "Following"
-  // and "Follow" so screen-readers and quick visual scans get the state from
-  // the text, not just the background colour. Background still flips for
-  // emphasis.
-  const followBtn = isToday ? (
-    <button
-      onClick={() => {
-        if (!followNow) {
-          setFollowNow(true);
-          if (zoom < followZoom) setZoom(followZoom);
-        } else {
-          setFollowNow(false);
-        }
-      }}
-      className="mgt-hover-scale mgt-press"
-      style={mkBtn({
-        minHeight: 36, padding: "4px 10px", fontSize: T.small,
-        // v17.8.0: the idle fill was a hard-coded copy of --app-btn-grey's old
-        // value, so the contrast pass fixed every other secondary button and
-        // left this one at 1.82:1 — the lowest on the screen, on the control
-        // that follows the clock during service. A literal duplicate of a token
-        // is a token that cannot be fixed.
-        background: followNow ? "var(--app-btn-dark)" : "var(--app-btn-grey)"
-      })}
-    >
-      {followNow ? "Following" : "Follow"}
-    </button>
-  ) : null;
-
-  // Zoom buttons (− · 1×/reset · +) — minimum 1× (i.e. never zoom below the
-  // "fit one full service into the screen" baseline).
+  // v18.14.0 (H7): their own components, because on a short screen they leave
+  // this card: Follow and zoom for App's header, Optimiser for the Summary.
+  // `toolbarFolded` is App's, and the state they drive was App's already.
   const zoomBtns = (
-    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-      {followBtn}
-      {/* v18.2.0: named. Their whole content is a glyph, so they announced as
-          "-" and "+" — the LayoutSettings `Stepper` defect (v17.15.5), and the
-          same reasoning: a glyph doing an icon's job carries no word a voice-
-          control user could say, so a name in words takes nothing away. The
-          reset button below DOES carry text, so its name leads with it. */}
-      <button
-        onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
-        aria-label="Zoom out"
-        className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
-      >
-        −
-      </button>
-      {/* v17.2.0 follow-up: the reset label grows "1x" → "Nx → 1x" when zoomed —
-          the widening used to SNAP and shove the whole toolbar group sideways.
-          The "Nx → " prefix now rides a horizontal Reveal (the start-time-chip
-          pattern) so the button width eases in/out instead of jumping. The
-          constant "1x" tail keeps the button's identity while collapsed. */}
-      <button
-        onClick={() => { setZoom(1); setFollowNow(false); }}
-        aria-label={(zoom !== 1 ? zoom + "x → " : "") + "1x (reset zoom)"}
-        className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 36, padding: "4px 10px", fontSize: T.small, background: zoom === 1 ? "var(--btn-default)" : BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
-      >
-        {/* NB the child must be NULL (not an empty span) at 1× — Reveal caches its
-            last truthy children for the exit ease; an always-mounted span would
-            overwrite that cache with empty text and the collapse would animate a
-            blank box (the text snapping away instead of easing out). */}
-        <Reveal horizontal show={zoom !== 1}>
-          {zoom !== 1 ? <span style={{ whiteSpace: "pre" }}>{zoom + "x → "}</span> : null}
-        </Reveal>
-        1x
-      </button>
-      <button
-        onClick={() => setZoom((z) => Math.min(maxZoom, z + 0.5))}
-        aria-label="Zoom in"
-        className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
-      >
-        +
-      </button>
-    </div>
+    <TimelineZoomControls
+      zoom={zoom} setZoom={setZoom} maxZoom={maxZoom} followZoom={followZoom}
+      followNow={followNow} setFollowNow={setFollowNow} isToday={isToday} />
   );
-
-  // Optimizer toggle + Reshuffle (today only). Reshuffle is only shown when
-  // the optimizer is OFF — when ON it runs continuously, no manual trigger
-  // needed.
   const optBtns = isToday ? (
-    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-      <button
-        onClick={() => setAutoOptimizer(!autoOptimizer)}
-        className="mgt-hover-scale"
-        style={mkBtn({
-          minHeight: 36, padding: "4px 12px", fontSize: T.small,
-          // v17.8.0 review fix: the OFF fill was the SAME hard-coded grey the
-          // Follow button above was just cured of, in the same commit, eight
-          // lines apart — 1.94:1 white-on-grey in light mode. Fixing one copy of
-          // a literal does not fix the literal; grep the VALUE.
-          background: autoOptimizer ? "var(--app-walkin)" : "var(--app-btn-grey)"
-        })}
-      >
-        {"Optimiser: " + (autoOptimizer ? "ON" : "OFF")}
-      </button>
-      {/* v15.8.0: slides in L→R when Optimizer is toggled OFF, slides out →L when ON. */}
-      <Presence show={!autoOptimizer} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span">
-        <button
-          onClick={onReshuffle}
-          className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 36, padding: "4px 12px", fontSize: T.small, background: BTN.orange })}
-        >
-          Reshuffle
-        </button>
-      </Presence>
-    </div>
+    <OptimiserControls autoOptimizer={autoOptimizer} setAutoOptimizer={setAutoOptimizer} onReshuffle={onReshuffle} />
   ) : null;
 
   // ── Legend chips (status colours + indoor/outdoor + blocked) ─────────────
@@ -2307,7 +2515,7 @@ export const TimelineView = memo(function TimelineView({
       <span
         key={s}
         style={{
-          fontSize: T.small, padding: "2px 8px", borderRadius: R.pill,
+          fontSize: sz.legend, padding: "2px 8px", borderRadius: R.pill,
           background: BLOCK_BG[s] || BLOCK_BG.confirmed,
           color: BLOCK_INK[s] || "var(--text-on-accent)",
           border: RIM_SOLID,
@@ -2326,17 +2534,17 @@ export const TimelineView = memo(function TimelineView({
     );
   });
   legendEls.push(
-    <span key="in" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: TBL.ind.bg, color: "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi }}>
+    <span key="in" style={{ fontSize: sz.legend, padding: "2px 8px", borderRadius: R.pill, background: TBL.ind.bg, color: "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi }}>
       indoor
     </span>
   );
   legendEls.push(
-    <span key="out" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: TBL.out.bg, color: "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi }}>
+    <span key="out" style={{ fontSize: sz.legend, padding: "2px 8px", borderRadius: R.pill, background: TBL.out.bg, color: "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi }}>
       outdoor
     </span>
   );
   legendEls.push(
-    <span key="blocked" style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi }}>
+    <span key="blocked" style={{ fontSize: sz.legend, padding: "2px 8px", borderRadius: R.pill, background: "var(--tl-blocked-badge)", color: "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi }}>
       blocked
     </span>
   );
@@ -2368,16 +2576,18 @@ export const TimelineView = memo(function TimelineView({
       // blur changes nothing (≤5/255 measured), and it spent the tablet's ≤4 budget.
       borderRadius: R.sheet,
       border: "1px solid var(--tl-card-border)",
-      padding: "10px 12px",
+      padding: toolbarFolded ? "4px 12px" : "10px 12px",
       boxShadow: "var(--shadow-soft)"
     }}>
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        marginBottom: 8, gap: 8, flexWrap: "wrap"
-      }}>
-        {optBtns || <div />}
-        {zoomBtns}
-      </div>
+      {toolbarFolded ? null : (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          marginBottom: 8, gap: 8, flexWrap: "wrap"
+        }}>
+          {optBtns || <div />}
+          {zoomBtns}
+        </div>
+      )}
       {/* v17.8.0: the "Closed this day" notice that used to sit here moved to
           NotificationStrip. It was a day-level fact drawn per-view — here and,
           differently worded, in PlanView — while List had none. One section now
@@ -2390,6 +2600,7 @@ export const TimelineView = memo(function TimelineView({
           The `null` on the false branch is what lets the exit animate at all
           (Reveal caches only truthy children and collapses that cache). */}
       <Reveal show={isEmpty}>{isEmpty ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}</Reveal>
+      {ruler}
       <div style={{ display: "flex" }}>
         {labelCol}
         {gridCol}
@@ -2413,7 +2624,7 @@ export const TimelineView = memo(function TimelineView({
           diff, because nothing about the handle's change touches this file's
           hint string. It shows the icon inline instead of naming a character, so
           the two cannot come apart again. */}
-      <div style={{ marginTop: 6, fontSize: T.small, color: S.muted, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+      <div style={{ marginTop: 6, fontSize: sz.legend, color: S.muted, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
         <span>tap booking to edit</span>
         <span aria-hidden="true">·</span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><AssignIcon size={IC.inline} />assign</span>

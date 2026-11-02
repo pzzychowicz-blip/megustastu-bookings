@@ -52,7 +52,7 @@ export function UnplacedBanner({ items, onAssign, swapKey }) {
         <button
           onClick={function () { onAssign(b.id); }}
           className="mgt-hover-scale"
-          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>{"Assign " + who}</button>
+          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.tables })}>{"Assign " + who}</button>
       </div>
     );
   }

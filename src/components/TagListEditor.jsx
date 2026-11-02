@@ -42,7 +42,9 @@ import {
   addTag, renameTag, removeTag, tagIdFor,
 } from "../lib/tags";
 import { genId, countLabel } from "../lib/booking-logic";
+import { markArmed, armSettled } from "../lib/arm-guard";
 import { Collapsible, InlineAlert, OutlineChip, Reveal, mkInp, mkBtn, mkDangerBtn, mkRemoveX } from "./atoms";
+import { FoldRows } from "./FoldRows";
 import { CloseIcon, TrashIcon } from "./Icons";
 
 // Where each kind lives, in the words the form and the Customers list bear out.
@@ -179,7 +181,7 @@ function AddTagRow({ kind, tagList, onSave, onDirty }) {
           disabled={full || !dirty}
           aria-label={"Add " + KIND_ONE[kind]}
           className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 14px", background: BTN.nav, opacity: full || !dirty ? 0.4 : 1, cursor: full || !dirty ? "not-allowed" : "pointer" })}>Add</button>
+          style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 14px", background: BTN.quiet, opacity: full || !dirty ? 0.4 : 1, cursor: full || !dirty ? "not-allowed" : "pointer" })}>Add</button>
       </div>
       <Reveal show={!!refusal}>
         <div id={hintId} style={{ fontSize: T.small, paddingTop: SP.tight, color: "var(--danger-text)", fontWeight: FW.semi }}>{refusal}</div>
@@ -195,8 +197,9 @@ export function TagListEditor({ tagList, onSave, tagError, onClearError, canEdit
   useEffect(function () { return function () { if (armTimer.current) clearTimeout(armTimer.current); }; }, []);
   function disarm() { if (armTimer.current) { clearTimeout(armTimer.current); armTimer.current = null; } setArmedId(null); }
   function arm(id) {
-    if (armedId === id) { disarm(); onSave(removeTag(tagList, id).list); return; }
+    if (armedId === id) { if (!armSettled()) return; disarm(); onSave(removeTag(tagList, id).list); return; }
     if (armTimer.current) clearTimeout(armTimer.current);
+    markArmed();
     setArmedId(id);
     armTimer.current = setTimeout(function () { armTimer.current = null; setArmedId(null); }, ARM_MS);
   }
@@ -217,7 +220,7 @@ export function TagListEditor({ tagList, onSave, tagError, onClearError, canEdit
               onClick={onClearError}
               aria-label="Dismiss"
               className="mgt-hover-scale"
-              style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 10px", background: BTN.dismiss })}>Dismiss</button>
+              style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 10px", background: BTN.quiet })}>Dismiss</button>
           </div>
         </Reveal>
       </div>
@@ -229,9 +232,9 @@ export function TagListEditor({ tagList, onSave, tagError, onClearError, canEdit
             <div style={{ fontSize: T.small, color: "var(--text-faint)", marginBottom: SP.base }}>{KIND_NOTE[kind]}</div>
             {canEdit ? (
               <div>
-                {tags.map(function (tag, i) {
-                  return <TagRow key={tag.id} tag={tag} index={i} kind={kind} tagList={tagList} onSave={onSave} armed={armedId === tag.id} onArm={arm} onDirty={onDirty} />;
-                })}
+                <FoldRows items={tags} idOf={function (t) { return t.id; }}>{function (tag, i) {
+                  return <TagRow tag={tag} index={i} kind={kind} tagList={tagList} onSave={onSave} armed={armedId === tag.id} onArm={arm} onDirty={onDirty} />;
+                }}</FoldRows>
                 <AddTagRow kind={kind} tagList={tagList} onSave={onSave} onDirty={onDirty} />
               </div>
             ) : (

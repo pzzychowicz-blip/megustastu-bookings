@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { visibleRail } from "../src/lib/block-layout.js";
+import { visibleRail, twoLineBlock } from "../src/lib/block-layout.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
 // The measured widths from TimelineView.jsx. Duplicated deliberately: this file
@@ -143,12 +143,82 @@ describe("the fixture matches the component (v18.2.0 phase 22)", () => {
   });
 
   it("the chip's room is counted from the SAME list the rail draws", () => {
-    expect(tv).toMatch(/function chipRoomFor\(b, noShows, warn, clash\) \{\s*const flags = railFlagsOf\(b, noShows, warn, ""\)\.length;/);
+    expect(tv).toMatch(/function chipRoomFor\(b, noShows, warn, clash, sz\) \{\s*const flags = railFlagsOf\(b, noShows, warn, ""\)\.length;/);
     expect(tv).toMatch(/const allFlags = railFlagsOf\(b, noShows, warn, currency\);/);
   });
 
   it("there is ONE list, in its own module, and the grid imports it", () => {
     expect(tv).not.toMatch(/function railFlagsOf\(/);
-    expect(tv).toMatch(/import \{ railFlagsOf \} from "\.\/blockFlags";/);
+    expect(tv).toMatch(/import \{ railFlagsOf, RAIL_KEYS \} from "\.\/blockFlags";/);
+  });
+
+  // v18.14.0 (correction 23, Patryk): a key missing from the slots is a flag that is
+  // counted against the block's width and never drawn, and nothing would say so.
+  it("every flag has a slot, in rail order", () => {
+    const keys = [...bf.match(/export const RAIL_KEYS = \[([^\]]*)\]/)[1].matchAll(/"(\w+)"/g)].map((m) => m[1]);
+    expect(keys).toEqual(RAIL.map((f) => f.k));
+  });
+
+  it("the flags, the clash mark, the ring and the pill open sideways, and none snaps", () => {
+    expect(tv).toMatch(/<Reveal key=\{k\} horizontal show=\{!!f\} style=\{\{ flexShrink: 0 \}\}>/);
+    expect(tv).toMatch(/<Reveal horizontal show=\{!!clash\} style=\{\{ flexShrink: 0 \}\}>/);
+    expect(tv).toMatch(/<Reveal horizontal show=\{showRing\} style=\{\{ flexShrink: 0 \}\}>/);
+    expect(tv).toMatch(/<Reveal horizontal show=\{freeMin != null\} style=\{\{ flexShrink: 0 \}\}>/);
+    expect(tv).not.toContain("railFlags.map(");
+  });
+});
+
+// v18.14.0 (D1): the rule is Patryk's, and each half of it fails without a sound.
+// A seated block on two lines reopens v16.0.0; a mixed grid is the v16.0.0 defect.
+describe("two-line blocks", () => {
+  const tv = stripComments(readFileSync(new URL("../src/components/TimelineView.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("a day without chips puts every confirmed and pending block on two lines", () => {
+    expect(twoLineBlock("confirmed", false)).toBe(true);
+    expect(twoLineBlock("pending", false)).toBe(true);
+  });
+  it("a block wearing its chip stays on one line", () => {
+    expect(twoLineBlock("confirmed", true)).toBe(false);
+    expect(twoLineBlock("pending", true)).toBe(false);
+  });
+  it("seated and completed blocks never go to two lines", () => {
+    for (const s of ["seated", "completed", "cancelled"]) expect(twoLineBlock(s, false)).toBe(false);
+  });
+  it("is decided from showChip, so a leaving copy's snapshot decides it too", () => {
+    expect(tv).toMatch(/const twoLine = twoLineBlock\(b\.status, showChip\);/);
+    expect(tv).toMatch(/chip: chipsOn && \(b\.status === "confirmed" \|\| b\.status === "pending"\)/);
+  });
+  it("line 2's start takes the name's place in the budget, and only there", () => {
+    expect(tv).toMatch(/HANDLE_PX \+ \(twoLine \? sz\.lineTwoPx : sz\.nameMinPx \+ \(showChip \? sz\.chipPx : 0\)\)/);
+  });
+  it("the status mark and the flags are on one of the two lines, never neither", () => {
+    expect(tv).toMatch(/<Reveal show=\{twoLine\}>[\s\S]*?\{marks\}[\s\S]*?<\/Reveal>/);
+    expect(tv).toMatch(/<Reveal horizontal show=\{!twoLine\} style=\{\{ flexShrink: 0 \}\}>\{marks\}<\/Reveal>/);
+  });
+  it("the ring on the name's row does not make that row taller", () => {
+    expect(tv).toMatch(/show=\{showRing && !twoLine\} style=\{\{ flexShrink: 0, marginBlock: -2\.5/);
+    expect(tv).toMatch(/paddingLeft: 6, overflowX: "clip"/);
+  });
+  it("the fold gives way to the name, not the name to the fold", () => {
+    expect(tv).toMatch(/const fold = !twoLine \? 14 : rim \? 8 : 11;/);
+    expect(tv).toMatch(/flex: "1 1 0%", minWidth: 0, paddingLeft: 6, overflowX/);
+  });
+  it("the clash band drops clear of the time on a two-line day", () => {
+    expect(tv).toMatch(/twoLine=\{!chipsOn\}/);
+    expect(tv).toMatch(/transform: twoLine \? "translateY\(3px\)" : "none", opacity: open \? 1 : 0,\s*transition: "transform " \+ M\.reveal/);
+  });
+  // v18.14.0 (correction 24, Patryk): three things that took no room and snapped.
+  it("the warning border eases: always solid, 0 or 3px", () => {
+    expect(tv).toMatch(/borderStyle: "solid", borderWidth: rim \? 3 : 0, borderColor: rim \|\| "transparent"/);
+    expect(tv).toMatch(/const TL_MOVE = [^\n]*\+ TL_RIM;/);
+    expect(tv).toMatch(/const TL_SETTLE = [^\n]*\+ TL_RIM;/);
+  });
+  it("the note corner stays mounted and grows from nothing", () => {
+    expect(tv).toMatch(/borderTop: \(hasNote \? fold : 0\) \+ "px solid/);
+    expect(tv).toMatch(/opacity: hasNote \? 1 : 0, transition: "opacity " \+ M\.reveal/);
+  });
+  it("a clash band fades out from an id that carries its geometry", () => {
+    expect(tv).toMatch(/useRevealRows\(spans\.map\(\(sp\) => sp\.from \+ "-" \+ sp\.to\), date, \{ speed: "move", quiet \}\)/);
+    expect(tv).not.toContain('key={"cb" + i}');
   });
 });

@@ -25,7 +25,7 @@
 // VIP) and the visit's (Birthday), as labels copied into the snapshot. A tagged
 // party with no note raises it too, and then there is no note box.
 
-import { S, R, T, FW, SP } from "../lib/constants";
+import { BTN, S, R, T, FW, SP } from "../lib/constants";
 import { guestsLabel } from "../lib/booking-logic";
 import { Overlay, TBadge, mkBtn } from "./atoms";
 import { TagRow } from "./TagChips";
@@ -37,7 +37,7 @@ export function SeatNoteModal({ note, onClose }) {
     <div style={{ display: "flex", justifyContent: "flex-end" }}>
       <button
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
         onClick={onClose}
       >Done</button>
     </div>

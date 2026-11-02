@@ -8,7 +8,7 @@ function Demo({ dark = false }: { dark?: boolean }) {
   const [show, setShow] = useState(true);
   return (
     <Surface dark={dark}>
-      <button style={mkBtn({ background: BTN.nav, marginBottom: SP.base })} onClick={() => setShow(!show)}>
+      <button style={mkBtn({ background: BTN.quiet, marginBottom: SP.base })} onClick={() => setShow(!show)}>
         {show ? "Hide the error" : "Show the error"}
       </button>
       <Reveal show={show}>
@@ -26,7 +26,7 @@ export const DisclosureBody = () => {
   return (
     <Surface>
       <Section style={{ marginBottom: 0 }}>
-        <button style={mkBtn({ background: "var(--app-btn-slate)" })} onClick={() => setOpen(!open)} aria-expanded={open}>Past visits (3)</button>
+        <button style={mkBtn()} onClick={() => setOpen(!open)} aria-expanded={open}>Past visits (3)</button>
         <Reveal show={open}>
           <div style={{ display: "flex", flexDirection: "column", gap: SP.tight, marginTop: SP.base, fontSize: T.body }}>
             <span><b style={{ fontWeight: FW.semi }}>12 Sep</b> · 4 guests · 6</span>

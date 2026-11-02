@@ -11,6 +11,9 @@
 //   splitEnabled, and their onToggle*                       the five PREF_SPEC booleans
 //   swEnabled, onToggleSw                                   the offline shell's switch
 //   tlSettings, onSetTlSetting                              Timeline zoom and follow
+//   largeText, onToggleLargeText                            Larger text on the Timeline
+//   indoorTint, onToggleIndoorTint                          Tint indoor tables on the Timeline
+//   vibrateOnDrag, onToggleVibrate                          Vibrate on drag (lib/haptics.js)
 //   split, focusedPane, setFocusedPane, applySplit,
 //   fitTimeline, confirmSplit, swapSides, toggleSplitDir,
 //   exitSplit, setSplitRatio, splitSideBySideOk             Split View
@@ -29,6 +32,7 @@
 import { useState, useRef, useEffect } from "react";
 import { VIEW_ORDER, SPLIT_DIVIDER_PX } from "../lib/constants";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "../lib/serviceWorker";
+import { readVibrate, setVibrate } from "../lib/haptics";
 import { useThemeMode } from "./useThemeMode";
 import { PREF_SPEC, PREF_NAMES, readPrefValue, prefLocalValue } from "./useUserPrefs";
 
@@ -179,6 +183,19 @@ function readTlNum(b){
   }catch{/* ignore */}
   return b.def;
 }
+// v18.14.0 (H2): per-device "Larger text" on the Timeline. The same reasoning as
+// zoom: it answers this screen at this distance, so a phone must not inherit the
+// tablet's. Default off, so only "1" is ever stored.
+const LARGE_TEXT_KEY="mgt-tl-largetext";
+function readLargeText(){
+  try{return localStorage.getItem(LARGE_TEXT_KEY)==="1";}catch{return false;}
+}
+// v18.14.0 (correction 2): per-device "Tint indoor tables", the same reasoning as
+// Larger text. Default on, so only "0" is ever stored.
+const INDOOR_TINT_KEY="mgt-tl-indoortint";
+function readIndoorTint(){
+  try{return localStorage.getItem(INDOOR_TINT_KEY)!=="0";}catch{return true;}
+}
 export function readTlSettings(){
   const B=TL_SETTING_BOUNDS;
   const maxZoom=readTlNum(B.maxZoom);
@@ -264,6 +281,28 @@ export function useShellPrefs({
       setThemePref(undefined);
       if(!DEV_THEME_FORCED) saveUserPrefs({theme:"auto"});
     }
+  }
+  const [vibrateOnDrag,setVibrateOnDrag]=useState(readVibrate);
+  function onToggleVibrate(){
+    const next=!vibrateOnDrag;
+    setVibrate(next);
+    setVibrateOnDrag(next);
+  }
+  const [largeText,setLargeText]=useState(readLargeText);
+  function onToggleLargeText(){
+    const next=!largeText;
+    try{
+      if(next) localStorage.setItem(LARGE_TEXT_KEY,"1"); else localStorage.removeItem(LARGE_TEXT_KEY);
+    }catch{/* ignore */}
+    setLargeText(next);
+  }
+  const [indoorTint,setIndoorTint]=useState(readIndoorTint);
+  function onToggleIndoorTint(){
+    const next=!indoorTint;
+    try{
+      if(next) localStorage.removeItem(INDOOR_TINT_KEY); else localStorage.setItem(INDOOR_TINT_KEY,"0");
+    }catch{/* ignore */}
+    setIndoorTint(next);
   }
   // v17.0.0 correction: per-device app width (see readAppWidth above).
   const [appWidth,setAppWidth]=useState(readAppWidth);
@@ -541,6 +580,9 @@ export function useShellPrefs({
     splitEnabled, onToggleSplitEnabled,
     swEnabled, onToggleSw,
     tlSettings, onSetTlSetting,
+    largeText, onToggleLargeText,
+    indoorTint, onToggleIndoorTint,
+    vibrateOnDrag, onToggleVibrate,
     split, focusedPane, setFocusedPane, applySplit, fitTimeline,
     confirmSplit, swapSides, toggleSplitDir, exitSplit, setSplitRatio,
     splitSideBySideOk, shellFixed,

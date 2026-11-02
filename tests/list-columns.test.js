@@ -74,9 +74,19 @@ describe("the name row", () => {
   });
 
   it("the flags live INSIDE that box, after the unit — a third item on the row let a wrapped flag move the covers (x 222 against 208 at 375px)", () => {
-    expect(List).toMatch(/\{hasFlags \? \(\s*<div style=\{\{ \.\.\.NAME_CELL, flex: "1 1 " \+ FLAGS_MIN \+ "px", minWidth: 0, flexWrap: "wrap", gap: "4px 8px" \}\}>\s*\{depositTag\}/);
+    expect(List).toMatch(/<Reveal show=\{hasFlags\} style=\{\{ flex: "1 1 " \+ FLAGS_MIN \+ "px", minWidth: 0 \}\}>\s*<div style=\{\{ \.\.\.NAME_CELL, flexWrap: "wrap", rowGap: 4, marginRight: -FLAG_GAP \}\}>\s*<FlagSlot flag=\{depositTag\} \/>/);
     const box = List.slice(List.indexOf('flex: "1000 1 " + UNIT_W'));
-    expect(box.indexOf("<SBadge status={b.status} />")).toBeLessThan(box.indexOf("{hasFlags ? ("));
+    expect(box.indexOf("<SBadge status={b.status} />")).toBeLessThan(box.indexOf("<Reveal show={hasFlags}"));
+  });
+
+  // v18.14.0 (correction 25, Patryk): each flag eases, and the columns stay put.
+  it("every flag holds a slot, and its gap folds with it", () => {
+    const flags = List.slice(List.indexOf("<Reveal show={hasFlags}"), List.indexOf("</Reveal>", List.indexOf("<Reveal show={hasFlags}")));
+    ["depositTag", "voucherTag", "zoneTag", "prefTag", "lockedTag", "manualTag", "noShowTag", "clashTag", "lateTag", "durationTag"]
+      .forEach((tag) => expect(flags, tag).toContain("<FlagSlot flag={" + tag + "} />"));
+    expect(List).toMatch(/<Reveal horizontal show=\{!!flag\} style=\{\{ flexShrink: 0 \}\}>/);
+    expect(List).toMatch(/marginRight: FLAG_GAP/);
+    expect(List).not.toContain('gap: "4px 8px"');
   });
 });
 
@@ -98,6 +108,24 @@ describe("the actions", () => {
 });
 
 describe("the card", () => {
+  // v18.14.0 (correction 33, Patryk): what comes with a warning eases, and the rim's
+  // width and padding change as one, because easing them shook the content by 1px.
+  it("holds each alert on a Reveal, so the cards under it slide", () => {
+    expect(List).toContain("<Reveal show={!!conflictEl}>{conflictEl}</Reveal>");
+    expect(List).toContain("<Reveal show={!!warnEl}>{warnEl}</Reveal>");
+  });
+  it("eases its rim's colour, and steps the width and the padding together", () => {
+    expect(List).toContain("transition: cardBw === 3 ? CARD_RIM_IN : CARD_RIM_OUT");
+    const rimIn = (List.match(/const CARD_RIM_IN = ([^;]*);/) || [])[1];
+    const rimOut = (List.match(/const CARD_RIM_OUT = ([^;]*);/) || [])[1];
+    expect(rimIn).toContain("background-color");
+    expect(rimIn).toContain("border-color");
+    expect(rimIn).not.toContain("border-width");
+    expect(rimIn).not.toContain("padding");
+    expect(rimOut).toContain("CARD_RIM_IN");
+    expect(rimOut).toContain("border-width var(--t-move) step-end");
+    expect(rimOut).toContain("padding var(--t-move) step-end");
+  });
   it("gives back in padding what a 3px border takes, so a seated card's columns start where a confirmed card's do", () => {
     expect(List).toMatch(/const cardBw = \(clash \|\| warn \|\| lateSt \|\| useStatusColor \|\| isPending\) \? 3 : 1;/);
     expect(List).toMatch(/border: cardBw \+ "px solid " \+ cardBrd,/);

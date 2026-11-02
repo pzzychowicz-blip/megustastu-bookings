@@ -43,7 +43,7 @@ explaining why is usually the one to read.
 ---
 
 ## Style tokens
-- All colours, spacing, button styles, badge styles, **corner radii**, **motion** and **type** flow through `src/lib/constants.js` exports (`S`, `BTN`, `BLOCK_BG`, `BLOCK_INK`, `STATUS_COLORS`, `TBL`, `R`, `M`, `T`, `FW`).
+- All colours, spacing, button styles, badge styles, **corner radii**, **motion** and **type** flow through `src/lib/constants.js` exports (`S`, `BTN`, `BLOCK_BG`, `BLOCK_INK`, `STATUS_BTN_BG`, `STATUS_COLORS`, `TBL`, `R`, `M`, `T`, `FW`).
 - **`R` = the v17.7.0 pill-radius scale** (`R.pill`/`auth`/`sheet`/`card`/`inset` → the `--r-*` tokens in `src/index.css`'s `:root`; radii are theme-agnostic, so they are NOT duplicated into the dark block). Assign **by role, never by the old number** — the same `12` meant "control" in one file and "card" in another. `--r-pill` is `999px` because CSS clamps an oversized radius to half the box, so one token is a true pill at every control height. **No new `borderRadius: <number>` literal.** **v17.8.0: ENFORCED, not described** — `npm run check:style` (`scripts/check-style-invariants.mjs`, a CI gate after lint) fails on any bare numeric radius unless its line carries an inline `/* @canvas */`. **The 26 genuine exceptions are marked at their sites**, so an exemption is visible where you are reading rather than in a paragraph three files away — timeline blocks + their manual-assign handle, folded corner and hour strip (7) · TimeAxis ticks, heat bar and now-marker (4) · WeekView's calendar cells and covers bars (5) · the Toggle track, `Kbd` and the safe-area `calc()` (3) · Summary's progress track+fill pair (2) · the two table-picker cells (2) · the split divider (1) · LayoutSettings' alignment indents (2). **v17.10.2 refreshed this count, which had drifted from a documented 17 while the code reached 26** — an exemption list that drifts is how a rule quietly stops meaning anything, which is the whole reason the markers are at their sites. Note the grep says 27: one hit is `constants.js`'s own PROSE about the marker, not an exemption. **Grep for the marker on a line that also carries an exempted property**, or the doc drifts again in the other direction.
   **Hard rule for any box holding WRAPPING or SCROLLING text (v17.7.1): its radius must be ≤ its horizontal padding.** A rounded box is narrowest at its top and bottom edges, so a radius past the padding clips the first/last visible line — and no vertical-centring trick saves it, because centring stops applying the moment the content overflows (that is exactly how the v17.7.0 `mkArea` fix passed QA and still shipped a bug: it was only ever tested with short content). Pills are for SINGLE-LINE controls, where the text is centred by line-height and never reaches the curve. Multi-line ⇒ `R.inset` (10px, inside mkInp's 12px padding) — see `mkArea`, and the chat bubble / reply composer in the WA sandbox. **A `<select>` needs the same clearance on its RIGHT** (v17.8.0 `mkSel`): its arrow is painted inside the padding box against `padding-right`, so mkInp's 12px lands it inside the pill's 21.5px cap. Text is immune — it spans enough height that the curve has receded behind it, which is exactly why the LEFT 12px looks right and the right 12px doesn't.
 - **`T` = the v17.8.0 type scale, `FW` the weight scale.** Six role-named steps
@@ -215,6 +215,10 @@ explaining why is usually the one to read.
   not jump to the press: the divider used to move TO the pointer, a 5px snap
   at most on 10px but 22px on 44. It now keeps the press's offset from the
   rule, so a press alone moves nothing and a drag moves it by the drag.
+  **Plan tables on a phone are the same rule with neighbours (v18.14.0).** Each table
+  has a finger-sized box under it (`lib/plan-hit.js`). The boxes go below every drawn
+  table, so a tap on a table is that table, they stop halfway across each gap, so a
+  tap in a gap is the nearer table, and only a coarse pointer reaches them.
 - **A literal is invisible to a token audit (v17.8.0).** The contrast pass
   measured every `--token` and still missed four fills carrying white text —
   TableGrid's selected (2.31), blocked (3.13) and swap (~1.4, white on bright
@@ -233,9 +237,48 @@ explaining why is usually the one to read.
   1.94:1 and the outdoor table pill 2.15:1, while every one of them passed in
   dark. **Dark mode is the easy case; light is where a saturated fill washes
   out.** `tests/contrast.test.js` measures every fill/ink pair in both themes
-  and fails on an unregistered text-bearing fill. Small bold labels take 4.5:1;
-  buttons take 3:1. `BLOCK_INK` pairs each block fill with its ink.
-  **The amber pair is a RECORDED EXEMPTION, not a pass**: confirmed sits at
+  and fails on an unregistered text-bearing fill. Small bold labels and buttons
+  take 4.5:1. `BLOCK_INK` pairs each block fill with its ink.
+  **v18.14.0 raised the button bar (`NEED.button`) from 3 to 4.5, Patryk's
+  decision of 2026-10-31.** It stood at 3 on the argument that a button is large
+  and its position and shape carry the meaning. On the tablet, in a dim room, in
+  front of someone who struggles with small text, a 36px pill is not large. Light's
+  button fills are OPAQUE now, so what the test reads is what the screen shows: the
+  "3:1" controls measured 3.0–3.3 live, and Completed in the popup 2.31. One grey
+  (`--app-btn-grey`) and one blue (`--accent`), by alias. Dark moved nowhere, apart
+  from the two WhatsApp fills, which have one value each. `--accent` in Dark stays
+  a named exemption at 3.65:1, in `EXEMPT_FLOOR`'s per-theme form, because it is
+  also text and rings there. A status BUTTON reads `STATUS_BTN_BG`: Completed takes
+  the grey on a button, and its pale fill stays on blocks, badges and legends.
+  **Two fills that each clear the bar can still fail together.** Follow used to say
+  which state it was in by getting darker, so the idle grey moving to 4.96:1 would
+  have left it beside Following at 5.74:1, and a test held the step between the two.
+  The quiet button ended that pair (below): idle is pale now. The rule stands for
+  the next one: a pair that signals a state by darkness alone needs the same pin.
+  **`--text-faint` is held to 4.5:1 on the cards it sits on, in both themes (v18.14.0).**
+  It is the ink of every Settings tab's help text and it read 2.7–3.0:1 in Light
+  and 3.51 in Dark, because it is no fill's partner and the registry enumerates
+  fills. It has its own test, which also holds it a step under `--text-muted`: two
+  inks at one level are one ink. `--field-prompt` is the same problem one surface
+  on: the word "Code" inside a field, 3.94:1 in Dark on the muted ink, so Dark gives
+  it the least that reaches the bar and Light keeps `--text-muted`.
+  **A field's edge is visible and subtle, #c3cad6 in Light (v18.14.0, Patryk).**
+  `--border-input` is a white rim that drew a field at 1.02:1 on a Section, so on a
+  near-white card a text box was a label with nothing under it. The scan raised that
+  to WCAG 1.4.11's 3:1, and #7a8494 did clear it, as a near-black outline round every
+  field beside a Confirm card and a Needs action row at 1.3:1. Patryk took the outline
+  back: a field at rest is that same quiet edge, about 1.6:1 on a Section, and 3:1 is
+  what Increase Contrast gives (`--text-muted`). This is his decision against the
+  letter of 1.4.11, recorded so it is not raised again. `--field-edge` is the field's
+  own token, because `--border-input` also rims stat cells and rows that are not
+  controls. `mkInp` reads it, so `DateField` and `SearchField` do; so do
+  `LayoutSettings`' two small inputs, the WhatsApp composer and the header's date pill.
+  A new field built without `mkInp` takes it by hand. Focus stays the 2px
+  `--focus-ring`, a long way from the edge. Dark keeps its rim, because its fill is
+  what shows a field there.
+  **The amber pair is a RECORDED EXEMPTION, not a pass**, and the 2026-10-31 scan
+  did not change that: it raised white on amber (H1) and on yellow (M2), and Patryk
+  kept both exactly as they are. Do not re-raise them. Confirmed sits at
   2.9:1 and pending at 1.8:1 with white ink, because both alternatives were
   tried and are worse — darkening the fills destroys the matched-intensity pair
   v17.0.0 engineered, and dark ink (shipped for exactly one commit) reads as
@@ -269,8 +312,12 @@ explaining why is usually the one to read.
   (light's is already opaque). Each value is that token's composite over
   `--bg-app`, so a surface keeps its colour and only stops showing what is
   behind it — the page header ghosted faintly through the iPhone booking sheet
-  in dark. **The hairlines take the muted ink**: `--border-soft`,
-  `--border-sheet` and `--tl-card-border` become `var(--text-muted)`, which is
+  in dark. A change to the token does not carry its composite along:
+  `tests/contrast.test.js` holds `--bg-sheet`'s since v18.14.0 raised the sheet
+  to the phone's 0.98 in both themes, because at 0.72 an amber block behind a
+  dialog tinted the form. A sheet that near-opaque has no use for a white rim,
+  so a hairline inside one takes `--border-soft`. **The hairlines take the muted ink**: `--border-soft`,
+  `--border-sheet`, `--tl-card-border` and `--field-edge` become `var(--text-muted)`, which is
   what "more contrast" asks of an edge. **Text does not change**: every ink
   already passes, and the setting asks for solid surfaces and visible edges,
   not a second palette. The dark rule comes second inside the block, so at
@@ -308,13 +355,35 @@ explaining why is usually the one to read.
   to be inside the check.
 
   **Corollary for pill-shaped controls (v17.8.0): `--r-pill` clamps to half the SHORTER side, so only a SQUARE box is a circle.** An icon button sized by `minHeight` + horizontal padding is ~30×40 and renders as a vertical egg — which is what the three Split-View tools were, one row above the perfectly round 34×34 🔍/⚙ pair. A single-glyph button gets explicit equal `width`/`height` and `padding: 0` (and `min-*` is not enough — a flex row will stretch it back).
-- Reusable JSX atoms in `src/components/atoms.jsx`: `Overlay`, `Fld`, `Section`, `TBadge`, `AvailBanner`, `Toggle`, `mkInp`, `mkBtn`.
+- Reusable JSX atoms in `src/components/atoms.jsx`: `Overlay`, `Fld`, `Section`, `TBadge`, `Toggle`, `mkInp`, `mkBtn`.
 - New UI composes from atoms, not redefining them. Add new atoms there if needed.
 - **`mkBtn` already sets `boxShadow`, so `Object.assign`-ing another one REPLACES it** — a
   property, not a shadow list. `ViewSwitcher`'s split-pane marker silently stripped
   the button's `--shadow-btn` this way (v17.8.0 review fix); the fix is one
   comma-separated value, `"inset 0 -3px 0 …, var(--shadow-btn)"`. Same trap for
   any property `mkBtn`/`mkInp` already own.
+- **The quiet button (v18.14.0, Patryk): one look for everything that does not
+  commit.** Every secondary grey was a solid pill with white words and a shadow, so
+  Re-check, Edit templates, Back and a day arrow spoke as loudly as Save. They are
+  one recipe now, across the whole app: the field's pale fill (`BTN.quiet`,
+  `--btn-quiet`, an alias of `--bg-input`), the field's edge (`--field-edge`),
+  `--text-secondary` words, no shadow, at the same size. **The fill decides, in one
+  place:** `quietLook(background)` is read by `mkBtn` and `mkSolidBtn`, so
+  `cond ? blue : BTN.quiet` carries its ink, edge and shadow with the fill, and a
+  button that names no fill is quiet. Two things follow. A fill goes INSIDE the call:
+  `{ ...mkBtn(), background: x }` keeps the quiet ink, which is how Log in read grey
+  on blue for one commit. And `boxShadow` in `extra` hands the shadow back.
+  `--btn-clear`, `--btn-reset`, `--btn-nav`, `--btn-dismiss`, `--btn-default` and the
+  two slates are gone, because they were five names for this one job. A quiet button
+  flips with its theme, so it may sit on anything: `tests/contrast.test.js` measures
+  its words on the seven surfaces it sits on, in both themes. The header's gear and
+  search went last, and are `CHROME_BTN` in `App.jsx`: their own grey disc was the
+  heaviest thing beside Follow, − and +, for the two least urgent controls there.
+  **What he kept solid:** Following (dark) and Optimiser ON (green), beside their
+  quiet idle states; Undo, solid blue; the grey title pills; Completed on a button;
+  Send, the moment it can send. Going between the two is one change, in and out:
+  `.mgt-hover-scale, .mgt-press` also ease `color` and `border-color`, so a flip
+  never snaps its words or its edge under a fill that is still moving.
 - **`mkInp` / `mkBtn` return *style objects*** (not JSX) — usage is `<input style={mkInp()}>` /
   `<button style={mkBtn({...})}>`. (Note: the sibling Scheduling app's equivalents return JSX;
   Bookings differs. Don't assume a `className`/prop passthrough — it isn't there.)
@@ -328,7 +397,7 @@ explaining why is usually the one to read.
 
 ## UI / style rules
 
-- Translucent / glass, iOS-inspired surfaces; rounded corners; the shared accent (`#007AFF`).
+- Translucent / glass, iOS-inspired surfaces; rounded corners; the shared accent (`--accent`).
 - **`--bg-app` is ONE flat tint per theme (v17.9.0), not a gradient.** It was six
   near-identical desaturated blues spanning a MEASURED 3.86 L\* in light and 4.00
   in dark — at the edge of visibility across a viewport, so the app paid six
@@ -362,20 +431,30 @@ explaining why is usually the one to read.
 - **Red means destructive, and only that (v18.2.0).** `--btn-dismiss` was the
   delete red, so "Dismiss" on the reshuffle suggestion and every banner row's ✕
   looked like Delete and Cancel beside them. It is now an ALIAS of
-  `--app-btn-slate`, the dialog secondary ("Back", "Keep editing") — one change,
+  `--app-btn-slate`, the dialog secondary ("Back") — one change,
   every dismiss in the app. Its other side was `BTN.cancel`, a red named for
   cancelling a BOOKING that kept being reached for as a dialog's "go back"; it
-  had no users after phase 41 and phase 59 removed it. A dialog's go-back is
-  `--app-btn-slate` (`confirmKitchen`'s "Back", "Keep editing"). **Phase 36 did the same for `--btn-clear`**
+  had no users after phase 41 and phase 59 removed it. A dialog's go-back was
+  `--app-btn-slate` (`confirmKitchen`'s "Back"). **Phase 36 did the same for `--btn-clear`**
   (the critique's X5): "Clear" empties a table selection — the booking form's,
   the walk-in form's, table assignment's, the preferred tables' — and was the
   delete red too. **Phase 78 did it for `--btn-reset`**, the booking and walk-in
   forms' duration "Reset", which puts the length back to the party's default.
+  **v18.14.0 took the tokens away and kept the rule:** all of these are the quiet
+  button now, so a thing that is not a deletion has no red to reach for.
 - **A destructive button is ONE solid red, at rest and armed (v18.2.0 phase 62,
   Patryk).** Everything that deletes, removes, voids, unblocks or clears is
   `mkDangerBtn` (atoms): solid `--app-danger-solid` with the solid rim, on
   mkBtn's geometry; arming a two-tap confirm changes the LABEL ("Confirm —
   remove") and nothing else, not the colour and not the size under the finger.
+  **For half a second after arming, a second tap does nothing (v18.14.0, Patryk):**
+  the button stays put so the second tap can find it, which is exactly what let a
+  double tap through both, on every armed button. `armSettled` (`lib/arm-guard.js`)
+  is the one clock, and `tests/arm-guard.test.js` fails a two-tap button that does
+  not ask it. **A confirm dialog's action takes the same half second from the
+  moment the dialog is on top**, because it opens where the finger may still be
+  (`CONFIRM_MODALS`). A row of a menu is the exception (v18.14.0, Patryk): Delete on the conversation
+  menu is red words on the menu's surface, and the solid red is the confirm's.
   **A Delete or a Remove carries `TrashIcon` before its word**; Void voucher,
   Unblock and Clear this range do not, because they are not deletions of a
   thing. A confirm dialog's red button is `mkDangerConfirm`, the same red on
@@ -412,7 +491,24 @@ explaining why is usually the one to read.
   pixel above it comes out of the text. **Where the armed label is the SHORTER
   one, the button keeps its resting width** (Customers' `DELETE_W`, phase 62):
   right-aligned, it otherwise shrank from its left edge (209 → 154px) and a
-  first tap there missed on the second.
+  first tap there missed on the second. **Any control whose width changes does the same
+  (v18.14.0, Patryk):** Follow keeps "Following"'s width (`FOLLOW_W`), a template's
+  buttons reserve the armed one, and the duration Reset has a slot on the field's label
+  line, because the stepper row cannot hold it: it wrapped "End:" and moved the form's
+  columns.
+- **Who asked decides which side the solid sits on (v18.14.0, Patryk).** A confirm that
+  follows your own press of Delete, Cancel booking or Archive keeps `Back` on the left
+  and the action on the right, because the right-hand button is what you came for. The
+  "Unsaved changes" confirm follows no such press: you tapped Back, ✕ or outside the
+  sheet, perhaps by mistake. So there the way back takes the right, in solid blue where
+  the thumb goes for Save, and Discard the left in its solid red, and Enter and Escape
+  both keep editing. Its title names the situation rather than proposing the loss, and
+  its second sentence says what the loss costs. Measured before: Escape then Enter wiped
+  a walk-in, and the quiet button (Correction 5) was the faintest thing beside the red.
+  The "Couldn't save" banner follows the same rule: nobody asked to lose that change
+  either, so Retry takes the right and Discard the left, in two taps ("Confirm —
+  discard"), in a slot reserving the armed width (`PARKED_ARMED_W`). It keeps its slate,
+  because a red there would read as cancelling the booking.
 - **A surface that carries data is OPAQUE (v18.2.0, X2).** The Week / Month
   cells were `--bg-input` (half-transparent) over a translucent sheet, so the
   page behind the modal showed through and the timeline's orange blocks
@@ -486,8 +582,8 @@ explaining why is usually the one to read.
   and "+ New" wrapped onto a second header row of their own, and the header and
   date row took ~455 of an 812px screen before the grid began. Below 600px they
   are `MOBILE_BAR` (App.jsx): fixed to the bottom, two equal thumb-width
-  buttons, the OPAQUE `--bg-sheet-mobile` (0.98 — `--bg-sheet` at 0.72 let a
-  timeline row show through) with a hairline and `--shadow-soft`, NO blur (the
+  buttons, the OPAQUE `--bg-sheet-mobile` (0.98 — `--bg-sheet`, at 0.72 until
+  v18.14.0, let a timeline row show through) with a hairline and `--shadow-soft`, NO blur (the
   ≤4 budget), z 100 — over the page and the toasts, under every modal. A spacer
   of the same height ends `<main>` so the last row is never under it.
 - **The Summary sits beside the date controls only on one line (v18.2.0).** The
@@ -504,6 +600,14 @@ explaining why is usually the one to read.
   200px over ~138px of text, so the slot (which measures content) and the
   card's own row (which broke on the basis) disagreed from about 784 to 846px,
   and the two-line card came back there.
+  **Its opened body is a row of its own (v18.14.0, L5).** It used to open inside
+  the slot, so the lid's row grew to the body's height and the space under the
+  date controls stood empty, and the controls hopped up 9px to meet it. The body
+  now portals into a slot under the date row, full width: the lid and the
+  controls hold still, the empty area is gone, and Print and More stay reachable
+  on the tablet. Patryk's default accepted with the plan, and the cost is honest:
+  open, the Summary reads as two pieces, and the same content takes about 22px
+  more height at 998 × 507 than the one tall card did.
 - **The view switcher keeps its own place in the header (v18.2.0 phase 64).**
   Phase 23 measured the Summary card's left edge and glided Timeline / List /
   Plan sideways to stand over it whenever the Summary's width changed (the
@@ -532,7 +636,8 @@ explaining why is usually the one to read.
   restaurant's tablets never hover. The inbox's Re-check, Edit templates and
   Simulator were icon-only; each now carries its word beside the mark (the
   shape Archive already had), and the title stays as the longer description.
-  A bare ✕ for Close is the one exception: everybody reads it.
+  A bare ✕ for Close and a bare ⋯ for More are the exceptions: everybody reads
+  them, and Re-check keeps its word on the ⋯ menu's row (v18.14.0).
 - **A day is written ONE way: "Thu 24.09" (v18.2.0, C1).** Weekday, day and
   month, and the year only when it is not this year: "Fri 15.01.2027". It is
   `formatDay` in `lib/day.js`, and nothing else writes a date on screen. The
@@ -862,7 +967,7 @@ explaining why is usually the one to read.
   under the TITLE rather than under the mark. Both are the notification strip's
   section shape, so a fault looks the same wherever it fires. `AlertPanel` is
   not in `atoms.jsx` because it imports the strip's geometry and the strip
-  imports atoms; that is also why `AvailBanner` moved to its own file.
+  imports atoms.
 
   It is **not** `BannerRows`, which is bound to `useRevealRows`, an
   arrival/departure lifecycle for rows that come and go while you watch. These
@@ -944,6 +1049,8 @@ explaining why is usually the one to read.
   audited for the one thing it was no longer carrying. **A `BTN.*` fill takes
   `--text-on-accent` and nothing else** — if a control's contents are chips,
   muted glyphs or any other sheet ink, the control belongs on a sheet surface.
+  (`BTN.quiet`, v18.14.0, is the one exception: it IS a sheet surface, it flips,
+  and its ink is `--text-secondary`.)
   **v17.15.0: an outline chip's border is DERIVED from its text**, not chosen
   beside it — `--chip-<role>-border` is `color-mix(in srgb, var(--<role>-text)
   50%, transparent)`. The border and the text are the same statement at two
@@ -1640,6 +1747,178 @@ the keyboard goes.
   list (two panes), the conversation's chips and actions, the linked booking, the
   request banner and the draft. The thread and the reply box stay.
 
+### The sticky hour ruler (v18.14.0)
+Scrolled to tables 6–13 the ruler used to be 198px above the screen, so a late
+booking could not be read against the clock. It now sticks to the nearest scrollport,
+which is `main` with the lock on, a pane in a split, the body with it off: one
+mechanism in all three. The now-pill rides it; the now-line stays with the rows.
+
+- **A strip of its own above the rows**, not part of the grid, because the grid's
+  horizontal scroller clips both axes. An inner is held at the grid's `scrollLeft`,
+  so during a fast fling it can trail by a frame and settles at rest.
+- **Opaque**, `--tl-ruler-bg`, because rows pass under it: the card's fill over the
+  page, written out. A surface that carries data is opaque.
+- **The scrollports carry no top padding**, a spacer child instead. Chrome measures
+  sticky from inside that padding, which showed a sliver of rows above the ruler.
+- **A dragged block paints above it** (z 30 against 20), and a drop never lands on a
+  row hidden under it.
+- The notification strip still scrolls away, Patryk's v17.5.0 decision. A swipe that
+  starts on the ruler does not pan the grid.
+
+### The grid's two tints (v18.14.0)
+The Timeline's rows were one ground, so a row's kind was only a word or a badge at the
+far left. A tint is a decoration under the blocks: it never carries a status, and a
+booking keeps its own colour on it (Patryk, 2026-11-01, against changing the blocks).
+
+- **The Unplaced row is rose**, `--tl-unplaced-bg`, the red of its word and its dashed
+  line, in both columns. It is `unplacedEdge`'s fill, so it stops on the dashed line and
+  eases with the row. "Unplaced" reads 6.62:1 on it in Light and 7.21 in Dark.
+- **The indoor rows are a shade of the indoor purple**, `--tl-indoor-bg`, 8% in Light and
+  12% in Dark, on the grid row and its label, so the zone is one band. Written from
+  `--tbl-ind-rgb`, so the two cannot drift. It is the row's resting ground: a drag's hint
+  replaces it and hands it back. "Tint indoor tables" turns it off, per device, on by
+  default. White on an indoor badge, whose fill lets the tint through, reads 5.92:1 in
+  Light and 6.05 in Dark.
+
+Both are screen only. The printed Timeline is drawn by `TimelineSheet` and has neither.
+
+### Two-line blocks (v18.14.0)
+A block used to lose its time on any day where one block could not fit the chip
+beside the name, and the ring and flags then cut the name shorter still. At 1.5× a
+90-minute block is 162px against the 180 that takes, so that was the normal service
+night: 7 of 17 names cut, no times. Now such a day is two-line, and **a block always
+shows its time.**
+
+- **The day decides, not the block.** `chipsOn` stays all-or-nothing: one line only
+  when every confirmed and pending block fits, or the grid reads mixed (v16.0.0).
+- **Line 1 is the name alone. Line 2 is time, ring, status, flags**, with the Assign
+  handle still the block's full height at the right. Line 2's start takes the name's
+  place in `visibleRail`, so the ring and flags drop in the ladder's order as before.
+- **The insets are the one-line block's** (Patryk): 6px at the left, the same at the
+  name and the chip, and top and bottom even. They are even to the ink, measured:
+  4.5px above the capitals and 4.5px under the chip, with the ring running a pixel
+  past it. The chip is the one-line block's chip, untouched: a time is the same object
+  wherever it appears. Line 2 is always 18 tall, so a block with no ring keeps the
+  name where its neighbours have it.
+- **Seated and completed blocks stay on one line** (Patryk, v16.0.0 stands).
+- **What gives way to the name:** the fold, 14px on one line, 11 on two, 8 inside a
+  3px border, because the fold cannot leave the padding box and the name's inset does
+  not move. And `ClashBand`, which drops 3px onto the bottom border so it clears the
+  time's digits; its dark casing is what keeps it a stripe there.
+- **It eases both ways**, on a zoom or a status change: the chip, ring and rail close
+  on horizontal `Reveal`s as line 2 opens, and the name rises because the group is
+  centred. The fold's size and the band's drop take the same `M.reveal`.
+- **Each mark on a block eases in and out on its own (v18.14.0, Patryk).** The flags,
+  the clash mark, line 2's ring and the "~Nm" pill each hold a slot, a horizontal
+  `Reveal`, in rail order (`RAIL_KEYS`), so one that arrives or leaves opens sideways
+  and the name slides with it. The slots take the chip's speed, so on a zoom a flag and
+  the chip are the same fraction of the way at every frame: measured 26% at 138ms.
+  Three things take no room. The note corner stays mounted at nothing and grows from
+  the block's own corner on `M.reveal`, with its pencil fading. The warning border is
+  always a solid border of 0 or 3px, and the clash band fades on a leaving copy, both on
+  `M.move`, because nobody pressed anything and the two are one change. Under the OS's
+  reduced motion the widths snap and the colours and fades stay, like every other
+  Reveal; "Reduce animations" takes all of it off. The print sheet draws none of this.
+  A List card's flags do the same (`FlagSlot`), with their 8px inside the slot, because
+  a flex gap stays beside a flag folded to nothing, and the box's negative margin hands
+  the last one's back, so the card's measured columns do not move. The alert a card
+  carries opens the same way, and the card's rim takes M.move like a block's, but only
+  its COLOUR eases: the width and the padding that pays for it change in one step while
+  the colour is the plain border's. A browser snaps a border to whole device pixels and
+  runs padding smooth, so easing the two together shook the content by a pixel.
+- **What arrives in a row with a gap brings the gap with it (v18.14.0, Patryk).** A
+  `Reveal` is a flex item even while closed, so the row's `gap` would pop while the thing
+  eases. `RowSlot` takes the gap back with a negative margin and carries its own inside
+  the ease, so at rest it sits where a plain child did and closed it takes no room. Its
+  content keeps its width and is clipped, so a label cannot wrap on the way, and the
+  leaving copy is inert. The form's status buttons hold one fixed order on these slots,
+  and each of them, Clear and "was:" ease on `M.reveal`. A sideways fold cannot ease the
+  row's HEIGHT, so a row whose slot is the tallest thing in it reserves that height.
+- **A row somebody removes folds, and what sits below slides (v18.14.0, Patryk).**
+  `FoldRows` is the list for a surface with no FLIP: People, the quick-reply templates,
+  reminders, tags, special days, standing bookings and the duration tiers. A newcomer
+  opens on the same `ROW_FOLD`, where a List card arrives at full height, because FLIP
+  slides the List's cards and nothing slides these. Pinned countries are chips, so with
+  a `gap` the same list opens sideways on `RowSlot`. A list that empties hands over to its
+  empty line, which opens as the last row folds.
+- **An answer being re-checked leaves at once and keeps its room (v18.14.0, Patryk).**
+  "Never show a stale answer" is about the answer. `TablesPreview` takes the form's
+  tables to opacity 0 in the frame the check starts, holds their room so nothing beside
+  them moves, and fades the next answer in where they stood on `M.move`. A sentence that
+  depends on the answer ("was:") waits for it, as the availability line's band does.
+- **A typed 60-minute booking at 1×** (about 79px) has less room than the chip, which
+  is cut at the handle rather than dropped. It is the one place a time is cut.
+
+### The row warning (v18.14.0)
+The row under a dragged block says what the release will do. A busy row used to look
+exactly like an empty one, and a drop there moved two other parties.
+
+- **Blue, amber, red.** Blue is free, `--bg-ac-hover` as it always was. Amber is
+  `ALERT_TONES.warn`: the drop goes through and moves somebody. Red is
+  `ALERT_TONES.danger`: it will be refused. The tint is on the row and the words are
+  in a pill at the row's left end, in `sz.legend`, so Larger text carries them.
+- **The pill is the role's tint over the ruler's opaque surface**, with the role's
+  border as its edge. The row wears the same tint, so a tint alone would leave the
+  words floating, and a tint over a block is unreadable. Measured in
+  `tests/contrast.test.js`, because that surface is not the registry's `BASE`.
+- **Above the dragged block**, z 31 to its 30, because a party that starts at the
+  left of the view would otherwise cover its own warning. Sticky, so it stays in view
+  at any zoom.
+- **It never stops the drop.** Patryk chose straight through: the words are the
+  warning and Undo is the safety. The tint eases on `M.tap` and the words fade on
+  `--t-move`, both ways.
+- **A row checks itself when the finger rests.** With the Optimiser on, "Moves …" is
+  a guess, because the real answer is too heavy for a drag. Amber shows at once;
+  after 200ms of a still finger the real plan runs once for that row, and a wrong
+  guess turns red, or free, or names the right parties. Still, not merely on the
+  row: within 8px, which a moving finger leaves, so nothing holds a frame during a drag.
+  A check that agrees changes nothing on screen. One that does not fades the new
+  words in on `--t-move`, because they replace the old ones under a stopped finger
+  and that change is the news, and the tint eases as it does on any row.
+
+### Larger text (v18.14.0)
+A switch in Settings → App for the person on the pass who struggles with small text.
+It is this device's, like zoom: it answers one screen at one distance, so a phone must
+not inherit it from the tablet, and no field joins the stored prefs.
+
+- **Names, times and table numbers go up two steps** (11 → 14, 10 → 12, 11 → 14), and
+  the rest of the Timeline one (the "Unplaced" word, BLOCKED, the legend). Icons stay:
+  they are read by shape, and they are what the `FLAG_PX` budget is counted in.
+- **Rows are 52px, a block 44.** That is Patryk's trade, a table fewer on screen for
+  it: 4 at 507 where normal size shows 5, 5 at 570 where it shows 6.
+- **One geometry, `sz`,** so a block cannot disagree with its row: both sets in one
+  place, and every width in the large one measured, not scaled.
+- **The ring grows with its digits** (22px). The negative margin that keeps the name's
+  row its own height still holds, because 22 less the name's 17 is the same 5px.
+- **The change eases both ways**, on the rows' `height`. The Settings sheet is over it,
+  so what is seen is the page settling behind the blur. The type steps, because text
+  cannot ease without reflowing every name for 385ms.
+
+### The compact layout (v18.14.0)
+Below 640px tall on anything that is not a phone (`isCompact`, `lib/compact-shell.js`)
+the shell gives its height to the grid. The tablet on the pass is 998 × 507 with
+Chrome's bars and 998 × 570 without; a laptop's browser window is about 650. It took
+the first table row from 253px down to 162, which is 5 tables on opening instead of 2.
+
+- **What goes, on every view:** the subtitle, the 16px under `main`, the date
+  controls' 9px drop. The name steps down to `T.title`, the Summary's headline row
+  is the date controls' 40px, and the gaps around them step down a notch.
+- **What moves, on a lone Timeline only** (`toolbarFolded`): Follow and zoom into the
+  header, after the name, on a horizontal `Reveal` so they leave and return with the
+  view. Optimiser and Reshuffle into the opened Summary, left of its own actions. In
+  a split each pane keeps its own toolbar.
+- **The inbox gets the same treatment (correction 9, Patryk):** a conversation is
+  there to be read. At 998 × 507 the title bar, the filter row and a header that
+  wrapped left the message no height at all, with a draft open. So with two panes
+  the panel takes the screen less 8px each way, Select, Needs action and search join
+  the title row, and the number leaves the conversation's header, because the list
+  beside it shows it.
+- **Why Optimiser is the half that goes:** in the evening the whole toolbar is 433px
+  and the header has 352 left. The Optimiser has switched itself off by then, so
+  it is the half nobody reaches for mid-service.
+- **It is a breakpoint, not a transition**, like `isMobile`. A screen does not change
+  height in service, and on Android the keyboard can only flip it behind a modal.
+
 ### Press feedback — universal, opt-OUT (v17.8.0)
 Every `button` dips to `scale(0.96)` on `:active`; `.mgt-hover-scale` buttons dip
 to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
@@ -1873,6 +2152,11 @@ it. Both halves are needed (with `Reveal`'s alone, still cut at 0.08–0.28px);
 with both, the card sits at 0 for 80–100ms before it goes. The rule is
 `usePresenceLifecycle`'s: a hold starts from an effect on the state that draws
 the exit, never beside the `setState` that will.
+**An entrance needs its start DRAWN the same way** (v18.14.0). `Reveal` set
+`mounted` from the effect that started its two frames, and after a slow click
+those frames ran first, so the node was born open with nothing to ease from: a
+refusal eased 2 times in 8 at 1× CPU and never at 4×. It mounts closed from the
+render that receives `show={true}` now.
 
 **The Plan view's zoom has edges that give, and its resets glide** (v18.3.0,
 A8). A pinch past 0.5× or 5× RESISTS rather than stopping dead: apple-design

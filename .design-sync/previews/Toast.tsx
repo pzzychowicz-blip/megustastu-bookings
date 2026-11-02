@@ -27,7 +27,7 @@ export const WithUndo = () => (
       <Toast show={true}>
         <Pane tone="var(--text-muted)">
           <span>Booking cancelled · Ana Ruiz, 19:30</span>
-          <button style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.nav })}>Undo</button>
+          <button style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.quiet })}>Undo</button>
         </Pane>
       </Toast>
     </div>

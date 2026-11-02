@@ -15,7 +15,7 @@ Every modal in MGT Bookings is an `Overlay`. From 600px wide up it is a centred 
 const { Overlay, ModalTitle, Fld, mkInp, mkBtn, mkSolidBtn, SP } = window.MGTBookings;
 <Overlay onClose={close} footer={
   <div style={{ display: "flex", gap: SP.base, justifyContent: "flex-end" }}>
-    <button style={mkBtn({ background: "var(--app-btn-slate)" })} onClick={close}>Back</button>
+    <button style={mkBtn()} onClick={close}>Back</button>
     <button style={mkSolidBtn("var(--app-new)")} onClick={save}>Save booking</button>
   </div>}>
   <ModalTitle background="var(--app-new)">New booking</ModalTitle>

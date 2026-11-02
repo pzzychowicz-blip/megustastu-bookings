@@ -16,11 +16,12 @@
 // contract) so App's discard guard covers Cancel, Escape and the backdrop.
 
 import { useState, useEffect } from "react";
-import { S, T, FW, IC, H } from "../lib/constants";
+import { BTN, S, T, FW, IC, H } from "../lib/constants";
 import { formatDay } from "../lib/day";
 import { hourLabel } from "../lib/time-grid";
 import { countLabel } from "../lib/booking-logic";
 import { specialDayRefusal, affectedBookings, clampHours, rangeLabel, SPECIAL_NOTE_MAX } from "../lib/special-days";
+import { markArmed, armSettled } from "../lib/arm-guard";
 import { Overlay, ModalTitle, Section, Fld, DateField, InlineAlert, Reveal, AutoHeight, SEG_TRACK, segStyle, mkBtn, mkSolidBtn, mkDangerBtn, mkInp, mkSel } from "./atoms";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { ClosedIcon, TrashIcon } from "./Icons";
@@ -82,7 +83,8 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
           className="mgt-hover-scale"
           style={mkDangerBtn({ minHeight: H.touch, padding: "10px 18px", marginRight: "auto" })}
           onClick={() => {
-            if (!armed) { setArmed(true); return; }
+            if (!armed) { markArmed(); setArmed(true); return; }
+            if (!armSettled()) return;
             if (onRemove(initial.id) !== false) onClose(true);
             else { setArmed(false); setRefusal(NOT_SAVED); }
           }}
@@ -90,7 +92,7 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
       ) : null}
       <button
         className="mgt-hover-scale"
-        style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: "var(--app-btn-slate)" })}
+        style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: BTN.quiet })}
         onClick={() => onClose(false)}
       >Cancel</button>
       <button
@@ -178,11 +180,13 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
       <div role="alert">
         <Reveal show={!!refusal}>{refusal ? <InlineAlert id={ERROR_ID}>{refusal}</InlineAlert> : null}</Reveal>
       </div>
-      {editing && armed ? (
-        <div style={{ fontSize: T.body, color: S.muted, marginTop: 8 }}>
-          {rangeLabel(initial.draft, today) + " goes back to its weekday's hours."}
-        </div>
-      ) : null}
+      <Reveal show={editing && armed}>
+        {editing && armed ? (
+          <div style={{ fontSize: T.body, color: S.muted, paddingTop: 8 }}>
+            {rangeLabel(initial.draft, today) + " goes back to its weekday's hours."}
+          </div>
+        ) : null}
+      </Reveal>
     </AutoHeight></Overlay>
   );
 }

@@ -148,8 +148,7 @@ export function LoginScreen() {
             disabled={loading}
             className="mgt-hover-scale"
             style={{
-              ...mkBtn({ fontSize: T.lead, minHeight: 44, padding: "12px" }),
-              background: "var(--accent)",
+              ...mkBtn({ background: "var(--accent)", fontSize: T.lead, minHeight: 44, padding: "12px" }),
               opacity: loading ? 0.7 : 1,
               cursor: loading ? "wait" : "pointer"
             }}

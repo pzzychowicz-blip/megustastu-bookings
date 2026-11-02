@@ -8,7 +8,7 @@
 import { useState } from "react";
 import { Reveal, mkSolidBtn, OutlineChip, InlineAlert } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
-import { TimeChip } from "../AvailBanner";
+import { TimeChip } from "../TimeChip";
 import { clampConfidence, availabilityReply } from "../../lib/whatsapp";
 import { draftCheckLine } from "../../lib/draft-check";
 import { formatDay } from "../../lib/day";
@@ -89,7 +89,9 @@ function DraftCheck({ conv, check, onAcceptAt, onTheWaitlist, onAddToWaitlist, o
               </div>
             ) : null}
             {offerWaitlist || canSuggest ? (
-              <div style={row}>
+              // Right-aligned (v18.14.0, Patryk), in the wrapping row and in the
+              // tall card's column alike, and inside itself in case the two wrap.
+              <div style={Object.assign({}, row, { marginLeft: "auto", alignSelf: "flex-end", justifyContent: "flex-end" })}>
                 {offerWaitlist ? (
                   // `aria-disabled`, never `disabled`: Chrome blurs a focused
                   // control that becomes disabled. `mgt-nopress` is the inert

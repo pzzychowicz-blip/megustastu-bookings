@@ -21,12 +21,14 @@
 // letting the reader assume.
 
 import { useState, useRef, useEffect, useId } from "react";
-import { R, T, FW, SP, H, IC } from "../lib/constants";
+import { BTN, R, T, FW, SP, H, IC } from "../lib/constants";
+import { FoldRows } from "./FoldRows";
 import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel, mkDangerBtn } from "./atoms";
 import { TrashIcon } from "./Icons";
 import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, isGranted, effectiveRole, displayName } from "../lib/roles";
 import { MODULES, moduleOn } from "../lib/modules";
 import { RETENTION_CHOICES } from "../lib/activity";
+import { markArmed, armSettled } from "../lib/arm-guard";
 import { useIntegrationStatus } from "../hooks/useIntegrationStatus";
 
 const LEVEL_LABEL = { staff: "Staff", manager: "Manager", admin: "Admin" };
@@ -596,7 +598,7 @@ export function RolesModal({ rows, selectedUid, myUid, onSelect, onToggleCap, on
       // shipped as a bare button and sat bottom-LEFT with the rest of the bar
       // empty, which is the only footer in the app that does.
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button className="mgt-hover-scale" onClick={onClose} style={mkSolidBtn("var(--app-btn-slate)")}>Done</button>
+        <button className="mgt-hover-scale" onClick={onClose} style={mkSolidBtn(BTN.quiet)}>Done</button>
       </div>
     }>
       {/* `background` is REQUIRED and has no default — omitting it rendered
@@ -781,16 +783,12 @@ export function AdminTabContent({
               Nobody has signed in yet. Invite someone below — they appear here the
               first time they sign in.
             </p>
-          : rows.map(function (r) {
-            const id = r.uid || r.inviteId;
+          : <FoldRows items={rows} idOf={function (r) { return r.uid || r.inviteId; }}>{function (r) {
             const self = r.uid && r.uid === myUid;
             const armed = !!r.uid && r.uid === armedUid;
             return (
-              <div key={id} style={{
-                display: "flex", alignItems: "center", gap: SP.base, flexWrap: "wrap",
-                padding: SP.base + "px 0",
-                borderTop: "1px solid var(--border-soft)",
-              }}>
+              <div style={{ padding: SP.base + "px 0", borderTop: "1px solid var(--border-soft)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: SP.base, flexWrap: "wrap" }}>
                 <div style={{ flex: "1 1 160px", minWidth: 0 }}>
                   <div style={{ fontWeight: FW.semi, fontSize: T.body, color: "var(--text-primary)" }}>
                     {displayName(r)}
@@ -842,23 +840,29 @@ export function AdminTabContent({
                       {self ? null : <button className="mgt-hover-scale"
                         aria-describedby={armed ? removeWarnId : undefined}
                         onClick={function () {
-                          if (armed) { setArmedUid(null); say(onRemoveUser(r.uid)); }
-                          else { setMsg(null); setArmedUid(r.uid); }
+                          if (armed) { if (!armSettled()) return; setArmedUid(null); say(onRemoveUser(r.uid)); }
+                          else { markArmed(); setMsg(null); setArmedUid(r.uid); }
                         }}
                         aria-label={(armed ? "Confirm — remove " : "Remove ") + displayName(r)}
                         style={mkDangerBtn()}
                       ><TrashIcon size={IC.control} />{armed ? "Confirm — remove" : "Remove"}</button>}
-                      {armed ? (
-                        <div id={removeWarnId} style={{ flexBasis: "100%", fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)" }}>
-                          Deletes {displayName(r)}'s level and capabilities here. It does not lock them
-                          out: the next time they open the app they are back on this list with no
-                          level{enforceRoles ? ", which counts as staff" : ""}. Tap again to confirm.
-                        </div>
-                      ) : null}
                     </>}
               </div>
+              {/* v18.14.0 (correction 28, Patryk): it eases open and closed, so
+                  it left the wrapping row, whose `gap` would have appeared and
+                  gone at once; the gap is this padding now, and folds with it.
+                  The id only while armed: `Reveal` keeps a leaving copy for its
+                  exit, and another row can arm inside that time. */}
+              <Reveal show={armed}>
+                <div id={armed ? removeWarnId : undefined} style={{ paddingTop: SP.base, fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)" }}>
+                  Deletes {displayName(r)}'s level and capabilities here. It does not lock them
+                  out: the next time they open the app they are back on this list with no
+                  level{enforceRoles ? ", which counts as staff" : ""}. Tap again to confirm.
+                </div>
+              </Reveal>
+              </div>
             );
-          })}
+          }}</FoldRows>}
       </Section>
 
       <Section>
@@ -914,7 +918,7 @@ export function AdminTabContent({
             type="button"
             className="mgt-hover-scale"
             onClick={onOpenActivity}
-            style={mkBtn({ background: "var(--app-btn-grey-strong)", flexShrink: 0 })}
+            style={mkBtn({ background: BTN.quiet, flexShrink: 0 })}
           >Open the log</button>
         </div>
         {/* v18.0.0 session 11: the retention window, which was hard-coded in

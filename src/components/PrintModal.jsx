@@ -19,7 +19,7 @@
 // Modal id `print` (MODAL_Z, beside `week`, the Summary's other button).
 
 import { useState } from "react";
-import { S, T, FW, H } from "../lib/constants";
+import { BTN, S, T, FW, H } from "../lib/constants";
 import { hourLabel } from "../lib/time-grid";
 import { TimelineSheet } from "./TimelineSheet";
 import { Overlay, ModalTitle, mkBtn, mkSolidBtn, mkStep, SEG_TRACK, segStyle, PAUSED_FADE } from "./atoms";
@@ -58,7 +58,7 @@ export function PrintModal({ range, onPrint, onClose }) {
   const grid = kind !== "sheet";
   const footer = (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-      <button className="mgt-hover-scale mgt-press" onClick={onClose} style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: "var(--app-btn-slate)" })}>Cancel</button>
+      <button className="mgt-hover-scale mgt-press" onClick={onClose} style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: BTN.quiet })}>Cancel</button>
       <button className="mgt-hover-scale mgt-press" onClick={function () { onPrint({ kind: kind, from: from, to: to, Sheet: TimelineSheet }); }} style={mkSolidBtn("var(--accent)", { minHeight: H.touch })}>Print</button>
     </div>
   );

@@ -22,7 +22,7 @@ import { useState, useRef, useEffect, useImperativeHandle } from "react";
 import { Reveal, mkSolidBtn, InlineAlert } from "../atoms";
 import { CloseIcon } from "../Icons";
 import { TemplatesIcon, PaperclipIcon, FileIcon } from "./WaIcons";
-import { R, T, FW, M, H, IC, SP, REVEAL_EXIT_MS } from "../../lib/constants";
+import { BTN, R, T, FW, M, H, IC, SP, REVEAL_EXIT_MS } from "../../lib/constants";
 import { fileSizeLabel, WA_CAPTION_MAX } from "../../lib/whatsapp";
 import { attachKind, attachRefusal, shrinkPhoto } from "../../lib/wa-attach";
 import { draftTextOf, setReplyDraft } from "../../lib/wa-reply-drafts";
@@ -379,13 +379,13 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
           // visible line. mkArea's centring only rescues the SHORT-content case.
           // At R.inset the corner reaches at most 10px, inside the 12px padding,
           // so no line can be clipped at any scroll position.
-          style={{ flex: 1, boxSizing: "border-box", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset, padding: "10px 12px", fontSize: T.lead, color: "var(--text-primary)", fontWeight: FW.regular, resize: "none", fontFamily: "inherit", minHeight: 44, boxShadow: "var(--shadow-input)", opacity: disabled ? 0.6 : 1 }}
+          style={{ flex: 1, boxSizing: "border-box", background: "var(--bg-input)", border: "1px solid var(--field-edge)", borderRadius: R.inset, padding: "10px 12px", fontSize: T.lead, color: "var(--text-primary)", fontWeight: FW.regular, resize: "none", fontFamily: "inherit", minHeight: 44, boxShadow: "var(--shadow-input)", opacity: disabled ? 0.6 : 1 }}
         />
         <button
           onClick={send}
           disabled={!canSend}
           className="mgt-hover-scale mgt-press"
-          style={mkSolidBtn(canSend ? "var(--wa-green-dark)" : "var(--btn-default)", { padding: "10px 18px", cursor: canSend ? "pointer" : "not-allowed", fontSize: T.body, minHeight: H.touch, boxShadow: "var(--shadow-btn)" })}
+          style={mkSolidBtn(canSend ? "var(--wa-green-dark)" : BTN.quiet, { padding: "10px 18px", cursor: canSend ? "pointer" : "not-allowed", fontSize: T.body, minHeight: H.touch, ...(canSend ? { boxShadow: "var(--shadow-btn)" } : null) })}
         >{busy ? "Sending…" : "Send"}</button>
       </div>
     </div>

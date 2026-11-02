@@ -30,7 +30,7 @@
 // unchanged, just hoisted into renderCard() so both groups share it.
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP, ROW_FOLD } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, STATUS_BTN_BG, STATUS_COLORS, BTN, R, T, FW, IC, SP, M, ROW_FOLD } from "../lib/constants";
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { useLeavingOrder } from "../hooks/useLeavingOrder";
@@ -40,7 +40,7 @@ import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey, formatPhone, bookingTags } from "../lib/customers";
 import { filterByTags, dayTagChips, toggleTagId, tagNames, liveTagIds } from "../lib/tag-filter";
 import { TagChips } from "./TagChips";
-import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES, textWidth, reduceMotionOn, ModalPresence } from "./atoms";
+import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, RowSlot, useFlip, InlineAlert, ALERT_TONES, textWidth, reduceMotionOn, ModalPresence } from "./atoms";
 import { AssignIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 
@@ -72,6 +72,8 @@ const FLAG = {
   display: "inline-flex", alignItems: "center", gap: SP.tight,
   fontSize: T.small, fontWeight: FW.semi, whiteSpace: "nowrap"
 };
+// The space between two flags. It lives inside FlagSlot rather than in a flex gap.
+const FLAG_GAP = 8;
 const FLAG_NEUTRAL = "var(--text-secondary)";
 const FLAG_WARN = "var(--warn-text)";
 const FLAG_SUCCESS = "var(--success-text)";
@@ -147,6 +149,17 @@ const UNIT_W = 18 + 8 + STATUS_COL;
 // now each card's own top margin, inside its `Reveal`, so it folds with the
 // card, and the list's -CARD_GAP top margin cancels the first one.
 const CARD_GAP = SP.mid;
+
+// v18.14.0 (correction 33, Patryk): a warning's rim arrives and leaves with nobody
+// pressing anything, so its colour takes M.move, as the timeline block's does (TL_RIM).
+// Its WIDTH cannot ease here: the padding gives back what a 3px border takes, and a
+// browser snaps a border to whole device pixels while padding runs smooth, so easing
+// the two together shook the card's content by 1px (measured, 33 → 32 → 33 at DPR 1).
+// So the width and the padding change in one step, while the colour is the plain
+// border's, which barely shows: at once on the way in, at the end on the way out. An
+// inline transition replaces `.mgt-ac-row`'s, so the hover tint is repeated here.
+const CARD_RIM_IN = "background-color " + M.tap + ", border-color " + M.move;
+const CARD_RIM_OUT = CARD_RIM_IN + ", border-width var(--t-move) step-end, padding var(--t-move) step-end";
 // A cell beside the name: as tall as the name's first line, content centred.
 const NAME_CELL = { display: "flex", alignItems: "center", minHeight: NAME_LINE };
 // The name's font, ONE object read by both the name span and the canvas that
@@ -214,6 +227,20 @@ function CardFlag({ title, ink, children }) {
 // block. No role: the text IS the label.
 function TextFlag({ ink, title, children }) {
   return <span title={title} style={{ ...FLAG, color: ink }}>{children}</span>;
+}
+
+// v18.14.0 (correction 25, Patryk): a slot per flag, as on the timeline block, so one
+// that arrives or leaves opens sideways and the flags after it close up. A flag that
+// has gone leaves on the copy its Reveal kept. FLAG_GAP is inside the slot because a
+// flex gap stays beside a flag folded to nothing (CARD_GAP's reason), and the box's
+// negative margin hands the last flag's back, so a line breaks exactly where the gap
+// broke it: measured identical at 998, 668, 390 and 360.
+function FlagSlot({ flag }) {
+  return (
+    <Reveal horizontal show={!!flag} style={{ flexShrink: 0 }}>
+      {flag ? <span style={{ display: "inline-flex", marginRight: FLAG_GAP }}>{flag}</span> : null}
+    </Reveal>
+  );
 }
 
 // v15.8.0: module-level status-change detection (mirrors TimelineView) so a card
@@ -407,6 +434,10 @@ export const ListView = memo(function ListView({
   // v17.1.0 perf: memoized (walks every booking ever) + moved above the
   // empty-day early return (rules of hooks — the v16.4.0 lesson).
   const nsMap = useMemo(() => noShowMap(bookings), [bookings]);
+  // A slot for every tag on the list, in its order, so a tag takes its place on the
+  // way in and keeps it on the way out.
+  const tagSlots = useMemo(() => ["guest", "occasion"].flatMap((kind) =>
+    ((tagList && tagList[kind]) || []).map((t) => ({ ...t, kind }))), [tagList]);
 
   // v17.3.1: scroll the focused card into view on a PROGRAMMATIC selection —
   // a search-jump (SearchPanel → App's pendingSelectRef / same-day branch) or
@@ -747,9 +778,12 @@ export const ListView = memo(function ListView({
         // block says it in its title only). Guest tags first, then occasion,
         // each in the tag list's order. The `title` says which kind it is.
         const tagged = bookingTags(b, guestTags, tagList);
-        const tagFlags = tagged.guest.map((l) => <TextFlag key={"g" + l} ink={FLAG_NEUTRAL} title={"Guest tag: " + l}>{l}</TextFlag>)
-          .concat(tagged.occasion.map((l) => <TextFlag key={"o" + l} ink={FLAG_NEUTRAL} title={"Occasion: " + l}>{l}</TextFlag>));
-        const hasFlags = !!(depositTag || voucherTag || zoneTag || prefTag || lockedTag || manualTag || noShowTag || clashTag || tagFlags.length || lateTag || durationTag);
+        const tagFlags = tagSlots.map((t) => (
+          <FlagSlot key={t.kind + t.id} flag={tagged[t.kind].includes(t.label)
+            ? <TextFlag ink={FLAG_NEUTRAL} title={(t.kind === "guest" ? "Guest tag: " : "Occasion: ") + t.label}>{t.label}</TextFlag>
+            : null} />
+        ));
+        const hasFlags = !!(depositTag || voucherTag || zoneTag || prefTag || lockedTag || manualTag || noShowTag || clashTag || tagged.guest.length || tagged.occasion.length || lateTag || durationTag);
 
         const notesEl = b.notes ? (
           <div style={{
@@ -787,7 +821,7 @@ export const ListView = memo(function ListView({
         const nextBtn = nextSt ? (
           <button
             className="mgt-hover-scale"
-            style={mkBtn({ background: BLOCK_BG[nextSt], color: BLOCK_INK[nextSt] || "var(--text-on-accent)", textTransform: "capitalize", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: NEXT_COL })}
+            style={mkBtn({ background: STATUS_BTN_BG[nextSt], color: BLOCK_INK[nextSt] || "var(--text-on-accent)", textTransform: "capitalize", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: NEXT_COL })}
             onClick={stopped(() => onStatus(b.id, nextSt))}
           >
             <StatusIcon status={nextSt} size={IC.control} />{nextSt}
@@ -807,7 +841,7 @@ export const ListView = memo(function ListView({
             aria-label="More actions"
             aria-expanded={menuFor === b.id}
             title="More actions"
-            style={mkBtn({ background: BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "4px 12px" })}
+            style={mkBtn({ background: BTN.quiet, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "4px 12px" })}
             onClick={stopped(() => setMenuFor(b.id))}
           >
             <MoreIcon size={IC.control} />
@@ -930,6 +964,7 @@ export const ListView = memo(function ListView({
               // one (measured 2px apart: the time at 19 against 17, ⋯ at 577
               // against 579).
               borderRadius: R.card, padding: cardBw === 3 ? "12px 14px" : "14px 16px",
+              transition: cardBw === 3 ? CARD_RIM_IN : CARD_RIM_OUT,
               marginTop: gapAbove,
               position: "relative",
               opacity: (b.status === "completed" || b.status === "cancelled") ? 0.75 : 1,
@@ -951,8 +986,9 @@ export const ListView = memo(function ListView({
               }} />
             ) : null}
             <div style={{ position: "relative", zIndex: 1 }}>
-            {conflictEl}
-            {warnEl}
+            {/* v18.14.0 (correction 33, Patryk): each eases, so the cards under it slide. */}
+            <Reveal show={!!conflictEl}>{conflictEl}</Reveal>
+            <Reveal show={!!warnEl}>{warnEl}</Reveal>
             {/* v18.2.0: the TIME LEADS, in its own column. A List is read down
                 its start times during service, and they sat at the far right of
                 a wrapping header, after the name and up to ten flags, so their
@@ -1007,7 +1043,7 @@ export const ListView = memo(function ListView({
                 flag against 208 on the two without. Inside the box, a flag that
                 does not fit wraps under the unit and moves nothing, and the box
                 can be left out of nothing: it is always there, so the flags can
-                be conditional. Their basis is FLAGS_MIN, the widest chip, so on
+                come and go on a Reveal. Their basis is FLAGS_MIN, the widest chip, so on
                 a narrow card they take a line of their own rather than pushing a
                 chip past the card's edge. */}
             <div style={{ gridColumn: 2, gridRow: 1, minWidth: 0, display: "flex", alignItems: "flex-start", columnGap: 8, rowGap: 4, flexWrap: "wrap" }}>
@@ -1031,21 +1067,21 @@ export const ListView = memo(function ListView({
                     card-only voucher). `manual` sits with
                     `locked` because it is the same fact one notch weaker, and
                     the two counters that have no block counterpart come last. */}
-                {hasFlags ? (
-                  <div style={{ ...NAME_CELL, flex: "1 1 " + FLAGS_MIN + "px", minWidth: 0, flexWrap: "wrap", gap: "4px 8px" }}>
-                    {depositTag}
-                    {voucherTag}
-                    {zoneTag}
-                    {prefTag}
-                    {lockedTag}
-                    {manualTag}
-                    {noShowTag}
-                    {clashTag}
+                <Reveal show={hasFlags} style={{ flex: "1 1 " + FLAGS_MIN + "px", minWidth: 0 }}>
+                  <div style={{ ...NAME_CELL, flexWrap: "wrap", rowGap: 4, marginRight: -FLAG_GAP }}>
+                    <FlagSlot flag={depositTag} />
+                    <FlagSlot flag={voucherTag} />
+                    <FlagSlot flag={zoneTag} />
+                    <FlagSlot flag={prefTag} />
+                    <FlagSlot flag={lockedTag} />
+                    <FlagSlot flag={manualTag} />
+                    <FlagSlot flag={noShowTag} />
+                    <FlagSlot flag={clashTag} />
                     {tagFlags}
-                    {lateTag}
-                    {durationTag}
+                    <FlagSlot flag={lateTag} />
+                    <FlagSlot flag={durationTag} />
                   </div>
-                ) : null}
+                </Reveal>
               </div>
             </div>
             {/* v18.2.0: tables and phone on the LEFT, the actions on the
@@ -1067,9 +1103,9 @@ export const ListView = memo(function ListView({
                   step (NEXT_COL wide) and ⋯ now line up down the List, and a
                   late card only grows leftwards. */}
               <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }}>
-                {acts.noShow ? (
+                <RowSlot show={!!acts.noShow} gap={6}>{acts.noShow ? (
                   <button className="mgt-hover-scale" style={mkBtn({ background: BTN.orange, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onNoShow(b.id))}><NoShowIcon size={IC.control} />No show</button>
-                ) : null}
+                ) : null}</RowSlot>
                 <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onManual(b.id))}><AssignIcon size={IC.control} />Assign</button>
                 {nextBtn}
                 {moreBtn}

@@ -37,22 +37,24 @@
 
 import { useState } from "react";
 import { stepPress } from "../lib/keyboard";
-import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, M, T, FW, H, IC } from "../lib/constants";
+import { DurationReset } from "./DurationReset";
+import { S, BTN, KITCHEN_TABLE_LIMIT, hoursFor, R, M, T, FW, H } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy, occupancyEnd, padEnd,
   findBest, findBestAny,
-  optimizerActiveFor, findTimes, formatSugg,
+  optimizerActiveFor, findTimes, formatSugg, earliestOffer,
   getKitchenLoad, findKitchenFriendlyTimes, startingPhrase,
   comboCapBest, nowTime, guestsLabel, countLabel, togglePick
 } from "../lib/booking-logic";
 import { Overlay, ModalTitle, Section, Fld, InlineAlert, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence, OutlineChip } from "./atoms";
-import { AvailBanner } from "./AvailBanner";
+import { AvailLine } from "./AvailLine";
 import { AlertPanel } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
-import { WaitIcon, AlertIcon } from "./Icons";
+import { AlertIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
+import { useLineBand } from "../hooks/useLineBand";
 import { todayStr } from "../lib/day";
 
 // v17.8.0 review fix: hex literals ON PURPOSE — see the identical pair in
@@ -111,22 +113,23 @@ export function WalkinForm({
   const wBusy = getBusy(wOther, wS, wE);
 
   // Auto-check: only relevant when the host hasn't picked any tables yet.
-  // First tries an automatic best-fit; if nothing fits, suggestion chips
-  // (alternative times before/after) for the AvailBanner to render.
+  // First tries an automatic best-fit; if nothing fits, the times for the
+  // availability line to offer.
   // v16.3.0 perf phase 2: the cheap best-fit probe stays synchronous (µs — it
   // reuses wOther), but the findTimes suggestion scan (the heavy part — full
   // trial optimisations on failing slots) is DEFERRED post-paint via
   // useDeferredCompute, so opening Walk-in is instantaneous even on a day
   // where the scan takes ~0.5s; the ⏳ cue shows past ~150ms.
   const wFitsNow = !!(findBest(wSize, "auto", wS, wE, wOther) || findBestAny(wSize, wS, wE, wOther));
+  const wNotBefore = earliestOffer(wDate, today, nowMins);
   const wSuggScan = useDeferredCompute(function () {
     if (wFitsNow) return null;
     const noResh = !optimizerActiveFor(wDate, autoOptimizer);
-    return formatSugg(findTimes(wDate, wSize, "auto", liveBookings, wDur, wS, tableBlocks, null, noResh), wS);
+    return formatSugg(findTimes(wDate, wSize, "auto", liveBookings, wDur, wS, tableBlocks, null, noResh, wNotBefore), wS);
     // wOther is rebuilt per render (not dep-safe); its inputs are covered by
     // liveBookings/tableBlocks + the wFitsNow boolean itself. The th signature
     // (/code-review) re-scans when another device edits today's hours live.
-  }, [wFitsNow, wSize, wDur, wS, liveBookings, tableBlocks, autoOptimizer, th.closed ? "closed" : th.open + "-" + th.close]);
+  }, [wFitsNow, wSize, wDur, wS, liveBookings, tableBlocks, autoOptimizer, th.closed ? "closed" : th.open + "-" + th.close, wNotBefore]);
   const wAutoCheck = wFitsNow ? null : wSuggScan.value;
   const wChecking = !wFitsNow && wSuggScan.pending;
 
@@ -149,6 +152,12 @@ export function WalkinForm({
   }
 
   const wSel = wf.tables || [];
+  // v18.14.0 (correction 16, Patryk): the booking form's line, pinned above the
+  // buttons, because this one's answer was under the picker, at y 906 on a 507-tall
+  // tablet, and nothing on screen said there was no table. A picked table settles
+  // the question, so the line goes with that tap rather than after the scan.
+  const wAsking = wSel.length === 0;
+  const wLine = useLineBand(wAsking ? wAutoCheck : null, wAsking && wChecking);
   const wCap = getCapOf(wSel);
   const wOk = wSel.length > 0 && wCap >= wSize;
   const wPickSaid = pickNote && pickNote.at === wSel.join("|") ? pickNote.text : null;
@@ -166,7 +175,7 @@ export function WalkinForm({
       <button
         key="clr"
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.clear })}
+        style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.quiet })}
         onClick={() => setDraft({ ...wf, tables: [], _pre: false })}
       >
         Clear
@@ -183,7 +192,7 @@ export function WalkinForm({
   const wKitchenStarts = wKitchenLoad.starts + 1;
   const wKitchenBusy = wKitchenStarts >= KITCHEN_TABLE_LIMIT;
   const wKitchenSugg = wKitchenBusy
-    ? findKitchenFriendlyTimes(bookings, wDate, wSize, "auto", wDur, wTime, null, tableBlocks)
+    ? findKitchenFriendlyTimes(bookings, wDate, wSize, "auto", wDur, wTime, null, tableBlocks, wNotBefore)
     : null;
 
   // Renderer for the time-suggestion chips inside the kitchen section.
@@ -336,10 +345,26 @@ export function WalkinForm({
           {error ? <InlineAlert style={{ marginBottom: 14 }}>{error}</InlineAlert> : null}
         </Reveal>
       </div>
+      {/* Always mounted, as the booking form's: a region that arrives holding its
+          message says nothing. */}
+      <div role="status">
+        <Reveal show={wLine.shown}>
+          {wLine.answer ? (
+            <AvailLine
+              text={"No table for " + wSize + " at " + wTime}
+              sugg={wLine.answer}
+              checking={wLine.checking}
+              leaving={!wLine.shown}
+              onTapTime={(t) => setDraft({ ...wf, tables: [], time: t, _pre: false })}
+              onAddToWaitlist={onAddToWaitlist || null}
+            />
+          ) : null}
+        </Reveal>
+      </div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <button
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
+          style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
           onClick={onClose}
         >
           Back
@@ -361,6 +386,12 @@ export function WalkinForm({
     </>
   );
 
+  // v18.14.0 (M4): Time and guests, then the picker, then the kitchen line, Duration
+  // and Notes. The form's job is choosing a table, Seat stays disabled until there
+  // is one, and the picker began below the fold: 0 of 13 tables on screen at
+  // 998 × 507. The kitchen line goes below it because Seat still asks the kitchen
+  // question when it matters, and "Tap tables to select / deselect." went because
+  // the card says "Select tables below." directly under it.
   return (
     <Overlay onClose={onClose} footer={footerEl}>
       <AutoHeight>
@@ -426,70 +457,13 @@ export function WalkinForm({
               </button>
             </div>
           </Fld>
-          <Fld label="Duration">
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button
-                className="mgt-hover-scale"
-                style={stepperBtnStyle}
-                aria-label="Decrease duration"
-                {...stepPress(() => {
-                  const cd = wf.customDur || getDur(Number(wf.size) || 2);
-                  setDraft({ ...wf, customDur: Math.max(15, cd - 15) });
-                })}
-              >
-                −
-              </button>
-              <span style={stepperValueStyle}>{countLabel(wDur, "min")}</span>
-              <button
-                className="mgt-hover-scale"
-                style={stepperBtnStyle}
-                aria-label="Increase duration"
-                {...stepPress(() => {
-                  const cd = wf.customDur || getDur(Number(wf.size) || 2);
-                  setDraft({ ...wf, customDur: Math.min(480, cd + 15) });
-                })}
-              >
-                +
-              </button>
-              <span style={{ fontSize: T.body, color: S.muted, marginLeft: 4 }}>
-                {"End: " + toTime(toMins(wTime) + wDur)}
-              </span>
-              {wf.customDur ? (
-                <button
-                  className="mgt-hover-scale mgt-press"
-                  style={mkBtn({ fontSize: T.body, background: BTN.reset })}
-                  // v18.2.0: pointer-only like the steppers beside it; same fix.
-                  {...stepPress(() => setDraft({ ...wf, customDur: null }))}
-                >
-                  Reset
-                </button>
-              ) : null}
-            </div>
-          </Fld>
-          <Fld label="Notes" style={{ marginTop: 12 }}>{(fid) => (
-            <textarea
-              id={fid}
-              value={wf.notes}
-              onChange={(e) => setDraft({ ...wf, notes: e.target.value })}
-              rows={2}
-              placeholder="Special requests..."
-              className="mgt-hover-scale"
-              style={mkArea()}
-            />
-          )}</Fld>
         </div>
       </Section>
-
-      {wKitchenSection}
-
-      <div style={{ fontSize: T.body, color: S.text, marginBottom: 14, textAlign: "center" }}>
-        Tap tables to select / deselect.
-      </div>
 
       <div style={{
         marginBottom: 14, padding: "12px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
-        border: "1px solid " + (wOk ? "var(--suggest-border)" : "var(--border-sheet)"),
+        border: "1px solid " + (wOk ? "var(--suggest-border)" : "var(--border-soft)"),
         display: "flex", alignItems: "center", justifyContent: "space-between",
         gap: 8, flexWrap: "wrap",
         boxShadow: "var(--shadow-card)"
@@ -516,39 +490,61 @@ export function WalkinForm({
       {/* v16.3.0 perf phase 2: ⏳ cue while the deferred suggestion scan runs.
           Reveal-wrapped — its ease (--t-reveal, 520ms) is the grace, so a
           fast scan shows only an imperceptible sliver instead of a flash. */}
-      <Reveal show={wChecking && wSel.length === 0}>
+      <Reveal show={wChecking && wAsking && !wLine.shown}>
         <div style={{ background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: R.card, padding: "10px 14px", marginBottom: 12, fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>
       </Reveal>
-      {/* v17.15.2: Reveal-wrapped. This arrives when the deferred scan lands and
-          leaves the instant you tap a table — both while you are looking at it,
-          and both were hard cuts. It sits directly under the ⏳ row, which has
-          eased since v16.3.0, so the cue faded and its own ANSWER snapped in. */}
-      <Reveal show={!!(wAutoCheck && wSel.length === 0)}>
-        {wAutoCheck && wSel.length === 0 ? (
-        <>
-          <AvailBanner
-            msg={"No tables available at " + wTime + "."}
-            sugg={wAutoCheck}
-            warn
-            onTapTime={(t) => setDraft({ ...wf, tables: [], time: t, _pre: false })}
-          />
-          {/* v16.0.0: nothing fits right now → offer the waitlist (today's date,
-              current draft time as the wanted time). */}
-          {onAddToWaitlist ? (
-            <div style={{ display: "flex", justifyContent: "center", marginTop: -4, marginBottom: 12 }}>
+      {wKitchenSection}
+
+      <Section>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+          gap: 12
+        }}>
+          <Fld label="Duration">
+            <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 6 }}>
               <button
                 className="mgt-hover-scale"
-                /* v17.10.0: pending amber — the waitlist's colour, see App's badge. */
-                style={mkBtn({ fontSize: T.body, background: BLOCK_BG.pending, minHeight: 40, padding: "8px 16px", display: "inline-flex", alignItems: "center", gap: 6 })}
-                onClick={() => onAddToWaitlist()}
+                style={stepperBtnStyle}
+                aria-label="Decrease duration"
+                {...stepPress(() => {
+                  const cd = wf.customDur || getDur(Number(wf.size) || 2);
+                  setDraft({ ...wf, customDur: Math.max(15, cd - 15) });
+                })}
               >
-                <WaitIcon size={IC.control} />Add to waitlist
+                −
               </button>
+              <span style={stepperValueStyle}>{countLabel(wDur, "min")}</span>
+              <button
+                className="mgt-hover-scale"
+                style={stepperBtnStyle}
+                aria-label="Increase duration"
+                {...stepPress(() => {
+                  const cd = wf.customDur || getDur(Number(wf.size) || 2);
+                  setDraft({ ...wf, customDur: Math.min(480, cd + 15) });
+                })}
+              >
+                +
+              </button>
+              <span style={{ fontSize: T.body, color: S.muted, marginLeft: 4 }}>
+                {"End: " + toTime(toMins(wTime) + wDur)}
+              </span>
+              <DurationReset show={!!wf.customDur} onReset={() => setDraft({ ...wf, customDur: null })} />
             </div>
-          ) : null}
-        </>
-        ) : null}
-      </Reveal>
+          </Fld>
+          <Fld label="Notes">{(fid) => (
+            <textarea
+              id={fid}
+              value={wf.notes}
+              onChange={(e) => setDraft({ ...wf, notes: e.target.value })}
+              rows={2}
+              placeholder="Special requests..."
+              className="mgt-hover-scale"
+              style={mkArea()}
+            />
+          )}</Fld>
+        </div>
+      </Section>
       </AutoHeight>
     </Overlay>
   );

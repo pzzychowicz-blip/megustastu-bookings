@@ -23,14 +23,15 @@
 import { useState, useEffect, useMemo } from "react";
 import { S, BTN, R, T, FW, IC, H } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, identityKey, isNoShow } from "../lib/customers";
-import { Section, OutlineChip, Reveal, mkInp, mkBtn, mkDangerBtn, SBadge } from "./atoms";
+import { Section, OutlineChip, Reveal, RowSlot, TurnChevron, mkInp, mkBtn, mkDangerBtn, SBadge } from "./atoms";
 import { formatDay, showsYear } from "../lib/day";
 import { guestsLabel, countLabel } from "../lib/booking-logic";
-import { ChevronDownIcon, ChevronRightIcon, WaitIcon, TrashIcon } from "./Icons";
+import { WaitIcon, TrashIcon } from "./Icons";
 import { TagListEditor } from "./TagListEditor";
 import { TagChips } from "./TagChips";
 import { tagLabels } from "../lib/tags";
 import { guestTagChoices, customersWithTag } from "../lib/tag-filter";
+import { markArmed, armSettled } from "../lib/arm-guard";
 
 // v18.2.0 phase 62: the id of the armed delete's warning, tied to its button
 // by aria-describedby only while it is on screen. One row is armed at a time.
@@ -206,7 +207,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           // v17.7.0 the hover rule no longer supplies one but still paints an
           // opaque --bg-hover-card, so a radius-less element would render that
           // fill as a hard-edged rectangle inside its own rounded card.
-          style={mkBtn({ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", padding: "6px 8px", minHeight: H.compact, background: "var(--bg-card)", border: "1px solid var(--border-soft)", borderRadius: R.card })}>{c.visits > 0 ? <OutlineChip tone="success">{countLabel(c.visits, "visit", "visits")}</OutlineChip> : null}{c.noShowCount > 0 ? <OutlineChip tone="warn">{countLabel(c.noShowCount, "no-show", "no-shows") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)"}</OutlineChip> : null}{wlCount > 0 ? <OutlineChip tone="neutral"><WaitIcon size={IC.inline} />{wlCount}</OutlineChip> : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></button></div>
+          style={mkBtn({ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", padding: "6px 8px", minHeight: H.compact, background: "var(--bg-card)", border: "1px solid var(--border-soft)", borderRadius: R.card })}>{c.visits > 0 ? <OutlineChip tone="success">{countLabel(c.visits, "visit", "visits")}</OutlineChip> : null}{c.noShowCount > 0 ? <OutlineChip tone="warn">{countLabel(c.noShowCount, "no-show", "no-shows") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)"}</OutlineChip> : null}{wlCount > 0 ? <OutlineChip tone="neutral"><WaitIcon size={IC.inline} />{wlCount}</OutlineChip> : null}<span style={{ display: "flex", color: S.muted }}><TurnChevron open={open} /></span></button></div>
         <Reveal show={open}>
           <div style={{ padding: "0 12px 12px" }}>
             {/* v18.5.0: this guest's tags, first: with a regular's thirty bookings
@@ -236,8 +237,8 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
                 aria-describedby={armed ? DELETE_WARN_ID : undefined}
                 style={mkDangerBtn({ fontSize: T.body, minHeight: 36, minWidth: DELETE_W })}
                 onClick={function () {
-                  if (armed) { onDeleteCustomer({ phone: c.phone, guestIds: c.guestIds }); setArmedKey(null); setOpenKey(null); }
-                  else setArmedKey(c.key);
+                  if (armed) { if (!armSettled()) return; onDeleteCustomer({ phone: c.phone, guestIds: c.guestIds }); setArmedKey(null); setOpenKey(null); }
+                  else { markArmed(); setArmedKey(c.key); }
                 }}><TrashIcon size={IC.control} />{armed ? "Confirm — delete" : "Delete customer & all data"}</button>
             </div>
             {/* v18.9.0: with WhatsApp on, the delete also erases MGT's copy of
@@ -246,7 +247,12 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
                 staff are told to delete the contact there too (Patryk,
                 2026-10-15). Inside the same described element, so it is read
                 with the warning it qualifies. */}
-            {armed ? <div id={DELETE_WARN_ID} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", marginTop: 8 }}>Permanently removes this customer's personal data (name, phone, notes, tags, history) — no backups. Their bookings remain anonymised as “Data removed” for statistics. Tap again to confirm.{whatsappOn && c.phone ? <span style={{ display: "block", marginTop: 6 }}>Also delete them from the restaurant phone's contacts: MGT can't reach the phone.</span> : null}</div> : null}
+            {/* v18.14.0 (correction 28, Patryk): it eases, with its gap inside the fold.
+                The id only while armed: `Reveal` keeps a leaving copy for its exit,
+                and another row can arm inside that time. */}
+            <Reveal show={armed}>
+              <div id={armed ? DELETE_WARN_ID : undefined} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", paddingTop: 8 }}>Permanently removes this customer's personal data (name, phone, notes, tags, history) — no backups. Their bookings remain anonymised as “Data removed” for statistics. Tap again to confirm.{whatsappOn && c.phone ? <span style={{ display: "block", marginTop: 6 }}>Also delete them from the restaurant phone's contacts: MGT can't reach the phone.</span> : null}</div>
+            </Reveal>
           </div>
         </Reveal>
       </div>
@@ -264,7 +270,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
         key={key}
         onClick={function () { setFilter(key); setOpenKey(null); setArmedKey(null); }}
         className="mgt-hover-scale"
-        style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: active ? "var(--accent)" : BTN.nav, opacity: searching ? 0.5 : 1 })}>{label}</button>
+        style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: active ? "var(--accent)" : BTN.quiet, opacity: searching ? 0.5 : 1 })}>{label}</button>
     );
   };
 
@@ -313,23 +319,23 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
               the Regulars filter is active (and not overridden by a search).
               v18.2.0 phase 56 (A-1): its buttons are named, as Settings'
               steppers are — they announced "−" and "+". */}
-          {filter === "regulars" && !searching ? (
+          <RowSlot show={filter === "regulars" && !searching} gap={6}>{filter === "regulars" && !searching ? (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
               <button
                 onClick={function () { setRegularMin(function (m) { return Math.max(1, m - 1); }); }}
                 aria-label="Decrease visits for a regular"
                 disabled={regularMin <= 1}
                 className={regularMin <= 1 ? undefined : "mgt-hover-scale"}
-                style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: regularMin <= 1 ? 0.4 : 1, cursor: regularMin <= 1 ? "not-allowed" : "pointer" })}>−</button>
+                style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.quiet, opacity: regularMin <= 1 ? 0.4 : 1, cursor: regularMin <= 1 ? "not-allowed" : "pointer" })}>−</button>
               <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, minWidth: 62, textAlign: "center" }}>{regularMin + "+ visit" + (regularMin !== 1 ? "s" : "")}</span>
               <button
                 onClick={function () { setRegularMin(function (m) { return Math.min(50, m + 1); }); }}
                 aria-label="Increase visits for a regular"
                 disabled={regularMin >= 50}
                 className={regularMin >= 50 ? undefined : "mgt-hover-scale"}
-                style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: regularMin >= 50 ? 0.4 : 1, cursor: regularMin >= 50 ? "not-allowed" : "pointer" })}>+</button>
+                style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.quiet, opacity: regularMin >= 50 ? 0.4 : 1, cursor: regularMin >= 50 ? "not-allowed" : "pointer" })}>+</button>
             </span>
-          ) : null}
+          ) : null}</RowSlot>
         </div>
         <div style={{ fontSize: T.small, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number, or — for guests who never gave one — by having been linked to each other from the name suggestions on a booking. Deleting a customer permanently removes their personal data (and waitlist entries); the bookings themselves stay anonymised as “Data removed” for statistics.</div>
       </Section>

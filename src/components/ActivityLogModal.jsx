@@ -31,7 +31,7 @@
 // with it.
 import { useId, useMemo, useState } from "react";
 import { S, T, FW, SP, R, H, IC, BTN } from "../lib/constants";
-import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, mkDangerBtn, AutoHeight, Reveal } from "./atoms";
+import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, mkDangerBtn, AutoHeight, Reveal, RowSlot } from "./atoms";
 import { rowText, activityCsv, activityCsvName } from "../lib/activity";
 // v18.0.0 session 11: the same index the Customers tab is built from, so "can
 // this row lead anywhere" is answered by the thing that would have to answer it
@@ -53,6 +53,7 @@ import { todayStr, addDays, formatDay, formatDaysIn, localDay, showsYear } from 
 import { DownloadIcon } from "./Icons";
 // v18.2.0 /code-review: the entry count joins its word like every other count.
 import { countLabel } from "../lib/booking-logic";
+import { markArmed, armSettled } from "../lib/arm-guard";
 
 // The kinds a person would filter by, in the order they matter during service.
 // `session` and `data` are deliberately last: signing in and exporting a backup
@@ -229,7 +230,7 @@ export function ActivityLogModal({
     <Overlay onClose={onClose} footer={
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button className="mgt-hover-scale" onClick={onClose}
-          style={mkBtn({ background: "var(--app-btn-slate)" })}>Done</button>
+          style={mkBtn({ background: BTN.quiet })}>Done</button>
       </div>
     }>
       {/* A read surface, so the pill takes the neutral — ModalTitle's colour
@@ -339,7 +340,7 @@ export function ActivityLogModal({
               disabled={crashBusy}
               onClick={pressCrashes}
               style={mkBtn({
-                background: BTN.nav, fontSize: T.body, minHeight: H.compact,
+                background: BTN.quiet, fontSize: T.body, minHeight: H.compact,
                 display: "inline-flex", alignItems: "center", gap: SP.snug,
                 opacity: crashBusy ? 0.5 : 1,
               })}
@@ -466,7 +467,7 @@ export function ActivityLogModal({
                 className="mgt-hover-scale"
                 onClick={onLoadOlder}
                 disabled={loadingMore}
-                style={mkBtn({ background: "var(--app-btn-slate)", minHeight: H.compact, fontSize: T.body })}
+                style={mkBtn({ background: BTN.quiet, minHeight: H.compact, fontSize: T.body })}
               >{loadingMore ? "Loading…" : "Load older"}</button>
             </div>
           ) : null}
@@ -517,7 +518,7 @@ export function ActivityLogModal({
               disabled={!shown.length}
               onClick={function () { onDownload(activityCsv(shown, byId), activityCsvName(fromDay, toDay)); }}
               style={mkBtn({
-                background: BTN.nav, fontSize: T.body, minHeight: H.compact,
+                background: BTN.quiet, fontSize: T.body, minHeight: H.compact,
                 display: "inline-flex", alignItems: "center", gap: SP.snug,
                 opacity: shown.length ? 1 : 0.5,
               })}
@@ -528,29 +529,35 @@ export function ActivityLogModal({
               disabled={allTime || clearBusy || !!badDay || !!backwards}
               aria-describedby={armed ? warnId : undefined}
               onClick={function () {
-                if (armed) { setArmed(false); onClearRange(); } else setArmed(true);
+                if (armed) { if (!armSettled()) return; setArmed(false); onClearRange(); }
+                else { markArmed(); setArmed(true); }
               }}
               style={mkDangerBtn({
                 fontSize: T.body, minHeight: H.compact, padding: SP.base + "px " + SP.pane + "px",
                 opacity: allTime || clearBusy || badDay || backwards ? 0.5 : 1,
               })}
             >{clearBusy ? "Clearing…" : armed ? "Confirm — delete this range" : "Clear this range"}</button>
-            {allTime ? (
-              <span style={{ fontSize: T.micro, color: S.muted }}>
-                Pick a day or a range above to clear.
-              </span>
-            ) : null}
+            <RowSlot show={allTime} gap={SP.base}>
+              {allTime ? (
+                <span style={{ fontSize: T.micro, color: S.muted }}>
+                  Pick a day or a range above to clear.
+                </span>
+              ) : null}
+            </RowSlot>
           </div>
-          {clearMsg && !armed ? (
-            <div style={{ fontSize: T.body, color: S.muted, marginTop: SP.base }}>{clearMsg}</div>
-          ) : null}
-          {armed ? (
-            <div id={warnId} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", marginTop: SP.base }}>
-              Permanently deletes every entry from {fromDay || "the beginning"} to {toDay || "now"} — including any
-              not loaded here, and whatever the filters above are showing. There are no backups.
-              The log will record that this happened. Tap again to confirm.
-            </div>
-          ) : null}
+          {/* v18.14.0 (correction 28, Patryk): both ease, with the gap inside the fold. */}
+          <Reveal show={!!clearMsg && !armed}>
+            {clearMsg ? <div style={{ fontSize: T.body, color: S.muted, paddingTop: SP.base }}>{clearMsg}</div> : null}
+          </Reveal>
+          <Reveal show={armed}>
+            {armed ? (
+              <div id={warnId} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", paddingTop: SP.base }}>
+                Permanently deletes every entry from {fromDay || "the beginning"} to {toDay || "now"} — including any
+                not loaded here, and whatever the filters above are showing. There are no backups.
+                The log will record that this happened. Tap again to confirm.
+              </div>
+            ) : null}
+          </Reveal>
         </div>
       ) : null}
 

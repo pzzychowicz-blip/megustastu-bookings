@@ -22,8 +22,8 @@
 // only positions what exists (a new table gets an auto slot via sanitize).
 
 import { useState, useRef, useEffect } from "react";
-import { S, R, T, FW, IC } from "../lib/constants";
-import { mkBtn, mkDangerBtn } from "./atoms";
+import { BTN, S, R, T, FW, IC } from "../lib/constants";
+import { mkBtn, mkDangerBtn, Reveal } from "./atoms";
 import { TrashIcon } from "./Icons";
 import { countLabel } from "../lib/booking-logic";
 // v17.1.0 (Tier 3 code-splitting): the shared geometry moved to FloorGlyphs.jsx
@@ -253,7 +253,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
           {["round", "square", "rect"].map(function(sh){
             return <button key={sh} onClick={function(){ patchTable(id, { shape: sh }); }}
               className="mgt-hover-scale"
-              style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: e.shape === sh ? S.accent : "var(--app-btn-grey)", textTransform: "capitalize" })}>{sh === "rect" ? "Rectangle" : sh}</button>;
+              style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: e.shape === sh ? S.accent : BTN.quiet, textTransform: "capitalize" })}>{sh === "rect" ? "Rectangle" : sh}</button>;
           })}
         </div>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 12 }}>
@@ -277,11 +277,13 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             ? [chairStep("top", "Chairs")]
             : [chairStep("top", "Top"), chairStep("right", "Right"), chairStep("bottom", "Bottom"), chairStep("left", "Left")]}
         </div>
-        {totalChairs !== cap ? (
-          <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 8 }}>
-            {countLabel(totalChairs, "chair", "chairs") + " drawn, but the table seats " + cap + " (capacity is set in the Tables editor above)."}
-          </div>
-        ) : null}
+        <Reveal show={totalChairs !== cap}>
+          {totalChairs !== cap ? (
+            <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--warn-text)", paddingTop: 8 }}>
+              {countLabel(totalChairs, "chair", "chairs") + " drawn, but the table seats " + cap + " (capacity is set in the Tables editor above)."}
+            </div>
+          ) : null}
+        </Reveal>
       </div>
     );
   } else if(sel && sel.type === "door" && fp.doors[sel.key]){
@@ -302,7 +304,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
               {[["left", !d.flip], ["right", !!d.flip]].map(function(o){
                 return <button key={o[0]} onClick={function(){ patchDoor(i, { flip: o[0] === "right" }); }}
                   className="mgt-hover-scale"
-                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: o[1] ? S.accent : "var(--app-btn-grey)", textTransform: "capitalize" })}>{o[0]}</button>;
+                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: o[1] ? S.accent : BTN.quiet, textTransform: "capitalize" })}>{o[0]}</button>;
               })}
             </div>
           </div>
@@ -327,7 +329,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
   const modeBtn = function(m, lbl){
     return <button key={m} onClick={function(){ setMode(m); setWallStart(null); setHoverPt(null); }}
       className="mgt-hover-scale"
-      style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: mode === m ? S.accent : "var(--app-btn-grey)" })}>{lbl}</button>;
+      style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: mode === m ? S.accent : BTN.quiet })}>{lbl}</button>;
   };
 
   return (
@@ -340,13 +342,13 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
         <div style={{ display: "flex", gap: 4, marginLeft: 6, alignItems: "center" }}>
           <button onClick={function(){ zoomBy(1 / 1.25); }} disabled={zoom.k <= 1} className={zoom.k <= 1 ? undefined : "mgt-hover-scale"}
             aria-label="Zoom out"
-            style={mkBtn({ fontSize: T.lead, fontWeight: FW.bold, minHeight: 32, width: 34, padding: 0, background: "var(--app-btn-grey)", opacity: zoom.k <= 1 ? 0.4 : 1 })}>−</button>
+            style={mkBtn({ fontSize: T.lead, fontWeight: FW.bold, minHeight: 32, width: 34, padding: 0, background: BTN.quiet, opacity: zoom.k <= 1 ? 0.4 : 1 })}>−</button>
           <span style={{ fontSize: T.small, color: S.muted, minWidth: 30, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{Math.round(zoom.k * 100) + "%"}</span>
           <button onClick={function(){ zoomBy(1.25); }} disabled={zoom.k >= 4} className={zoom.k >= 4 ? undefined : "mgt-hover-scale"}
             aria-label="Zoom in"
-            style={mkBtn({ fontSize: T.lead, fontWeight: FW.bold, minHeight: 32, width: 34, padding: 0, background: "var(--app-btn-grey)", opacity: zoom.k >= 4 ? 0.4 : 1 })}>+</button>
+            style={mkBtn({ fontSize: T.lead, fontWeight: FW.bold, minHeight: 32, width: 34, padding: 0, background: BTN.quiet, opacity: zoom.k >= 4 ? 0.4 : 1 })}>+</button>
           <button onClick={resetZoom} disabled={zoom.k === 1 && zoom.x === 0 && zoom.y === 0} className={zoom.k === 1 && zoom.x === 0 && zoom.y === 0 ? undefined : "mgt-hover-scale"}
-            style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: "var(--app-btn-grey)", opacity: zoom.k === 1 && zoom.x === 0 && zoom.y === 0 ? 0.4 : 1 })}>Reset</button>
+            style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.quiet, opacity: zoom.k === 1 && zoom.x === 0 && zoom.y === 0 ? 0.4 : 1 })}>Reset</button>
         </div>
         <span style={{ fontSize: T.body, color: S.muted, marginLeft: 6 }}>
           {mode === "wall" ? (wallStart ? "Tap the wall's END point." : "Tap the wall's START point.")
@@ -454,11 +456,15 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
           onDec={function(){ commitFp({ ...fp, room: { ...fp.room, h: fp.room.h - 50 } }); }}
           onInc={function(){ commitFp({ ...fp, room: { ...fp.room, h: fp.room.h + 50 } }); }} />
       </div>
-      {inspector ? (
-        <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: R.card, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
-          {inspector}
-        </div>
-      ) : null}
+      <Reveal show={!!inspector} inert={!inspector}>
+        {inspector ? (
+          <div style={{ paddingTop: 14 }}>
+            <div style={{ padding: "12px 14px", borderRadius: R.card, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+              {inspector}
+            </div>
+          </div>
+        ) : null}
+      </Reveal>
       <div style={{ fontSize: T.small, color: "var(--text-faint)", marginTop: 10 }}>
         All distances are in centimeters — grid squares are 50 cm, positions snap to 10 cm.
         The plan mirrors your Tables list — add, remove or rename tables in the Tables editor above; new tables appear here automatically. Shared across all devices.

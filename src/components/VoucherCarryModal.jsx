@@ -21,7 +21,7 @@
 // The card renders a SNAPSHOT taken when the prompt was raised, so its height
 // is static and nothing can change underneath it while it is open.
 
-import { S, T, FW } from "../lib/constants";
+import { BTN, S, T, FW } from "../lib/constants";
 import { Overlay, mkBtn, mkSolidBtn } from "./atoms";
 import { formatCode, money } from "../lib/vouchers";
 import { formatDay } from "../lib/day";
@@ -41,7 +41,7 @@ export function VoucherCarryModal({ carry, currency = "€", onMove, onNotNow })
         type="button"
         onClick={onNotNow}
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
       >Not now</button>
       <button
         type="button"

@@ -120,6 +120,22 @@ describe("planAssign: a swap", () => {
   });
 });
 
+// v18.14.0 (H5): the sentence the Undo pill carries, in a drop's own words.
+describe("planAssign: done", () => {
+  const list = [
+    { id: "a", name: "Lena Brandt", tables: ["1"] },
+    { id: "b", name: "Yara Domínguez", tables: ["2"] },
+  ];
+  it("names the party and its tables", () => {
+    expect(planAssign({ bookingId: "a", tables: ["4", "5"], locked: true, bookings: list, viewDate: "x", tableBlocks: [] }).done)
+      .toBe("Lena Brandt moved to 4+5.");
+  });
+  it("names whoever a swap took tables from", () => {
+    expect(planAssign({ bookingId: "a", tables: ["2"], locked: true, affected: [{ id: "b", tables: ["2"] }], bookings: list, viewDate: "x", tableBlocks: [] }).done)
+      .toBe("Lena Brandt moved to 2 — Yara Domínguez reassigned.");
+  });
+});
+
 describe("App's manualAssign is the plan and its three effects", () => {
   const APP = appCode();
   const at = APP.indexOf("function manualAssign(");
@@ -132,9 +148,11 @@ describe("App's manualAssign is the plan and its three effects", () => {
     }
   });
 
-  it("writes through saveBookings with the deleted-elsewhere report, closes the picker, and flashes only when the write went and the day was reshuffled", () => {
+  // v18.14.0 (H5): `saveMove` carries the write's report and the Undo. It flashes
+  // only for a swap that moved nobody, since the pill has the sentence otherwise.
+  it("writes through saveMove, closes the picker, and has a flash only for a day it reshuffled", () => {
     const flat = body.replace(/\s+/g, "");
-    expect(flat).toContain("constok=saveBookings(plan.transform,false,goneReport(bookingId));setManualTarget(null);if(ok&&plan.reshuffles)flash();");
+    expect(flat).toContain('saveMove(plan.transform,bookingId,"assign",plan.done,plan.reshuffles?flash:null);setManualTarget(null);');
   });
 });
 

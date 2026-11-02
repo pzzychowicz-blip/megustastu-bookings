@@ -202,9 +202,12 @@ const BASE = { light: { r: 255, g: 255, b: 255, a: 1 }, dark: { r: 50, g: 50, b:
 //          carries its own alpha, so it is used verbatim).
 // ink    — the token painted ON it.
 // role   — `label` is small bold text (<18.66px) and takes the full AA 4.5:1.
-//          `button` is a large solid control whose meaning is also carried by
-//          position and shape, and takes 3:1 — Patryk's call, so the palette
-//          stays recognisable rather than every button going muddy.
+//          `button` is a solid control with a word on it. It took 3:1 from v17.8.0
+//          on the argument that position and shape carry the meaning, and takes
+//          the same 4.5:1 since v18.14.0 (M1, Patryk's decision of 2026-10-31):
+//          the tablet sits in a dim room in front of someone who struggles with
+//          small text, and a 36px pill is not large. Amber and yellow stay exempt
+//          by the same decision (below).
 const FILLS = [
   // Table badges — 11px/600, the most-read label in the app.
   { fill: "--tbl-out-rgb", alpha: 0.8, ink: "--text-on-accent", role: "label", what: "outdoor table badge" },
@@ -322,21 +325,23 @@ const FILLS = [
   { fill: "--tag-flag", alpha: null, ink: "--text-on-accent", role: "label", what: "booking flag tag" },
 
   // Buttons.
-  { fill: "--btn-default", alpha: null, ink: "--text-on-accent", role: "button", what: "mkBtn default" },
-  { fill: "--btn-nav", alpha: null, ink: "--text-on-accent", role: "button", what: "nav / inactive view" },
+  // v18.14.0 (correction 5): every secondary grey is one quiet button, on the field's
+  // pale fill with --text-secondary, and the rows for the seven greys it replaced
+  // went with their tokens. Translucent, so this reading is over BASE alone: "the
+  // quiet button on what it sits on", below, is the screen's.
+  { fill: "--btn-quiet", alpha: null, ink: "--text-secondary", role: "button", what: "the quiet button" },
   { fill: "--btn-tables", alpha: null, ink: "--text-on-accent", role: "button", what: "Assign tables" },
   { fill: "--btn-edit", alpha: null, ink: "--text-on-accent", role: "button", what: "Edit" },
   { fill: "--btn-today", alpha: null, ink: "--text-on-accent", role: "button", what: "Today" },
   { fill: "--btn-del", alpha: null, ink: "--text-on-accent", role: "button", what: "Delete" },
-  { fill: "--btn-clear", alpha: null, ink: "--text-on-accent", role: "button", what: "Clear" },
-  { fill: "--btn-reset", alpha: null, ink: "--text-on-accent", role: "button", what: "Reset" },
-  { fill: "--btn-dismiss", alpha: null, ink: "--text-on-accent", role: "button", what: "Dismiss" },
   { fill: "--btn-orange", alpha: null, ink: "--text-on-accent", role: "button", what: "walk-in / count" },
   // v18.2.0 phase 28: a row's destructive button at rest (mkDangerBtn, the
   // Layout ×) is the danger pane's pair used as a button; and Layout's Cancel ×
   // left the red for the stepper's neutral, which the form's ± steppers have
   // always drawn on and nothing had registered.
   { fill: "--danger-bg", alpha: null, ink: "--danger-text", role: "button", what: "row delete at rest (mkDangerBtn)" },
+  // v18.14.0 (M4): it was solid red at half opacity, white on it, 1.7–1.94:1.
+  { fill: "--danger-bg", alpha: null, ink: "--danger-text", role: "label", what: "a busy table in the picker (TableGrid): the number and the word" },
   { fill: "--bg-stepper", alpha: null, ink: "--text-primary", role: "button", what: "stepper ± and Layout's Cancel ×" },
   // v18.2.0 phase 34: the Week / Month / Stats cells, opaque now. Today's
   // number in --accent is a pre-existing pair left out here: the accent as
@@ -349,10 +354,8 @@ const FILLS = [
   // that matters most — the INACTIVE View button, the control staff look at on
   // every screen — is --app-btn-grey, not --btn-nav. It measured 1.94:1. Two
   // names for one concept is how a fill hides from its own audit.
-  { fill: "--app-btn-grey", alpha: null, ink: "--text-on-accent", role: "button", what: "inactive View / secondary" },
-  { fill: "--app-btn-grey-strong", alpha: null, ink: "--text-on-accent", role: "button", what: "secondary (strong)" },
-  { fill: "--app-btn-slate", alpha: null, ink: "--text-on-accent", role: "button", what: "dialog secondary" },
-  { fill: "--app-btn-slate-dim", alpha: null, ink: "--text-on-accent", role: "button", what: "write-warning dismiss" },
+  { fill: "--app-btn-grey", alpha: null, ink: "--text-on-accent", role: "button", what: "a Completed button (--btn-completed), a tab's count badge" },
+  { fill: "--app-btn-grey-strong", alpha: null, ink: "--text-on-accent", role: "button", what: "a neutral title pill" },
 
   // v17.13.0 — two fills that reached this file only because the colour rule
   // in check:style forced them out of the components. Both carried white text
@@ -360,6 +363,13 @@ const FILLS = [
   // enumerates TOKENS, and "an audit that enumerates tokens has a blind spot
   // exactly the size of the literals."
   { fill: "--app-btn-dark", alpha: null, ink: "--text-on-accent", role: "button", what: "timeline Follow, while following" },
+  // v18.14.0 (M1): the primary button of every form, unregistered until now because
+  // it is a text-bearing use of a token whose name says nothing about buttons. An
+  // `exempt` entry only in Dark: EXEMPT_FLOOR holds Light at the bar. See there.
+  { fill: "--accent", alpha: null, ink: "--text-on-accent", role: "exempt", what: "the primary button (Save booking, Assign, the blue modal titles)" },
+  // v18.14.0 (M1): the status buttons, through STATUS_BTN_BG. The other four are the
+  // block's own fill and already measured above.
+  { fill: "--btn-completed", alpha: null, ink: "--ink-completed", role: "button", what: "the Completed status button" },
   // The greyed-out primary in both form footers, ReminderEditor and ManualModal.
   //
   // v17.13.0 recorded this as an EXEMPTION: WCAG 1.4.3 exempts inactive
@@ -470,7 +480,7 @@ const FILLS = [
   { fill: "--wa-header-bg", alpha: null, ink: "--text-primary", role: "label", what: "panel header strip" },
 ];
 
-const NEED = { label: 4.5, button: 3 };
+const NEED = { label: 4.5, button: 4.5 };
 
 // ── The recorded exemption ───────────────────────────────────────────────────
 // `exempt` fills are measured and REPORTED but not asserted against a bar. Both
@@ -556,7 +566,21 @@ const NEED = { label: 4.5, button: 3 };
 // longer an exemption (v17.14.0), but the pair form stays, because the next fill
 // whose themes diverge should not have to rediscover why one number is not
 // enough.
-const EXEMPT_FLOOR = { "--block-confirmed": 2.8, "--block-pending": 1.75, "--block-completed": 2.1 };
+//
+// ── v18.14.0 (M1): --accent, an exemption in one theme ───────────────────────
+// The first entry to use the pair for that. Light is held to the button bar through
+// its floor (4.5, at 5.42 since #0066d6), so the entry is `exempt` only in the sense
+// that Dark is: Dark's #0a84ff reads 3.65:1 under white. Patryk's M1 decision was to
+// darken Light and leave Dark's fills alone. Dark's other buttons all clear the bar,
+// and --accent is also text and rings there, where Light's value would be the wrong
+// way round: against Dark's surface #0066d6 reads 2.36:1, and #0a84ff 3.51:1. The
+// number is recorded, not forgotten: it cannot fall.
+const EXEMPT_FLOOR = {
+  "--block-confirmed": 2.8,
+  "--block-pending": 1.75,
+  "--block-completed": 2.1,
+  "--accent": { light: 4.5, dark: 3.65 },
+};
 const exemptFloor = (fill, theme) => {
   const f = EXEMPT_FLOOR[fill];
   return typeof f === "number" ? f : f[theme];
@@ -637,9 +661,11 @@ const ATOMS_SRC = stripComments(readFileSync(
 // of the three that is a named binding — so the scan cannot wander. If that
 // declaration is ever renamed the test throws here rather than silently
 // measuring nothing, which is the failure mode to prefer.
-function chipOpacity() {
+// v18.14.0 (D1): a second block chip, on line 2 of a two-line block, and the common
+// one in service. Same anchor rule, so it is passed its own.
+function chipOpacity(anchor = /const\s+timeChip\s*=/) {
   const lines = TIMELINE_SRC.split("\n");
-  const start = lines.findIndex((l) => /const\s+timeChip\s*=/.test(l));
+  const start = lines.findIndex((l) => anchor.test(l));
   if (start < 0) {
     throw new Error(
       "contrast.test: could not find `const timeChip` in TimelineView.jsx. " +
@@ -661,6 +687,9 @@ function chipOpacity() {
 }
 
 describe("timeline start-time chip — the hour pill over each block, as rendered", () => {
+  it("is full strength on a two-line block too: the ten cases below hold for both chips", () => {
+    expect(chipOpacity(/<Reveal show=\{twoLine\}>/)).toBe(chipOpacity());
+  });
   for (const theme of ["light", "dark"]) {
     for (const blockTok of BLOCK_FILLS) {
       it(`${blockTok} start-time chip is legible in ${theme}`, () => {
@@ -714,6 +743,53 @@ describe("fill/ink contrast — every text-bearing fill, both themes, at rest an
           got,
           `${entry.what} in ${theme}: ${got}:1, needs ${need}:1 (${entry.role})`
         ).toBeGreaterThanOrEqual(need);
+      });
+    }
+  }
+});
+
+// v18.14.0 (correction 1): the Unplaced row's rose ground carries one word,
+// "Unplaced", in --danger-text. A tint is no fill's partner in the registry, so
+// its pair is written out here, over the card's opaque ground.
+describe("the Unplaced word on its rose ground", () => {
+  for (const theme of ["light", "dark"]) {
+    it(`reads in ${theme}`, () => {
+      const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+      const ground = over(parse(vars["--tl-unplaced-bg"]), parse(vars["--tl-ruler-bg"]));
+      const got = +ratio(parse(vars["--danger-text"]), ground).toFixed(2);
+      expect(got, `Unplaced in ${theme}: ${got}:1`).toBeGreaterThanOrEqual(NEED.label);
+    });
+  }
+});
+
+// v18.14.0 (correction 2): the indoor table's number sits on its row's tint, and the
+// badge's fill is 0.8 alpha, so the tint is under the number too. In Dark it lightens
+// the badge a little, which is the direction that could fail.
+describe("the indoor table number on its tinted row", () => {
+  for (const theme of ["light", "dark"]) {
+    it(`reads in ${theme}`, () => {
+      const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+      const rgb = vars["--tbl-ind-rgb"];
+      const row = over(parse(vars["--tl-indoor-bg"].replace("var(--tbl-ind-rgb)", rgb)), parse(vars["--tl-ruler-bg"]));
+      const badge = over(parse(`rgba(${rgb}, 0.8)`), row);
+      const got = +ratio(parse(vars["--text-on-accent"]), badge).toFixed(2);
+      expect(got, `the indoor number in ${theme}: ${got}:1`).toBeGreaterThanOrEqual(NEED.label);
+    });
+  }
+});
+
+// v18.14.0 (H5): the words on a row under a dragged block. The pill is its role's
+// tint over the ruler's opaque surface, because the row under it wears the same
+// tint and a tint alone would float. The surface is the point of the test: over
+// BASE these two read like the registry's panes, and they are not on BASE.
+describe("the drop hint on its row", () => {
+  for (const theme of ["light", "dark"]) {
+    for (const role of ["warn", "danger"]) {
+      it(`--${role}-text on its tint over the ruler's surface reads in ${theme}`, () => {
+        const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+        const pane = over(parse(vars[`--${role}-bg`]), parse(vars["--tl-ruler-bg"]));
+        const got = +ratio(parse(vars[`--${role}-text`]), pane).toFixed(2);
+        expect(got, `the drop hint, ${role}, in ${theme}: ${got}:1`).toBeGreaterThanOrEqual(NEED.label);
       });
     }
   }
@@ -823,6 +899,184 @@ describe("registry coverage", () => {
     }
     expect([...new Set(bad)]).toEqual([]);
   });
+});
+
+// v18.14.0 (M3): the faint ink is not a fill's partner, so the registry has no row for
+// it, and it read 2.7–3.0:1 for as long as nothing asked. These are the surfaces it was
+// found on, walking every view and Settings tab. Dark joined in correction 12, at 3.51.
+// The second assertion is the point of having two inks: a faint that reaches the bar by
+// turning into --text-muted has stopped being a level.
+describe("--text-faint on the cards it sits on", () => {
+  for (const [theme, vars] of Object.entries({ Light: LIGHT_VARS, Dark: DARK_VARS })) {
+    const app = parse(vars["--bg-app"]);
+    const sheet = over(parse(vars["--bg-sheet"]), app);
+    const SURFACES = {
+      "a Section in a dialog": over(parse(vars["--bg-soft"]), sheet),
+      "the main card": over(parse(vars["--tl-card-bg"]), app),
+      "a dialog's sheet": sheet,
+    };
+    for (const [what, bg] of Object.entries(SURFACES)) {
+      it(`reads on ${what} in ${theme}, a step under --text-muted`, () => {
+        const faint = ratio(parse(vars["--text-faint"]), bg);
+        const muted = ratio(parse(vars["--text-muted"]), bg);
+        expect(faint).toBeGreaterThanOrEqual(4.5);
+        expect(muted / faint).toBeGreaterThanOrEqual(1.1);
+      });
+    }
+  }
+});
+
+// v18.14.0 (correction 12): two small inks with no fill of their own. Section is the
+// lightest ground a field label sits on, and a field in a Section the lightest fill in
+// Dark, so these are the worst readings of each; the words read 4.35 and 3.94 there.
+describe("the required mark and a field's prompt", () => {
+  for (const [theme, vars] of Object.entries({ Light: LIGHT_VARS, Dark: DARK_VARS })) {
+    const sheet = over(parse(vars["--bg-sheet"]), parse(vars["--bg-app"]));
+    const section = over(parse(vars["--bg-soft"]), sheet);
+    it(`the * reads on a Section in ${theme}`, () => {
+      const got = +ratio(parse(vars["--text-required"]), section).toFixed(2);
+      expect(got, `the * in ${theme}: ${got}:1`).toBeGreaterThanOrEqual(NEED.label);
+    });
+    it(`"Code" reads on a field in a Section in ${theme}`, () => {
+      const got = +ratio(parse(vars["--field-prompt"]), over(parse(vars["--bg-input"]), section)).toFixed(2);
+      expect(got, `"Code" in ${theme}: ${got}:1`).toBeGreaterThanOrEqual(NEED.label);
+    });
+  }
+});
+
+// v18.14.0 (correction 6): the ⋯ menu's rows are inks on a popup, so no fill names them.
+// Opaque in every theme, because nothing dims behind it: --tl-popup-bg's 95% in Dark let
+// the buttons under it read through, behind the word Delete.
+describe("the conversation menu's words", () => {
+  const THEMES = { Light: LIGHT_VARS, Dark: DARK_VARS, "Light, Increase Contrast": LIGHT_MORE_VARS, "Dark, Increase Contrast": DARK_MORE_VARS };
+  for (const [theme, vars] of Object.entries(THEMES)) {
+    for (const ink of ["--text-primary", "--text-muted", "--danger-text"]) {
+      it(`${ink} reads on the menu in ${theme}`, () => {
+        const card = parse(vars["--menu-bg"]);
+        expect(card.a).toBe(1);
+        expect(ratio(parse(vars[ink]), card)).toBeGreaterThanOrEqual(NEED.label);
+      });
+    }
+  }
+});
+
+// v18.14.0 (correction 11): a heading's ink has no fill of its own, so the registry has
+// no row for it, and the outdoor one read 4.46:1 for as long as nothing asked. Both
+// pickers, the walk-in and Assign, draw it straight on the sheet.
+describe("the table picker's group headings on a dialog's sheet", () => {
+  const THEMES = { Light: LIGHT_VARS, Dark: DARK_VARS, "Light, Increase Contrast": LIGHT_MORE_VARS, "Dark, Increase Contrast": DARK_MORE_VARS };
+  for (const [theme, vars] of Object.entries(THEMES)) {
+    for (const ink of ["--tbl-out-text", "--tbl-ind-text"]) {
+      it(`${ink} reads in ${theme}`, () => {
+        const sheet = over(parse(vars["--bg-sheet"]), parse(vars["--bg-app"]));
+        const got = +ratio(parse(vars[ink]), sheet).toFixed(2);
+        expect(got, `${ink} in ${theme}: ${got}:1`).toBeGreaterThanOrEqual(NEED.label);
+      });
+    }
+  }
+});
+
+// v18.14.0 (correction 13): the worker's offline page is a document of its own, so no
+// token reaches it and it kept the old blue, 4.02:1 under white, after M1. Its button
+// is one value on two pages, so it has to read against both.
+describe("the worker's offline page", () => {
+  const SW_SRC = stripComments(readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "..", "public", "sw.js"), "utf8"
+  )).join("\n");
+  const css = (re) => {
+    const m = re.exec(SW_SRC);
+    if (!m) throw new Error("the offline page's CSS changed shape: " + re);
+    return parse(m[1]);
+  };
+  const button = css(/button\{[^}]*background:(#[0-9a-fA-F]{6})/);
+  it("its button's white word clears the bar", () => {
+    expect(ratio({ r: 255, g: 255, b: 255, a: 1 }, button)).toBeGreaterThanOrEqual(NEED.button);
+  });
+  it("its button stands clear of the page in both themes", () => {
+    for (const page of [css(/html\{background:(#[0-9a-fA-F]{6})/), css(/prefers-color-scheme:dark\)\{html\{background:(#[0-9a-fA-F]{6})/)]) {
+      expect(ratio(button, page)).toBeGreaterThanOrEqual(3);
+    }
+  });
+});
+
+// ── A field's edge — a NON-TEXT boundary (v18.14.0, M6) ──────────────────────────
+// The party-size ring's shape again (below): there is no ink, so it is not a row in
+// FILLS. A white rim drew a field at 1.02:1 on a Section. M6 then held it to WCAG
+// 1.4.11's 3:1, and Patryk took that back on seeing it (correction 4): a near-black
+// outline round every field. So a field at rest is a quiet edge, above the white rim
+// and well below an outline, and 3:1 is Increase Contrast's. These are the surfaces
+// fields sit on, the page itself included, because the date pill in the header is
+// one. Light only: Dark's fill shows the field.
+describe("a field's edge against what it sits on, in Light", () => {
+  const app = parse(LIGHT_VARS["--bg-app"]);
+  const sheet = over(parse(LIGHT_VARS["--bg-sheet"]), app);
+  const SURFACES = {
+    "a Section in a dialog": over(parse(LIGHT_VARS["--bg-soft"]), sheet),
+    "a dialog's sheet": sheet,
+    "the main card": over(parse(LIGHT_VARS["--tl-card-bg"]), app),
+    "the page": app,
+  };
+  for (const [what, bg] of Object.entries(SURFACES)) {
+    it(`is a quiet edge on ${what}, and clears 3:1 with Increase Contrast`, () => {
+      const rest = ratio(parse(LIGHT_VARS["--field-edge"]), bg);
+      expect(rest, `at rest on ${what}: ${rest.toFixed(2)}:1`).toBeGreaterThanOrEqual(1.3);
+      expect(rest, `at rest on ${what}: ${rest.toFixed(2)}:1`).toBeLessThan(2);
+      expect(ratio(parse(LIGHT_MORE_VARS["--field-edge"]), bg)).toBeGreaterThanOrEqual(3);
+    });
+  }
+  it("the header's date pill and mkInp both draw it", () => {
+    expect(LIGHT_VARS["--app-date-border"]).toBe(LIGHT_VARS["--field-edge"]);
+    const start = ATOMS_SRC.indexOf("export function mkInp");
+    expect(start).toBeGreaterThan(-1);
+    expect(ATOMS_SRC.slice(start, ATOMS_SRC.indexOf("}", start + 40))).toContain("var(--field-edge)");
+  });
+});
+
+// v18.14.0 (correction 5): the quiet button's fill is translucent, so the registry's
+// one reading over BASE is not the screen's, and the ink is an ink that flips. These
+// are the surfaces it lands on, the strip's two panes included, because Dismiss and
+// Snooze sit on them.
+describe("the quiet button on what it sits on", () => {
+  for (const theme of ["light", "dark"]) {
+    const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+    const app = parse(vars["--bg-app"]);
+    const card = over(parse(vars["--tl-card-bg"]), app);
+    const sheet = over(parse(vars["--bg-sheet"]), app);
+    const SURFACES = {
+      "the page": app,
+      "the main card": card,
+      "a dialog's sheet": sheet,
+      "a Section in a dialog": over(parse(vars["--bg-soft"]), sheet),
+      "the inbox header": over(parse(vars["--wa-header-bg"]), app),
+      "a danger pane": over(parse(vars["--danger-bg"]), card),
+      "a warn pane": over(parse(vars["--warn-bg"]), card),
+    };
+    for (const [what, ground] of Object.entries(SURFACES)) {
+      it(`reads on ${what} in ${theme}`, () => {
+        const face = over(parse(vars["--btn-quiet"]), ground);
+        const got = +ratio(parse(vars["--text-secondary"]), face).toFixed(2);
+        expect(got, `quiet on ${what}, ${theme}: ${got}:1`).toBeGreaterThanOrEqual(NEED.button);
+      });
+    }
+  }
+});
+
+// v18.14.0 (L6): at 0.72 an amber block behind a dialog moved the sheet's blue channel
+// by 34 levels, and everything on the sheet read against that. Two facts hold the fix:
+// a dialog's sheet stays as opaque as the phone sheet, and each Increase Contrast value
+// stays that token's composite over --bg-app, which DESIGN.md promises and which a
+// change to the token does not carry along by itself.
+describe("a dialog's sheet does not show what is behind it", () => {
+  for (const [theme, vars, more] of [["light", LIGHT_VARS, LIGHT_MORE_VARS], ["dark", DARK_VARS, DARK_MORE_VARS]]) {
+    it(`both sheets are near-opaque in ${theme}`, () => {
+      for (const k of ["--bg-sheet", "--bg-sheet-mobile"]) expect(parse(vars[k]).a, k).toBeGreaterThanOrEqual(0.98);
+    });
+    it(`the Increase Contrast sheet is its composite over the page in ${theme}`, () => {
+      const got = over(parse(vars["--bg-sheet"]), parse(vars["--bg-app"]));
+      const want = parse(more["--bg-sheet"]);
+      for (const ch of ["r", "g", "b"]) expect(Math.abs(got[ch] - want[ch]), ch).toBeLessThanOrEqual(1);
+    });
+  }
 });
 
 // ── The party-size ring — a NON-TEXT boundary (v17.9.1) ──────────────────────
@@ -1133,14 +1387,14 @@ describe("Save pending outline (--pending-outline)", () => {
   }
 });
 
-describe("dismiss is not destructive (v18.2.0)", () => {
-  it("--btn-dismiss ALIASES the dialog secondary's slate — no red, no copied literal", () => {
-    expect(RAW_LIGHT["--btn-dismiss"]).toBe("var(--app-btn-slate)");
-    expect(LIGHT_VARS["--btn-dismiss"]).toBe(LIGHT_VARS["--app-btn-slate"]);
-    expect(DARK_VARS["--btn-dismiss"], "resolved AFTER the dark block overrides slate").toBe(DARK_VARS["--app-btn-slate"]);
+describe("the alias resolver (v18.2.0)", () => {
+  it("--btn-quiet ALIASES the field's fill, so Dark's arrives with it and nothing is copied", () => {
+    expect(RAW_LIGHT["--btn-quiet"]).toBe("var(--bg-input)");
+    expect(LIGHT_VARS["--btn-quiet"]).toBe(LIGHT_VARS["--bg-input"]);
+    expect(DARK_VARS["--btn-quiet"], "resolved AFTER the dark block overrides the fill").toBe(DARK_VARS["--bg-input"]);
   });
 
-  it("the alias resolver refuses a dangling name instead of passing a string to parse()", () => {
+  it("refuses a dangling name instead of passing a string to parse()", () => {
     expect(() => resolveAliases({ "--a": "var(--nope)" })).toThrow(/does not declare/);
     expect(() => resolveAliases({ "--a": "var(--b)", "--b": "var(--a)" })).toThrow(/cycle/);
   });

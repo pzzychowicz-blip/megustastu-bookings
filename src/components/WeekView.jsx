@@ -198,11 +198,11 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
   const footer = (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <button onClick={function(){ isWeek ? goWeek(-1) : goMonth(-1); }} aria-label={isWeek ? "Previous week" : "Previous month"} title={isWeek ? "Previous week" : "Previous month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.nav })} ><ChevronLeftIcon size={IC.chrome} /></button>
+        <button onClick={function(){ isWeek ? goWeek(-1) : goMonth(-1); }} aria-label={isWeek ? "Previous week" : "Previous month"} title={isWeek ? "Previous week" : "Previous month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.quiet })} ><ChevronLeftIcon size={IC.chrome} /></button>
         <button onClick={goToday} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "6px 14px", background: BTN.today })}>{isWeek ? "This week" : "This month"}</button>
-        <button onClick={function(){ isWeek ? goWeek(1) : goMonth(1); }} aria-label={isWeek ? "Next week" : "Next month"} title={isWeek ? "Next week" : "Next month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.nav })} ><ChevronRightIcon size={IC.chrome} /></button>
+        <button onClick={function(){ isWeek ? goWeek(1) : goMonth(1); }} aria-label={isWeek ? "Next week" : "Next month"} title={isWeek ? "Next week" : "Next month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.quiet })} ><ChevronRightIcon size={IC.chrome} /></button>
       </div>
-      <button onClick={onClose} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-btn-slate)" })}>Close</button>
+      <button onClick={onClose} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: BTN.quiet })}>Close</button>
     </div>
   );
 

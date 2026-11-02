@@ -36,10 +36,10 @@
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
 import { useRef, useState, useMemo } from "react";
-import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC, SP, exitHold } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT, STATUS_BTN_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC, SP, exitHold } from "../lib/constants";
 import {
   getDur, toMins, toTime,
-  trialFits, findTimes, formatSugg,
+  trialFits, findTimes, formatSugg, earliestOffer,
   getKitchenLoad, findKitchenFriendlyTimes, startingPhrase,
   optimizerActiveFor, seatingClosed,
   // v18.0.0 session 10: the predicate `applyOpt` itself branches on, so the
@@ -58,8 +58,11 @@ import {
   // v18.2.0 (C2): "4 guests", never "4 pax".
   guestsLabel,
   // v18.2.0 phase 77: any other count and its word, joined the same way.
-  countLabel
+  countLabel,
+  // v18.14.0 (H4): the refusal that carries the pinned codes.
+  NO_CODE_REFUSAL
 } from "../lib/booking-logic";
+import { codeColumns, pinnedCodes } from "../lib/phone-countries";
 // v18.3.3: and what the save will say about the tables it keeps — v18.3.4 moved
 // it beside the save, where it reads the save's own window (`editWindow`).
 import { keptRefusal, pickedRefusal } from "../lib/booking-save";
@@ -67,12 +70,16 @@ import { keptRefusal, pickedRefusal } from "../lib/booking-save";
 import { WEEKDAY_LONG, formatDay } from "../lib/day";
 import { stepPress } from "../lib/keyboard";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
-import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, mkDangerBtn, AutoHeight, Reveal, Presence } from "./atoms";
-import { AvailBanner } from "./AvailBanner";
+import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, RowSlot, TurnChevron, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, mkDangerBtn, AutoHeight, Reveal, Presence } from "./atoms";
+import { AvailLine } from "./AvailLine";
+import { TimeChip } from "./TimeChip";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
-import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon, TrashIcon } from "./Icons";
+import { AssignIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon, TrashIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
+import { TablesPreview } from "./TablesPreview";
+import { DurationReset } from "./DurationReset";
+import { useLineBand } from "../hooks/useLineBand";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
 import { VoucherPicker } from "./VoucherPicker";
 import { PhoneField } from "./PhoneField";
@@ -94,6 +101,9 @@ import { TagChips } from "./TagChips";
 // a hard CI gate. Only one modal is ever mounted at a time, so a fixed id
 // cannot collide; useId() would be the answer if that stopped being true.
 const FORM_ERROR_ID = "mgt-form-error";
+// v18.14.0 (correction 29, Patryk): every status the form's row can offer, in the
+// order `statusTargets` offers them, so each keeps its place and eases out and in.
+const STATUS_ROW = ["confirmed", "seated", "completed", "cancelled", "pending"];
 
 // v18.2.0: the − / + press handlers are `stepPress` in lib/keyboard.js, shared
 // with the walk-in form's steppers, which had the same pointer-only defect.
@@ -106,6 +116,7 @@ export function BookingFormModal({
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel, onRequestDelete,
   onAddToWaitlist, standingEnabled,
   currency = "€", regularMin = DEFAULT_REGULAR_MIN, // v17.0.0: settings/general
+  onPickCode,       // v18.14.0 (H4): a pinned code tapped in Save's phone refusal
   pinnedCountries,  // v18.1.0: settings/general — the codes pinned to the top of the phone field's list (v18.2.0: no default country any more)
   vouchers, vouchersByCode,       // v18.0.0: the list (for suggestions) + the index
   vouchersOn = true,              // v18.0.0 phase 4: settings/admin.modules.vouchers
@@ -124,7 +135,7 @@ export function BookingFormModal({
   const [statusFlash,setStatusFlash]=useState(null);
   const flashTimer=useRef(null);
   function flashStatus(s){
-    setStatusFlash({color:BLOCK_BG[s],k:Date.now()});
+    setStatusFlash({color:STATUS_BTN_BG[s],k:Date.now()});
     if(flashTimer.current) clearTimeout(flashTimer.current);
     flashTimer.current=setTimeout(function(){setStatusFlash(null);},exitHold("wipe")); // outlives the --t-wipe sweep (exitHold)
   }
@@ -287,7 +298,7 @@ export function BookingFormModal({
   // sandbox's own /code-review extraction: prod re-inlined the same ternary
   // here, and the threshold it compares against is a settings value, so an
   // inline copy is a second place for `regularMin` to be read wrongly.
-  const chipMark=function(which){return histWhich===which?<ChevronDownIcon size={IC.inline} />:<ChevronRightIcon size={IC.inline} />;};
+  const chipMark=function(which){return <TurnChevron open={histWhich===which} size={IC.inline} />;};
   const regularChip=custMatch&&custMatch.regularCount>=1?<OutlineChip
     key="reg" tone="success" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("regular");}}><span>{regularChipLabel(custMatch.regularCount,regularMin)}</span>{chipMark("regular")}</OutlineChip>:null;
@@ -420,8 +431,9 @@ export function BookingFormModal({
   // banner eases in when the result lands ~a frame later; ⏳ cue past ~150ms) and
   // only when the actual scan inputs change — never on name/notes keystrokes or
   // the 15s tick. liveBookings is referentially stable across keystrokes since
-  // App's v16.3.0 useMemo. `value` is null while (re-)checking — the banner
-  // collapses rather than showing a stale answer (Patryk-chosen).
+  // App's v16.3.0 useMemo. `value` is null while (re-)checking, so no stale answer
+  // is ever shown (Patryk-chosen); the line keeps its band meanwhile (`heldAvail`).
+  const notBefore=earliestOffer(form.date,today,nowMins);
   const availScan=useDeferredCompute(function(){
     if(!form.time) return null;
     if(fh.closed) return null; // closed day → no availability to compute
@@ -455,10 +467,14 @@ export function BookingFormModal({
     const noResh=!optimizerActiveFor(form.date,autoOptimizer);
     const tables=trialFits(liveBookings,form.date,form.time,size,form.preference||"auto",d,tableBlocks,editId,form.preferredTables,noResh);
     if(tables) return {ok:true,tables:tables,sugg:null};
-    const sugg=findTimes(form.date,size,form.preference,liveBookings,d,sm,tableBlocks,editId,noResh);
+    const sugg=findTimes(form.date,size,form.preference,liveBookings,d,sm,tableBlocks,editId,noResh,notBefore);
     return {ok:false,tables:null,sugg:formatSugg(sugg,sm)};
   },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,form.status,form._clearManual,bookings,liveBookings,tableBlocks,editId,autoOptimizer,hoursSig,swap,nowMins,today]);
   const formAvail=availScan.value;
+  // v18.14.0 (correction 10, Patryk): the line keeps its band while a refused answer is
+  // re-checked (`useLineBand`).
+  const answeredNo=formAvail&&!formAvail.ok?formAvail:null;
+  const {answer:lineAvail,shown:lineShown,checking:lineChecking}=useLineBand(answeredNo,availScan.pending);
 
   // ── v18.0.0 session 8 (items 2b, 7): this guest's other vouchers ───────────
   // Read once per mount, like the picker's own and the Vouchers tab's: expiry is
@@ -517,7 +533,7 @@ export function BookingFormModal({
     const hasPref=prefs.length>0;
     const prefBtn=<button
       className="mgt-hover-scale"
-      style={mkBtn({background:hasPref?"var(--btn-tables)":BTN.nav,fontSize: T.body,padding:"6px 10px",display:"inline-flex",alignItems:"center",gap:6})}
+      style={mkBtn({background:hasPref?"var(--btn-tables)":BTN.quiet,fontSize: T.body,padding:"6px 10px",display:"inline-flex",alignItems:"center",gap:6})}
       onClick={function(){onOpenPrefPicker();}}><StarIcon size={IC.inline} />{hasPref?prefs.join("+"):"Preferred"}</button>;
     if(editId){
       const cur=bookings.find(function(b){return b.id===editId;});
@@ -627,25 +643,22 @@ export function BookingFormModal({
       const showClearManual=isManual&&!mt&&!cleared;
       const leftEls=[
         <span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium}}>Tables</span>];
-      if(showTbl) showTbl.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
-      else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
       // v18.0.0 session 10: "was:" only when the tables really are about to
       // change. With the optimiser's answer now driving this row, an edit it is
       // content with would otherwise read "5A (auto) · was: 5A" — a move
       // announced over a booking that is staying exactly where it is. The
       // pre-existing shape had the same wart on any changed edit the optimiser
       // answered with the same tables; one test, one fix.
-      if((changed||cleared)&&!mt&&!pinnedTbl&&curTbl&&!(previewTbls&&tblKey(previewTbls)===tblKey(curTbl))) leftEls.push(<span key="prev" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
-      if(mt) leftEls.push(<button
-        key="clrmt"
+      const wasLine=(changed||cleared)&&!mt&&!pinnedTbl&&curTbl&&!(previewTbls&&tblKey(previewTbls)===tblKey(curTbl));
+      leftEls.push(<TablesPreview key="tables" tables={showTbl||previewTbls} auto={!showTbl} was={wasLine?"was: "+curTbl.join(", "):null} pending={availScan.pending} />);
+      leftEls.push(<RowSlot key="clrmt" show={!!mt} gap={8}>{mt?<button
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({fontSize: T.body,background:BTN.clear})}
-        onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>);
-      if(showClearManual) leftEls.push(<button
-        key="clrman"
+        style={mkBtn({fontSize: T.body,background:BTN.quiet})}
+        onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>:null}</RowSlot>);
+      leftEls.push(<RowSlot key="clrman" show={!!showClearManual} gap={8}>{showClearManual?<button
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({fontSize: T.body,background:BTN.clear})}
-        onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[],_clearManual:true});});onClearSwap();}}>Clear</button>);
+        style={mkBtn({fontSize: T.body,background:BTN.quiet})}
+        onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[],_clearManual:true});});onClearSwap();}}>Clear</button>:null}</RowSlot>);
       return (
         <Section><div
             style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><div
@@ -656,13 +669,11 @@ export function BookingFormModal({
       );
     }
     const leftEls=[<span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium}}>Tables</span>];
-    if(mt) mt.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
-    else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
-    if(mt) leftEls.push(<button
-      key="clrmt"
+    leftEls.push(<TablesPreview key="tables" tables={mt||previewTbls} auto={!mt} was={null} pending={availScan.pending} />);
+    leftEls.push(<RowSlot key="clrmt" show={!!mt} gap={8}>{mt?<button
       className="mgt-hover-scale mgt-press"
-      style={mkBtn({fontSize: T.body,background:BTN.clear})}
-      onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>);
+      style={mkBtn({fontSize: T.body,background:BTN.quiet})}
+      onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>:null}</RowSlot>);
     return (
       <Section><div
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><div
@@ -679,18 +690,19 @@ export function BookingFormModal({
   // the other zone is tried too, and a refusal means no zone had room.
   // v18.3.3: a refusal of kept tables (`keptRefusal`) is Save's own sentence,
   // in the warning colour, with no times offered: its way out is the sentence's
-  // own ("Assign different tables"), not another time.
+  // own ("Assign different tables").
   // v18.4.10: a refused PICK (`pickedRefusal`) is shown the same way, for a new
   // booking too, and offers no waitlist: its way out is Clear or Assign.
-  const availBanner=formAvail&&!formAvail.ok?<><AvailBanner
-    msg={formAvail.refusal||"No tables available."}
-    warn={!!formAvail.refusal}
-    sugg={formAvail.sugg}
-    onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}} />{!editId&&onAddToWaitlist&&!formAvail.refusal?<div style={{display:"flex",justifyContent:"center",marginTop:-4,marginBottom:12}}><button
-      className="mgt-hover-scale"
-      /* v17.10.0: pending amber — the waitlist's colour, see App's badge. */
-      style={mkBtn({fontSize: T.body,background:BLOCK_BG.pending,minHeight:40,padding:"8px 16px",display:"inline-flex",alignItems:"center",gap:6})}
-      onClick={function(){onAddToWaitlist();}}><WaitIcon size={IC.control} />Add to waitlist</button></div>:null}</>:null;
+  // v18.14.0 (H3): this is the footer's availability line now (`AvailLine`, whose
+  // header says why), and the body's banner is gone.
+  const availLine=lineAvail?<AvailLine
+    text={lineAvail.refusal||"No table for "+(Number(form.size)||2)+" at "+form.time}
+    warn={!!lineAvail.refusal}
+    sugg={lineAvail.sugg}
+    checking={lineChecking}
+    leaving={!lineShown}
+    onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}}
+    onAddToWaitlist={!editId&&onAddToWaitlist&&!lineAvail.refusal?onAddToWaitlist:null} />:null;
   // v15.0.0: closed-day notice — the chosen date falls on a weekday marked Closed
   // (Settings → General → Opening hours). doSave blocks the write; this explains why.
   // v17.15.2: an AlertPanel, and it takes ClosedIcon — the same mark the strip's
@@ -711,15 +723,17 @@ export function BookingFormModal({
   // "Starting at this time: N bookings · N guests" line renders instantly; only
   // the suggested-times chips arrive post-paint.
   const kitchenScan=useDeferredCompute(function(){
-    return kitchenBusy?findKitchenFriendlyTimes(bookings,form.date,Number(form.size)||2,form.preference||"auto",form.customDur||getDur(Number(form.size)||2),form.time,editId,tableBlocks):null;
-  },[kitchenBusy,bookings,form.date,form.size,form.preference,form.customDur,form.time,editId,tableBlocks,hoursSig]);
+    return kitchenBusy?findKitchenFriendlyTimes(bookings,form.date,Number(form.size)||2,form.preference||"auto",form.customDur||getDur(Number(form.size)||2),form.time,editId,tableBlocks,notBefore):null;
+  },[kitchenBusy,bookings,form.date,form.size,form.preference,form.customDur,form.time,editId,tableBlocks,hoursSig,notBefore]);
   const kitchenSugg=kitchenScan.value;
   // v16.3.0 perf phase 2: the ⏳ cue — shown while a deferred scan is pending.
   // Its Reveal's ease (--t-reveal, 520ms) is the natural grace: a fast scan
   // unmounts it having barely opened (imperceptible sliver), a slow scan shows
   // it fully.
   // One shared row covers both scans; it sits in the availBanner's slot region.
-  const availChecking=availScan.pending||(kitchenBusy&&kitchenScan.pending);
+  // v18.14.0 (correction 10): not while the line's band is up. It says so itself, and
+  // at dinner the kitchen's scan would open this row under it on every change of time.
+  const availChecking=!lineShown&&(availScan.pending||(kitchenBusy&&kitchenScan.pending));
   const checkingRow=<div style={{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize: T.body,fontWeight: FW.medium,color:"var(--text-muted)",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>;
   // v17.8.0 review fix: these two colours are hex literals ON PURPOSE, and must
   // stay that way. The chip FILLS below are hard-coded pale green / pale yellow
@@ -814,14 +828,13 @@ export function BookingFormModal({
   })();
   const quickStatusBtns=editId?<Section style={{position:"relative"}}>{statusFlash?(
         <div key={statusFlash.k} className="mgt-wipe-ltr" style={{position:"absolute",inset:0,borderRadius:R.card,pointerEvents:"none",zIndex:0,background:statusFlash.color,opacity:0.5}} />
-      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium,marginRight:4}}>Status:</span>{statusTargets.map(function(s){return (
+      ):null}<div style={{position:"relative",zIndex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><span style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium,marginRight:4}}>Status:</span>{STATUS_ROW.map(function(s){const offered=statusTargets.indexOf(s)>=0;return (
         // v17.10.0: the per-status mark, from the ONE source in Icons.jsx that
         // this row, the List card and the quick-status popup all read.
-        <button
-          key={s}
+        <RowSlot key={s} show={offered} gap={6}>{offered?<button
           className="mgt-hover-scale"
-          style={mkBtn({background:BLOCK_BG[s],color:BLOCK_INK[s]||"var(--text-on-accent)",textTransform:"capitalize",minHeight:H.control,display:"inline-flex",alignItems:"center",gap:6})}
-          onClick={function(){flashStatus(s);if(s==="cancelled"){onRequestCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}><StatusIcon status={s} size={IC.control} />{s}</button>
+          style={mkBtn({background:STATUS_BTN_BG[s],color:BLOCK_INK[s]||"var(--text-on-accent)",textTransform:"capitalize",minHeight:H.control,display:"inline-flex",alignItems:"center",gap:6})}
+          onClick={function(){flashStatus(s);if(s==="cancelled"){onRequestCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}><StatusIcon status={s} size={IC.control} />{s}</button>:null}</RowSlot>
       );})}</div></Section>:null;
 
   // v18.0.0 session 8 (item 6): icon-only. It was the words "History (4)" and
@@ -844,7 +857,7 @@ export function BookingFormModal({
         className="mgt-hover-scale"
         aria-label={"History, "+n+" "+(n===1?"entry":"entries")}
         title={"History ("+n+")"}
-        style={mkBtn({background:"var(--app-btn-slate)",padding:SP.none,minHeight:H.chrome,width:H.chrome,display:"inline-flex",alignItems:"center",justifyContent:"center"})}><HistoryIcon size={IC.chrome} /></button>
+        style={mkBtn({background:BTN.quiet,padding:SP.none,minHeight:H.chrome,width:H.chrome,display:"inline-flex",alignItems:"center",justifyContent:"center"})}><HistoryIcon size={IC.chrome} /></button>
     );
   })();
   // v14: Book Again button — visible only in Edit Booking modal when status is
@@ -932,20 +945,23 @@ export function BookingFormModal({
   // once `error` is already null. The `role="alert"` div stays OUTSIDE it and
   // permanently mounted: a live region announces a change to its CONTENT, so a
   // region that arrives holding its message says nothing.
+  // v18.14.0 (H4): Save refuses a number with no country, and fixing that was
+  // Code, Spain, Save again, with the guest on the line. The pinned codes sit in
+  // the refusal: a tap writes the code and carries on with what was refused
+  // (`onPickCode`, App's `pickPhoneCode`). Nothing is assumed until the tap, so
+  // v18.1.0's no-default-country decision stands. No pins means the sentence alone.
+  // v18.14.0 (correction 3): the codes run edge to edge under the sentence, in
+  // equal cells, a grid because a phone's six are 3 + 3 (`codeColumns`). A phone's
+  // 2px less padding a side is what keeps the sentence on one line at 375.
+  const codes=error===NO_CODE_REFUSAL?pinnedCodes(pinnedCountries):[];
   const errorEl=<div role="alert"><Reveal show={!!error}>{error?
-    <InlineAlert id={FORM_ERROR_ID} style={{marginBottom:14}}>{error}</InlineAlert>
+    <InlineAlert id={FORM_ERROR_ID} style={{marginBottom:14,rowGap:SP.snug,...(codes.length&&isMobile?{padding:"10px 12px"}:null)}} below={codes.length?<div style={{display:"grid",gridTemplateColumns:"repeat("+codeColumns(codes.length,isMobile)+",1fr)",gap:SP.snug}}>{codes.map(function(c){return <TimeChip key={c.iso} time={c.iso} label={c.label} onPick={onPickCode} style={{minHeight:H.control,padding:"0 8px"}} />;})}</div>:null}>{error}</InlineAlert>
   :null}</Reveal></div>;
   // Gated on `error` as well as the field name, so the id handed to
   // aria-describedby can only ever name an element that is on screen.
   function invalidField(name){return !!error&&errorField===name;}
 
-  const resetDurBtn=form.customDur?<button
-    key="rd"
-    className="mgt-hover-scale mgt-press"
-    style={mkBtn({fontSize: T.body,background:BTN.reset})}
-    /* v18.2.0: pointer-only like the steppers beside it — Enter and Space did
-       nothing — so it takes the same stepPress. */
-    {...stepPress(function(){setForm(function(f){return Object.assign({},f,{customDur:null});});})}>Reset</button>:null;
+  const resetDurBtn=<DurationReset show={!!form.customDur} onReset={function(){setForm(function(f){return Object.assign({},f,{customDur:null});});}} />;
   const endTime=form.time?toTime(toMins(form.time)+dur):"--";
 
   // v14.4.1: action row pinned to the modal bottom via Overlay's `footer` slot.
@@ -962,6 +978,11 @@ export function BookingFormModal({
   const footerEl=(
     <>
       {errorEl}
+      {/* v18.14.0 (H3): the live region stays mounted for the reason `errorEl`'s
+          does: a region that arrives holding its message says nothing. A named
+          refusal yields to Save's, which is the same sentence: two panes saying
+          one thing read as a fault. */}
+      <div role="status"><Reveal show={lineShown&&!(lineAvail.refusal&&lineAvail.refusal===error)}>{availLine}</Reveal></div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}{deleteBtn}{(function(){
         if(editId) return null;
         const canSave=!!form.date;
@@ -990,9 +1011,9 @@ export function BookingFormModal({
            the FORM. CLAUDE.md named this exact trap and the fix (until v18.2.0
            removed the token), and it
            was sitting two buttons away from a red-adjacent amber and a blue
-           primary, so the footer read as three warnings. --app-btn-slate is the
-           documented neutral dialog secondary. */
-        style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+           primary, so the footer read as three warnings. The quiet button is the
+           neutral dialog secondary. */
+        style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
         onClick={function(){onClose();}}>Back</button>{(function(){
         // v14 p1 (Issue 3): Save is disabled when date is empty. Prevents the
         // dd.mm.yyyy placeholder state from being submitted (esp. via Book Again
@@ -1067,7 +1088,7 @@ export function BookingFormModal({
               :Object.assign({id:fid},attrs)}
             value={form.date}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{date:e.target.value});});}}
-            style={inp()} />{dateLocked?<div id={DATE_LOCK_ID} style={{fontSize: T.small,color:S.muted,marginTop:4}}>Change the status to change the date</div>:null}</>;}}</Fld><Fld label="Time" invalid={invalidField("time")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input
+            style={inp()} /><Reveal show={dateLocked}>{dateLocked?<div id={DATE_LOCK_ID} style={{fontSize: T.small,color:S.muted,paddingTop:4}}>Change the status to change the date</div>:null}</Reveal></>;}}</Fld><Fld label="Time" invalid={invalidField("time")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input
             id={fid}
             {...attrs}
             type="time"
@@ -1092,7 +1113,7 @@ export function BookingFormModal({
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               aria-label="Increase number of guests"
-              {...stepPress(function(){const v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});})}>+</button></div></Fld><Fld label="Duration"><div style={{display:"flex",alignItems:"center",gap:6}}><button
+              {...stepPress(function(){const v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});})}>+</button></div></Fld><Fld label="Duration"><div style={{position:"relative",display:"flex",alignItems:"center",gap:6}}><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               aria-label="Decrease duration"
@@ -1101,7 +1122,7 @@ export function BookingFormModal({
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               aria-label="Increase duration"
-              {...stepPress(function(){const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});})}>+</button><span style={{fontSize: T.body,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={availChecking}>{checkingRow}</Reveal><Reveal show={!!(formAvail&&!formAvail.ok)}>{availBanner}</Reveal>{quickStatusBtns}<Section><Fld label="Notes">{function(fid){return <textarea
+              {...stepPress(function(){const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});})}>+</button><span style={{fontSize: T.body,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={availChecking}>{checkingRow}</Reveal>{quickStatusBtns}<Section><Fld label="Notes">{function(fid){return <textarea
           id={fid}
           value={form.notes}
           onChange={function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});}}

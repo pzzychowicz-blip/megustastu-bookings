@@ -51,11 +51,12 @@ describe("the hook measures before paint, on the one box whose size moves when t
 });
 
 describe("App's date-nav row", () => {
-  it("drops the controls only while the Summary is measured beside them, and never while it is open", () => {
+  it("drops the controls only while the Summary is measured beside them, open or closed (L5)", () => {
     expect(App).toMatch(/const summaryLine=useSharesLine\(dateRowRef,dateNavRef,summarySlotRef\);/);
-    expect(App).toMatch(/const dateCtrlShift=\(summaryLine\.same!==true\|\|summaryOpen\)\?"none":"translateY\("\+DATE_CTRL_DROP\+"px\)";/);
+    expect(App).toMatch(/const dateCtrlShift=\(compact\|\|summaryLine\.same!==true\)\?"none":"translateY\("\+DATE_CTRL_DROP\+"px\)";/);
     const shift = App.slice(App.indexOf("const dateCtrlShift="), App.indexOf(";", App.indexOf("const dateCtrlShift=")));
     expect(shift, "the width breakpoint was the bug — the gate is the measurement").not.toMatch(/isMobile/);
+    expect(shift, "the row's height no longer moves, so opening must not move the controls").not.toMatch(/summaryOpen/);
   });
 
   it("switches the transition on only once the first measurement has painted", () => {
@@ -65,7 +66,7 @@ describe("App's date-nav row", () => {
   });
 
   it("wires the three refs to the row, the date nav and the Summary's slot", () => {
-    expect(App).toMatch(/ref=\{dateRowRef\}\s+style=\{\{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0\}\}><nav aria-label="Date" ref=\{dateNavRef\}/);
+    expect(App).toMatch(/ref=\{dateRowRef\}\s+style=\{\{display:"flex",alignItems:"flex-start",gap:8,marginBottom:compact\?8:12,flexWrap:"wrap",flexShrink:0\}\}><nav aria-label="Date" ref=\{dateNavRef\}/);
     expect(App).toMatch(/<div ref=\{summarySlotRef\} style=\{\{flexGrow:1,flexShrink:1,flexBasis:"auto",minWidth:0\}\}>\{summaryPanel\}<\/div>/);
   });
 
@@ -85,8 +86,23 @@ describe("the Summary breaks its own line where the date row expects it to", () 
   });
 });
 
-describe("the Summary's opened body stays out of that width", () => {
-  it("contains the Reveal's inline size, or opening it would bounce the panel onto the next line", () => {
-    expect(Summary).toMatch(/<Reveal show=\{open\} style=\{\{ contain: "inline-size" \}\}>/);
+// v18.14.0 (L5): the body sat inside the slot, so opening it stretched the lid's
+// row by 174px at 998 × 507, and all of that stood empty under the date controls.
+describe("the Summary's opened body is its own row under the date row", () => {
+  it("portals into App's slot, and renders in place when there is none", () => {
+    expect(Summary).toMatch(/\{bodySlot \? createPortal\(body, bodySlot\) : body\}/);
+  });
+
+  it("is a state ref, so the first render with a slot draws the portal at all", () => {
+    expect(App).toMatch(/const \[summaryBodySlot,setSummaryBodySlot\]=useState\(null\);/);
+    expect(App).toMatch(/bodySlot=\{summaryBodySlot\}/);
+  });
+
+  it("the slot follows the date row, and is as inert as the row it came from", () => {
+    const close = App.indexOf("{summaryPanel}</div>");
+    const slot = App.indexOf("<div ref={setSummaryBodySlot} inert={anyModal} style={{flexShrink:0}} />");
+    expect(close).toBeGreaterThan(-1);
+    expect(slot).toBeGreaterThan(close);
+    expect(App.slice(close, slot), "nothing but the row's close between them").not.toMatch(/<[a-zA-Z]/);
   });
 });

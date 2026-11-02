@@ -25,17 +25,19 @@ import { useState, useEffect, useRef } from "react";
 import { useWinW } from "../../hooks/useWinW";
 import { useWinH } from "../../hooks/useWinH";
 import { useShortViewport } from "../../hooks/useShortViewport";
+import { isCompact } from "../../lib/compact-shell";
 import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, conversationSearchNames, intentBannerVisible } from "../../lib/whatsapp";
 import { ConversationList } from "./ConversationList";
 import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
 import { SelectIcon, FlaskIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
 import { CloseIcon, EditIcon, TrashIcon } from "../Icons";
-import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Reveal, InlineAlert, MODAL_TITLE_ATTR } from "../atoms";
+import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Presence, Reveal, InlineAlert, MODAL_TITLE_ATTR } from "../atoms";
 import { disconnectSentence } from "../../lib/wa-coexist";
-import { R, T, FW, M, IC, H } from "../../lib/constants";
+import { BTN, R, T, FW, M, IC, H, SP } from "../../lib/constants";
 // v18.2.0 /code-review: "3 selected", "Delete 3 conversations?" keep their count and word together.
 import { countLabel } from "../../lib/booking-logic";
+import { markArmed, armSettled } from "../../lib/arm-guard";
 import { raisesKeyboard } from "../../lib/keyboard";
 import { lockPageScroll } from "../../lib/scroll-lock";
 
@@ -51,6 +53,9 @@ import { lockPageScroll } from "../../lib/scroll-lock";
 // The conversation list's width in two panes.
 const LIST_W = 320;
 const INBOX_PANEL = { maxWidth: 1200, height: "min(900px, 90dvh)", background: "var(--wa-panel-bg)", blur: 16 };
+// v18.14.0 (correction 9): see `shortScreen`. 8px of the app stays visible above and below,
+// so it still reads as a panel over the day.
+const INBOX_PANEL_SHORT_SCREEN = { ...INBOX_PANEL, height: "calc(100dvh - " + 2 * SP.base + "px)" };
 
 function isActionable(c) {
   // v18.9.0: "Not a customer" needs nothing from staff, a draft left from
@@ -142,6 +147,20 @@ export function InboxPanel({
   // composer template chips behind a button so the message thread stays readable.
   const winH = useWinH();
   const compact = winH < INBOX_COMPACT_HEIGHT;
+  // v18.14.0 (correction 9, Patryk): a conversation on the tablet. With a draft open,
+  // the title bar, the filter row and a header that wrapped took everything: at
+  // 998 × 507 the thread's box was its own padding, so the message had no height at
+  // all, and Send ended 13px past the panel. So on the compact layout's screens the
+  // panel takes the screen, the filter row joins the title row, and the number leaves
+  // the conversation's header. Two panes only, because that is what makes the third
+  // safe: the list beside it shows the same number.
+  //
+  // Read once, when the panel opens. Android's keyboard moves `innerHeight`
+  // (`interactive-widget=resizes-content`), so on a taller tablet a live `winH` would
+  // turn this on while the search box has focus, remount the box in its other parent,
+  // drop the focus and with it the keyboard, and turn it off again.
+  const [openedAt] = useState(winH);
+  const shortScreen = twoPane && isCompact(openedAt, false);
   // v18.4.0 (Patryk: "the keyboard squeezes WhatsApp"): while somebody types a
   // reply and the visible area is short, everything that is not the thread or
   // the reply box folds away, and comes back when the keyboard goes. Measured
@@ -304,6 +323,11 @@ export function InboxPanel({
   // are unreachable from under the inbox either way.
   useEffect(() => {
     function onKey(e) {
+      // v18.14.0: an open ⋯ menu has the keyboard (ConversationMenu). Its listener
+      // is on `window` in the capture phase too, and this one is re-added on every
+      // render, so neither can count on running first. The DOM says whether it is
+      // open, which needs no prop through ConversationView to stay true.
+      if (document.querySelector('[role="menu"]')) return;
       if (e.key === "Escape") {
         // Each of these CONSUMES the key — see the note above.
         const consume = () => { e.preventDefault(); e.stopPropagation(); };
@@ -476,7 +500,7 @@ export function InboxPanel({
         onSend={(t) => onSend(activeConv.phoneKey, t)} onSendMedia={onSendMedia ? (blob, meta) => onSendMedia(activeConv.phoneKey, blob, meta) : null} onAccept={(over) => onAccept(activeConv, over)} onDismiss={() => onDismiss(activeConv.phoneKey)}
         templates={templates} bookings={bookings} contacts={contacts} draftOwner={draftOwner} tagList={tagList}
         contactsSynced={!!(waLink && waLink.contacts && waLink.contacts.firstAt)}
-        showBack={!twoPane} phone={winW < 600} compact={compact}
+        showBack={!twoPane} phone={winW < 600} compact={compact} hideNumber={shortScreen}
         kbFold={kbFold} onUnfold={unfold}
         onArchive={onArchive} onUnarchive={onUnarchive} onDelete={onDelete} onMute={onMute}
         onCancelLinkedBooking={onCancelLinkedBooking} onOpenLinkedBooking={onOpenLinkedBooking}
@@ -501,15 +525,80 @@ export function InboxPanel({
   function tabBtn(key, label, badge) {
     const isActive = tab === key;
     return (
-      <button className="mgt-hover-scale" onClick={() => switchTab(key)} style={{ background: isActive ? "var(--bg-tab-active)" : "transparent", color: isActive ? "var(--text-primary)" : "var(--text-muted)", border: "none", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: isActive ? "var(--shadow-btn)" : "none" }}>
+      <button className="mgt-hover-scale" onClick={() => switchTab(key)} style={{ background: isActive ? "var(--bg-tab-active)" : "transparent", color: isActive ? "var(--text-primary)" : "var(--text-muted)", border: "none", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", display: "flex", alignItems: "center", boxShadow: isActive ? "var(--shadow-btn)" : "none" }}>
         {label}
-        {badge != null && badge > 0 ? <span style={{ fontSize: T.micro, fontWeight: FW.bold, padding: "0 6px", borderRadius: R.pill, background: isActive ? "var(--wa-unread-dot)" : "var(--btn-default)", color: "var(--text-on-accent)", lineHeight: 1.4 }}>{badge}</span> : null}
+        {/* v18.14.0 (correction 27, Patryk): the first count on a tab opens sideways, its
+            6px with it, so the filter row beside the tabs slides rather than jumps 23px.
+            Nothing can reserve that width: a tab with no count is the common case. */}
+        <Reveal horizontal show={badge != null && badge > 0}>
+          {badge != null && badge > 0 ? <span style={{ marginLeft: 6, fontSize: T.micro, fontWeight: FW.bold, padding: "0 6px", borderRadius: R.pill, background: isActive ? "var(--wa-unread-dot)" : "var(--app-btn-grey)", color: "var(--text-on-accent)", lineHeight: 1.4 }}>{badge}</span> : null}
+        </Reveal>
       </button>
     );
   }
 
+  // The select toggle, Needs action and the search box: their own row, or the title
+  // row's middle on a short screen (`shortScreen`).
+  const filterControls = (
+    <>
+      {/* v17.15.6's aria-pressed rule, reaching the module at the 17.16.12
+          sync: on these three controls selection is carried by an accent
+          fill and NOTHING else, so without the attribute a screen-reader
+          user cannot tell which of them are on. `aria-pressed`, not
+          `role="switch"` — a switch is a state that STAYS (the Toggle
+          atom), these are modes and filters you enter and leave.
+          The NAME must not flip with the state, or one control reads as
+          two. This one has no text at all, so its flipping `title` WAS its
+          name; the static aria-label outranks `title` and demotes the
+          flipping text to a description, which is where it belongs. */}
+      <button
+        onClick={() => { if (selectMode) exitSelectMode(); else setSelectMode(true); }}
+        title={selectMode ? "Exit selection" : "Select conversations"}
+        aria-pressed={selectMode}
+        aria-label="Select conversations"
+        className="mgt-hover-scale mgt-press"
+        style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: selectMode ? "var(--wa-green)" : "transparent", color: selectMode ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (selectMode ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
+      ><SelectIcon size={IC.chrome} /></button>
+      <button
+        onClick={() => setNeedsAction((v) => !v)}
+        aria-pressed={needsAction}
+        title="Show only conversations that need a response"
+        className="mgt-hover-scale mgt-press"
+        style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }}
+      >{/* A real 8px dot, not a text ● — the same device NotificationStrip
+           uses for a section with no icon. It stays a dot rather than
+           becoming an icon because it reports a STATE (this filter is on),
+           which is what the strip's dots report too. */}
+        <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "currentColor", flexShrink: 0 }} />Needs action</button>
+      <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
+        {/* 17.15.0-wa-sandbox: a placeholder is not a name. It is not
+            exposed as one consistently, and it is gone the moment there is
+            a value — so the control a screen reader meets while you are
+            typing in it has no name at all. There is no visible label to
+            associate here by design (the field is the width of the pane and
+            its purpose is obvious to the eye), which is exactly the case
+            `aria-label` exists for. */}
+        <input /* @no-lift a full-width text input — index.css records exactly this case: the booking form's Date/Time inputs overflowed their Section when they lifted, and 28 of the app's 29 inputs are unlifted for it */
+          ref={searchRef}
+          aria-label="Search conversations"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          // v18.2.0 (W5): a phone cut the long one to "Search name, number
+          // or". The field is named either way (aria-label above).
+          placeholder={twoPane && !shortScreen ? "Search name, number or message…" : "Search…"}
+          // v18.10.0: 16px under a finger (.mgt-touch-16, index.css), and a
+          // Search key on the phone's keyboard.
+          className="mgt-touch-16"
+          enterKeyHint="search"
+          style={Object.assign({}, mkInp(), { fontSize: T.body, padding: "8px 12px", paddingRight: query ? 30 : 12 })}
+        />
+        <Presence show={!!query} inClass="mgt-appear" outClass="mgt-ghost-out">{query ? <button /* @no-lift transparent, radius-less and absolutely positioned INSIDE the input: the class supplies an opaque --bg-hover-card and no radius (v17.7.0), which is the hard-edged rectangle ConnectionStatus's dot hit — and its scale would be out-specified by this element's own inline translateY(-50%) anyway */ onClick={() => setQuery("")} title="Clear search" className="mgt-press" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "var(--text-muted)", padding: "2px 6px", lineHeight: 1 }}><CloseIcon size={IC.inline} /></button> : null}</Presence>
+      </div>
+    </>
+  );
+
   return (
-    <Overlay /* @static-height panel mode — the card is min(900px, 90dvh) from INBOX_PANEL and its body is a flex column that scrolls inside it, so there is no content-driven height for AutoHeight to ease */ onClose={onClose} panel={INBOX_PANEL}>
+    <Overlay /* @static-height panel mode — the card's height is INBOX_PANEL's and its body is a flex column that scrolls inside it, so there is no content-driven height for AutoHeight to ease */ onClose={onClose} panel={shortScreen ? INBOX_PANEL_SHORT_SCREEN : INBOX_PANEL}>
         {/* v18.4.0: the panel's title bar and the list's toolbar fold while
             somebody types a reply on a short screen (`kbFold`, above). */}
         {/* The dialog's NAME, always mounted (`/code-review`). It was the
@@ -534,6 +623,7 @@ export function InboxPanel({
               {tabBtn("archived", "Archived", archivedCount)}
             </div>
           </div>
+          {shortScreen ? <div style={{ display: "flex", alignItems: "center", gap: SP.base, flex: 1, minWidth: 0, marginLeft: SP.base }}>{filterControls}</div> : null}
           {/* v18.2.0 (the design critique, W5): on a phone this row wrapped and
               Close landed on the second line at the LEFT, under the badge. Close
               is now its own item: last on a tablet's one line, and on a phone
@@ -544,7 +634,7 @@ export function InboxPanel({
                 quick-reply Templates button per Patryk (2026-07-16); the sim
                 opens on top of this window. */}
             {onOpenSim ? (
-              <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), HEAD_TEXT_BTN)}><FlaskIcon size={IC.inline} />Simulator</button>
+              <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: BTN.quiet }), HEAD_TEXT_BTN)}><FlaskIcon size={IC.inline} />Simulator</button>
             ) : null}
             {/* v18.2.0 (the design critique, W2): "Edit templates", with the
                 app's edit pencil. It was "Templates" with the same document
@@ -554,9 +644,9 @@ export function InboxPanel({
                 W3: and it SAYS so, as does the simulator's — icon-only, their
                 meaning lived in a tooltip the tablets never show. Close stays
                 a bare ✕, the one mark everybody reads. */}
-            <button onClick={() => setShowTpl(true)} title="Edit templates (T)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), HEAD_TEXT_BTN)}><EditIcon size={IC.inline} />Edit templates</button>
+            <button onClick={() => setShowTpl(true)} title="Edit templates (T)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: BTN.quiet }), HEAD_TEXT_BTN)}><EditIcon size={IC.inline} />Edit templates</button>
           </div>
-          <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1, order: twoPane ? 0 : 1, marginLeft: twoPane ? 0 : "auto" })}><CloseIcon size={IC.chrome} /></button>
+          <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: BTN.quiet }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1, order: twoPane ? 0 : 1, marginLeft: twoPane ? 0 : "auto" })}><CloseIcon size={IC.chrome} /></button>
         </div>
         {/* v18.9.0: the WhatsApp Business app's connection is broken (Meta's
             account_update, recorded on waLink by the server): every device's
@@ -579,61 +669,9 @@ export function InboxPanel({
             v18.2.0 (W5): it belongs to the LIST, so on a phone, where an open
             conversation replaces the list, it goes with it — it stood above
             the conversation taking ~140px of a phone's height. */}
-        {twoPane || !activeKey ? (
+        {!shortScreen && (twoPane || !activeKey) ? (
         <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          {/* v17.15.6's aria-pressed rule, reaching the module at the 17.16.12
-              sync: on these three controls selection is carried by an accent
-              fill and NOTHING else, so without the attribute a screen-reader
-              user cannot tell which of them are on. `aria-pressed`, not
-              `role="switch"` — a switch is a state that STAYS (the Toggle
-              atom), these are modes and filters you enter and leave.
-              The NAME must not flip with the state, or one control reads as
-              two. This one has no text at all, so its flipping `title` WAS its
-              name; the static aria-label outranks `title` and demotes the
-              flipping text to a description, which is where it belongs. */}
-          <button
-            onClick={() => { if (selectMode) exitSelectMode(); else setSelectMode(true); }}
-            title={selectMode ? "Exit selection" : "Select conversations"}
-            aria-pressed={selectMode}
-            aria-label="Select conversations"
-            className="mgt-hover-scale mgt-press"
-            style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: selectMode ? "var(--wa-green)" : "transparent", color: selectMode ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (selectMode ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
-          ><SelectIcon size={IC.chrome} /></button>
-          <button
-            onClick={() => setNeedsAction((v) => !v)}
-            aria-pressed={needsAction}
-            title="Show only conversations that need a response"
-            className="mgt-hover-scale mgt-press"
-            style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }}
-          >{/* A real 8px dot, not a text ● — the same device NotificationStrip
-               uses for a section with no icon. It stays a dot rather than
-               becoming an icon because it reports a STATE (this filter is on),
-               which is what the strip's dots report too. */}
-            <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "currentColor", flexShrink: 0 }} />Needs action</button>
-          <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
-            {/* 17.15.0-wa-sandbox: a placeholder is not a name. It is not
-                exposed as one consistently, and it is gone the moment there is
-                a value — so the control a screen reader meets while you are
-                typing in it has no name at all. There is no visible label to
-                associate here by design (the field is the width of the pane and
-                its purpose is obvious to the eye), which is exactly the case
-                `aria-label` exists for. */}
-            <input /* @no-lift a full-width text input — index.css records exactly this case: the booking form's Date/Time inputs overflowed their Section when they lifted, and 28 of the app's 29 inputs are unlifted for it */
-              ref={searchRef}
-              aria-label="Search conversations"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              // v18.2.0 (W5): a phone cut the long one to "Search name, number
-              // or". The field is named either way (aria-label above).
-              placeholder={twoPane ? "Search name, number or message…" : "Search…"}
-              // v18.10.0: 16px under a finger (.mgt-touch-16, index.css), and a
-              // Search key on the phone's keyboard.
-              className="mgt-touch-16"
-              enterKeyHint="search"
-              style={Object.assign({}, mkInp(), { fontSize: T.body, padding: "8px 12px", paddingRight: query ? 30 : 12 })}
-            />
-            {query ? <button /* @no-lift transparent, radius-less and absolutely positioned INSIDE the input: the class supplies an opaque --bg-hover-card and no radius (v17.7.0), which is the hard-edged rectangle ConnectionStatus's dot hit — and its scale would be out-specified by this element's own inline translateY(-50%) anyway */ onClick={() => setQuery("")} title="Clear search" className="mgt-press" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "var(--text-muted)", padding: "2px 6px", lineHeight: 1 }}><CloseIcon size={IC.inline} /></button> : null}
-          </div>
+          {filterControls}
         </div>
         ) : null}
         </Reveal>
@@ -653,11 +691,11 @@ export function InboxPanel({
             <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexShrink: 0 }}>
               {tab === "archived" ? (
                 <>
-                  <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-btn-handled)" : "var(--btn-default)", { padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />Restore</button>
-                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={selected.size ? mkDangerBtn({ gap: 4, padding: "6px 12px", minHeight: H.compact, fontSize: T.body, whiteSpace: "nowrap" }) : mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: 0.6 })} ><TrashIcon size={IC.inline} />Delete</button>
+                  <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-btn-handled)" : BTN.quiet, { padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />Restore</button>
+                  <button onClick={() => { if (selected.size) { markArmed(); setConfirmBulkDelete(true); } }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={selected.size ? mkDangerBtn({ gap: 4, padding: "6px 12px", minHeight: H.compact, fontSize: T.body, whiteSpace: "nowrap" }) : mkSolidBtn(BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: 0.6 })} ><TrashIcon size={IC.inline} />Delete</button>
                 </>
               ) : (
-                <button onClick={() => runBulk("archive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-green-dark)" : "var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 })} ><ArchiveIcon size={IC.inline} />Archive</button>
+                <button onClick={() => runBulk("archive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-green-dark)" : BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 })} ><ArchiveIcon size={IC.inline} />Archive</button>
               )}
               <button onClick={exitSelectMode} className="mgt-hover-scale mgt-press" style={{ background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "6px 12px", fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap" }}>Cancel</button>
             </div>
@@ -680,8 +718,8 @@ export function InboxPanel({
           <Overlay /* @static-height one sentence naming a count fixed when it opens, and two buttons */
             onClose={() => setConfirmBulkDelete(false)}
             footer={<div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
-              <button onClick={() => setConfirmBulkDelete(false)} className="mgt-hover-scale mgt-press" style={mkBtn({ background: "var(--btn-default)" })}>Cancel</button>
-              <button onClick={() => { setConfirmBulkDelete(false); runBulk("delete"); }} className="mgt-hover-scale mgt-press" style={mkDangerBtn()}><TrashIcon size={IC.control} />Delete {selected.size}</button>
+              <button onClick={() => setConfirmBulkDelete(false)} className="mgt-hover-scale mgt-press" style={mkBtn({ background: BTN.quiet })}>Back</button>
+              <button onClick={() => { if (!armSettled()) return; setConfirmBulkDelete(false); runBulk("delete"); }} className="mgt-hover-scale mgt-press" style={mkDangerBtn()}><TrashIcon size={IC.control} />Delete {selected.size}</button>
             </div>}
           >
             <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", marginBottom: 8 }}>{"Delete " + countLabel(selected.size, "conversation", "conversations") + "?"}</div>

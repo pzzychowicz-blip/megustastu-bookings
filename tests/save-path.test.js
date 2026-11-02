@@ -61,6 +61,7 @@ import * as submitGuard from "../src/lib/submitGuard.js";
 import * as recurringLib from "../src/lib/recurring.js";
 import * as drafts from "../src/lib/drafts.js";
 import * as statusChange from "../src/lib/status-change.js";
+import * as phoneCountries from "../src/lib/phone-countries.js";
 import { appCode } from "./app-source.js";
 
 // ── The lib modules the lifted code may bind, by basename ───────────────────
@@ -68,6 +69,7 @@ import { appCode } from "./app-source.js";
 // hook, firebase) fails the scope build loudly rather than running without it.
 const LIB = {
   "booking-logic": bookingLogic,
+  "phone-countries": phoneCountries,
   "booking-fields": bookingFields,
   "booking-save": bookingSave,
   "constants": constants,
@@ -94,7 +96,9 @@ const importScope = (src, lifted) => scopeOf(LIB, src, lifted, {});
 // import now rather than lifted.
 const APP_SAVE_NAMES = [
   "withClearedSeats", "undoDelta",
+  "planEdit", "planNew",
   "doSaveEdit", "doSaveNew", "doSave", "openEdit",
+  "planRefused", "save",
 ];
 const APP_SAVE = APP_SAVE_NAMES.map((n) => liftFunction(APP, n));
 const APP_GENERATOR = [liftEffect(APP, "dueOccurrences(recurring.rules", "generate")];
@@ -303,6 +307,9 @@ function appEnv(opts) {
     setEditId: rec("setEditId"),
     setSwapAffected: rec("setSwapAffected"),
     setShowHistory: rec("setShowHistory"),
+    confirmKitchen: opts.confirmKitchen || null,
+    setConfirmKitchen: rec("setConfirmKitchen"),
+    phoneDoorRef: { current: null },
   }, opts.env);
   return h;
 }
@@ -315,6 +322,13 @@ function runSave(opts) {
   Object.defineProperty(out, "subjects", { value: h.subjects || [], enumerable: false });
   if (opts.pendingWaitlist) out.pendingWaitlistAfter = h.pendingWaitlistRef.current;
   return out;
+}
+// One press of the form's Save button, through `save`, which asks the kitchen
+// question before `doSave`. `doSave` alone cannot see that order.
+function runPress(opts, statusOverride) {
+  const h = appEnv(opts);
+  compile(APP, APP_SAVE, h.env).save(statusOverride);
+  return reduce(h);
 }
 // `openEdit(b)`: what the edit form opens with.
 function runOpenEdit(b, env) {
@@ -2683,6 +2697,69 @@ describe("Seat — a walk-in", () => {
   });
 });
 
+
+// v18.14.0 (/code-review): each form's second way out. The form stays drawn for its
+// exit, so a double tap reached this twice, measured: "2 waiting" from an empty list.
+describe("Add to waitlist is one party for one open of the form", () => {
+  function formTaps(opts) {
+    const added = [], calls = [];
+    const guard = { current: submitGuard.READY };
+    const fns = compile(APP, [liftFunction(APP, "addFormToWaitlist")], {
+      saveGuardRef: guard, phoneDoorRef: { current: null },
+      formRef: { current: Object.assign({ name: "Ana", size: 2, date: TODAY, time: "19:30", notes: "", phone: "+34 612345678" }, opts && opts.form) },
+      generalSettings: { pinnedCountries: ["ES"], phonePrefix: "+34" }, viewDate: TODAY,
+      refused: () => false, addToWaitlist: (e) => added.push(e.name),
+      setShowForm: (v) => calls.push("setShowForm(" + v + ")"),
+      setWaitAddedShown: (v) => { if (v) calls.push("toast"); },
+      setErrorField: (v) => calls.push("setErrorField(" + v + ")"), setError: () => calls.push("setError"),
+      setTimeout: () => {},
+    });
+    return { fns, added, calls, guard };
+  }
+  it("the booking form's second tap adds nothing", () => {
+    const r = formTaps();
+    r.fns.addFormToWaitlist();
+    r.fns.addFormToWaitlist();
+    expect(r.added).toEqual(["Ana"]);
+    expect(r.calls).toEqual(["setShowForm(false)", "toast"]);
+    expect(r.guard.current).toBe(submitGuard.DISPATCHED);
+  });
+  it("a refused phone leaves the open unspent, so the corrected number can go", () => {
+    const r = formTaps({ form: { phone: "612345678" } });
+    r.fns.addFormToWaitlist();
+    expect(r.added).toEqual([]);
+    expect(r.calls).toEqual(["setErrorField(phone)", "setError"]);
+    expect(r.guard.current).toBe(submitGuard.READY);
+  });
+  function walkinTaps(guard) {
+    const added = [], calls = [];
+    const ref = { current: guard };
+    const { onceWalkin } = compile(WALKIN, [liftFunction(WALKIN, "onceWalkin")], { walkinGuardRef: ref });
+    const { addWalkinToWaitlist } = compile(APP, [liftFunction(APP, "addWalkinToWaitlist")], {
+      onceWalkin, walkinForm: { size: 2, notes: "", tables: [], time: "19:30" },
+      generalSettings: { phonePrefix: "+34" }, refused: () => false,
+      addToWaitlist: (e) => added.push(e.size),
+      setShowWalkin: (v) => calls.push("setShowWalkin(" + v + ")"),
+      setWaitAddedShown: (v) => { if (v) calls.push("toast"); },
+      setTimeout: () => {},
+    });
+    return { addWalkinToWaitlist, added, calls, ref };
+  }
+  it("the walk-in's second tap adds nothing", () => {
+    const r = walkinTaps(submitGuard.READY);
+    r.addWalkinToWaitlist();
+    r.addWalkinToWaitlist();
+    expect(r.added).toEqual([2]);
+    expect(r.calls).toEqual(["setShowWalkin(false)", "toast"]);
+    expect(r.ref.current).toBe(submitGuard.DISPATCHED);
+  });
+  it("nor does a tap after Seat went out", () => {
+    const r = walkinTaps(submitGuard.DISPATCHED);
+    r.addWalkinToWaitlist();
+    expect(r.added).toEqual([]);
+  });
+});
+
 // ═════════════════════════════════════════════════════════════════════════════
 describe("the weekly generator", () => {
   it("books the weeks after a rule's start", () => {
@@ -2902,5 +2979,134 @@ describe("the form's saves name their booking to the write", () => {
     const out = runSave({ form: newDraft({ name: "Ana" }) });
     expect(out.subjects.length).toBe(1);
     expect(Object.keys(out.writes[0].rows)).toContain(out.subjects[0]);
+  });
+});
+
+// v18.14.0 (H3): the path was Save → "Kitchen may be busy" → Confirm → only then
+// the refusal, a question answered for a save that could not go through. Save
+// asks its own plan first, and the plan is run, never written.
+describe("the form's Save puts the kitchen question only to a save that can go through", () => {
+  // Thirteen two-tops at 20:00, nobody movable: no table, and the kitchen busy.
+  const noTable = () => ({ bookings: fullDay(T, "20:00", true), form: newDraft({ name: "Ana" }) });
+  // Two starting at 20:00 reach the limit with this one, and the room is empty.
+  const busyKitchen = () => ({
+    bookings: [bk("a", { tables: ["1"] }), bk("b", { tables: ["2"] })],
+    form: newDraft({ name: "Ana" }),
+  });
+  const asked = (out) => out.calls.includes('setConfirmKitchen("form")');
+
+  it("no table: refused at once, with the save's own sentence, and the question never raised", () => {
+    const out = runPress(noTable());
+    expect(asked(out)).toBe(false);
+    expect(out.calls.some((c) => c.startsWith("setError("))).toBe(true);
+    expect(out.writes).toBeUndefined();
+    expect(out.guard, "the form stays open with Save live").toBe("ready");
+  });
+
+  it("Save pending takes the same way", () => {
+    const out = runPress(noTable(), "pending");
+    expect(asked(out)).toBe(false);
+    expect(out.calls.some((c) => c.startsWith("setError("))).toBe(true);
+  });
+
+  it("an edit into a full evening does too", () => {
+    const b1 = bk("b1", { time: "18:00", tables: ["1"] });
+    const out = runPress({ bookings: fullDay(T, "20:00", true).concat([b1]), editId: "b1", form: draftOf(b1, { time: "20:00" }) });
+    expect(asked(out)).toBe(false);
+    expect(out.calls).toContain('setError("No tables available at this time — see suggestions below.")');
+    expect(out.writes).toBeUndefined();
+  });
+
+  it("a table free: the question is raised, and asking wrote nothing", () => {
+    const out = runPress(busyKitchen());
+    expect(asked(out)).toBe(true);
+    expect(out.writes).toBeUndefined();
+    expect(out.calls.some((c) => c.startsWith("setError("))).toBe(false);
+  });
+
+  it("a quiet kitchen never runs the plan twice: the save just goes", () => {
+    const out = runPress({ bookings: [], form: newDraft({ name: "Ana" }) });
+    expect(asked(out)).toBe(false);
+    expect(out.writes.length).toBe(1);
+  });
+
+  it("a plan that throws reaches doSave's catch, which reports it, rather than dying in the button's handler", () => {
+    const boom = () => { throw new Error("boom"); };
+    const out = runPress(Object.assign(busyKitchen(), { env: { getUser: boom } }));
+    expect(asked(out)).toBe(false);
+    expect(out.calls).toContain('setError("Error: boom")');
+  });
+});
+
+// v18.14.0 (H4): "Choose the country code" with the codes inside it. The tap
+// changes `form.phone`, which fires the stale-error effect, so the refused action
+// resumes in the effect BELOW that one. Resumed in the tap's handler, a second
+// refusal is set first and cleared a frame later: the press does nothing at all.
+describe("a tapped country code resumes the door that was refused", () => {
+  const LIFTED = [liftFunction(APP, "pickPhoneCode"), liftEffect(APP, "const door=resumeDoorRef.current", "resume")];
+  function tap(door, phone, iso) {
+    const calls = [];
+    let form = { phone };
+    const env = {
+      phoneDoorRef: { current: door }, resumeDoorRef: { current: null },
+      formRef: { get current() { return form; } },
+      setForm: (fn) => { form = fn(form); calls.push("setForm"); },
+      doSave: () => calls.push("doSave"),
+      addFormToWaitlist: () => calls.push("addFormToWaitlist"),
+    };
+    const fns = compile(APP, LIFTED, env);
+    fns.pickPhoneCode(iso);
+    const inHandler = calls.slice();
+    fns.resume();
+    fns.resume(); // a later change of the phone resumes nothing
+    return { inHandler, calls, phone: form.phone, armed: env.resumeDoorRef.current, fns, env };
+  }
+
+  it("writes the code the way the picker does, and resumes only once it is committed", () => {
+    const r = tap("save", "612345678", "ES");
+    expect(r.phone).toBe("+34 612345678");
+    expect(r.inHandler, "nothing resumes inside the tap").toEqual(["setForm"]);
+    expect(r.calls).toEqual(["setForm", "doSave"]);
+    expect(r.armed).toBe(null);
+  });
+
+  it("Add to waitlist is resumed as Add to waitlist", () => {
+    expect(tap("waitlist", "07700900123", "GB").calls).toEqual(["setForm", "addFormToWaitlist"]);
+  });
+
+  // Measured on DEV: a double tap saved, and the second tap left the door armed, so
+  // the next form to open saved itself, with nothing pressed.
+  it("a second tap on the way out arms nothing, because it writes nothing", () => {
+    const r = tap("save", "612345678", "ES");
+    r.fns.pickPhoneCode("ES");
+    r.fns.pickPhoneCode("GB");
+    expect(r.env.resumeDoorRef.current).toBe(null);
+    r.fns.resume();
+    expect(r.calls).toEqual(["setForm", "doSave"]);
+    expect(r.phone).toBe("+34 612345678");
+  });
+
+  it("each door says so before it asks for the phone", () => {
+    const h = appEnv({ form: newDraft({ phone: "612345678" }) });
+    compile(APP, APP_SAVE, h.env).doSave();
+    expect(h.env.phoneDoorRef.current).toBe("save");
+    expect(APP.slice(APP.indexOf("function addFormToWaitlist()"), APP.indexOf("waitlistEntry(formRef.current"))).toContain('phoneDoorRef.current="waitlist";');
+  });
+
+  it("the resume sits below the stale-error effect, which would otherwise clear a second refusal", () => {
+    const stale = APP.indexOf('useEffect(function(){if(error){setError("");setErrorField(null);}}');
+    const resume = APP.indexOf("useEffect(function(){const door=resumeDoorRef.current");
+    expect(stale).toBeGreaterThan(-1);
+    expect(resume).toBeGreaterThan(stale);
+  });
+
+  it("a save resumes doSave, not save: the refusal comes after the kitchen question, so it is answered", () => {
+    expect(LIFTED[1]).toMatch(/else doSave\(\);/);
+    expect(LIFTED[1]).not.toMatch(/\bsave\(/);
+  });
+
+  it("the form offers the codes on that refusal alone", () => {
+    const FORM = read("src/components/BookingFormModal.jsx");
+    expect(FORM).toContain("const codes=error===NO_CODE_REFUSAL?pinnedCodes(pinnedCountries):[];");
   });
 });

@@ -225,7 +225,7 @@ export function WaSimulator({ ctx, onClose }) {
   const footer = (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
       <span role="status" title={status} style={{ fontSize: T.body, color: statusLine.failed ? "var(--danger-text)" : "var(--text-muted)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{status}</span>
-      <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-btn-slate)" })} onClick={onClose}>Close</button>
+      <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: BTN.quiet })} onClick={onClose}>Close</button>
     </div>
   );
 
@@ -323,15 +323,15 @@ export function WaSimulator({ ctx, onClose }) {
           </Fld>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="mgt-hover-scale" disabled={!custConv || coBusy} onClick={() => runCoexist("contact", { name: coName })} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: S.accent })}>Save as contact</button>
-            <button className="mgt-hover-scale" disabled={!custConv || coBusy} onClick={() => runCoexist("contact", { remove: true })} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)" })}>Remove contact</button>
+            <button className="mgt-hover-scale" disabled={!custConv || coBusy} onClick={() => runCoexist("contact", { remove: true })} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.quiet })}>Remove contact</button>
           </div>
           <Fld label="Text (a reply from the phone, or the customer's edit)">
             {(id) => <textarea id={id} className="mgt-hover-scale" value={coText} onChange={(e) => setCoText(e.target.value)} rows={2} style={mkArea()} />}
           </Fld>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="mgt-hover-scale" disabled={!custConv || coBusy} onClick={() => runCoexist("echo", { text: coText })} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: S.accent })}>Reply from the phone</button>
-            <button className="mgt-hover-scale" disabled={!custConv || coBusy} onClick={() => runCoexist("edit", { text: coText })} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)" })}>Customer edits last message</button>
-            <button className="mgt-hover-scale" disabled={!custConv || coBusy} onClick={() => runCoexist("revoke")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)" })}>Customer deletes last message</button>
+            <button className="mgt-hover-scale" disabled={!custConv || coBusy} onClick={() => runCoexist("edit", { text: coText })} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.quiet })}>Customer edits last message</button>
+            <button className="mgt-hover-scale" disabled={!custConv || coBusy} onClick={() => runCoexist("revoke")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.quiet })}>Customer deletes last message</button>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="mgt-hover-scale" disabled={coBusy} onClick={() => runCoexist("history")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--wa-sim-accent)" })}>Import chat history</button>
@@ -340,9 +340,9 @@ export function WaSimulator({ ctx, onClose }) {
           <div style={{ fontSize: T.small, color: "var(--text-muted)" }}>History brings two chats: one from this week, which stays in the Inbox, and one from forty days ago, which goes straight to Archived. Its photo comes as a placeholder until the second button sends it.</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="mgt-hover-scale" disabled={!backendOn || coBusy} onClick={() => runCoexist("connect")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: S.accent })}>Connect (simulated)</button>
-            <button className="mgt-hover-scale" disabled={!backendOn || coBusy} onClick={() => runCoexist("disconnect")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)" })}>Disconnect</button>
-            <button className="mgt-hover-scale" disabled={!backendOn || coBusy} onClick={() => runCoexist("reconnect")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)" })}>Reconnect</button>
-            <button className="mgt-hover-scale" disabled={!backendOn || coBusy} onClick={() => runCoexist("forget")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)" })}>Forget</button>
+            <button className="mgt-hover-scale" disabled={!backendOn || coBusy} onClick={() => runCoexist("disconnect")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.quiet })}>Disconnect</button>
+            <button className="mgt-hover-scale" disabled={!backendOn || coBusy} onClick={() => runCoexist("reconnect")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.quiet })}>Reconnect</button>
+            <button className="mgt-hover-scale" disabled={!backendOn || coBusy} onClick={() => runCoexist("forget")} style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.quiet })}>Forget</button>
           </div>
           <div style={{ fontSize: T.small, color: "var(--text-muted)" }}>{backendOn
             ? "Each goes through the real webhook's handlers. The connection is marked as the simulator's, and nothing here touches a real one recorded on this database."
@@ -378,7 +378,7 @@ export function WaSimulator({ ctx, onClose }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {groups[g].map((s) => (
               <div key={s.id}>
-                <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: "var(--btn-default)", width: "100%", textAlign: "left" })} onClick={() => runScenario(s)}>{s.label}</button>
+                <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.quiet, width: "100%", textAlign: "left" })} onClick={() => runScenario(s)}>{s.label}</button>
                 {s.note ? <div style={{ fontSize: T.small, color: "var(--text-muted)", margin: "2px 2px 0" }}>{s.note}</div> : null}
               </div>
             ))}

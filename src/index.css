@@ -64,7 +64,11 @@
   --text-primary: #1a1d24;
   --text-muted: #5a6474;
   /* Accent */
-  --accent: #007aff;
+  /* v18.14.0 (M1): was #007aff, 4.02:1 under white, on the primary button of every
+     form. The same blue, a step down, at 5.42:1. Dark keeps #0a84ff at 3.65:1, a
+     named exemption (EXEMPT_FLOOR in tests/contrast.test.js). Its copies moved with
+     it: the hover wash, the toggle, the halo, the active WhatsApp row. */
+  --accent: #0066d6;
   /* v17.8.0: the keyboard focus ring. Its own token rather than --accent
      because it must stay legible on accent-filled buttons too, where an
      accent ring would vanish. Deliberately NOT the same value as the
@@ -161,31 +165,35 @@
      text on a 0.5-alpha grey over a white sheet was 1.87:1 — the inactive
      View buttons were legible only as shapes. Darkening the grey also
      fixes the hierarchy it broke: an inactive segment now reads as
-     secondary rather than as disabled. */
-  --btn-tables: rgba(0, 116, 244, 0.75);
-  --btn-edit: rgba(0, 108, 225, 0.7);
-  --btn-del: rgba(211, 58, 58, 0.75);
+     secondary rather than as disabled.
+     v18.14.0 (M1): 4.5:1 in Light, Patryk's decision of 2026-10-31. These
+     tablets sit in a dim room in front of someone who struggles with small
+     text, and "a button is large" was not true of a 36px pill. The Light fills
+     are OPAQUE now, because a translucent one reads differently over every
+     surface it lands on: the "3:1" controls measured 3.0–3.3 live, and the
+     Completed status button 2.31. The blues became one blue (--accent) and the
+     greys one grey (--app-btn-grey), by alias, so neither can drift. The red is
+     this token's own colour with its alpha removed. Dark moved nowhere: every
+     value it used to inherit from here is copied into its block, and dropping
+     one of those lines would move Dark without a word. */
+  --btn-tables: var(--accent);
+  --btn-edit: var(--accent);
+  --btn-del: #d33a3a;
   /* v18.2.0 phase 59 (round 3's T-1): --btn-cancel is gone. It was --btn-del's
      value under a second name, and phase 41 took its last user. */
-  /* v18.2.0 (the design critique, X5): "Clear" empties a table SELECTION —
-     the booking form's, the walk-in form's, table assignment's, the preferred
-     tables' — and destroys nothing, so it leaves the delete red for the
-     dialog slate, the same alias Dismiss took (below). */
-  --btn-clear: var(--app-btn-slate);
-  /* v18.2.0 phase 78 (round 2's loose end): the duration "Reset" puts a
-     booking's length back to its party's default — the booking and walk-in
-     forms' — and destroys nothing either, so it takes Clear's slate. */
-  --btn-reset: var(--app-btn-slate);
-  --btn-today: rgba(0, 108, 225, 0.7);
-  --btn-nav: rgba(39, 43, 49, 0.5);
-  /* v18.2.0: the dialog secondary's slate, not the delete red. "Dismiss"
-     (the reshuffle suggestion) and every banner row's close control wore the
-     same red as Delete and Cancel, so the app's word for "destructive" was
-     also its word for "not now" — the design critique. An ALIAS, not a copy
-     of slate's value, so it follows slate in both themes (the contrast test
-     resolves aliases per theme). */
-  --btn-dismiss: var(--app-btn-slate);
-  --btn-orange: rgba(210, 91, 28, 0.8);
+  --btn-today: var(--accent);
+  /* v18.14.0 correction 5 (Patryk): the quiet button, every secondary grey in the
+     app: Back, Close, Clear, Reset, Dismiss, Re-check, the date arrows. A solid
+     grey weighed as much as the action beside it. It is the pale field fill, and
+     mkBtn pairs it with --text-secondary, --field-edge and no shadow, so Dark's
+     fill and Increase Contrast's strong edge both arrive by alias. Nothing that
+     destroys wears it, and Clear, Reset and Dismiss never wear the red. */
+  --btn-quiet: var(--bg-input);
+  /* v18.14.0 (M1): Completed on a BUTTON takes the grey. Its pale fill is accepted
+     at 2.19:1 on a block, whose position and width carry the status, and a button
+     has only its word. STATUS_BTN_BG reads this; blocks stay on --block-completed. */
+  --btn-completed: var(--app-btn-grey);
+  --btn-orange: #bf5319;
   /* v17.8.0: booking-attribute FLAGS (manual / locked / preferred-tables).
      They were three unrelated hand-picked hues — #0369a1 blue (a shade off
      the accent), #854d0e (the pending-text amber) and #0d9488 teal (which
@@ -196,10 +204,15 @@
   --tag-flag: #475569;
   /* ── v14.2.2: atoms / modal surfaces, borders, semantic text, banners ── */
   /* Surfaces */
-  --bg-sheet: rgba(255, 255, 255, 0.72);         /* Overlay desktop dialog card */
+  /* v18.14.0 (L6): was 0.72, which let whatever sat behind a dialog tint the form:
+     amber blocks behind one moved the sheet's blue channel by 34 levels, and now by
+     3. 0.98 is the phone sheet's own value, opaque enough that a timeline row beneath
+     does not show. The blur stays, inside the budget. A white rim reads on nothing
+     here, so a hairline INSIDE the sheet takes --border-soft. */
+  --bg-sheet: rgba(255, 255, 255, 0.98);         /* Overlay desktop dialog card */
   --bg-sheet-mobile: rgba(240, 243, 248, 0.98);  /* Overlay mobile full-screen sheet */
   --bg-ac-menu: rgba(255, 255, 255, 0.98);       /* v16.4.0: autocomplete dropdown menu — near-opaque so form fields don't bleed through */
-  --bg-ac-hover: rgba(0, 122, 255, 0.12);        /* v16.4.0: autocomplete row hover tint */
+  --bg-ac-hover: rgba(0, 102, 214, 0.12);        /* v16.4.0: autocomplete row hover tint */
   /* v17.9.1: the NEUTRAL .mgt-ac-row hover, for a surface that already
      carries a meaningful colour. `--bg-ac-hover` is an accent wash, which
      on the notification strip replaced the section's severity tint with
@@ -216,7 +229,6 @@
      white over the sheet over --bg-app), made solid. */
   --bg-cal-cell: #fbfcfd;
   --bg-kbd: rgba(255, 255, 255, 0.75);           /* keycap */
-  --btn-default: rgba(58, 62, 72, 0.55);         /* mkBtn default grey fill — v17.8.0, was rgba(120,130,150,.55) = 1.99:1 white-on-grey */
   --bg-stepper: rgba(235, 239, 246, 0.95);       /* +/- stepper buttons (form) */
   --bg-tabbar: rgba(240, 243, 248, 0.8);         /* Settings tab-strip track */
   --bg-tab-active: rgba(255, 255, 255, 0.95);    /* lifted active tab */
@@ -224,6 +236,15 @@
   --border-sheet: rgba(255, 255, 255, 0.5);
   --border-soft: rgba(210, 218, 230, 0.8);
   --border-input: rgba(255, 255, 255, 0.4);
+  /* v18.14.0 (M6): the edge of a real field, its own token because --border-input
+     also rims stat cells and rows that are not controls. That white rim drew a
+     field at 1.02:1 on a Section, so on a near-white card a text box was a label
+     with nothing under it. Correction 4 (Patryk): M6's #7a8494 cleared WCAG 1.4.11's
+     3:1 and drew a near-black outline round every field, beside a Confirm card and
+     a Needs action row at 1.3:1, so this is the same quiet edge, visible and subtle.
+     3:1 is Increase Contrast's, below. Dark has a visible fill and keeps its rim.
+     Focus stays a 2px ring in --focus-ring. */
+  --field-edge: #c3cad6;
   --border-kbd: rgba(180, 190, 210, 0.55);
   --border-glass: rgba(255, 255, 255, 0.3);      /* white rim on filled btns / Toggle */
   /* v17.13.0 — the hairline rim on a THEME-INVARIANT solid fill, and the
@@ -244,12 +265,19 @@
   --rim-solid-strong: rgba(255, 255, 255, 0.55);
   /* Scrim + toggle */
   --scrim: rgba(0, 0, 0, 0.25);                  /* modal backdrop */
-  --toggle-on: rgba(0, 122, 255, 0.7);
+  --toggle-on: rgba(0, 102, 214, 0.7);
   --toggle-off: rgba(180, 180, 190, 0.4);
   /* Semantic text (on the sheet, or on the matching banner below) */
   --text-secondary: #4a5568;
-  --text-faint: #8a94a3;
+  /* v18.14.0 (M3): was #8a94a3, 2.7–3.0:1 on the cards it sits on, and every Settings
+     tab's help text is this ink. Solved to 4.5:1 on the darkest of them (the main
+     card, 4.56), and still a steady step under --text-muted. */
+  --text-faint: #646e7e;
   --text-required: #dc2626;
+  /* v18.14.0 (correction 12): a prompt inside a field, the country picker's "Code".
+     --text-muted is built for the card and sits a step lower on a field's fill, which
+     is what Dark's value below is for. */
+  --field-prompt: var(--text-muted);
   /* v17.15.2 — the warn ink was #9a3412 and read RED in light while its dark
      twin reads ORANGE, which is what was reported ("No-shows is orange in dark
      mode and red in light"). It is a HUE fault, not a contrast one, and the
@@ -341,7 +369,7 @@
      coloured halo announcing the default action — so unlike every other
      shadow here it is identical in both themes. Unifies three literals
      that carried two different alphas (0.25 / 0.2) for one effect. */
-  --shadow-btn-accent: 0 2px 8px rgba(0, 122, 255, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+  --shadow-btn-accent: 0 2px 8px rgba(0, 102, 214, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.2);
   --shadow-btn-success: 0 2px 8px rgba(22, 101, 52, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.2);
   /* v17.10.1: RECESSED — a groove, the inverse of --shadow-btn-solid.
      Two sites (the Toggle track, HistoryPopup's scrolling panel) held two
@@ -374,10 +402,21 @@
   --tl-row-border: rgba(180, 190, 210, 0.2);      /* between table rows */
   --tl-header-border: rgba(180, 190, 210, 0.3);   /* under the time-axis strip */
   --tl-header-strip: rgba(220, 225, 235, 0.45);   /* the label-col + axis header bg */
+  /* v18.14.0 (H6): the sticky ruler's ground. --tl-card-bg over --bg-app, made
+     opaque because rows pass under it. Both themes' values are what their
+     Increase Contrast rule already gives the card, so that rule needs no line. */
+  --tl-ruler-bg: #eef1f7;
   --tl-hour-pill: rgba(90, 100, 120, 0.9);        /* time labels (white text) */
   --tl-now-pill: rgba(0, 0, 0, 0.9);              /* now-time label */
   --tl-now-line: rgba(0, 0, 0, 0.6);              /* the vertical now line */
   --tl-unassigned-border: rgba(220, 60, 60, 0.4); /* dashed unassigned divider */
+  /* v18.14.0 correction 1 (Patryk): the Unplaced row's ground, the red of its word
+     and its dashed line, so the row reads as a problem before a word is read. */
+  --tl-unplaced-bg: rgba(220, 60, 60, 0.08);
+  /* v18.14.0 correction 2 (Patryk): the indoor rows' ground, a shade of the indoor
+     badges' own purple, so the two zones read apart before a number is read.
+     Settings' Tint indoor tables turns it off on this device. */
+  --tl-indoor-bg: rgba(var(--tbl-ind-rgb), 0.08);
   --tl-block-warn: #dc2626;                        /* booking overdue border */
   --tl-block-warn-soon: #f59e0b;                   /* booking due-soon border */
   /* v17.0.0 round 10 (Patryk): the RUNNING-LATE border used to reuse
@@ -410,14 +449,16 @@
   --tl-blocked-badge: rgba(153, 27, 27, 0.85);     /* "blocked" label-col badge bg */
   --tl-blocked-badge-border: rgba(153, 27, 27, 0.5);
   --tl-popup-bg: #eef1f7;                           /* quick-status popup card */
+  /* v18.14.0: the conversation menu. It takes the popup's card in Light, and it is
+     its own token because of Dark: nothing dims behind this menu, so the popup's 95%
+     let Accept and Dismiss read through it, behind the word Delete. */
+  --menu-bg: var(--tl-popup-bg);
   --tl-popup-scrim: rgba(0, 0, 0, 0.18);
   /* v17.0.0 correction: floor-plan glyph outlines — the light-mode tables/
      chairs blended into the canvas; strokes need real contrast per theme. */
   --fp-outline: rgba(70, 75, 90, 0.55);
   --fp-chair-outline: rgba(70, 75, 90, 0.4);
   --fp-grid: rgba(70, 75, 90, 0.22);               /* floor-plan minor grid (round 6) */
-  --cog-bg: rgba(120, 130, 150, 0.4);              /* settings cog button */
-  --cog-border: rgba(255, 255, 255, 0.45);
   /* ── v14.2.4: ListView cards ── */
   --bg-card-strong: rgba(255, 255, 255, 0.45);     /* default booking card */
   --bg-card-dim: rgba(255, 255, 255, 0.35);        /* seated/completed/cancelled card */
@@ -450,10 +491,9 @@
      warning read as the same KIND of surface, differing only in hue. */
   --danger-bg-soft: rgba(255, 241, 241, 0.6);
   /* Date input (header) */
-  --app-date-bg: rgba(255, 255, 255, 0.45); --app-date-border: rgba(255, 255, 255, 0.4);
+  --app-date-bg: rgba(255, 255, 255, 0.45); --app-date-border: var(--field-edge);
   /* Neutral grey button fills (header Log out / dialog Back-Cancel / Settings title) */
-  --app-btn-grey: rgba(58, 62, 72, 0.55);  --app-btn-grey-strong: rgba(105, 114, 131, 0.75);
-  --app-btn-slate: #64748b;                 /* dialog secondary buttons */
+  --app-btn-grey: #6c7079;                 --app-btn-grey-strong: var(--app-btn-grey);
   /* v17.13.0 — two fills that were hand-written literals, i.e. invisible
      to tests/contrast.test.js, which enumerates TOKENS. Both carry white
      text, which is exactly the pairing that file exists to measure.
@@ -465,8 +505,12 @@
      :root-only: they composite toward whatever is behind them, so one
      declaration lands correctly in both themes — the alpha is doing the
      theming, which is legitimate here because the value is a FILL, not a
-     rim on an invariant surface. */
-  --app-btn-dark: rgba(0, 0, 0, 0.6);
+     rim on an invariant surface.
+     v18.14.0 (M1): --app-btn-dark is opaque and per theme now. Follow says which
+     state it is in by getting darker, and at 5.74:1 Following would have sat
+     beside an idle Follow at 4.96:1, one step apart. This keeps the step they
+     had before M1 (a test holds it). Dark keeps the old alpha in its block. */
+  --app-btn-dark: #43464d;
   --btn-disabled: rgba(180, 180, 190, 0.4);
   /* v17.14.0: the INK on --btn-disabled, and unlike the fill it must be
      declared per theme. v17.13.0 measured the disabled primary's white
@@ -504,14 +548,15 @@
   /* v17.8.0: the table pickers' group heading colours, ex-hex in constants.js.
      #7c3aed was a third purple, unrelated to --tbl-ind-rgb; both are now
      tied to their zone and both flip for dark, where the originals were
-     near-unreadable on the dark sheet. */
-  --tbl-out-text: #3f7f8c;
+     near-unreadable on the dark sheet.
+     v18.14.0 (correction 11): one step darker, 4.46 → 4.53:1 on a dialog's sheet,
+     where both pickers draw it. */
+  --tbl-out-text: #3e7e8b;
   --tbl-ind-text: #7c3aed;
-  --app-btn-slate-dim: #78828c;             /* write-warning dismiss */
   /* Saturated action fills (white text — read on both themes) */
-  --app-walkin: rgba(22, 101, 52, 0.75);    /* Walk-in button */
+  --app-walkin: #387d54;                    /* Walk-in button */
   --app-success-solid: rgba(22, 99, 51, 0.8); /* v17.8.0: reminder "Done" */
-  --app-new: rgba(0, 116, 243, 0.75);       /* + New button */
+  --app-new: var(--accent);                 /* + New button */
   --app-danger-solid: #dc2626;              /* Delete (solid) */
   /* v17.15.2: follows --warn-text to hue 30. It was the SAME hex as the old
      warn ink, and this token is theme-invariant, so leaving it behind would
@@ -549,8 +594,8 @@
   --wa-list-bg: rgba(248, 250, 253, 0.55);     /* conversation-list pane */
   --wa-row-bg: rgba(255, 255, 255, 0.55);
   --wa-row-bg-hover: rgba(213, 224, 242, 0.96);   /* clearly-visible cool tint (white-on-white was too faint) */
-  --wa-row-active-bg: rgba(0, 122, 255, 0.12);
-  --wa-row-active-border: rgba(0, 122, 255, 0.5);
+  --wa-row-active-bg: rgba(0, 102, 214, 0.12);
+  --wa-row-active-border: rgba(0, 102, 214, 0.5);
   --wa-divider: rgba(200, 210, 225, 0.7);
   --wa-bubble-in: rgba(255, 255, 255, 0.85);   --wa-bubble-in-border: rgba(200, 210, 225, 0.7);
   --wa-bubble-out: rgb(0, 114, 238);           --wa-bubble-out-border: rgba(0, 90, 190, 0.55);
@@ -582,14 +627,16 @@
      "parsing should show that something is working"); see .mgt-shimmer for
      why the old sweep drew nothing at all. */
   --wa-shimmer: rgba(133, 77, 14, 0.45);
-  --wa-btn-open: rgb(0, 122, 255);
-  --wa-btn-handled: rgb(13, 148, 136);
+  /* v18.14.0 (M1): these two darken in BOTH themes: one value each, read in both,
+     4.02 and 3.74 under white. */
+  --wa-btn-open: rgb(0, 102, 214);
+  --wa-btn-handled: rgb(15, 118, 110);
   --wa-unread-dot: #dc2626;
   /* Two rings that were hard-coded COPIES of the two values above —
      the failure mode CLAUDE.md names: retune the token and the copy
      silently keeps the old hue. Grep the value, not the name. */
   --wa-unread-ring: 0 0 0 1px rgba(220, 38, 38, 0.25);
-  --wa-row-active-glow: 0 2px 8px rgba(0, 122, 255, 0.12);
+  --wa-row-active-glow: 0 2px 8px rgba(0, 102, 214, 0.12);
   --wa-sim-accent: rgb(155, 79, 228);          /* dev-only simulator chrome */
   /* v17.9.1: the floor-plan table's hover halo (.mgt-glyph). Theme-SPLIT
      for the same reason --shadow-* is: a halo has to be readable against
@@ -762,7 +809,7 @@
   --block-seated: rgba(32, 150, 75, 0.85);
   --block-cancelled: rgba(200, 80, 80, 0.8);
   /* ── v14.2.2: atoms / modal dark overrides ── */
-  --bg-sheet: rgba(44, 44, 46, 0.85);
+  --bg-sheet: rgba(44, 44, 46, 0.98);
   --bg-sheet-mobile: rgba(28, 28, 30, 0.98);
   --bg-ac-menu: rgba(44, 44, 46, 0.98);          /* v16.4.0: autocomplete dropdown menu — near-opaque */
   --bg-ac-hover: rgba(10, 132, 255, 0.24);       /* v16.4.0: autocomplete row hover tint */
@@ -771,7 +818,18 @@
   --bg-input: rgba(118, 118, 128, 0.24);
   --bg-cal-cell: #3c3c40;                          /* v18.2.0: see :root */
   --bg-kbd: rgba(255, 255, 255, 0.1);
-  --btn-default: rgba(110, 118, 135, 0.5);
+  /* v18.14.0 (M1): Light moved these to opaque fills at 4.5:1 and Dark did not.
+     They are Light's old values, which Dark used to inherit, so dropping a line
+     here moves Dark without a word. */
+  --btn-tables: rgba(0, 116, 244, 0.75);
+  --btn-edit: rgba(0, 108, 225, 0.7);
+  --btn-today: rgba(0, 108, 225, 0.7);
+  --btn-del: rgba(211, 58, 58, 0.75);
+  --btn-orange: rgba(210, 91, 28, 0.8);
+  --btn-completed: var(--block-completed);
+  --app-new: rgba(0, 116, 243, 0.75);
+  --app-walkin: rgba(22, 101, 52, 0.75);
+  --app-btn-dark: rgba(0, 0, 0, 0.6);
   --bg-stepper: rgba(255, 255, 255, 0.1);
   --bg-tabbar: rgba(0, 0, 0, 0.2);
   --bg-tab-active: rgba(255, 255, 255, 0.14);
@@ -783,6 +841,7 @@
   --tl-row-border: rgba(255, 255, 255, 0.07);
   --tl-header-border: rgba(255, 255, 255, 0.1);
   --tl-header-strip: rgba(255, 255, 255, 0.06);
+  --tl-ruler-bg: #212327;
   --tl-hour-pill: rgba(90, 100, 120, 0.85);
   /* v17.8.0 review fix: was rgba(10,132,255,.95) — the dark --accent,
      copied. White 10px on it measured 3.91:1, the one --tl-* pill that
@@ -792,15 +851,16 @@
   --tl-now-pill: rgba(6, 112, 228, 0.95);
   --tl-now-line: rgba(10, 132, 255, 0.85);
   --tl-unassigned-border: rgba(255, 120, 120, 0.45);
+  --tl-unplaced-bg: rgba(255, 120, 120, 0.1);
+  --tl-indoor-bg: rgba(var(--tbl-ind-rgb), 0.12);
   /* block warn borders, blocked-stripe + badge, popup are theme-invariant
      (saturated, white text — read on both); only scrim/card/bg flip */
   --tl-popup-bg: rgba(44, 44, 46, 0.95);
+  --menu-bg: #2c2c2e;
   --tl-popup-scrim: rgba(0, 0, 0, 0.45);
   --fp-outline: rgba(200, 205, 220, 0.4);
   --fp-chair-outline: rgba(200, 205, 220, 0.3);
   --fp-grid: rgba(200, 205, 220, 0.18);
-  --cog-bg: rgba(255, 255, 255, 0.1);
-  --cog-border: rgba(255, 255, 255, 0.14);
   /* ── v14.2.4: ListView cards (dark) ── */
   --bg-card-strong: rgba(255, 255, 255, 0.06);
   --bg-card-dim: rgba(255, 255, 255, 0.04);
@@ -813,14 +873,20 @@
   --border-sheet: rgba(255, 255, 255, 0.12);
   --border-soft: rgba(255, 255, 255, 0.1);
   --border-input: rgba(255, 255, 255, 0.12);
+  --field-edge: var(--border-input);
   --border-kbd: rgba(255, 255, 255, 0.15);
   --border-glass: rgba(255, 255, 255, 0.14);
   --scrim: rgba(0, 0, 0, 0.5);
   --toggle-on: rgba(10, 132, 255, 0.85);
   --toggle-off: rgba(120, 120, 128, 0.5);
   --text-secondary: #c7c7cc;
-  --text-faint: #8a8a8e;
-  --text-required: #ff6b6b;
+  /* v18.14.0 (correction 12): M3 held faint to 4.5:1 in Light and left Dark at 3.51 on a
+     Section. Solved the same way, on that darkest reading of it, and still the steady
+     step under --text-muted (4.98). The required mark read 4.35, and "Code" 3.94 on a
+     field in a Section, the lightest fill any of these text sits on. */
+  --text-faint: #9e9ea3;
+  --text-required: #ff7575;
+  --field-prompt: #b3b3b9;
   --warn-text: #fdba74;
   --danger-text: #fca5a5;
   --success-text: #86efac;
@@ -847,8 +913,10 @@
      not (it lands on a theme-invariant fill). See :root. */
   --shadow-btn-solid: 0 2px 6px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.15);
   --shadow-well: inset 0 1px 2px rgba(0, 0, 0, 0.35);
-  /* --shadow-btn-accent / --shadow-btn-success are deliberately NOT
-     redefined: a coloured halo is the button's own hue, not elevation. */
+  /* --shadow-btn-success is deliberately NOT redefined: a coloured halo is the
+     button's own hue, not elevation. v18.14.0 (M1): --shadow-btn-accent is here
+     only because Light's blue moved and Dark's did not; this is its old value. */
+  --shadow-btn-accent: 0 2px 8px rgba(0, 122, 255, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.2);
   --shadow-flat: 0 1px 3px rgba(0, 0, 0, 0.35);
   /* ── v14.2.5: App.jsx main-screen chrome (dark) ── */
   --app-saved-bg: rgba(90, 75, 20, 0.35);    --app-saved-border: rgba(253, 230, 138, 0.35); --app-saved-text: #fde68a;
@@ -864,8 +932,6 @@
   --danger-bg-soft: rgba(80, 25, 25, 0.3);
   --app-date-bg: rgba(118, 118, 128, 0.24);  --app-date-border: rgba(255, 255, 255, 0.12);
   --app-btn-grey: rgba(110, 118, 135, 0.5);  --app-btn-grey-strong: rgba(110, 118, 135, 0.6);
-  --app-btn-slate: rgba(100, 116, 139, 0.7);
-  --app-btn-slate-dim: rgba(120, 130, 140, 0.6);
   /* walkin / new / danger / warn solids are saturated — read on both; kept from :root */
   /* v14.3.0: hover-lift card — opaque dark surface (matches Scheduling) */
   --bg-hover-card: rgb(50, 50, 53);
@@ -878,6 +944,7 @@
   --wa-row-bg-hover: rgba(255, 255, 255, 0.09);
   --wa-row-active-bg: rgba(10, 132, 255, 0.22);
   --wa-row-active-border: rgba(10, 132, 255, 0.6);
+  --wa-row-active-glow: 0 2px 8px rgba(0, 122, 255, 0.12); /* v18.14.0 (M1): the value Dark used to inherit */
   --wa-divider: rgba(255, 255, 255, 0.1);
   --wa-bubble-in: rgba(255, 255, 255, 0.1);   --wa-bubble-in-border: rgba(255, 255, 255, 0.14);
   --wa-draft-bg: rgba(72, 60, 15, 0.3);  --wa-draft-border: rgba(253, 224, 71, 0.4);  --wa-draft-text: #fde68a;  --wa-draft-text-dim: #fcd34d;
@@ -895,23 +962,31 @@
 @media (prefers-contrast: more) {
   :root {
     --tl-card-bg: #eef1f7;
-    --bg-sheet: #f7f8fb;
+    --bg-sheet: #fefeff;
     --bg-sheet-mobile: #f0f3f8;
     --border-soft: var(--text-muted);
     --border-sheet: var(--text-muted);
     --tl-card-border: var(--text-muted);
+    --field-edge: var(--text-muted);
   }
   [data-theme="dark"] {
     --tl-card-bg: #212327;
-    --bg-sheet: #29292c;
+    --bg-sheet: #2c2c2e;
     --bg-sheet-mobile: #1c1c1e;
     --tl-popup-bg: #2b2b2d;
     --border-soft: var(--text-muted);
     --border-sheet: var(--text-muted);
     --tl-card-border: var(--text-muted);
+    --field-edge: var(--text-muted);
   }
 }
 html, body { margin: 0; }
+/* v18.14.0 (L3): a downward pull at the top of a Chrome tab reloads the page, which
+   mid-service throws away an open form. `html` is the one that counts: it is what
+   the viewport takes its overscroll from. `body` has had this since App's mount
+   effect set it inline, and every inner scroller has `contain`. The installed app
+   has no pull-to-refresh to stop. */
+html, body { overscroll-behavior: none; }
 /* v18.3.0 (N8): iPhone Safari may inflate text when the phone turns to
    landscape; 100% keeps the type scale as written. */
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
@@ -924,6 +999,12 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   html.mgt-scroll-lock body { overflow: hidden !important; }
 }
 body {
+  /* v18.14.0: clears the Timeline's sticky ruler (SCROLL_CLEAR_RULER, constants.js).
+     On body, and only here does it work. App's mount effect hides html's overflow,
+     so with Lock navigation off body is the scrollport, not the viewport. A plain
+     test page says the opposite, because it has no such effect: measured in the
+     app, a focused block lands at 32 with this, and under the ruler on html. */
+  scroll-padding-top: 32px;
   background: var(--bg-app);
   min-height: 100dvh;
   color: var(--text-primary);
@@ -1054,10 +1135,15 @@ html[data-holding] * {
    property either class animates. Order can no longer matter because
    there is nothing left to override.
    `border-radius` is deliberately NOT in the list — v17.7.0 removed the
-   radius change from the hover rule, so it had nothing left to ease. */
+   radius change from the hover rule, so it had nothing left to ease.
+   v18.14.0 (correction 5): `color` and `border-color` joined it, because a button
+   that flips between quiet and solid (Follow, Optimiser, Send) changes all of them
+   at once, and white ink cannot snap ahead of the fill it has to read on. */
 .mgt-hover-scale, .mgt-press {
   transition: transform var(--t-tap) var(--ease-out),
               background-color var(--t-tap) var(--ease-out),
+              color var(--t-tap) var(--ease-out),
+              border-color var(--t-tap) var(--ease-out),
               box-shadow var(--t-tap) var(--ease-out),
               filter var(--t-tap) var(--ease-out);
 }
@@ -1265,6 +1351,9 @@ html[data-holding] * {
    way the hover brighten is not. A filter that is fine in one direction is
    not automatically fine in the other. */
 .mgt-glyph-shape { transition: filter var(--t-tap) var(--ease-out); }
+/* v18.14.0 (L2): a phone's finger target round a Plan table (lib/plan-hit.js). A
+   mouse in a narrow window can aim, and should not open a table from empty floor. */
+@media (pointer: fine) { .mgt-plan-hit { pointer-events: none; } }
 @media (hover: hover) and (pointer: fine) {
   .mgt-glyph:hover .mgt-glyph-shape { filter: var(--glyph-halo); }
 }

@@ -6,8 +6,21 @@
 
 import { useState } from "react";
 import { Overlay, ModalTitle, Fld, mkInp, mkArea, mkBtn, mkDangerBtn, AutoHeight } from "../atoms";
+import { FoldRows } from "../FoldRows";
 import { S, BTN, R, T, FW, IC } from "../../lib/constants";
+import { markArmed, armSettled } from "../../lib/arm-guard";
 import { TrashIcon } from "../Icons";
+
+// v18.14.0 (correction 26, Patryk): the buttons' ARMED width, DESIGN.md's rule for a row
+// whose buttons sit beside its text: "Confirm — delete" at T.small with its mark, 137.9
+// measured and rounded up. Arming used to take 60px out of the text, so the row rewrapped
+// under the finger and the button could leave it.
+const ARMED_W = 138;
+// v18.14.0 (correction 36): the two share a column, and a column stretches its items, so
+// arming Delete stretched Edit 60px to the left in one frame. Each now takes its own width
+// from the right edge, and both start at Delete's resting width, 78.1 rounded up, so they
+// still match at rest.
+const REST_W = 79;
 
 export function TemplatesEditor({ templates, onSave, onClose }) {
   const [list, setList] = useState(() => templates.slice().map((t) => Object.assign({}, t)));
@@ -34,41 +47,46 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
   }
   function removeT(id) { setList(list.filter((t) => t.id !== id)); }
 
-  const rows = list.map((t) => {
+  const rows = <FoldRows items={list} idOf={(t) => t.id}>{(t) => {
     const armed = armedId === t.id;
     const name = t.labelEn + " / " + t.labelEs;
     return (
-    <div key={t.id} style={{ padding: "10px 12px", borderRadius: R.card, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", marginBottom: 8 }}>
+    <div style={{ padding: "10px 12px", borderRadius: R.card, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", marginBottom: 8 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-primary)", marginBottom: 2 }}>{t.labelEn + " / " + t.labelEs}</div>
           <div style={{ fontSize: T.body, color: "var(--text-muted)", marginBottom: 2 }}>{"EN: " + t.textEn}</div>
           <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>{"ES: " + t.textEs}</div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
+        <div style={{ minWidth: ARMED_W, display: "flex", justifyContent: "flex-end", flexShrink: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
           {/* v18.2.0: each names its template, the visible word leading,
               for the reason the reminder rows' do (tests/a11y.test.js). */}
-          <button className="mgt-hover-scale" aria-label={"Edit (" + name + ")"} style={mkBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", background: BTN.edit })} onClick={() => openEdit(t)}>Edit</button>
+          <button className="mgt-hover-scale" aria-label={"Edit (" + name + ")"} style={mkBtn({ fontSize: T.small, minHeight: 36, minWidth: REST_W, padding: "6px 12px", background: BTN.quiet })} onClick={() => openEdit(t)}>Edit</button>
           <button className="mgt-hover-scale"
             aria-label={(armed ? "Confirm — delete (" : "Delete (") + name + ")"}
-            style={mkDangerBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", gap: 4 })}
-            onClick={() => { if (armed) { setArmedId(null); removeT(t.id); } else setArmedId(t.id); }}
+            style={mkDangerBtn({ fontSize: T.small, minHeight: 36, minWidth: REST_W, padding: "6px 12px", gap: 4 })}
+            onClick={() => {
+              if (armed) { if (!armSettled()) return; setArmedId(null); removeT(t.id); }
+              else { markArmed(); setArmedId(t.id); }
+            }}
           ><TrashIcon size={IC.inline} />{armed ? "Confirm — delete" : "Delete"}</button>
+        </div>
         </div>
       </div>
     </div>
     );
-  });
+  }}</FoldRows>;
 
   const editFooter = (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-      <button className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })} onClick={() => setEditing(null)}>Cancel</button>
+      <button className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })} onClick={() => setEditing(null)}>Cancel</button>
       <button onClick={saveEdit} className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: S.accent })}>Save template</button>
     </div>
   );
   const listFooter = (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-      <button className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })} onClick={onClose}>Close</button>
+      <button className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })} onClick={onClose}>Close</button>
       <button onClick={() => onSave(list)} className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: S.accent })}>Save all</button>
     </div>
   );
@@ -86,8 +104,9 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
           unclipped for that frame. Keying on the editing identity re-measures
           synchronously, pre-paint. Exactly Settings' `watch={tab}` case. */}
       <AutoHeight watch={editing === null ? "list" : "edit"}>
+      {/* v18.14.0 (correction 32, Patryk): the swap fades in, as a Settings tab's body does. */}
       {editing ? (
-        <div style={{ padding: "14px", borderRadius: R.card, background: "var(--wa-row-active-bg)", border: "1px solid var(--wa-row-active-border)" }}>
+        <div key="edit" className="mgt-fade-in" style={{ padding: "14px", borderRadius: R.card, background: "var(--wa-row-active-bg)", border: "1px solid var(--wa-row-active-border)" }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)", marginBottom: 10 }}>{editing === "__new__" ? "New template" : "Edit template"}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Fld label="Label (EN)">{(id) => <input id={id} className="mgt-hover-scale" value={form.labelEn} onChange={(e) => setForm(Object.assign({}, form, { labelEn: e.target.value }))} style={mkInp()} placeholder="Confirm" />}</Fld>
@@ -97,7 +116,7 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
           </div>
         </div>
       ) : (
-        <div>
+        <div key="list" className="mgt-fade-in">
           {rows}
           <button onClick={openNew} className="mgt-hover-scale mgt-press" style={mkBtn({ minHeight: 40, padding: "8px 14px", background: S.accent })}>+ Add template</button>
         </div>

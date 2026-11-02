@@ -56,3 +56,18 @@ export function everyFrame(fn) {
   let r = requestAnimationFrame(function step() { fn(); r = requestAnimationFrame(step); });
   return function () { cancelAnimationFrame(r); };
 }
+
+// `afterIdle(fn)` (v18.14.0, correction 34): run `fn` once the page has nothing to do,
+// and return a cancel function. For work nobody is waiting for, kept out of the frames
+// that matter (Settings' chunk, after the day has loaded). IDLE_WAIT_MS is a ceiling
+// where the callback exists, because a busy page or a hidden tab may never go idle, and
+// the wait itself on a browser without one (Safari).
+const IDLE_WAIT_MS = 2000;
+export function afterIdle(fn) {
+  if (typeof requestIdleCallback === "function") {
+    const h = requestIdleCallback(fn, { timeout: IDLE_WAIT_MS });
+    return function () { cancelIdleCallback(h); };
+  }
+  const t = setTimeout(fn, IDLE_WAIT_MS);
+  return function () { clearTimeout(t); };
+}

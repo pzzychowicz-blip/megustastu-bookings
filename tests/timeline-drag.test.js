@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { EDGE_BAND, EDGE_MAX_SPEED, edgeVelocity, edgeStep } from "../src/lib/edge-scroll.js";
+import { EDGE_BAND, EDGE_MAX_SPEED, edgeVelocity, edgeStep, rowProbeY } from "../src/lib/edge-scroll.js";
 
 const Timeline = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "TimelineView.jsx"), "utf8")).join("\n");
 
@@ -69,6 +69,21 @@ describe("edgeStep: whole pixels, the fraction carried", () => {
   });
 });
 
+describe("rowProbeY: a row under the stuck ruler cannot be dropped on (v18.14.0)", () => {
+  it("counts a finger on the stuck ruler as just under it", () => {
+    expect(rowProbeY(120, 128, -200)).toBe(128);
+  });
+  it("leaves a finger below the ruler alone", () => {
+    expect(rowProbeY(300, 128, -200)).toBe(300);
+  });
+  it("at rest the grid starts at the ruler's bottom, and above the grid is still nowhere", () => {
+    expect(rowProbeY(120, 190, 190)).toBe(120);
+  });
+  it("with no ruler, nothing changes", () => {
+    expect(rowProbeY(120, null, 0)).toBe(120);
+  });
+});
+
 describe("the block's wiring", () => {
   it("the offset adds the scroll since the arm", () => {
     expect(Timeline).toMatch(/return d\.lastY - d\.y0 \+ \(d\.sc \? d\.sc\.scrollTop - d\.s0 : 0\);/);
@@ -83,6 +98,6 @@ describe("the block's wiring", () => {
   it("a move and the touch arm both start the loop; every end stops it", () => {
     expect(Timeline.match(/kickEdge\(\);/g).length).toBe(2);
     expect(Timeline).toMatch(/if \(edgeRafRef\.current\) \{ cancelAnimationFrame\(edgeRafRef\.current\); edgeRafRef\.current = 0; \}/);
-    expect(Timeline).toMatch(/useEffect\(\(\) => \(\) => \{ cancelAnimationFrame\(edgeRafRef\.current\); \}, \[\]\);/);
+    expect(Timeline).toMatch(/useEffect\(\(\) => \(\) => \{\s*cancelAnimationFrame\(edgeRafRef\.current\);/);
   });
 });

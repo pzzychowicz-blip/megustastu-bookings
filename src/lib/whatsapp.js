@@ -232,6 +232,19 @@ export const WA_RECHECK_HISTORY = 12;
 // never mistaken for a dead one.
 export const WA_PARSING_STALE_MS = 90000;
 
+// conversationMenuIds(conv, can) — what the ⋯ in a conversation's header holds, in
+// order (v18.14.0, Patryk). Re-check wherever there is something to ask, an
+// archived thread included, which is often why it was opened. Not a customer until
+// it has been said: Restore reads "Customer again" after that. Delete only from
+// Archived, so a live conversation is two deliberate steps from gone.
+export function conversationMenuIds(conv, can) {
+  const ids = [];
+  if (can.recheck) ids.push("recheck");
+  if (can.mute && !conv.muted) ids.push("mute");
+  if (conv.archived) ids.push("delete");
+  return ids;
+}
+
 // isParsing(conv) — THE test for "an LLM round-trip is genuinely in progress".
 // Use this rather than reading `conv.parsing` directly, so the staleness bound
 // applies everywhere the indicator is shown. A conversation written before

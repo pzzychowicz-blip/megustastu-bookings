@@ -93,7 +93,7 @@ api/                                 serverless functions (v18.0.0 phase 5). **N
 ### Style tokens — see `DESIGN.md`
 Every colour, radius, size, weight, spacing, control height, icon size and
 motion value comes from a role-named scale in `src/lib/constants.js`
-(`S` · `BTN` · `BLOCK_BG` · `BLOCK_INK` · `STATUS_COLORS` · `TBL` · `R` · `T` ·
+(`S` · `BTN` · `BLOCK_BG` · `BLOCK_INK` · `STATUS_BTN_BG` · `STATUS_COLORS` · `TBL` · `R` · `T` ·
 `FW` · `SP` · `H` · `IC` · `M`), backed by CSS custom properties in
 `src/index.css` (in `index.html` until v17.15.1). **`DESIGN.md` holds the whole system and the reasoning behind
 each scale.** The part you cannot skip:

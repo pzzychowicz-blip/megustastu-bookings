@@ -13,6 +13,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import {
+  formatSugg, lineTimes, newBookingTime,
   toMins, toTime, overlaps, genId, getDur, statusOrder,
   comboCap, comboCapBest, sanitize, sanitizeAll, isReadableTime, diffBooking,
   lateState, lateMins, freeingSoon, daySummary, rangeStats,
@@ -28,11 +29,11 @@ import {
   keepsHandTables, tablesKept, blockedTablesAt, handKeptRefusal,
   unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
   tablesFreeFor, trialFits, enteredPhone, kitchenRelevant, savedToast, lastStartMins,
-  optimizerActiveFor,
+  optimizerActiveFor, earliestOffer, findTimes, findKitchenFriendlyTimes,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
-import { setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
+import { setWeekHours, DEFAULT_WEEK_HOURS, setHourExceptions } from "../src/lib/constants.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { draftFromBooking } from "../src/lib/booking-fields.js";
 import { applyEdit, buildBooking, editWindow, keptRefusal, releaseSwapped, pickedRefusal, PICKED_REFUSAL } from "../src/lib/booking-save.js";
@@ -2207,6 +2208,11 @@ describe("savedToast", () => {
     expect(savedToast(true, true)).toBe("Tables re-optimised.");
     expect(savedToast(true, false)).toBe("Booking saved.");
   });
+
+  it("a Reshuffle that moved nobody says so, in both Optimiser states", () => {
+    expect(savedToast("unmoved", true)).toBe("No tables needed moving.");
+    expect(savedToast("unmoved", false)).toBe("No tables needed moving.");
+  });
 });
 
 // ── v18.0.0 session 8 (R6) — the kitchen asks about kitchen things ──────────
@@ -2455,7 +2461,7 @@ describe("the preview row is wired to the optimiser's answer (v18.0.0 session 10
   });
 
   it("the \"was:\" line is suppressed when the answer is the same tables", () => {
-    expect(/if\(\(changed\|\|cleared\)[^\n]*?!\(previewTbls&&tblKey\(previewTbls\)===tblKey\(curTbl\)\)\)/.test(FORM)).toBe(true);
+    expect(/const wasLine=\(changed\|\|cleared\)[^\n]*?!\(previewTbls&&tblKey\(previewTbls\)===tblKey\(curTbl\)\);/.test(FORM)).toBe(true);
   });
 });
 
@@ -3079,10 +3085,51 @@ describe("the save and the preview ask tablesKept (v18.3.2)", () => {
     expect(/tablesPinned\(form\.status/.test(FORM), "no site still asks the status alone").toBe(false);
   });
 
-  it("v18.3.3: the scan asks keptRefusal and the banner shows its sentence as a warning", () => {
+  // v18.14.0 (H3): the footer is the one part of the dialog that stays on screen
+  // with the keyboard up, so the answer lives there and the body's list is gone.
+  it("H3: the line is in the footer, above the buttons, in a region that stays mounted", () => {
+    const foot = FORM.slice(FORM.indexOf("const footerEl=("));
+    const err = foot.indexOf("{errorEl}"), line = foot.indexOf('<div role="status"><Reveal show={lineShown'), row = foot.indexOf('justifyContent:"space-between"');
+    expect(err).toBeGreaterThan(-1);
+    expect(line, "under the save's refusal, which says \"see suggestions below\"").toBeGreaterThan(err);
+    expect(row, "above the buttons").toBeGreaterThan(line);
+  });
+
+  // v18.14.0 (correction 10, Patryk): what it costs if these go is a 56px band blinking
+  // on every change of the time, which no build or render test would notice.
+  it("the band holds while a refused answer is re-checked, and nothing stale shows", () => {
+    expect(FORM).toMatch(/const answeredNo=formAvail&&!formAvail\.ok\?formAvail:null;/);
+    expect(FORM).toContain("const {answer:lineAvail,shown:lineShown,checking:lineChecking}=useLineBand(answeredNo,availScan.pending);");
+    const Band = stripComments(readFileSync(new URL("../src/hooks/useLineBand.js", import.meta.url), "utf8")).join("\n");
+    expect(Band, "from the render that starts the check, so never a commit behind").toMatch(/if \(!pending\) \{\s*if \(open !== !!refused\) setOpen\(!!refused\);/);
+    expect(Band).toMatch(/const checking = pending && open;/);
+    expect(Band).toMatch(/shown: !!refused \|\| checking, checking, answer: refused \|\| held/);
+    expect(FORM).toMatch(/checking=\{lineChecking\}\s*leaving=\{!lineShown\}/);
+    const Line = stripComments(readFileSync(new URL("../src/components/AvailLine.jsx", import.meta.url), "utf8")).join("\n");
+    expect(Line, "the old answer cannot be tapped, focused or read out").toMatch(/<span ref=\{rowRef\} inert=\{answerHidden\}/);
+    expect(Line, "hidden, not gone: it is what holds the height").toMatch(/opacity: answerHidden \? 0 : 1/);
+    expect(Line).toMatch(/const answerHidden = checking \|\| leaving;/);
+    expect(Line, "the words are for the eye").toMatch(/<span aria-hidden="true" style=\{\{ gridArea: "1 \/ 1"/);
+  });
+
+  it("the fold that follows a re-check does not bring the words in: the check is over", () => {
+    const Line = stripComments(readFileSync(new URL("../src/components/AvailLine.jsx", import.meta.url), "utf8")).join("\n");
+    expect(Line).toMatch(/opacity: checking \? 1 : 0, transition: checking \? WORDS_FADE_IN : ANSWER_FADE/);
+    expect(Line, "`leaving` must not reach the words").not.toMatch(/opacity: answerHidden \? 1 : 0/);
+  });
+
+  it("the body's row stays shut while the band is up: at dinner the kitchen's scan would open it on every change of time", () => {
+    expect(FORM).toMatch(/const availChecking=!lineShown&&\(availScan\.pending\|\|\(kitchenBusy&&kitchenScan\.pending\)\);/);
+  });
+
+  it("H3: a named refusal yields to Save's, the same sentence, rather than standing beside it", () => {
+    expect(FORM).toContain("show={lineShown&&!(lineAvail.refusal&&lineAvail.refusal===error)}");
+  });
+
+  it("v18.3.3: the scan asks keptRefusal and the line shows its sentence as a warning (H3 moved it to the footer)", () => {
     expect(/const refusal=keptRefusal\(bookings,cur,form,tableBlocks\);/.test(FORM)).toBe(true);
-    expect(/msg=\{formAvail\.refusal\|\|"No tables available\."\}/.test(FORM)).toBe(true);
-    expect(/warn=\{!!formAvail\.refusal\}/.test(FORM)).toBe(true);
+    expect(/text=\{lineAvail\.refusal\|\|"No table for "\+\(Number\(form\.size\)\|\|2\)\+" at "\+form\.time\}/.test(FORM)).toBe(true);
+    expect(/warn=\{!!lineAvail\.refusal\}/.test(FORM)).toBe(true);
   });
 });
 
@@ -3291,5 +3338,123 @@ describe("pickedRefusal: what Save will say about the tables picked in the form"
     const kitchen = APP.indexOf('setConfirmKitchen("form")');
     expect(picked).toBeGreaterThan(-1);
     expect(kitchen).toBeGreaterThan(picked);
+  });
+});
+
+// v18.14.0 (H3): what the booking form's availability line offers.
+describe("lineTimes", () => {
+  const sugg = formatSugg([1080, 1095, 1110, 1125, 1170, 1185, 1200, 1215], 1140); // 18:00–18:45 · 19:30–20:15, around 19:00
+
+  it("takes two each side of the time asked for, in clock order", () => {
+    expect(lineTimes(sugg, 4)).toEqual(["18:30", "18:45", "19:30", "19:45"]);
+  });
+
+  it("makes the number up from the other side when one runs short", () => {
+    expect(lineTimes({ earlier: ["18:45"], later: ["19:30", "19:45", "20:00", "20:15"] }, 4)).toEqual(["18:45", "19:30", "19:45", "20:00"]);
+    expect(lineTimes({ earlier: ["18:00", "18:15", "18:30", "18:45"], later: ["19:30"] }, 4)).toEqual(["18:15", "18:30", "18:45", "19:30"]);
+    expect(lineTimes({ earlier: [], later: ["19:30", "19:45", "20:00", "20:15", "20:30"] }, 4)).toEqual(["19:30", "19:45", "20:00", "20:15"]);
+    expect(lineTimes({ earlier: ["18:00", "18:15", "18:30", "18:45", "19:00"], later: [] }, 4)).toEqual(["18:15", "18:30", "18:45", "19:00"]);
+  });
+
+  it("offers what there is when there are fewer than asked for", () => {
+    expect(lineTimes({ earlier: ["18:45"], later: ["19:30"] }, 4)).toEqual(["18:45", "19:30"]);
+    expect(lineTimes({ earlier: [], later: [] }, 4)).toEqual([]);
+  });
+
+  it("takes a named refusal's null sugg", () => {
+    expect(lineTimes(null, 4)).toEqual([]);
+  });
+});
+
+// v18.14.0 (M5): what a new booking opens at. The default week is 13:00–22:00.
+describe("earliestOffer", () => {
+  const D = "2099-06-17";
+  it("today, it is this quarter hour or the next", () => {
+    expect(earliestOffer(D, D, 20 * 60 + 20)).toBe(20 * 60 + 30);
+    expect(earliestOffer(D, D, 20 * 60 + 15)).toBe(20 * 60 + 15);
+  });
+  it("every other day has no floor, a past one included", () => {
+    expect(earliestOffer("2099-06-18", D, 20 * 60 + 20)).toBe(0);
+    expect(earliestOffer("2099-06-16", D, 20 * 60 + 20)).toBe(0);
+  });
+});
+
+// The floor is the walk's start rather than a filter on what it found, and the
+// second case is why: with ten fitting times after a typed 14:00, a filter would have
+// nothing left, while the times ahead of now are still free.
+describe("a floor on the time searches", () => {
+  const D = "2099-06-17";
+  const at = (h, m) => h * 60 + m;
+  const none = () => findTimes(D, 2, "auto", [], 90, at(20, 0), [], null, false);
+  it("findTimes offers nothing before it, on either side of the time asked for", () => {
+    const got = findTimes(D, 2, "auto", [], 90, at(20, 0), [], null, false, at(19, 30));
+    expect(Math.min(...got)).toBe(at(19, 30));
+    expect(got).toContain(at(20, 15));
+  });
+  it("findTimes still finds the times ahead when the time asked for has passed", () => {
+    const got = findTimes(D, 2, "auto", [], 90, at(14, 0), [], null, false, at(19, 30));
+    expect(got).toEqual([at(19, 30), at(19, 45), at(20, 0), at(20, 15), at(20, 30)]);
+  });
+  it("findTimes is unchanged with no floor, and empty past the last start", () => {
+    expect(findTimes(D, 2, "auto", [], 90, at(20, 0), [], null, false, 0)).toEqual(none());
+    expect(findTimes(D, 2, "auto", [], 90, at(20, 0), [], null, false, at(22, 15))).toEqual([]);
+  });
+  it("findKitchenFriendlyTimes offers nothing before it either", () => {
+    const got = findKitchenFriendlyTimes([], D, 2, "auto", 90, "20:00", null, [], at(19, 30));
+    expect(got.before.map((r) => r.timeStr)).toEqual(["19:30", "19:45"]);
+    expect(got.after.length).toBeGreaterThan(0);
+  });
+});
+
+describe("newBookingTime", () => {
+  const D = "2099-06-17";
+  const at = (h, m) => h * 60 + m;
+
+  it("today, while open, is the next quarter hour", () => {
+    expect(newBookingTime(D, D, at(19, 7))).toBe("19:15");
+    expect(newBookingTime(D, D, at(19, 14))).toBe("19:15");
+    expect(newBookingTime(D, D, at(19, 58))).toBe("20:00");
+  });
+
+  it("is strictly after now, so a booking made on the quarter opens at the next one", () => {
+    expect(newBookingTime(D, D, at(19, 15))).toBe("19:30");
+    expect(newBookingTime(D, D, at(13, 0))).toBe("13:15");
+  });
+
+  it("never passes the day's last start", () => {
+    expect(newBookingTime(D, D, at(21, 40))).toBe("21:45");
+    expect(newBookingTime(D, D, at(21, 50))).toBe("21:45");
+    expect(lastStartMins(22)).toBe(at(21, 45));
+  });
+
+  it("outside the hours today, opens at the day's opening time", () => {
+    expect(newBookingTime(D, D, at(10, 0))).toBe("13:00");
+    expect(newBookingTime(D, D, at(22, 0))).toBe("13:00");
+    expect(newBookingTime(D, D, at(23, 30))).toBe("13:00");
+  });
+
+  it("any other day opens at that day's opening time, whatever the clock says", () => {
+    expect(newBookingTime("2099-06-18", D, at(19, 7))).toBe("13:00");
+  });
+
+  it("reads the day's own hours, not a literal", () => {
+    const W = "2099-06-16"; // a Tuesday
+    setHourExceptions({ [W]: { open: 18, close: 23.5 } });
+    try {
+      expect(newBookingTime(W, D, at(19, 7))).toBe("18:00");
+      expect(newBookingTime(W, W, at(23, 20))).toBe("23:15");
+    } finally {
+      setHourExceptions({});
+    }
+  });
+
+  it("a day marked closed has no opening hours to be inside", () => {
+    const W = "2099-06-16";
+    setHourExceptions({ [W]: { open: 13, close: 22, closed: true } });
+    try {
+      expect(newBookingTime(W, W, at(19, 7))).toBe("13:00");
+    } finally {
+      setHourExceptions({});
+    }
   });
 });

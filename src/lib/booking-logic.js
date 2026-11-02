@@ -335,8 +335,12 @@ export function histEntry(action,user){return {at:new Date().toISOString(),by:us
 // An action that suppressed the optimiser says `"saved"`; everything else keeps
 // the old derivation. A toast is presentation, but the sentence it prints is a
 // factual claim about what the app just did, and that part is testable.
+// v18.14.0 (correction 14): `"unmoved"`, a Reshuffle that found nothing to move.
+// It said "Booking saved." with the Optimiser off and "Tables re-optimised." with
+// it on, and neither had happened.
 export function savedToast(kind,optimiserActive){
   if(kind==="saved") return "Booking saved.";
+  if(kind==="unmoved") return "No tables needed moving.";
   return optimiserActive?"Tables re-optimised.":"Booking saved.";
 }
 // ── v18.0.0 session 8 (R6): does this save change what the KITCHEN sees? ────
@@ -879,7 +883,27 @@ export function trialFits(bookings,date,time,size,pref,dur,blocks,editId,prefTab
 export function lastStartMins(close){
   return Math.min(Number(close)||0,24)*60-15;
 }
-export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noReshuffle){
+// v18.14.0 (M5): the time a new booking opens at. A literal 13:00 meant nearly
+// every evening booking began by changing the time, through Android's native
+// picker. Today, while the restaurant is open, it is the next quarter hour, the
+// slot the rest of the app works in, and never past the day's last start. Any other
+// day, and outside the hours, it is that day's opening time.
+export function newBookingTime(date,today,nowMins){
+  const h=hoursFor(date);
+  const open=h.open*60;
+  if(h.closed||date!==today||nowMins<open||nowMins>=h.close*60) return toTime(open);
+  return toTime(Math.min(Math.floor(nowMins/15)*15+15,lastStartMins(h.close)));
+}
+// v18.14.0 (correction 15, Patryk): the earliest start worth offering on `date`.
+// Neither time search ever looked at the clock, so at 20:20 a walk-in was offered
+// 18:45. Today it is this quarter hour, or the next; any other day has no floor, a
+// past day included, because entering a booking after the fact is not service.
+// On the quarter-hour grid, so a search's walk stays on it. It moves four times an
+// hour, so a scan that depends on it does not re-run on the 15-second tick.
+export function earliestOffer(date,today,nowMins){
+  return date===today?Math.ceil(nowMins/15)*15:0;
+}
+export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noReshuffle,notBefore){
   var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date
   if(h.closed) return []; // closed day → no valid times
   var aroundM=around||0;
@@ -899,7 +923,9 @@ export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noRes
     if(Date.now()-t0>BUDGET_MS) return false; // budget spent — skip the expensive trial
     return !!trialFits(existing,date,toTime(m),size,pref,dur,blocks,editId,null,noReshuffle);
   }
-  var first=h.open*60,last=lastStartMins(h.close);
+  // The floor is the walk's own start, not a filter on its results: a time typed
+  // before now still finds the ten after it, and those are the ones ahead of now.
+  var first=Math.max(h.open*60,notBefore||0),last=lastStartMins(h.close);
   var CAP=10; // formatSugg keeps 10 per side — scanning further is wasted work
   // Stay on the quarter-hour grid even when `around` isn't grid-aligned (the old
   // fixed-grid scan only ever produced grid slots): step outwards from the
@@ -927,6 +953,17 @@ export function formatSugg(sugg,around){
   var after=sugg.filter(function(s){return s>around;}).slice(0,10).map(toTime);
   return {earlier:before,later:after};
 }
+// v18.14.0 (H3): the times the booking form's availability line offers, in
+// clock order: half each side of the time asked for, and where one side runs
+// short the other makes up the number. `sugg` is `formatSugg`'s, each side
+// ascending, so the nearest are the END of `earlier` and the START of `later`.
+export function lineTimes(sugg,count){
+  const earlier=sugg?sugg.earlier:[];
+  const later=sugg?sugg.later:[];
+  const fromLater=Math.min(later.length,Math.max(Math.ceil(count/2),count-earlier.length));
+  const fromEarlier=Math.min(earlier.length,count-fromLater);
+  return earlier.slice(earlier.length-fromEarlier).concat(later.slice(0,fromLater));
+}
 
 // ── Kitchen-load helpers ──────────────────────────────────────────────────────
 export function getKitchenLoad(bookings,date,time,dur,excludeId){
@@ -951,7 +988,7 @@ export function startingPhrase(load){
   var g=(load&&load.guests)||0;
   return countLabel(n,"booking","bookings")+" · "+guestsLabel(g);
 }
-export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excludeId,blocks){
+export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excludeId,blocks,notBefore){
   var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date
   if(h.closed) return {before:[],after:[]}; // closed day → no times to suggest
   var times=Array.from({length:(h.close-h.open)*4},function(_,i){return h.open*60+i*15;});
@@ -963,6 +1000,7 @@ export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excl
   if(blocks) exSl=exSl.concat(getBlockSlots(blocks,date));
   times.forEach(function(m){
     if(m===aroundM) return;
+    if(m<(notBefore||0)) return; // v18.14.0 (correction 15): `earliestOffer`
     if(m>=24*60) return; // v14.5.0: never suggest a post-midnight start (24h-hours is extend-window only)
     if(m+dur>h.close*60) return;
     var load=getKitchenLoad(bookings,date,toTime(m),dur,excludeId);

@@ -36,7 +36,7 @@
 
 import { S, BTN, TBL, TABLE_GROUPS, R, T, FW, IC } from "../lib/constants";
 import { isIn, comboCap, guestsLabel } from "../lib/booking-logic";
-import { Overlay, ModalTitle, mkBtn, AutoHeight } from "./atoms";
+import { Overlay, ModalTitle, mkBtn, AutoHeight, RowSlot } from "./atoms";
 import { CheckIcon } from "./Icons";
 
 export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
@@ -76,18 +76,20 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
   // v14.4.1: clear/done row pinned via Overlay's `footer` slot.
   const footerEl=(
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-      {prefs.length > 0 ? (
-        <button
-          className="mgt-hover-scale mgt-press"
-          style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.clear })}
-          onClick={() => onChange([])}
-        >
-          Clear
-        </button>
-      ) : null}
+      <RowSlot show={prefs.length > 0} gap={8}>
+        {prefs.length > 0 ? (
+          <button
+            className="mgt-hover-scale mgt-press"
+            style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
+            onClick={() => onChange([])}
+          >
+            Clear
+          </button>
+        ) : null}
+      </RowSlot>
       <button
         className="mgt-hover-scale mgt-press"
-        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}
+        style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
         onClick={onClose}
       >
         Done
@@ -105,7 +107,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
       <div style={{
         marginBottom: 14, padding: "10px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
-        border: "1px solid " + (capOk ? "var(--suggest-border)" : "var(--border-sheet)"),
+        border: "1px solid " + (capOk ? "var(--suggest-border)" : "var(--border-soft)"),
         boxShadow: "var(--shadow-card)"
       }}>
         <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>

@@ -11,7 +11,7 @@
 //     walkinForm, setWalkinForm,
 //     walkinError, walkinDirty,
 //     getNextWalkinNum,
-//     openWalkin, saveWalkin, doSaveWalkin,
+//     openWalkin, saveWalkin, doSaveWalkin, onceWalkin,
 //   } = useWalkin({
 //     bookings, saveBookings,
 //     setViewDate, getUser,
@@ -167,6 +167,15 @@ export function useWalkin({
     }
     setConfirmKitchen(null);doSaveWalkin();
   }
+  // v18.14.0 (/code-review): this form's other way out, Add to waitlist, which App
+  // owns because the waitlist is App's. It answers to the same guard, so a second
+  // tap during the exit, or Seat then Add, cannot make a second party. `dispatch`
+  // writes and closes; the guard is armed after it, rule 2 of lib/submitGuard.js.
+  function onceWalkin(dispatch){
+    if(!mayDispatch(walkinGuardRef.current)) return;
+    dispatch();
+    walkinGuardRef.current=DISPATCHED;
+  }
 
   // v17.5.0: does closing this form lose work? False whenever the form is shut
   // (a stale draft behind a closed modal must never arm the beforeunload guard).
@@ -176,6 +185,6 @@ export function useWalkin({
     walkinForm, setWalkinForm,
     walkinError, walkinDirty,
     getNextWalkinNum,
-    openWalkin, saveWalkin, doSaveWalkin,
+    openWalkin, saveWalkin, doSaveWalkin, onceWalkin,
   };
 }

@@ -56,6 +56,7 @@ const App = appCode();
 const Atoms = read("components/atoms.jsx");
 const List = read("components/ListView.jsx");
 const Timeline = read("components/TimelineView.jsx");
+const Zoom = read("components/TimelineZoomControls.jsx");
 const Glyphs = read("components/FloorGlyphs.jsx");
 const Plan = read("components/PlanView.jsx");
 const Toasts = read("components/StatusToasts.jsx");
@@ -530,7 +531,7 @@ describe("the bookings themselves are reachable (WCAG 2.1.1, 4.1.2)", () => {
       "Tab must not land on a booking that has left the day");
     has(Timeline, "the handle is not tabbable", /tabIndex=\{leaving \? -1 : undefined\}\n\s*onClick=\{leaving \? undefined :/,
       "a real <button> inside an aria-hidden block would still take focus");
-    expect(count(Timeline, /<TimelineBlock (?:key=\{"leaving-" \+ s\.b\.id\} )?leaving b=\{s?\.?b\} pxPerMin=\{pxPerMin\} anim=\{null\} flipId=\{null\}/g),
+    expect(count(Timeline, /<TimelineBlock sz=\{sz\} (?:key=\{"leaving-" \+ s\.b\.id\} )?leaving b=\{s?\.?b\} pxPerMin=\{pxPerMin\} anim=\{null\} flipId=\{null\}/g),
       "both leaving sites (a table row, an Unplaced lane) pass no flip id and no status overlay").toBe(2);
   });
 
@@ -1372,8 +1373,9 @@ describe("a status painted as a FILL is never colour alone (WCAG 1.4.1)", () => 
 
   // Comments stripped, for this file's standing reason: PlanView's own mark
   // carries a paragraph naming `fillFor` and `isBlocked`, and a guard that
-  // reads it is measuring the documentation.
-  const painting = srcFilesMatching(/BLOCK_BG\[/);
+  // reads it is measuring the documentation. v18.14.0: `STATUS_BTN_BG[expr]` is the
+  // same act through another map, the fill of a status BUTTON, so it counts.
+  const painting = srcFilesMatching(/\b(?:BLOCK_BG|STATUS_BTN_BG)\[/);
 
   it("every surface that indexes BLOCK_BG by status is registered", () => {
     const unregistered = painting.map(([rel]) => rel).filter((rel) => !(rel in PAINTS_STATUS));
@@ -1611,8 +1613,10 @@ describe("the booking form's steppers and the timeline zoom work from the keyboa
     const Keyboard = read("lib/keyboard.js");
     has(Keyboard, "lib/keyboard.js", /export function stepPress\(apply\)[\s\S]*?onClick:\s*function\s*\(e\)\s*\{\s*if\s*\(e\.detail === 0\) apply\(\);/,
       "stepPress must act on a click with detail 0 — the keyboard's — or Enter/Space step nothing");
+    expect(count(read("components/DurationReset.jsx"), /\{\.\.\.stepPress\(/g)).toBe(1);
     for (const [name, src] of [["BookingFormModal", BookingForm], ["WalkinForm", Walkin]]) {
-      expect(count(src, /\{\.\.\.stepPress\(/g), name + ": four steppers (guests − +, duration − +) and the duration Reset").toBe(5);
+      expect(count(src, /\{\.\.\.stepPress\(/g), name + ": four steppers (guests − +, duration − +)").toBe(4);
+      has(src, name, /<DurationReset show=/, "the duration Reset lives in DurationReset now, with its own stepPress");
       hasnt(src, name, /onPointerDown=/,
         "a control acting on pointerdown alone is back — Enter and Space fire click, never a pointer event");
     }
@@ -1627,10 +1631,10 @@ describe("the booking form's steppers and the timeline zoom work from the keyboa
   });
 
   it("the zoom buttons are named, and the reset button's name LEADS with its text", () => {
-    expect(count(Timeline, /aria-label="Zoom out"/g)).toBe(1);
-    expect(count(Timeline, /aria-label="Zoom in"/g)).toBe(1);
+    expect(count(Zoom, /aria-label="Zoom out"/g)).toBe(1);
+    expect(count(Zoom, /aria-label="Zoom in"/g)).toBe(1);
     // Label in Name: the visible "1x" (or "2x → 1x") comes first.
-    has(Timeline, "TimelineView", /aria-label=\{\(zoom !== 1 \? zoom \+ "x → " : ""\) \+ "1x \(reset zoom\)"\}/,
+    has(Zoom, "TimelineZoomControls", /aria-label=\{\(zoom !== 1 \? "Whole day" : "1x"\) \+ " \(reset zoom\)"\}/,
       "the reset button shows text, so its accessible name must start with that text");
   });
 });

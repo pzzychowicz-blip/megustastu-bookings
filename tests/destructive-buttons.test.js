@@ -66,7 +66,7 @@ describe("Admin → People: Remove", () => {
   });
 
   it("acts on the second tap only", () => {
-    expect(Admin).toMatch(/if \(armed\) \{ setArmedUid\(null\); say\(onRemoveUser\(r\.uid\)\); \}\s*else \{ setMsg\(null\); setArmedUid\(r\.uid\); \}/);
+    expect(Admin).toMatch(/if \(armed\) \{ if \(!armSettled\(\)\) return; setArmedUid\(null\); say\(onRemoveUser\(r\.uid\)\); \}\s*else \{ markArmed\(\); setMsg\(null\); setArmedUid\(r\.uid\); \}/);
     expect(Admin).not.toMatch(/onClick=\{function \(\) \{ say\(onRemoveUser\(r\.uid\)\); \}\}/);
   });
 
@@ -78,7 +78,8 @@ describe("Admin → People: Remove", () => {
 
   it("puts the sentence UNDER the row, tied to the button only while it exists", () => {
     expect(Admin).toMatch(/aria-describedby=\{armed \? removeWarnId : undefined\}/);
-    expect(Admin).toMatch(/<div id=\{removeWarnId\} style=\{\{ flexBasis: "100%"/);
+    expect(Admin).toMatch(/<div id=\{armed \? removeWarnId : undefined\} style=\{\{ paddingTop/);
+    expect(Admin.indexOf("<Reveal show={armed}>")).toBeGreaterThan(Admin.indexOf('"Confirm — remove"'));
   });
 
   it("is disarmed by every other action in People", () => {
@@ -108,7 +109,7 @@ describe("the rows' deletes: one red, and the trash mark", () => {
   });
 
   it("Templates: Delete takes two taps, names its template, and any other action disarms it", () => {
-    expect(Templates).toMatch(/onClick=\{\(\) => \{ if \(armed\) \{ setArmedId\(null\); removeT\(t\.id\); \} else setArmedId\(t\.id\); \}\}/);
+    expect(Templates).toMatch(/onClick=\{\(\) => \{\s*if \(armed\) \{ if \(!armSettled\(\)\) return; setArmedId\(null\); removeT\(t\.id\); \}\s*else \{ markArmed\(\); setArmedId\(t\.id\); \}\s*\}\}/);
     expect(Templates).toMatch(/aria-label=\{\(armed \? "Confirm — delete \(" : "Delete \("\) \+ name \+ "\)"\}/);
     expect(Templates).toMatch(/aria-label=\{"Edit \(" \+ name \+ "\)"\}/);
     expect(Templates).toMatch(/function openEdit\(t\) \{ setArmedId\(null\);/);
@@ -224,20 +225,18 @@ describe("a paused reminder fades its text, never its buttons", () => {
   });
 });
 
-// v18.2.0 phase 36 (X5): "Clear" empties a table selection and destroys
-// nothing, but wore the delete red. Measured on DEV: the walk-in form's Clear
-// now reads rgb(100, 116, 139), exactly --app-btn-slate, as Dismiss does.
-describe("X5 — Clear is not red", () => {
+// v18.2.0 phase 36 (X5): "Clear" empties a table selection and destroys nothing, but
+// wore the delete red; phase 78 said the same of the duration Reset, and the design
+// critique of Dismiss. v18.14.0 (correction 5) took all three, and every other
+// secondary grey, to one quiet button, which holds X5 by having no red to reach.
+describe("X5 — Clear, Reset and Dismiss are not red", () => {
   const CSS = readFileSync(join(SRC, "index.css"), "utf8");
-  it("aliases the dialog slate, as Dismiss does, in every theme", () => {
-    expect(CSS).toMatch(/--btn-clear: var\(--app-btn-slate\);/);
-    expect(CSS).toMatch(/--btn-dismiss: var\(--app-btn-slate\);/);
-    expect((CSS.match(/--btn-clear:/g) || []).length, "no theme block overrides it back").toBe(1);
+  it("the quiet button is the field's fill in every theme", () => {
+    expect(CSS).toMatch(/--btn-quiet: var\(--bg-input\);/);
+    expect((CSS.match(/--btn-quiet:/g) || []).length, "no theme block overrides it back").toBe(1);
   });
-  // v18.2.0 phase 78: the forms' duration Reset destroys nothing either.
-  it("so does the duration Reset", () => {
-    expect(CSS).toMatch(/--btn-reset: var\(--app-btn-slate\);/);
-    expect((CSS.match(/--btn-reset:/g) || []).length, "no theme block overrides it back").toBe(1);
+  it("their own tokens are gone, so a theme block cannot take one back to red", () => {
+    expect(CSS).not.toMatch(/--btn-(clear|reset|dismiss):/);
   });
 });
 
@@ -258,7 +257,6 @@ describe("phase 62 — one red for every destructive control, and the trash mark
 
   // What may still paint an old red, and why. Everything else is a failure.
   const ALLOWED = {
-    "components/TableGrid.jsx": 1,      // a BLOCKED table's fill: a status, not a button
     "components/whatsapp/WaSimulator.jsx": 1, // "Make next staff reply fail": sandbox-only, destroys nothing
   };
   it("no control is left on BTN.del, --btn-del or --wa-btn-cancel", () => {
@@ -279,7 +277,9 @@ describe("phase 62 — one red for every destructive control, and the trash mark
       ["components/FloorPlanEditor.jsx", /<TrashIcon size=\{IC\.control\} \/>Delete door<\/button>/],
       ["components/FloorPlanEditor.jsx", /<TrashIcon size=\{IC\.control\} \/>Delete wall<\/button>/],
       ["components/LayoutSettings.jsx", /<TrashIcon size=\{IC\.control\} \/>\{orph > 0 \? "Remove anyway" : "Remove"\}/],
-      ["components/whatsapp/ConversationView.jsx", /style=\{mkDangerBtn\(\{ gap: 4, padding: "8px 12px", minHeight: H\.chrome, fontSize: T\.small \}\)\} ><TrashIcon size=\{IC\.inline\} \/>Delete<\/button>/],
+      // v18.14.0 (correction 6): a row of the ⋯ menu, which draws the row's icon before its word.
+      ["components/whatsapp/ConversationView.jsx", /delete: \{ label: "Delete", icon: TrashIcon, danger: true,/],
+      ["components/whatsapp/ConversationMenu.jsx", /<Icon size=\{IC\.control\} \/><\/span>\s*\{it\.label\}/],
       ["components/whatsapp/InboxPanel.jsx", /<TrashIcon size=\{IC\.inline\} \/>Delete<\/button>/],
       ["components/whatsapp/InboxPanel.jsx", /style=\{mkDangerBtn\(\)\}><TrashIcon size=\{IC\.control\} \/>Delete \{selected\.size\}<\/button>/],
     ];
@@ -312,7 +312,7 @@ describe("phase 62 — one red for every destructive control, and the trash mark
     const Cust = read("components/CustomersSettings.jsx");
     expect(Cust).toMatch(/aria-describedby=\{armed \? DELETE_WARN_ID : undefined\}/);
     const btn = Cust.indexOf('"Delete customer & all data"');
-    const warn = Cust.indexOf("<div id={DELETE_WARN_ID}");
+    const warn = Cust.indexOf("<div id={armed ? DELETE_WARN_ID : undefined}");
     expect(warn).toBeGreaterThan(btn);
     expect(Cust).not.toMatch(/"Confirm delete"/);
   });

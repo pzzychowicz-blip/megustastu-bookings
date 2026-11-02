@@ -1,7 +1,7 @@
 // src/components/atoms.jsx
 // Tiny UI primitives used across the app: modal Overlay, form Fld, Section
-// container, status / table / small badges, Toggle switch, Kbd keycap, and
-// AvailBanner. Plus the style-builder helpers mkInp / mkBtn.
+// container, status / table / small badges, Toggle switch and Kbd keycap. Plus
+// the style-builder helpers mkInp / mkBtn.
 //
 // Phase B1 (v15-refactor): extracted from App.jsx and converted RC() → JSX.
 // First file in the codebase using JSX syntax — proves the build pipeline
@@ -13,7 +13,7 @@
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
+import { BTN, BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
 import { isIn, guestsLabel } from "../lib/booking-logic";
 import { weekdayShort } from "../lib/day";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
@@ -22,7 +22,7 @@ import { afterFrame, pageHidden } from "../lib/after-frame";
 import { openerFor } from "../lib/focus-return";
 import { raisesKeyboard } from "../lib/keyboard";
 import { lockPageScroll } from "../lib/scroll-lock";
-import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
+import { AlertIcon, ChevronDownIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
 // Return inline-style objects. Used wherever an `<input>` or `<button>` needs
@@ -76,7 +76,7 @@ export function mkInp() {
     boxSizing: "border-box",
     height: H.touch,
     background: "var(--bg-input)",
-    border: "1px solid var(--border-input)",
+    border: "1px solid var(--field-edge)",
     borderRadius: R.pill,
     padding: "10px 12px",
     fontSize: T.title,
@@ -156,10 +156,26 @@ export function mkStep(size) {
   };
 }
 
+// ── The quiet button (v18.14.0, Patryk) ──────────────────────────────────────
+// `BTN.quiet` is every secondary grey in the app. A solid grey held the same weight
+// as the action beside it: Re-check and Edit templates drew the eye in an inbox whose
+// point is the conversation. So a button that is not the point of the screen wears
+// the field's pale fill, its edge and secondary ink, with no shadow, at the same size.
+// The fill decides, here and nowhere else, so `cond ? S.accent : BTN.quiet` carries
+// its ink, edge and shadow with it. Increase Contrast's strong edge comes with the
+// token. A solid button stays one by naming its fill: Following, Optimiser ON, the
+// Completed status and the grey title pills. `extra` still wins, after this.
+function quietLook(background) {
+  return background === BTN.quiet
+    ? { border: "1px solid var(--field-edge)", color: "var(--text-secondary)", boxShadow: "none" }
+    : null;
+}
+
 export function mkBtn(extra) {
+  const background = (extra && extra.background) || BTN.quiet;
   return {
     border: "1px solid var(--border-glass)",
-    background: "var(--btn-default)",
+    background,
     borderRadius: R.pill,
     padding: "8px 14px",
     cursor: "pointer",
@@ -173,6 +189,7 @@ export function mkBtn(extra) {
     minHeight: H.control,
     boxShadow: "var(--shadow-btn)",
     letterSpacing: "0.01em",
+    ...quietLook(background),
     ...(extra || {})
   };
 }
@@ -211,6 +228,7 @@ export function mkSolidBtn(background, extra) {
     color: "var(--text-on-accent)",
     minHeight: H.touch,
     boxShadow: "var(--shadow-btn-solid)",
+    ...quietLook(background),
     ...(extra || {})
   };
 }
@@ -238,7 +256,7 @@ export function mkDangerBtn(extra) {
 }
 
 // The same red on a confirm DIALOG's button ("Delete booking?" · Delete,
-// "Discard unsaved changes?" · Discard): mkSolidBtn's geometry, T.lead at
+// "Unsaved changes" · Discard): mkSolidBtn's geometry, T.lead at
 // H.touch, because it stands beside the dialog's 44px Back. Before phase 62
 // those buttons were three reds: `--app-danger-solid`, the translucent
 // `BTN.del` (reminders, conversations) and the inbox's `--wa-btn-cancel`.
@@ -646,7 +664,7 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor, fo
   // which a tap outside it closes; a phone's sheet has no scrim, so its footer
   // is the one way out and stays. A `Reveal`, so it folds out and back in.
   const cardFoot = footer ? (
-    <div style={{ flexShrink: 0, padding: tight ? "6px 24px" : "16px 24px", transition: "padding " + M.shift, borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
+    <div style={{ flexShrink: 0, padding: tight ? "6px 24px" : "16px 24px", transition: "padding " + M.shift, borderTop: "1px solid var(--border-soft)", boxSizing: "border-box" }}>
       {footer}
     </div>
   ) : null;
@@ -818,7 +836,7 @@ export const ALERT_TONES = {
 // default is the one place a rename would fail silently rather than loudly.
 export const ALERT_DANGER = ALERT_TONES.danger;
 
-export function InlineAlert({ tone = ALERT_DANGER.tone, tint = ALERT_DANGER.tint, icon: Icon = AlertIcon, id, style, children }) {
+export function InlineAlert({ tone = ALERT_DANGER.tone, tint = ALERT_DANGER.tint, icon: Icon = AlertIcon, id, style, below, children }) {
   return (
     <div id={id} style={{
       // `alignItems: center` and the mark-to-text gap both mirror the strip's
@@ -828,6 +846,10 @@ export function InlineAlert({ tone = ALERT_DANGER.tone, tint = ALERT_DANGER.tint
       // pixel between a modal alert and a strip section is not something anyone
       // can see, whereas an off-scale literal here is something check:style can.
       display: "flex", alignItems: "center", gap: SP.base,
+      // v18.14.0 (correction 3): `below` is a full-width line under the mark and
+      // the sentence, not under the sentence alone, so what it holds can run from
+      // edge to edge of the pane.
+      flexWrap: below ? "wrap" : undefined,
       padding: "10px 14px", borderRadius: R.card,
       background: tint,
       ...(style || {})
@@ -843,6 +865,7 @@ export function InlineAlert({ tone = ALERT_DANGER.tone, tint = ALERT_DANGER.tint
         </span>
       ) : null}
       <span style={{ fontSize: T.body, fontWeight: FW.bold, color: tone, flex: 1, minWidth: 0 }}>{children}</span>
+      {below ? <div style={{ flex: "1 1 100%", minWidth: 0 }}>{below}</div> : null}
     </div>
   );
 }
@@ -1151,7 +1174,6 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
   // (v18.3.1's rule).
   useEffect(function () {
     if (show) {
-      setMounted(true);
       if (pageHidden()) { setOpen(true); setRevealed(true); return undefined; }
       // Double rAF: ensure the 0fr→1fr change lands in a separate frame from
       // the mount so the transition actually fires (a single frame can batch).
@@ -1166,12 +1188,29 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
       });
       return function () { cancelAnimationFrame(r1); cancelAnimationFrame(r2); if (stopHold) stopHold(); };
     }
+    // Nothing to fold, and no hold to run. A timeline block keeps closed slots for
+    // its flags, so a day's load would otherwise start a timer per slot per block.
+    if (!mounted) return undefined;
     setOpen(false);
     setRevealed(false);   // clip immediately so the collapse hides cleanly
     if (pageHidden()) { setMounted(false); return undefined; }
     return afterFrame(function () { setMounted(false); }, exitHold(speed));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `speed` is fixed per call site; re-running on it would restart a live transition
   }, [show]);
+  // v18.14.0: mounted from the render that receives `show={true}`, the twin of
+  // `isOpen` below. The effect used to do this, and its render runs in a later
+  // task, so after a slow click the browser's overdue frames came first: both
+  // rAFs fired, `mounted` and `open` landed in one commit, and the node was born
+  // open with nothing to ease from. Measured at 998 × 507: the form's refusal
+  // eased 2 times in 8 at 1× CPU and never at 4× or 6×, and the Summary's body
+  // and the header's Follow group did the same. With the closed node in this
+  // commit the rAFs can only run after it, and the frame between them computes
+  // the style the ease starts from. The hidden page's snap comes along, because
+  // a closed commit first could arm a transition that plays on wake.
+  if (show && !mounted) {
+    setMounted(true);
+    if (pageHidden()) { setOpen(true); setRevealed(true); }
+  }
   if (!mounted) return null;
   // A Reveal is a DISCLOSURE by default, so it takes M.reveal rather than the
   // M.shift a bare geometry change would get — see the --t-reveal note in
@@ -1219,6 +1258,35 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
     <div role={presentational ? "presentation" : undefined} inert={inert === true} style={{ ...track, opacity: isOpen ? 1 : 0, ...(style || {}) }}>
       <div role={presentational ? "presentation" : undefined} style={innerStyle}>{children || last.current}</div>
     </div>
+  );
+}
+
+// ── TurnChevron — a disclosure's mark (v18.14.0, correction 30) ──────────────
+// One drawing that turns with its panel, on the notification strip's speed, where a
+// ternary of two icons swapped in a frame. It points right and turns down; with
+// `flip` it points down and turns up.
+export function TurnChevron({ open, size = IC.control, flip = false }) {
+  const Mark = flip ? ChevronDownIcon : ChevronRightIcon;
+  return (
+    <span aria-hidden="true" style={{ display: "inline-flex", transform: "rotate(" + (open ? (flip ? 180 : 90) : 0) + "deg)", transition: "transform " + M.move }}>
+      <Mark size={size} />
+    </span>
+  );
+}
+
+// ── RowSlot — a horizontal Reveal in a row with a `gap` (v18.14.0, correction 29) ──
+// A Reveal is a flex item even while it is closed, so the row's `gap` would arrive
+// and go with it, at once. A slot takes that gap back with a negative margin and
+// carries its own inside the ease, so at rest it sits exactly where a plain child
+// did and closed it takes no room. `gap` is the row's. Its content keeps its width
+// through the ease and is clipped, so a label never wraps on the way. Pass null
+// while closed: Reveal keeps the last copy for the exit, and that copy is inert,
+// because it has been answered and is only on its way out.
+export function RowSlot({ show, gap, children }) {
+  return (
+    <Reveal horizontal show={show} inert={!show} style={{ marginLeft: -gap }}>
+      {children ? <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, whiteSpace: "nowrap", paddingLeft: gap }}>{children}</span> : null}
+    </Reveal>
   );
 }
 
@@ -1643,9 +1711,12 @@ export function SlideView({ dir, fill = false, children }) {
     <div
       className={animating ? dir : undefined}
       onAnimationEnd={function () { setAnimating(false); }}
+      // v18.14.0 (H6): `clip`, not `hidden`. A `hidden` box is a scroll container,
+      // so for the length of a date fade the Timeline's sticky ruler stuck to this
+      // and dropped back into the page. `clip` clips the same and scrolls nothing.
       style={fill
-        ? { overflow: animating ? "hidden" : "visible", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }
-        : { overflow: animating ? "hidden" : "visible" }}
+        ? { overflow: animating ? "clip" : "visible", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }
+        : { overflow: animating ? "clip" : "visible" }}
     >
       {children}
     </div>
@@ -2274,6 +2345,10 @@ export function OutlineChip({ tone = "neutral", as = "span", size = "micro", sty
       // says what the guest has (Settings → Customers, for an account that may
       // not edit bookings).
       ...(as === "button" ? { cursor: rest.disabled ? "default" : "pointer", transition: CHIP_BUTTON_EASE } : null),
+      // v18.14.0 (L1): a small chip that is a target is `H.chip` tall, not 21px. The
+      // tag chips, the log's filters and the pinned countries each said so by hand;
+      // the Regular and No-show disclosures, the last four, did not.
+      ...(as === "button" && size === "small" ? { minHeight: H.chip } : null),
       ...(style || {})
     }}>{children}</Tag>
   );
@@ -2542,7 +2617,7 @@ export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, 
         placeholder={placeholder}
         style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", color: "inherit", font: "inherit", padding: SP.none, margin: SP.none, boxShadow: "none" }}
       />
-      {has ? (
+      <Presence show={has} inClass="mgt-appear" outClass="mgt-ghost-out" style={{ display: "flex", flexShrink: 0 }}>{has ? (
         <button
           type="button"
           className="mgt-hover-scale"
@@ -2559,7 +2634,7 @@ export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, 
             borderRadius: R.pill, boxShadow: "none", cursor: "pointer",
           }}
         ><CloseIcon size={IC.control} /></button>
-      ) : null}
+      ) : null}</Presence>
     </div>
   );
 }

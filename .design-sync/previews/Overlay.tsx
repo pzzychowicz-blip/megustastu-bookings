@@ -4,7 +4,7 @@ import { ModalStage } from "./_shared/backdrop";
 function Footer({ primary, colour }: { primary: string; colour: string }) {
   return (
     <div style={{ display: "flex", gap: SP.base, justifyContent: "flex-end" }}>
-      <button style={mkBtn({ background: "var(--app-btn-slate)" })}>Back</button>
+      <button style={mkBtn()}>Back</button>
       <button style={mkSolidBtn(colour)}>{primary}</button>
     </div>
   );

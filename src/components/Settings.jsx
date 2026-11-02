@@ -30,6 +30,7 @@ import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
+import { FoldRows } from "./FoldRows";
 import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, InlineAlert, ALERT_TONES, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE, textWidth } from "./atoms";
 import { connectionLines } from "../lib/wa-coexist";
 import { useIntegrationStatus } from "../hooks/useIntegrationStatus";
@@ -71,8 +72,10 @@ const TIER_ARMED_W = 153;
 import { SETTINGS_TABS, visibleTabs } from "./SettingsChrome";
 import { AdminTabContent } from "./AdminSettings";
 import { hourLabel } from "../lib/time-grid";
+import { canVibrate } from "../lib/haptics";
 import { splitExceptions, rangeLabel, specialHoursLabel } from "../lib/special-days";
 import { waAutoReplyOn, AUTO_ACK_TEXT } from "../lib/whatsapp";
+import { markArmed, armSettled } from "../lib/arm-guard";
 import { CloseIcon, DownloadIcon, TrashIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
@@ -273,11 +276,10 @@ function PinnedCountriesSetting({ gs, onSave }) {
     <div role="group" aria-labelledby="gs-pinned-label">
       <div id="gs-pinned-label" style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: SP.snug }}>Pinned countries</div>
       <div style={{ display: "flex", gap: SP.snug, flexWrap: "wrap", alignItems: "center" }}>
-        {list.map((iso) => {
+        <FoldRows items={list.filter(countryByIso)} idOf={(iso) => iso} gap={SP.snug}>{(iso) => {
           const c = countryByIso(iso);
-          if (!c) return null;
           return (
-            <OutlineChip key={iso} as="button" size="small" className="mgt-hover-scale"
+            <OutlineChip as="button" size="small" className="mgt-hover-scale"
               aria-label={"Unpin " + c.name}
               onClick={() => onSave({ pinnedCountries: list.filter((x) => x !== iso) })}
               style={{ minHeight: H.chip }}>
@@ -285,7 +287,7 @@ function PinnedCountriesSetting({ gs, onSave }) {
               <CloseIcon size={IC.inline} />
             </OutlineChip>
           );
-        })}
+        }}</FoldRows>
         {/* The list of countries to ADD leaves out the ones already pinned —
             offering Spain twice would let the second tap do nothing. */}
         <div style={{ position: "relative", width: 280 /* @canvas wide enough for a country name in the list */ }}>
@@ -294,9 +296,9 @@ function PinnedCountriesSetting({ gs, onSave }) {
             style={{ height: H.chip, padding: "0 12px", fontSize: T.body }} />
         </div>
       </div>
-      {list.length === 0 ? (
-        <div style={{ fontSize: T.body, color: "var(--text-muted)", marginTop: SP.snug }}>Nothing pinned — the code list starts at A.</div>
-      ) : null}
+      <Reveal show={list.length === 0}>
+        <div style={{ fontSize: T.body, color: "var(--text-muted)", paddingTop: SP.snug }}>Nothing pinned — the code list starts at A.</div>
+      </Reveal>
     </div>
   );
 }
@@ -347,16 +349,17 @@ function SpecialDaysList({ exceptions, onOpen }) {
       <div style={{ fontSize: T.body, color: "var(--text-faint)", marginTop: 2, marginBottom: SP.snug }}>
         Dates that are closed, or open with other hours. Bookings already made stay.
       </div>
-      {upcoming.length ? upcoming.map((ex) => (
-        <div key={ex.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: SP.snug, flexWrap: "wrap", padding: "6px 0" }}>
+      <FoldRows items={upcoming} idOf={(ex) => ex.id}>{(ex) => (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: SP.snug, flexWrap: "wrap", padding: "6px 0" }}>
           <span style={{ fontSize: T.body, color: "var(--text-primary)", flex: "1 1 200px" }}>{line(ex)}</span>
           <button type="button" className="mgt-hover-scale" onClick={() => onOpen(ex.id)}
             aria-label={"Change " + rangeLabel(ex, today)}
-            style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.nav })}>Change</button>
+            style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.quiet })}>Change</button>
         </div>
-      )) : (
+      )}</FoldRows>
+      <Reveal show={upcoming.length === 0}>
         <div style={{ fontSize: T.body, color: "var(--text-muted)", padding: "6px 0" }}>None planned.</div>
-      )}
+      </Reveal>
       {past.length ? (
         <div style={{ opacity: PAUSED_FADE, marginTop: SP.snug }}>
           <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--text-muted)" }}>Past</div>
@@ -367,7 +370,7 @@ function SpecialDaysList({ exceptions, onOpen }) {
       ) : null}
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: SP.snug }}>
         <button type="button" className="mgt-hover-scale" onClick={() => onOpen(null)}
-          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "6px 14px", background: BTN.nav })}>Add a special day</button>
+          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "6px 14px", background: BTN.quiet })}>Add a special day</button>
       </div>
     </div>
   );
@@ -454,7 +457,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
 // where noted" is a statement about exactly these controls (the two marked
 // "This device only" are the exceptions it names). Left behind in General it
 // would have been a rule with nothing to govern.
-export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggleAutoTheme = () => {}, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, swEnabled = true, onToggleSw = () => {}, planGestures = true, onTogglePlanGestures = () => {}, planAvail = true, onTogglePlanAvail = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {} }) {
+export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggleAutoTheme = () => {}, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, swEnabled = true, onToggleSw = () => {}, planGestures = true, onTogglePlanGestures = () => {}, planAvail = true, onTogglePlanAvail = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {}, largeText = false, onToggleLargeText = () => {}, indoorTint = true, onToggleIndoorTint = () => {}, vibrateOnDrag = true, onToggleVibrate = () => {} }) {
   const tl = tlSettings && typeof tlSettings === "object"
     ? tlSettings : { followZoom: 4, defaultZoom: 1, followLead: 30, maxZoom: 5 };
   return (
@@ -594,12 +597,45 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
             them down when Max zoom is lowered). */}
         <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
           <div style={{ textAlign: "left", marginBottom: 10 }}>
-            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Timeline zoom</div>
+            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Timeline</div>
             <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
-              This device only. Zoom and Follow behaviour of the timeline.
+              This device only. Text size, row tint, vibration, zoom and Follow behaviour of the timeline.
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {/* v18.14.0 (H2): per device, like the zoom beside it (useShellPrefs). */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)" }}>Larger text</div>
+                <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
+                  Bigger names, times and table numbers, with taller rows.
+                </div>
+              </div>
+              <Toggle label="Larger text" on={largeText} onClick={onToggleLargeText} />
+            </div>
+            {/* v18.14.0 (correction 2): per device, like Larger text above it. */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)" }}>Tint indoor tables</div>
+                <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
+                  A pale purple behind the indoor rows, so inside and outside read apart.
+                </div>
+              </div>
+              <Toggle label="Tint indoor tables" on={indoorTint} onClick={onToggleIndoorTint} />
+            </div>
+            {/* v18.14.0 (L7): per device, and hidden where the browser has no
+                vibration at all (lib/haptics.js). */}
+            {canVibrate() ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ textAlign: "left" }}>
+                  <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)" }}>Vibrate on drag</div>
+                  <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
+                    A short buzz when a block lifts and when it lands.
+                  </div>
+                </div>
+                <Toggle label="Vibrate on drag" on={vibrateOnDrag} onClick={onToggleVibrate} />
+              </div>
+            ) : null}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Zoom when opening the app</div>
               <MiniStepper label="zoom when opening the app" value={tl.defaultZoom} fmt={(v) => v + "×"}
@@ -708,7 +744,8 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
   const updateTier = (i, patch) => { disarmTier(); saveTiers(tiers.map((t, j) => (j === i ? { ...t, ...patch } : t))); };
   const removeTier = (i) => saveTiers(tiers.filter((_, j) => j !== i));
   const armTierRemove = (i) => {
-    if (armedTier === i) { disarmTier(); removeTier(i); return; }
+    if (armedTier === i) { if (!armSettled()) return; disarmTier(); removeTier(i); return; }
+    markArmed();
     setArmedTier(i);
     if (armTimer.current) clearTimeout(armTimer.current);
     armTimer.current = setTimeout(() => { armTimer.current = null; setArmedTier(null); }, 3000);
@@ -872,11 +909,16 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
         <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 4 }}>
           {/* Editable tier list + the catch-all row. Fixed-width first column
               so every row's "stay for" stepper aligns vertically. */}
-          {tiers.map((t, i) => {
+          {/* v18.14.0 (correction 32, Patryk): a tier has no id, so its place is its
+              id: the row that opens or folds is the last one, and each tier's values
+              move up a row at once. The list's gap sits inside each row, so it folds
+              too, and the margin hands the last one back to the column's own. */}
+          <div style={{ marginBottom: -14 }}>
+          <FoldRows items={tiers} idOf={(t, i) => String(i)}>{(t, i) => {
             const minMax = i > 0 ? tiers[i - 1].max + 1 : 1;
             const maxMax = i < tiers.length - 1 ? tiers[i + 1].max - 1 : 19;
             return (
-              <div key={i} style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end", paddingBottom: 14 }}>
                 <div style={{ width: 150 }}>
                   <HourStepper label="Parties up to" who={"Tier " + (i + 1)} value={t.max} fmt={upToLabel}
                     disableDec={t.max <= minMax} disableInc={t.max >= maxMax}
@@ -914,7 +956,8 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                 </div>
               </div>
             );
-          })}
+          }}</FoldRows>
+          </div>
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
             <div style={{ width: 150, height: H.chrome, display: "flex", alignItems: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>
               {tiers.length ? "Larger parties (" + restFrom + "+)" : "All parties"}
@@ -1066,9 +1109,10 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           </div>
           <AutoHeight>{recurring.enabled !== false ? (
             <div style={{ marginTop: 12 }}>
-              {(recurring.rules || []).length === 0 ? (
+              <Reveal show={(recurring.rules || []).length === 0}>
                 <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>No standing bookings yet.</div>
-              ) : (recurring.rules || []).map(function (r) {
+              </Reveal>
+              <FoldRows items={recurring.rules || []} idOf={(r) => r.id}>{function (r) {
                 const armed = armedRule === r.id;
                 // v18.2.0 phase 42: the rule's identity, written once — the
                 // switch and the Delete both name it, so they cannot disagree.
@@ -1085,7 +1129,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                 // phone (a 440px one is 38px short of sharing the line), beside
                 // it in the 600px-and-up card.
                 return (
-                  <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: R.inset, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: R.inset, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
                     {/* Phase 55 (round 3's L-3): a paused rule looks like a
                         paused reminder one tab over — BOTH lines at PAUSED_FADE
                         and an outline "Paused" tag. It faded the name alone (to
@@ -1116,13 +1160,16 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                           called "Delete" (measured on DEV). */}
                       <button
                         aria-label={(armed ? "Confirm — delete (" : "Delete (") + ruleWho + ")"}
-                        onClick={() => { if (armed) { onRemoveRule(r.id); setArmedRule(null); } else setArmedRule(r.id); }}
+                        onClick={() => {
+                          if (armed) { if (!armSettled()) return; onRemoveRule(r.id); setArmedRule(null); }
+                          else { markArmed(); setArmedRule(r.id); }
+                        }}
                         className="mgt-hover-scale mgt-press"
                         style={mkDangerBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px" })}><TrashIcon size={IC.control} />{armed ? "Confirm — delete" : "Delete"}</button>
                     </div>
                   </div>
                 );
-              })}
+              }}</FoldRows>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>Generate ahead</span>
                 <MiniStepper label="weeks generated ahead" value={(recurring.horizonWeeks || 4)} fmt={(n) => String(n)}
@@ -1193,7 +1240,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               onClick={onBackup}
               className="mgt-hover-scale mgt-press"
               aria-busy={backupStatus && backupStatus.kind === "busy" ? true : undefined}
-              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><DownloadIcon size={IC.control} />Download backup</button>
+              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.quiet, display: "inline-flex", alignItems: "center", gap: 6 })}><DownloadIcon size={IC.control} />Download backup</button>
           </div>
           {/* v18.3.1: the outcome, here rather than in the red banner behind
               this overlay (App's backupStatus). The region is ALWAYS mounted:
@@ -1339,6 +1386,8 @@ function WaCostSection() {
       onToggle={toggle}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: SP.tight, paddingTop: SP.tight }}>
+        {/* v18.14.0 (correction 35, Patryk): the answer alone, so Refresh under it glides. */}
+        <AutoHeight><div style={{ display: "flex", flexDirection: "column", gap: SP.tight }}>
         {figures ? (
           <>
             <div style={text}>
@@ -1369,6 +1418,7 @@ function WaCostSection() {
             Couldn&rsquo;t get the figures: {usage.error}.
           </InlineAlert>
         ) : null}
+        </div></AutoHeight>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.base, paddingTop: SP.tight }}>
           <button type="button" className="mgt-hover-scale mgt-press" disabled={loading} aria-busy={loading}
             onClick={function () { usage.load(); }}
@@ -1497,6 +1547,12 @@ export function SettingsContent({
   onTogglePlanGestures,
   tlSettings,
   onSetTlSetting,
+  largeText,
+  onToggleLargeText,
+  indoorTint,
+  onToggleIndoorTint,
+  vibrateOnDrag,
+  onToggleVibrate,
   weekHours,
   onSaveDayHours,
   onSaveAllDays,
@@ -1632,7 +1688,7 @@ export function SettingsContent({
       onOpenCapabilities={onOpenCapabilities} onOpenActivity={onOpenActivity} retentionDays={activityRetentionDays} onSetRetention={onSetActivityRetention}
       waRetentionDays={waRetentionDays} onSetWaRetention={onSetWaRetention} />;
   } else if (cur === "app") {
-    content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} planAvail={planAvail} onTogglePlanAvail={onTogglePlanAvail} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} />;
+    content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} planAvail={planAvail} onTogglePlanAvail={onTogglePlanAvail} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} largeText={largeText} onToggleLargeText={onToggleLargeText} indoorTint={indoorTint} onToggleIndoorTint={onToggleIndoorTint} vibrateOnDrag={vibrateOnDrag} onToggleVibrate={onToggleVibrate} />;
   } else if (cur === "general") {
     content = <GeneralTabContent can={can} appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} exceptions={exceptions} onOpenSpecialDay={onOpenSpecialDay} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} backupStatus={backupStatus} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
   } else if (cur === "layout") {

@@ -38463,3 +38463,1671 @@ holds `.env.local` files, so treat it as a secret. Two worktrees could not be ar
   `fitTimeline`, so on a shell too narrow for a side-by-side Timeline a tap writes `v` and the repair effect
   writes `h` straight back. Measured on the restaurant tablet at 998 wide, and the title still offers
   "Switch to side by side". The line moved verbatim, and this version changes no behaviour.
+
+## v18.14.0 — the 20 skills-scan fixes
+
+**Date:** 2026-10-31 · **Branch:** `feat/v18.14.0-skills-scan-fixes`
+
+The 2026-10-31 scan, weighted for real service: the tablet on the pass (998 × 507 with Chrome's bars,
+998 × 570 without), Timeline, Light in a dim room, wet hands, 1–2 staff, one of whom struggles with
+small text, Lock navigation on. Patryk decided every finding and chose one version, one branch and one
+PR. H1 (white on amber) and M2 (yellow) stay exempt by his decision. Report:
+`MGT_Bookings_Skills_Scan_2026-10-31.md` in the context folder, with the rig beside it.
+
+**Each fix below names its reading.** All readings are headless, on DEV, at 998 × 507 and 998 × 570,
+DPR 2, touch, Lock navigation on, on the capture profile's seeded day (12 bookings, 17 blocks, 2 lanes of
+Unplaced) unless the fix says otherwise.
+
+### H7: the compact layout
+
+Patryk: below 640px tall, Follow and zoom in the header, Optimiser and Reshuffle in the opened Summary.
+`isCompact(winH, isMobile)` (`lib/compact-shell.js`) is a HEIGHT test because nothing else separates that
+tablet from a taller screen of the same width; `useShortViewport`'s 480 means "the keyboard is up".
+Applied to all three views; `toolbarFolded` (a lone Timeline) moves the controls.
+
+**The scan's plan did not fit.** It said to fold the toolbar row into the header, but in the evening the
+Optimiser is off, so the row is `Optimiser: OFF` 110, Reshuffle 79, Following 75 and zoom 145 plus gaps: 433px,
+against 352 left in the header with the name hidden. And dropping the subtitle saves 1px on its own: the
+40px controls set the header's height. So the half nobody needs mid-service went to the Summary.
+
+`zoom`, `followNow` and `autoOptimizer` were App's already, so the two groups became components
+(`TimelineZoomControls`, `OptimiserControls`) with no portal and nothing moved but markup. The Summary takes
+scalars and stable functions, never an element, which would bust its memo.
+
+| Reading | Before | After |
+|---|---|---|
+| Tables fully on screen at 507 | 2 | 5 |
+| Tables fully on screen at 570 | 4 | 6 |
+| `main` top at 507 | 139 | 104 |
+| First grid pixel at 507 | 253 | 162 |
+| Header at 700 tall | 16–57 | 16–57 (`main` 139, grid 253: unchanged) |
+| Header zoom group, leaving / arriving | n/a | 215 → 0 in 240ms / 42 → 215 in 300ms |
+
+**Files:** new `src/lib/compact-shell.js`, `src/components/TimelineZoomControls.jsx`,
+`src/components/OptimiserControls.jsx`, `tests/compact-shell.test.js`; `src/App.jsx`, `TimelineView.jsx`,
+`Summary.jsx`, `tests/a11y.test.js`.
+
+### H6: the sticky hour ruler
+
+Patryk chose a separate strip over the plan's "the Timeline takes over its vertical scroll". That needs
+a definite height, which the lock-off page does not have, and it would have pinned the notification strip
+above the grid, one table less. The ruler cannot stick from inside the grid: `overflow-x: auto` makes y
+auto too, so that scroller would be what it sticks to. So it is a strip of its own above the rows, holding
+the hour lines and labels and the now-pill, with an inner `syncRuler` keeps at the grid's `scrollLeft`.
+Printing cannot be affected, against the plan's note: `#root` is hidden there and `TimelineSheet` draws its
+own grid.
+
+Five things the mechanism needed that the plan did not name:
+- **Chrome measures sticky from inside a scroller's padding** (`top: -4` under 6px of padding stuck at +2),
+  which left a 2px sliver of rows above the stuck ruler, and an engine that does not do this would cut the
+  ruler instead. So `main` and the split panes lost their top padding to a spacer child.
+- **`SlideView`'s `overflow: hidden`** made it a scroll container for the length of a date fade, so the ruler
+  would have stuck to it and dropped back into the page. It is `clip` now.
+- **`centerNow` writes `scrollLeft` in a rAF**, and the scroll event lands a frame later, so it calls
+  `syncRuler` itself or the ruler trails the now-line through a Follow ease.
+- **A drag:** a row passing under the ruler is still in the geometry, so `tableForClientY` looks up through
+  `rowProbeY`, and `scrollBounds` starts the top band under the ruler, only while it is stuck.
+- **Keyboard focus:** `scrollPaddingTop` 32 on the three scrollports (WCAG 2.4.11).
+
+| Reading | Value |
+|---|---|
+| Ruler's ticks when scrolled, against the scrollport's top: lock on 507 / 570 / 720 | 104 of 104 · 104 of 104 · 139 of 139 |
+| Same, lock off (the body scrolls) and in a split (a pane scrolls) | 0 of 0 · 186 of 186 |
+| Tables on screen scrolled to the end | 8 at 507 (6 before H7 and H6), 9 at 570 |
+| Ruler and rows, left edge after a 120px scroll | -25 and -25 |
+| Paced touch drag from table 10 to 8px under the stuck ruler | `main` 118 → 68 → 38 → 15 → 0, the edge scroll runs |
+
+**Files:** `TimelineView.jsx`, `lib/edge-scroll.js`, `atoms.jsx`, `SplitLayout.jsx`, `App.jsx`, `constants.js`,
+`index.css`, new `tests/timeline-ruler.test.js`, `tests/timeline-drag.test.js`, `tests/unplaced.test.js`.
+
+### D1: two-line blocks
+
+A day where one block could not fit the start-time chip took the time off every block, and the ring and
+flags then cut the names too. At the account's 1.5× a 90-minute block is 162px against the 180 `chipRoomFor`
+wants, so that was the usual service night. `chipsOn` stays all-or-nothing, as decided: on, one line; off, two.
+Confirmed and pending only. `twoLineBlock` reads `showChip`, so a leaving copy's snapshot needs nothing new.
+
+Patryk asked for the one-line block's padding around the content, so the insets did not move, and that
+decided the rest:
+- **The fold:** the 12px noted last session stopped clearing the name once top and bottom were evened (the
+  capitals rose to 4.5px, and a 3px border takes the fold further in). It is 14 on one line, 11 on two, 8 with
+  a border, with a 6px pencil at 8. Read at 6× zoom: "Emil" stopped reading "Émil".
+- **`ClashBand`:** at `bottom: 8` it covered the lower half of "20:30", the failure its own comment warns of.
+  It drops 3px onto the border on a two-line day. Its casing, added after the original placement note was
+  written, is why that no longer reads as a thicker border.
+- **A step the first pass had:** the one-line ring's `Reveal` stays on the name's row while line 2 eases, and
+  18 tall against the name's 13 that row grew 5px, so line 2 stepped 2.5px when the Reveal unmounted, at both
+  ends of the ease. Negative block margins on the Reveal hold the row at 13. `overflow: hidden` on the group
+  would then cut the ring, so it clips with `overflowX: clip`, which leaves the other axis alone.
+
+Left as it is: a typed 60-minute booking at 1× (about 79px) has less room than the chip, so the chip is cut at
+the handle. The old layout showed no time there at all, and the default lengths never get that narrow.
+
+| Reading (the 17 blocks of the test day) | Before | After |
+|---|---|---|
+| Names cut at 1.5× / 1× | 7 / 15 | **0 / 8** |
+| Blocks showing a time at 1.5× | 0 | 17 |
+| One-line day (2×), every rect of name, chip, ring, marks and handle, against HEAD | | 17 of 17 identical |
+| Seated and completed blocks on a two-line day, against HEAD | | 4 of 4 identical |
+| Two to one line and back on a zoom: name's biggest step per frame | | 0.9px both ways |
+| Same on a status flip, confirmed to seated and back | | 1.0px and 0.9px |
+| The time chip's distance under the name, through the ease | | 14.0 throughout |
+| Ink insets on the 36px block, from pixels: above the capitals, under the chip, under the ring | | 4.5 · 4.5 · 3 |
+
+**Files:** `TimelineView.jsx`, `lib/block-layout.js`, `tests/block-layout.test.js`, `tests/contrast.test.js`.
+
+### H2: Larger text
+
+One switch in Settings → App, Timeline group, renamed from "Timeline zoom" because it is no longer only zoom.
+Per device and `localStorage` only, so no `SCHEMA` raise and no field in `settings/users/{uid}/prefs`. Default
+off, stored only when on.
+
+Names, times and table numbers go up two steps, the rest one, on 52px rows. `TimelineView` takes a scalar
+`largeText` and makes one geometry object, `sz`, which the block, the ghost and the blocked bar are handed.
+Every `*_PX` width in `TL_LARGE` was measured off the live DOM at that size, as the normal ones were:
+
+| Measured at Larger text | Normal | Large |
+|---|---|---|
+| Time chip, width × height | 37.5 × 16 | 42.7 × 18 |
+| Hour pill · now-pill, width | 38.2 · 36.6 | 43.5 · 40.7 |
+| `NOW_PILL_CLEAR` (the two pills' half-widths, plus 2) | 38 | 44 |
+| Size ring | 18 | 22 |
+| The word "Unplaced", in a 52px room | 47.6 | 51.8 |
+
+D1's arrangement carries over without a new number: the fold's 11 and 8 clear the 14px name, the clash band
+clears the 12px digits, and 22 less 17 is the same 5px the ring's margin was written for. On a block too narrow
+for its ring the ladder drops it first, as at the normal size (Ingrid Sanz below, 162px with a clash).
+
+| Reading | Value |
+|---|---|
+| Names cut of 17 at 1.5× / 1× | 1 / 12, against 0 / 8 at the normal size; more letters shown either way |
+| Tables on opening, 998 × 507 / 998 × 570 | 4 / 5, against 5 / 6 |
+| Through the real switch, on: block · row · Unplaced box | 36 → 44 · 44 → 52 · 92 → 108, eased over 41 frames |
+| Off | 44 → 36 · 52 → 44 · 108 → 92, eased over 40 frames |
+| Paced touch drag from table 1 to 2, 4, 6 (writes dropped by the rig) | each row lit under the finger, block lands 3px inside it |
+| `localStorage` after on / off | `"1"` / no key |
+| Frames written to Firebase by the switch, both ways | 0 |
+
+**Files:** `TimelineView.jsx`, `useShellPrefs.js`, `Settings.jsx`, `App.jsx`, new `tests/large-text.test.js`,
+`tests/a11y.test.js`, `tests/block-layout.test.js`, `tests/grid-extend.test.js`, `tests/unplaced.test.js`.
+
+### L3: pull-to-refresh
+
+The scan said neither `html` nor `body` had `overscroll-behavior`, which was half right. App's mount effect has
+set it on `body` inline for years, and every inner scroller has `contain`. Only `html` lacked it, and that is the
+one the viewport reads. It is on both now, in the stylesheet, so it also holds before the app mounts.
+
+| Reading | Before | After |
+|---|---|---|
+| `overscroll-behavior-y`, computed on `html` | auto | **none** |
+| Same on `body` | none | none |
+
+Whether a pull in a Chrome tab now does nothing is on the hardware list: a synthetic touch cannot raise it.
+
+**Files:** `index.css`, `tests/stylesheet.test.js`.
+
+### L4: "Whole day"
+
+The reset button read "1.5x → 1x", which is the sum rather than what it does. It reads "Whole day" while zoomed and
+"1x" at 1×. Each word rides its own horizontal `Reveal`, so the button still eases rather than shoving the group
+beside it. Its `aria-label` leads with the same words.
+
+| Reading, 998 × 507, 570 and 720 alike | Value |
+|---|---|
+| Text · accessible name, zoomed | Whole day · Whole day (reset zoom) |
+| Width to 1×, and back on a zoom in | 80.1 → 34 · 34 → 80.1 |
+| Biggest step per frame | 5.5px · 4.5px |
+
+**Files:** `TimelineZoomControls.jsx`, `tests/a11y.test.js`.
+
+### L5: the Summary's body gets its own row
+
+The opened body sat inside the slot beside the date controls. It stretched the row by 174px at 998 × 507, all of
+it empty under the controls, and the controls hopped up 9px on a tall screen to get out of the way. It now portals
+into a slot under the date row, at full width. The lid and the controls hold still, because the row's height no
+longer moves, so `summaryOpen` left the drop's gate. The slot carries `inert={anyModal}` itself, since a portal
+leaves the row's `inert` behind.
+
+| Reading | Before | After |
+|---|---|---|
+| Date controls on opening, 998 × 800 | 78 → 69 | **78 → 78** |
+| Same at 998 × 507 and 998 × 570 | 56 → 56 | 56 → 56 |
+| Lid on opening, 507 · 570 · 800 | 58 → 57 · not read · 80 → 80 | **58 → 58 · 58 → 58 · 80 → 80** |
+| Left edge of the hourly bars at 507 | 384 | **31** |
+| `main`'s top at 507, closed → open | 104 → 278 | 104 → **300** |
+| Ease of `main`, 3 runs each way at 507 and 570 | | 18.4px per frame at most, one dropped frame aside, lid and nav still throughout |
+| Phone, 390 × 800, open and close | | lid 167, nav 108, both still, `main` 270 ↔ 540 |
+| Horizontal page overflow, open | | none |
+| Print and More behind a modal | | inert, and live again after it |
+
+That 22px is the cost, and so is the look: open, the Summary reads as two pieces. Both were the plan's stated
+default, the only shape that loses the empty area and keeps the lid under the finger.
+
+**Files:** `Summary.jsx`, `App.jsx`, `useSharesLine.js`, `tests/date-row.test.js`.
+
+### H5: Undo on every move, and a warning on the row
+
+A drop, the picker's Assign and Reshuffle could each move several parties, and none could be taken back. A real
+drag onto a busy row moved two other parties, and that row looked exactly like an empty one. All three now arm the
+Undo through `saveMove`, and the row under a dragged block says what the release will do.
+
+**Undo.** Armed in `onLanded`, because a refused write must not offer one. A held write replays on a fresh `prev`,
+so the delta is read inside the transform (`withUndoDelta`, `memoByPrev`, one optimiser pass). The pill outranks
+`dragMsg` and `reshuffled`, so it carries the action's sentence, and nothing is flashed at the dispatch: a toast that
+became the pill a tenth of a second later would flicker. A landing later than the pill would have lasted offers
+nothing. The pill's column went from 360 to 480px and the button no longer wraps under the text.
+
+**The warning.** `dropPreview`, asked once per row through a `VA` wrapper. Free keeps today's blue, a party in the
+way is amber with "Swaps with Lena Brandt" or "Moves Yara, Ariadna", and a drop that will be refused is red with
+the reason. The release goes straight through, as Patryk chose: the words are the warning and Undo is the safety.
+`planDrop`'s first half moved to `dropSite` and its swap to `swapOf`, so the row and the drop read one answer.
+
+**A flaw the evening found.** Written first with no trial at all, the row said "Moves …" and the release refused.
+Past the Optimiser's cutoff nothing re-seats a displaced party, so every such drop is refused, and that is most of a
+service. The morning's drag had gone through, so the scan never saw it. With the Optimiser off the trial is a list
+copy, so `dropPreview` runs the real plan and says "Can't move Yara, Ariadna" in red.
+
+**The gap that stays.** With the Optimiser on, no trial runs, so "Moves …" can still end in a stranding refusal.
+Nothing is written and the toast says why. The approved plan took a cheap preview for this reason: a trial is 70–500ms.
+
+| Reading | Value |
+|---|---|
+| `planDrop` against its pre-refactor copy, 16,000 generated drops | 16,000 identical, written lists included |
+| Same drops, row against release | free → plain 8,238 of 8,238 · swap ↔ swap 120 of 120 · red never went through |
+| Amber "Moves …", Optimiser on | 2,329 moved others · 51 took a lower free set · 214 refused, on dense generated days |
+| Amber "Moves …" refused, Optimiser off | 0, and 534 such rows are now red |
+| Real drop on DEV, 998 × 507 and 570 | "Lena Brandt moved to 1 — Yara Domínguez, Ariadna Puig reassigned." · 3 blocks moved |
+| Its Undo, then a reload | 0 of 17 blocks differ · 0 of 17 |
+| Assign, DEV | "Lena Fischer moved to 5." · 1 moved · Undo 0 differ |
+| Assign with Swap, DEV | "Lena Fischer moved to 3 — Olga Petrova reassigned." · 2 moved · Undo 0 · reload 0 |
+| Reshuffle, with a move fed in by the rig | "Tables re-optimised." · 3 moved · Undo 0 differ |
+| Reshuffle that moves nobody | no pill, the toast as before |
+| Undo pill's text row with that sentence | 72 → 32px |
+| Preview, 3 rows walked | 3 asks, 2.5–4.7ms each on a Mac in DEV |
+| Row tint · words, in and out | 145ms · 240ms, both ways |
+| Words on their tint over the ruler's surface | 4.5:1 or better, both themes, both roles (`tests/contrast.test.js`) |
+
+**What the rig did to DEV.** A simulated Reshuffle matched guests by name across every date, so it also moved Lena
+Fischer on 1 November, and the reconciliation re-placed her on table 4. Her earlier table was not recorded anywhere
+I could read. She is unlocked on a future date, so the optimiser owns her table, and the pass that re-placed her is
+deterministic, but I cannot prove 4 is where she was. Today's three parties are back where they started. Later
+simulations were scoped to the day and to the exact bookings.
+
+**Left as it is, because it is older than this version:** a Reshuffle that moves nobody with the Optimiser off reads
+"Booking saved."
+
+**Files:** `App.jsx`, `drop-plan.js`, `delete-undo.js`, `manual-assign.js`, `TimelineView.jsx`, `StatusToasts.jsx`,
+`tests/drop-plan.test.js`, `tests/delete-undo.test.js`, `tests/manual-assign.test.js`, `tests/retry-report.test.js`,
+`tests/contrast.test.js`.
+
+### L7: Vibrate on drag
+
+A finger on the tablet covers the block it is dragging. `lib/haptics.js` gives a 25ms pulse when the block lifts and
+when it lands on another row, with a switch in Settings → App, under the Timeline group's "This device only". It is
+on by default and stored only when off. The pulse reads the switch as it fires, so no prop reaches a block.
+
+| Reading, 998 × 507 and 570 alike, `navigator.vibrate` spied on | Value |
+|---|---|
+| Hold, then release on its own row | 1 pulse, at 820–828ms |
+| Drop on another row | 2 pulses, 805ms and 1866ms in |
+| Same drop with the switch off | 0 pulses |
+| Stored, on · off · on again | nothing · `"1"` · nothing |
+| With `navigator.vibrate` removed, as on iOS | the row is not drawn |
+
+Whether the restaurant's tablet has a motor, and whether Chrome lets the first pulse through before a tap, can only
+be read on the tablet, so both are on the hardware list.
+
+**Files:** new `lib/haptics.js`, `useShellPrefs.js`, `App.jsx`, `Settings.jsx`, `TimelineView.jsx`, new
+`tests/haptics.test.js`.
+
+### H3: the availability line
+
+A phone booking learned "no table" last. The answer was a banner in the form's body, at y=694 on a 570-tall screen,
+and the path ran Save → "Kitchen may be busy", which pointed at "alternatives below" that were not on screen →
+Confirm → only then the refusal. The answer is now a line in the form's footer, above the buttons, because the footer
+is what stays on screen with the keyboard up: "No table for 8 at 21:00", the four nearest times to tap, and Add to
+waitlist on a new booking. It replaces the body's list. A picked or kept table that Save will refuse shows Save's own
+sentence instead, in amber, with no times and no waitlist.
+
+`save()` now asks the save's own plan (`planRefused`) before it raises the kitchen question, so a save that cannot go
+through is refused at once. It asks the plan rather than the line because the line is a preview, which can be
+re-checking as Save is pressed. A throw in that dry run answers yes, so `doSave` reaches it inside the try that
+reports it. `planEdit` and `planNew` were named for this, and every `save-path` snapshot is unchanged.
+
+| Reading | 998 × 507 | 998 × 570 |
+|---|---|---|
+| The line, 8 at 21:00 | y 365–413, 48px | y 425–473, 48px |
+| The form's body, without it · with it · with the old list shape | 377 · 321 · 273 (a wrapped line, 96px) | 435 · 378 |
+| Save with the line up | stays at y 421, on screen | stays at y 481 |
+| In, 2 guests at 13:00 to 21:00 | 0 → 56px in about 530ms, opacity 0 → 1 | same |
+| Out, a tap on 18:45 | 56 → 0 in about 500ms, opacity 1 → 0 | same |
+| A chip with the name field focused | time 18:45, focus stays in the field | same |
+| Save, 8 at 21:45, kitchen busy, no table | no dialog, "Could not assign a table — try manual assignment." above the line | same |
+| Save pending, same draft | same refusal, no dialog | not rerun |
+| Save, tomorrow 2 at 14:00, kitchen busy, a table free | "Kitchen may be busy" is still asked | not rerun |
+| Keyboard, simulated as Android does it, 998 × 298 with the name field focused | body 153px, field at y 43–87, line and Save on screen | n/a |
+| 375 × 812 | the line wraps to three rows, 117px, no overflow | n/a |
+| Dark | same geometry, read from the screenshot | n/a |
+| A picked table taken at the new time | 37px pane, amber; after Save it yields to the same sentence; a time change brings it back | same |
+| 14 and 20 guests | still one row | same |
+
+The kitchen confirm now says "Go back to pick another time, or confirm to proceed anyway", because the dialog covers
+the form and nothing is below it.
+
+**Decisions.**
+- To hold one row in the form's 530px, the line goes without the notice's mark, and the chips and the button take
+  narrower insets (6px and 8px) than they have elsewhere. Their height stays 40px. A wrapped line was 96px.
+- Save's refusal sits above the line, so `applyEdit`'s "see suggestions below" stays true and needed no change.
+- The line can stand under a red refusal that says much the same. Save's sentence adds the way out ("try manual
+  assignment"), so both stay. Only an identical sentence yields.
+- A tap on a time keeps the focus where it was. Otherwise it would drop the keyboard mid-sentence. Whether that holds
+  on the tablet is on the hardware list.
+- The body's "Checking table availability…" row stays where it was. It also covers the kitchen scan, whose times are
+  in the body, and a time or guest change is made up there.
+
+**Left as it is, by the recorded rule:** the line collapses while a change is re-checked, because `useDeferredCompute`
+never shows a stale answer (Patryk's choice). Between two refused times it dips and returns: 56 → 41px at full speed,
+56 → 33px at 4× CPU, over about 200–330ms. Nothing under it moves, and the old banner moved the whole form.
+Correction 10 took the dip out, on better numbers than these.
+
+**Files:** new `AvailLine.jsx`, `AvailBanner.jsx`, `BookingFormModal.jsx`, `App.jsx`, `booking-logic.js`,
+`tests/booking-logic.test.js`, `tests/save-path.test.js`.
+
+### H4: one-tap country codes in the refusal
+
+Every Spanish number typed the way it is said was refused at Save, and the fix was Code, Spain, Save again, with the
+guest on the line. "Choose the country code for this phone number." now carries the pinned countries as buttons,
+flag and code. A tap writes the number the way the picker does (`joinPhone`) and carries on with what was refused,
+Save or Add to waitlist. Nothing is assumed until the tap, so v18.1.0's no-default-country decision stands. With no
+pins it is the sentence alone.
+
+**The trap, and why the resume is an effect.** The tap changes `form.phone`, which fires the stale-error effect.
+Resumed in the tap's own handler, a save refused for something else would set its message first and lose it a frame
+later, so the press would do nothing at all, which is what `doSave`'s own note warns of. `pickPhoneCode` only arms a
+ref and writes the number, and an effect declared BELOW the stale-error effect resumes. A save resumes `doSave`, not
+`save`: the phone refusal comes after the kitchen question, so that is already answered, and `save` would ask it twice.
+
+| Reading | 998 × 507 | 998 × 570 |
+|---|---|---|
+| The refusal, DEV's six pins | 75px pane, sentence then a row of six 40px chips, 58–60px wide | same |
+| Save on screen with it up | y 421 | y 481 |
+| A free table, "612345678", tap +34 | the form closes, "Booking saved" (writes blocked) | not rerun |
+| 8 at 21:45, tap +34, no table | "Could not assign a table — try manual assignment." still there at 60, 200, 500 and 1000ms, the picker on +34 | not rerun |
+| Add to waitlist refused, tap +44 | the form closes, "Added to the waitlist." | not rerun |
+| No pins | the sentence alone, 35px pane, as before | n/a |
+| Out, the number edited | 89 → 0 in about 500ms, opacity 1 → 0 | same |
+
+**A finding, left as it is.** The refusal opens at once rather than easing in, and a plain "Customer name is
+required." does the same, so it is older than this version and not this fix: `Reveal` runs its double
+`requestAnimationFrame` from the effect that sets `mounted`, and after a slow click (38–67ms of DEV render here) two
+ticks ran 1ms apart before the `mounted` render committed, so `mounted` and `open` landed in one commit and nothing
+transitioned. A Reveal opened from a timer, such as the availability line, is not affected. It was measured in
+headless Chromium in DEV, so whether the tablet does it is not established. `atoms.jsx`'s `Reveal` is unchanged from
+`main`. It is outside the scan's 20 fixes, so it was left here, and Patryk then asked for it: see "Reveal: an opening always eases" below.
+
+**Files:** `App.jsx`, `BookingFormModal.jsx`, `AvailBanner.jsx`, `phone-countries.js`, `tests/save-path.test.js`,
+`tests/phone-countries.test.js`.
+
+### M5: a new booking opens near now
+
+The form always opened at a literal 13:00, so nearly every evening booking began by changing the time through
+Android's native picker. Today, while the restaurant is open, a new booking opens at the next quarter hour, never past
+the day's last start. Any other day, and outside the hours, it opens at that day's opening time, which is
+`hoursFor(date).open` and no longer a literal. `newBookingTime` is pure, and the time goes in the draft `openForm` is
+given, so it is the baseline too and a form nobody touched is not dirty. `EMPTY_FORM` is unchanged, and so is the
+WhatsApp seed, which passes its own time.
+
+| Reading, DEV, 998 × 507 and 570 alike | Opens at | Back |
+|---|---|---|
+| The real clock, 17:3x, today | 17:45 | closes, not dirty |
+| Tomorrow | 13:00 | closes, not dirty |
+| Page clock 19:07 | 19:15 | closes, not dirty |
+| 20:15 exactly | 20:30, and the availability line is already up | closes, not dirty |
+| 21:50, past the last start | 21:45 | closes, not dirty |
+| 10:00, before opening | 13:00 | closes, not dirty |
+| 23:10, after closing | 13:00 | closes, not dirty |
+
+"Next" is strictly after now, so a form opened on the quarter does not offer the minute it is already in. How fast the
+Android time picker feels with this is on the hardware list.
+
+**Files:** `booking-logic.js`, `App.jsx`, `tests/booking-logic.test.js`.
+
+### M4: busy tables you can read, and a walk-in picker you can see
+
+A busy table in the picker was solid red at half opacity, which took the white text down with it: 1.7–1.94:1, on the
+10px word "busy" too. It is now the danger pane's pair, a pale red with the ink at full strength, and it has no
+shadow because it does nothing. With Swap busy on, a table a party can be moved from stays amber at full strength,
+which the plan had already found to hold.
+
+The Walk-in form exists to choose a table, Seat stays disabled until there is one, and the picker began below the
+fold. The order is now Time and guests, then the picker, then the kitchen line, Duration and Notes.
+
+| Reading | Before | After |
+|---|---|---|
+| Busy table, Light, from the rendered pixels | 1.7–1.94:1 (the scan) | 6.86–6.91:1 at 507 and 570 |
+| Busy table, Dark | not measured then | 7.32:1 |
+| Swap busy on | | amber, opacity 1, pointer, every table on DEV's evening |
+| Walk-in, first table's y, 998 × 507 | 523, body ends at 404 | 340 |
+| Tables on screen on opening, 507 and 570 | 0 of 13 | 3 of 13 |
+| Duration and Notes labels | 12px apart | level |
+| Pick table 3 | | Seat goes live, "Selected: 3 · Capacity: 2 (fits 2 guests)" |
+
+**Decisions.** The reorder alone gained 105px and left the first row just under the fold, so two more things moved.
+The kitchen line went below the picker, because it usually reads "none yet" and Seat still asks the kitchen question
+when it matters. "Tap tables to select / deselect." went, because the card directly under it said "Select tables
+below." Notes lost a 12px top margin from the old layout. The walk-in's "no tables" banner stays under the grid. It
+is off screen on a full evening, and moving it was not in the plan.
+
+**Files:** `TableGrid.jsx`, `WalkinForm.jsx`, `tests/walkin.test.js`, `tests/contrast.test.js`,
+`tests/destructive-buttons.test.js`.
+
+### M1: every button reads at 4.5:1 in Light
+
+`NEED.button` went from 3 to 4.5 and the fills were solved to it. The scan's readings,
+the same controls after, from rendered pixels at 998 × 507 and 998 × 570 (identical at
+both, DPR 2, touch):
+
+| Control | Before | After |
+|---|---|---|
+| Follow | 3.24 | 4.96 |
+| Following | 5.74 | 9.45 |
+| Zoom buttons | 3.29 | 4.96 |
+| Hours for this day, Print, More | 3.12 | 4.96 |
+| "+ New" | 3.23 | 5.42 |
+| Walk-in | 3.99 (token) | 4.96 |
+| Assign, in the form | 3.11 | 5.42 |
+| Reshuffle | 3.11 | 4.70 |
+| Completed, in the popup | 2.31 | 4.96 |
+| Completed, in the form | 2.19 (token) | 4.96 |
+| Modal title pills | 3.35 | 5.42 blue, 4.96 grey (token) |
+| Save booking | 4.02 | 5.42 |
+
+Nothing white-inked in those states reads under 4.5 except the block fills the decision
+keeps: amber 2.93, and yellow 1.86 on the Waitlist button. Log out, Re-check and the
+write-warning dismiss were not on screen in the rig, and read from their tokens: 4.96,
+4.96 and 4.76.
+
+**What moved.** Light's fills are opaque, because a translucent one reads differently
+over every surface it lands on. One grey, `--app-btn-grey` `#6c7079`, with `--btn-default`,
+`--btn-nav`, `--app-btn-grey-strong` and the new `--btn-completed` as aliases. One blue,
+`--accent` `#0066d6`, with `--btn-tables`, `--btn-edit`, `--btn-today` and `--app-new` as
+aliases. Red `#d33a3a`, which is `--btn-del`'s own colour without its alpha. Orange
+`#bf5319`, Walk-in green `#387d54`, slate-dim `#6a747e`. The two WhatsApp fills darken in
+both themes: `rgb(0, 102, 214)` and `rgb(15, 118, 110)`.
+
+**Dark did not move, and that is a measured statement.** Every token resolved per theme
+against HEAD: 3 differ of 206 in Dark and in Dark under more contrast, namely those two
+WhatsApp fills and the new `--btn-completed`, which reads `--block-completed` there.
+Light has 23. Many of these fills were `:root`-only, so each one's old value is copied
+into the dark block, the halo and the row glow included. The `more` states read the same
+as at rest, since neither block touches an opaque fill.
+
+**`--accent` and its copies.** Registered at last, as a text-bearing fill: the primary
+button of every form was measured by nothing. Light is held to the bar through
+`EXEMPT_FLOOR`'s per-theme form, and Dark's `#0a84ff` is a named exemption at 3.65:1,
+because against Dark's surface `#0066d6` reads 2.36:1 where `#0a84ff` reads 3.51:1, and
+`--accent` is also text and rings there. Swept by value: `--bg-ac-hover`, `--toggle-on`,
+`--shadow-btn-accent`, `--wa-row-active-bg`, `-border` and `-glow`. Two copies the plan
+did not name turned up in the same grep:
+
+- `index.html`'s boot-failure button, now `#0066D6`, which moved the boot script's CSP
+  hash in `vercel.json`. `tests/csp.test.js` holds that pair.
+- **`public/sw.js`'s offline page keeps `#007AFF`, on purpose.** Changing a byte of the
+  worker ships a new worker to every device, for a page seen only on a cold start with no
+  network, and no version carries a worker change it did not need.
+
+**Beyond the plan's list:**
+
+- `--app-btn-dark`. Follow says which state it is in by getting darker, and at 5.74
+  Following would have stood beside an idle Follow at 4.96. It is `#43464d` in Light, so
+  the step stays where it was (1.91 before, 1.91 after), and a new test holds the step
+  rather than either number. Dark keeps its alpha.
+- `flashStatus` in the form reads `STATUS_BTN_BG` too, so the wipe is the colour of the
+  button that was tapped. Live: `rgb(108, 112, 121)` on Completed.
+
+`STATUS_BTN_BG` (`constants.js`) is `BLOCK_BG` with Completed on the grey, read by the
+three status-button sites. Blocks, `SBadge` and the Plan legend stay on `BLOCK_BG`, so
+the Completed badge on a List card stays at its exempt 2.19.
+
+**Files:** `src/index.css`, `constants.js`, `BookingFormModal.jsx`, `ListView.jsx`,
+`QuickStatusPopup.jsx`, `index.html`, `vercel.json`, `tests/contrast.test.js`,
+`tests/a11y.test.js`, `DESIGN.md`.
+
+### L6: a dialog no longer shows what is behind it
+
+Built ahead of its place, because M3 and M6 are measured on this surface: the plan's M3
+note asks for L6's token first. `--bg-sheet` went to the 0.98 the phone sheet already
+uses: 0.72 to 0.98 in Light, 0.85 to 0.98 in Dark. Same hues, and the blur stays.
+
+| At 998 × 507, a new booking over the evening | Before | After |
+|---|---|---|
+| The sheet's gutter over the amber blocks, per channel | 211–225, 206–223, 190–224 | 252–253, 252–253, 250–253 |
+| The same gutter on the left, over nothing | 220–222 | 253 |
+| Blurred surfaces while a form is up | 2 | 2 |
+
+998 × 570 reads the same as 507. Dark's gutter over the same blocks reads 43–45 in every
+channel, against 43–45 over nothing.
+
+**Two things the token took with it.**
+
+- The Increase Contrast sheets were composites of the OLD token over `--bg-app`, which
+  DESIGN.md promises and nothing checked. Now `#fefeff` and `#2c2c2e`, and a test holds
+  the composite. Left alone, Light under more contrast would have read darker than at rest.
+- `--border-sheet` is a white rim. Inside a near-white sheet it draws nothing, so the
+  footer's hairline vanished and a scrolling Section was cut off by no visible edge. The
+  footer and the three "Selected" cards (Walk-in, Assign, Preferred) take `--border-soft`.
+  Only the card branch of `Overlay`: the phone sheet did not change, so its footer did not.
+  The autocomplete menu keeps the rim, because it floats on its own shadow.
+
+**Files:** `src/index.css`, `atoms.jsx`, `ManualModal.jsx`, `PrefPickerModal.jsx`,
+`WalkinForm.jsx`, `App.jsx` (comment), `tests/contrast.test.js`, `DESIGN.md`.
+
+### M3: the help text can be read
+
+`--text-faint` went from `#8a94a3` to `#646e7e` in Light. It is no fill's partner, so the
+registry never measured it, and it is the ink of every Settings tab's help text. Found by
+walking the Timeline, the opened Summary, List, Plan and all nine Settings tabs with every
+section open (86 sites):
+
+| Surface | Sites | Before | After | `--text-muted` |
+|---|---|---|---|---|
+| The main card, `#eef1f7` (Plan's hint) | 1 | 2.71 | 4.56 | 5.29 |
+| A Section in a dialog, `#f8fafd` | 70 | 2.93 | 4.93 | 5.72 |
+| The Summary's cells, `#fbfcfe` | 2 | 2.99 | 5.02 | 5.83 |
+| A dialog's sheet, `#fdfdfd` | 3 | 3.02 | 5.07 | 5.88 |
+
+Solved to the darkest surface, so the rest clear it with room. The scan's 2.28–2.32 on
+modal glass was L6's tint, and it went with L6. Three sites first read about 2 on a grey:
+that was the scrim, at the sheet's clipped bottom edge in the rig's 1500px window.
+Scrolled into view at 507, each one reads 4.93 on `#f8fafd`.
+
+A step under `--text-muted` on every surface, 1.16 throughout, and a test holds both the
+4.5 and the step. Nothing else moved: the same 86 sites, on the same 8 sampled colours,
+before and after.
+
+**Dark was not part of this decision.** Its `#8a8a8e` stays, and reads 3.19 on a Section
+and 4.05 on the sheet. The scan measured Light, and the plan says Light.
+
+**Files:** `src/index.css`, `tests/contrast.test.js`, `DESIGN.md`.
+
+### M6: a field has an edge
+
+`--field-edge`, `#7a8494` in Light, is a new token rather than a change to
+`--border-input`, whose other readers are stat cells and rows, not controls. `mkInp`
+reads it, so `DateField` and `SearchField` do, along with `LayoutSettings`' two small
+inputs, the WhatsApp composer and the header's date pill (`--app-date-border`).
+
+| Against | White rim, before | `--field-edge` |
+|---|---|---|
+| A dialog's sheet, `#fdfdfd` | 1.01 | 3.72 |
+| A Section in a dialog, `#f8fafd` | 1.02 | 3.62 |
+| The main card, `#eef1f7` | 1.05 | 3.34 |
+| The page, `#e2e7f1` | 1.09 | 3.05 |
+
+Live at 507 and 570: all 64 fields walked (the main screen, a new booking, Walk-in, Search
+and eight Settings tabs with every section open) read `rgb(122, 132, 148)`, 1px solid, the
+wrapped ones measured on the wrapper. Fields in dialogs that were not opened spread
+`mkInp`, and the readers left on `--border-input` are all non-controls.
+
+**Focus still reads as a change.** Tapping the name field takes the darkest pixel round it
+from `#7a8494` to the `#0a2540` ring, 2px solid, and the ring reads 14.9:1 on the Section
+against the edge's 3.62.
+
+Increase Contrast takes `--text-muted` here too, with the other hairlines, in both themes.
+At rest **Dark did not change**: `--field-edge` is `--border-input` there. Its rim reads
+1.44 on a Section and its fill 1.25, and the fill is what shows a field. That is under
+3:1, and the decision was about Light.
+
+**Files:** `src/index.css`, `atoms.jsx`, `LayoutSettings.jsx`, `ReplyComposer.jsx`,
+`tests/contrast.test.js`, `DESIGN.md`.
+
+### M7: Assign is blue everywhere
+
+The two Assign buttons in the Notifications strip, `UnplacedBanner.jsx:55` and
+`ClashBanner.jsx:84`, take `BTN.tables`, so the same action has one colour. Live at 507
+and 570: "Assign Rita Nowak" and "Assign Camilo Rey" read `rgb(0, 102, 214)`, 36px tall,
+5.42:1, the blue the form's Assign reads. Orange stays on the buttons that move a party
+somewhere it did not ask to go: Reassign, Reshuffle, No show.
+
+**Files:** `UnplacedBanner.jsx`, `ClashBanner.jsx`.
+
+### L1: the small chips you tap are 28px
+
+`TimeChip` takes `H.chip` by default, which covers the WhatsApp "Accept at" row and
+Walk-in's banner. The availability line and the phone codes pass their own 40px, as they
+did. `OutlineChip` now gives a small button chip `H.chip` itself: the tag chips, the
+activity log's filters and the pinned countries each said so by hand, and the Regular and
+No-show disclosures, the last four, did not. A span chip is not a target and stays as it was.
+
+| At 998 × 507 and 998 × 570 | Before | After |
+|---|---|---|
+| "Accept at" time chips, WhatsApp | 21 | 28 |
+| "Regular · 3 past visits", WhatsApp | 21 | 28 |
+| "Regular · 12 past visits", the form | 21 | 28 |
+| Time chips in Walk-in's banner | 21 | 28 |
+
+The scan's bar was WCAG 2.5.8's 24, and the plan's is `H.chip`, the size the app already
+uses for a tiny target.
+
+**Files:** `AvailBanner.jsx`, `atoms.jsx`.
+
+### L2: a Plan table can be tapped on a phone
+
+On a 375px phone the room's 900 units are drawn 323px wide, so tables are 21.5 and 25.1px.
+The drawn table does not change: `lib/plan-hit.js` gives each one an invisible box instead.
+PlanView paints the boxes below every table, so a tap on a drawn table can only be that
+table, and only a coarse pointer reaches them.
+
+**A box cannot just be 44px.** The closest pair stand 35.9px apart, centre to centre, so
+two 44px boxes overlap, and the overlap goes to whichever was painted last, which can be
+the table further from the finger. So boxes meet halfway across each gap, and none overlap.
+
+| 375 × 812, touch, Lock navigation on | Before | After |
+|---|---|---|
+| Smallest target | 21.5 × 21.5 | 37.7 × 44.5 |
+| Largest of the 13 boxes | 44.1 (table 9) | 44.5 × 44.5 |
+| Drawn tables | 21.5, 25.1, 44.1 | unchanged |
+
+Live, with fresh geometry before each tap:
+
+- A tap on each of the 13 drawn tables opens that table.
+- 26 taps 8px outside a drawn table, above and below: 23 open it. Two (11 below, 12 above)
+  are past the middle of a 14.4px gap and open the nearer table, which is the design. One
+  (9 below) lands on bare floor, `svg` by `elementFromPoint`, and opened table 2. That is
+  Chrome's own touch adjustment choosing the nearest clickable thing, not one of the boxes.
+- Either side of the 3 and 4 gap's midpoint, 2px off it: 4 on the left, 3 on the right.
+- A held finger on a box raises the quick-status popup, exactly as on the drawn table.
+- A drag that starts on a box opens nothing, because the pan is the svg's.
+- A mouse in a 375px window: 13 boxes, `pointer-events: none`. The tablet at 998: no boxes,
+  because a table is 73px there.
+
+The boxes sit in the zoomed group, so they pan and zoom with the room. `tableTap(id)` is
+the table's three handlers, once, so a box cannot answer differently from its table.
+
+**Files:** `src/lib/plan-hit.js` (new), `PlanView.jsx`, `src/index.css`,
+`tests/plan-hit.test.js` (new), `src/lib/CLAUDE.md`, `DESIGN.md`.
+
+### Reveal: an opening always eases
+
+Patryk asked for this one here, after the 20, from the ROADMAP entry H4's finding became. The branch had not
+merged, so it is one more commit in this version rather than a version of its own.
+
+`Reveal` set `mounted` in the effect that started its two `requestAnimationFrame`s. That render runs in a later task,
+so after a slow click the browser's overdue frames came first, `mounted` and `open` landed in one commit, and the node
+was born open. It now mounts closed in the render that receives `show={true}`, the twin of v18.3.3's `isOpen`, so the
+frames can only run after it. This is a render-phase update, the shape `useRevealRows` already uses for its re-seed,
+rather than the second effect the ROADMAP guessed at. The hidden page's snap moved with it, because a closed commit
+first could arm a transition that plays on wake.
+
+**It was wider than the finding.** The probe records every `Reveal` as it mounts, and at 4× CPU the Summary's body, the
+header's Follow group (H7's) and the refusal were all born open on every tap.
+
+| Reading | Before | After |
+|---|---|---|
+| Form's refusal on a real tap, 507, eased of 8, at 1× / 4× / 6× CPU | 2 / 0 / 0 | **8 / 8 / 8** |
+| A tour of the app, 2 rounds at 507, born open of 21 mounts, at 1× / 4× | 5 / 6 | **0 / 0** |
+| Summary, header group, refusal and a Settings section, in and out, 507 and 570, 1× and 4× | not read | 64 of 64 ease and end right |
+| Hidden page | | born open, 0 transitions, nothing plays on wake |
+| OS reduced motion, 1× and 4× | | height snaps, opacity fades, as the CSS intends |
+| Manual Reduce animations, 1× and 4× | | snaps |
+| Open or close interrupted at 150ms and inside the two frames, 1× and 4× | | 8 of 8 end right |
+
+**Not measured.** A newcomer row in the notification strip, the tour at 570, and the tablet itself. The rigs in the
+section below ran before this fix and were not run again after it, because the session's usage ran out.
+
+**Files:** `atoms.jsx`, `tests/motion.test.js`, `src/components/CLAUDE.md`, `DESIGN.md`, `ROADMAP.md`.
+
+### Patryk's corrections after seeing it (2026-11-01)
+
+He looked at the built version and sent five points. Every fork went through an interview on real renders of
+DEV, in five rounds, and his answers are the scope of this section. The first two sheets were mock-ups: injected
+CSS and DOM on the running app, writes blocked, nothing in `src/`. One rendering was wrong and was caught before
+he saw it: the block-colour option's fill had not applied.
+
+**Correction 1: the Unplaced row is tinted rose.** He asked for a different background, and the option he took
+keeps the bookings' status colour, against changing the blocks. `--tl-unplaced-bg` is `rgba(220,60,60,.08)` in
+Light and `rgba(255,120,120,.1)` in Dark. It is `unplacedEdge`'s fill, in both columns, so it stops on the dashed
+line (the edge's bottom and the line's agree at 278) and needs no hold of its own. The word's wrapper became
+`position: relative`, or the absolute tint paints over it. Measured on real pixels on Saturday's board: "Unplaced"
+#991b1b on #ece3e8 is 6.62:1 in Light, #fca5a5 on #372a2f is 7.21 in Dark, beside an untinted #eef1f7 and #212328.
+It eases both ways with the row: deleting Camilo Rey, writes blocked, took it 88 → 77.5 → 59 → 47.8 → 44.1 → 44,
+and Undo took it 44 → 59 → 73 → 81.5 → 86 → 88. A new test holds the word in both themes, because a tint is no
+fill's partner in the registry. Screen only, by his decision: `TimelineSheet` draws its own grid.
+
+**Files:** `index.css`, `TimelineView.jsx`, `tests/contrast.test.js`, `DESIGN.md`, `GLOSSARY.md`.
+
+**Correction 2: the indoor tables are tinted, and a switch turns it off.** A shade of the indoor badges' own purple
+behind the indoor rows and their labels, 8% in Light and 12% in Dark, both his numbers. `--tl-indoor-bg` is written
+as `rgba(var(--tbl-ind-rgb), …)`, so a new purple moves it. "Tint indoor tables" sits in Settings → App → Timeline
+under Larger text, this device only, on by default and stored only when off (`mgt-tl-indoortint`), so nothing is
+added to what is stored and `SCHEMA` does not move. TimelineView takes `indoorTint` as a scalar for the memo. A row
+hint replaces the tint and hands it back: dragged over table 12 the row read `--warn-bg`, the other three stayed
+purple, and back on the home row all four were purple again before the finger lifted. The label cell gained
+`background-color` in its transition, because its row already had one and it would have snapped beside a fade.
+The switch eased both ways with the two parts in step (.08 → .055 → .035 → .004 → 0 off, 0 → .055 → .067 → .075 →
+.08 on), and off survived a reload. Real pixels: the ground is #e5e3ef in Light against #eef1f7 beside it, #32283d
+in Dark against #212328. The badge's fill is 0.8 alpha, so the tint reaches under the number: white on the badge
+reads 5.92:1 in Light and 6.05 in Dark, and a new test holds that in both themes. Not on the printed Timeline, by
+his decision; a test keeps both names out of `TimelineSheet`.
+
+**Files:** `index.css`, `useShellPrefs.js`, `App.jsx`, `Settings.jsx`, `TimelineView.jsx`, `tests/indoor-tint.test.js`,
+`tests/contrast.test.js`, `tests/drop-plan.test.js`, `DESIGN.md`, `GLOSSARY.md`, `src/hooks/CLAUDE.md`,
+`src/components/CLAUDE.md`.
+
+**Correction 3: the buttons on the two pictured surfaces stretch edge to edge.** His option C, on the availability
+line and the country codes only: equal cells, the sentence left. Walk-in's banner and the WhatsApp Accept at chips
+keep theirs, and a test holds that `TimeChip` itself does not stretch. **The line:** the tablet's one row had to
+stay one row, and a breakpoint could not say where that ends, so nothing measures for the cells: the sentence's
+growth outweighs the actions' 9999 to 1, so it takes a shared row's free space, and a line of their own gives the
+actions all of it. The tablet reads as before: 530 × 48, chips 47.8 / 45.6 / 47.7 / 47.7, Add to waitlist 124.4, and
+12 guests stays one row. On a 375 phone the pane is 339 × 129 at 10px 12px, four cells of 75.8 run 12 from either
+edge, and the bar is 315 wide. Only the padding and the bar's own line depend on the wrap, and those are measured
+(`useSharesLine`), on a group that stays mounted, because the hook takes its nodes once. A first build let the bar
+share the times' line at 430, against his full-width bar, so the measured `wrapped` puts it on its own line. Turning
+a phone 430 → 590 → 430 with no reload goes to one row and back. **The codes:** `InlineAlert` gained `below`, a
+full-width line under the mark and the sentence together, which is what lets them run under the mark as the mock
+did with a measured negative margin. A grid, because a phone's six are 3 + 3 and a flex row cannot say that:
+`codeColumns(n, narrow)`, six at most on a tablet, three on a phone, four as 2 + 2. The tablet's six are 78.7 each at
+14px, the phone's 101 at 12px, which is also what keeps the sentence on one line at 375 (at 14px it wrapped, which
+the mock had not shown). Both still ease in and out through their `Reveal`s on a phone.
+
+**Files:** `AvailLine.jsx`, `atoms.jsx`, `BookingFormModal.jsx`, `lib/phone-countries.js`, `tests/stretched-chips.test.js`,
+`tests/phone-countries.test.js`, `GLOSSARY.md`, `src/components/CLAUDE.md`.
+
+**Correction 4: a field's edge is subtle again, reversing M6.** He compared M6's commit with the Confirm card and
+the Needs action row, whose borders are visible and subtle, and did not like the black outlines. `--field-edge` is
+#c3cad6 in Light, from #7a8494, the same quiet edge as those two (1.26 and 1.32:1). It is 1.33:1 on the page, 1.46
+on the main card, 1.58 on a Section and 1.62 on a sheet, so M6's 3:1 no longer holds at rest, by his decision, and
+DESIGN.md records that. Increase Contrast keeps the strong edge: read live, `rgb(90,100,116)` on the time, name and
+date pill, and the test still holds that one at 3:1. At rest they read `rgb(195,202,214)`, Dark's stay
+`rgba(255,255,255,.12)`, and a key focus still draws the 2px outline. The test now fences the edge from both sides,
+1.3 to 2, so neither the white rim nor the outline can come back by accident.
+
+**Files:** `index.css`, `tests/contrast.test.js`, `DESIGN.md`.
+
+**Correction 5: every secondary grey is one quiet button, across the whole app.** He pointed at the inbox's
+Re-check and Edit templates: visible, but they take the main focus and look heavy. Shown four recipes on his own
+screens, he chose the field's pale fill and the field's edge, grey words, no shadow, the same size, and chose "the
+whole app" over the inbox alone. `BTN.quiet` is one token, and the look is one rule in `mkBtn` and `mkSolidBtn`
+(`quietLook`): the FILL decides. That was chosen over rewriting about 125 sites, because about 15 of them are
+`cond ? blue : grey`, and each would otherwise have had to carry its ink, edge and shadow through the ternary. A
+button that names no fill is quiet. `--btn-clear`, `--btn-reset`, `--btn-nav`, `--btn-dismiss`, `--btn-default` and
+both slates are deleted, which touched 47 files. `--app-btn-grey` stays for Completed and the inbox tab's count,
+`--app-btn-grey-strong` for the title pills, `--app-btn-dark` for Following.
+
+His exceptions: Follow idle and Optimiser OFF go quiet while Following stays dark and Optimiser ON stays green; Undo
+becomes solid blue; the grey title pills and Completed on a button stay solid. He also ticked the four that were
+arguable: the inbox ✕; Send while it cannot send, which is a quiet disabled button that turns green when it can; the
+Template editor, where Edit on each card and Close are quiet while Save all and Add template stay blue; and the
+phone's back chevron and folded draft button.
+
+A deleted token fails silently, as a transparent button, so the walk was built to find that: on Timeline, the
+Summary, the strip, List, Plan, the form, Walk-in, Find a booking, Hours, Print, the week view, all nine Settings
+tabs with every group open, the inbox and the Template editor, in Light, Dark and on a phone, every `var()` in an
+inline style was resolved on its own element, and none came back empty. Every quiet button read
+`rgba(255,255,255,.5)`, `rgb(195,202,214)`, `rgb(74,85,104)` and no shadow in Light, and `rgba(118,118,128,.24)`,
+`rgba(255,255,255,.12)`, `rgb(199,199,204)` in Dark. Follow's flip eases all four properties both ways, about 140ms
+each way, read frame by frame, because the shared transition now names `color` and `border-color`. Undo reads
+`rgb(0,102,214)` and Completed `rgb(108,112,121)`. A forced `:active` is the same 0.96 on a quiet button and on
++ New, and a key focus draws the 2px ring. Log in stays blue on the signed-out page and `/wa-connect`'s links are
+quiet, in both themes, in a clean browser with nothing typed. Send's flip was not driven: the only DEV conversation
+has an expired window, so it cannot send. It has the same class as Follow, and the test reads its ternary.
+
+One trap: moving a fill's `background` after the spread keeps the quiet ink, so LoginScreen's Log in was grey on
+blue until the fill moved inside `mkBtn`, and a test now refuses that shape. The Follow step test is gone, since idle
+has no dark fill left to step from. DESIGN.md keeps the rule that test held, for the next such pair.
+
+**Files:** `lib/constants.js`, `components/atoms.jsx`, `index.css`, 47 component files by a codemod (plus by hand
+`LoginScreen`, `StatusToasts`, `whatsapp/TemplatesEditor`, `whatsapp/ReplyComposer`, `whatsapp/InboxPanel`,
+`whatsapp/ConversationView`, `TimelineZoomControls`, `AdminSettings`), `tests/quiet-buttons.test.js` (new),
+`tests/contrast.test.js`, `tests/destructive-buttons.test.js`, `tests/motion.test.js`, `.design-sync/`, `DESIGN.md`,
+`GLOSSARY.md`, `src/components/CLAUDE.md`.
+
+**Correction 6: the inbox's header keeps one action, and the rest are under a ⋯.** His words: "Point 4, but the
+order of the buttons (looking from right to left) is: a new ⋯ menu first and second Archive." So `[Archive] [⋯]`,
+with the ⋯ at the far right holding Re-check and Not a customer. On an archived thread it is `[Restore] [⋯]`, Restore
+stays solid teal, and the ⋯ adds Delete in red, which still confirms. He chose a menu under the button with nothing
+dimmed over the List card's centred card, and the ⋯ turning while Re-check runs over a row that stays open.
+`ConversationMenu` is a real ARIA menu; what it holds is `conversationMenuIds`, which is pure and tested. Delete is
+last, so red is never the row under the thumb, and it is only offered on Archived. With two buttons the header no
+longer wraps, so v18.9.0's wrapping and its `maxWidth` went.
+
+Measured live at 998×570, DPR 2, touch. Archive 842–925 and the ⋯ 931–967, both 36 tall; rows 216×44 and every one
+hit-tests as itself over the thread and the draft card. In: opacity 0 to 1 with scale .97 to 1 and 4px down to rest,
+from the top-right corner. Out: the same pair back, then gone at 415ms. A tap elsewhere closes it and still does what
+that tap does, a tap leaves focus on the ⋯ with no ring, and at `data-motion="reduce"` it opens and closes at once.
+By key: Enter or Space opens on the first row, ↓ ↑ wrap, Home and End go, Tab leaves and closes, and Escape closes
+the menu alone: the first Escape left the inbox open with focus on the ⋯, the second closed the inbox, and on a phone
+it left the conversation open. Re-check, with its request held open through a route: the menu closes, the marks
+cross-fade (.63 → 0 in, .19 → 1 out, read in steps), the arrow turns, a reopened menu reads "Checking…" muted and
+`aria-disabled` and a tap on it does nothing, and the result line is unchanged. Delete raises the same confirm, and
+Escape from it puts focus back on the ⋯, which is why focus is handed back before the action runs. Fits a phone at
+375×812 (menu 137–353) and at 998×507.
+
+Two things the mock could not show. **InboxPanel owns the keys:** its listener is on `window` in the capture phase and
+re-added on every render, so ↓ inside the menu would have moved the conversation and Escape on a phone would have
+left the thread as well. `stopPropagation` does not stop a listener on the same target, so that listener stands down
+while a `[role="menu"]` is in the DOM. **`--tl-popup-bg` is 95% in Dark** because it normally sits on a dimmed page.
+With nothing dimmed, Accept and Dismiss read through it behind the word Delete. `--menu-bg` is the popup's card in
+Light, which is what he approved, and `#2c2c2e` in Dark. The rows' three inks are measured on it in all four themes.
+
+Not caused by this and not fixed here, because it is a separate job: a tall draft card does not fit a short screen. The
+header is the same height as before (it ends at the same pixel), and nothing else in that column moved in this version,
+but measured here on the only DEV thread, Send ends 12.7px past the panel's bottom at rest at 998×507, and while
+"Reading the message…" sits above the draft it ends 23px past at 998×570 and 79.7px past at 998×507. Correction 9
+fixed it, in this version, once he had seen it.
+
+**Files:** `whatsapp/ConversationMenu.jsx` (new), `whatsapp/ConversationView.jsx`, `whatsapp/InboxPanel.jsx`,
+`lib/whatsapp.js`, `lib/keyboard.js`, `index.css`, `tests/conversation-menu.test.js` (new),
+`tests/wa-inbox-layout.test.js`, `tests/destructive-buttons.test.js`, `tests/contrast.test.js`, `DESIGN.md`,
+`GLOSSARY.md`, `src/CLAUDE.md`, `src/components/CLAUDE.md`.
+
+**Correction 7: the draft card's Add to waitlist goes right.** Its own row at the right, on the compact bar and in the
+tall card. It is `marginLeft: auto` for the wrapping row and `alignSelf: flex-end` for the tall card's column, and
+`justifyContent: flex-end` for Suggest beside it, because a group that wraps fills its line and its rows would start
+at the left again. Read live, its right edge is the row's right edge at 998×570 and 998×507 (956, level with Dismiss),
+1280×900 and 1600×1000 (the column, 1210 and 1370) and 375×812 (349). Only the row's place moved: the button is the
+same size at each.
+
+**Files:** `whatsapp/DraftCard.jsx`, `tests/wa-inbox-layout.test.js`.
+
+**Correction 8: the header's gear and search go quiet.** The regression pass found them: `--cog-bg` was not on the
+census of Correction 5, so they kept a darker disc and a shadow beside Follow, − and +, and the mock he approved
+showed them that way. He looked at the two side by side and chose quiet. `CHROME_BTN` is `mkBtn` on `BTN.quiet` now
+and both `--cog-*` tokens are gone. Read live, the two match Zoom in exactly in both themes: `rgba(255,255,255,.5)`,
+edge #c3cad6, ink #4a5568 and no shadow in Light, and `rgba(118,118,128,.24)`, `rgba(255,255,255,.12)`, #c7c7cc in Dark,
+at 36 × 36. A forced `:active` reads 0.96 on the gear and on Zoom in, the control, and a key focus draws the 2px ring.
+
+**Files:** `App.jsx`, `index.css`, `tests/quiet-buttons.test.js`, `DESIGN.md`, `GLOSSARY.md`.
+
+**Correction 9: a conversation gets its height back on a short screen.** The regression pass found what Correction 6
+had set aside, and the picture was worse than the 12.7px it had recorded. At 998 × 507, with a Regular's chip and a
+refused draft, the thread's box was 28px, which is its own padding, so the message had no height at all, and the
+composer ran off the panel. It is older than this version. He chose from five real renders, today and four ways out,
+which measured 12, 47, 71 and 106px for the message, and took all three of the changes they were built from.
+
+| 998 × 507, a draft with no table | Before | After |
+|---|---|---|
+| Panel | 25.3–481.6 | 8–499 |
+| The message's height | 0 | 106 |
+| Send against the panel's bottom | 12.7 past | 11 inside |
+| The same during a re-check, "Reading the message…" on screen | 79.7 past, message 0 | 11 inside, message 39 |
+| At 998 × 570 | message 33 | message 169 |
+
+- **The panel** takes the screen less 8px each way, so it still reads as a panel over the day.
+- **Select, Needs action and search** join the title row, as one element drawn in one of two places (`filterControls`).
+  The placeholder is "Search…" there, as on a phone.
+- **The number** leaves the conversation's header. That is what puts the header on one line, and it needs two panes,
+  because the list beside it is what shows the number instead.
+
+**Read once, when the panel opens, and this is the one thing here that is not obvious.** The flag is
+`useState(winH)`, not a live `winH`. Android's keyboard moves `innerHeight` (`resizes-content`), so on a tablet taller
+than 640 the keyboard would turn this on while the search box has focus, remount the box in its other parent, drop the
+focus and with it the keyboard, and turn it off again. The restaurant's tablet is short either way; a second, taller one
+is not. Measured at 1280 × 800, taking the height to 460 and back with the search box focused: the same node, still
+focused, and the layout did not change.
+
+At 640 and above nothing changed: 998 × 640, 998 × 700 and 1280 × 800 keep the two rows, the long placeholder and the
+number. So do 899 × 500, which has one pane, and a phone. A window of exactly 640 reads a smaller message (96) than 570
+does (169), because the layout stops there; a breakpoint does that, and no real screen sits on it. Exercised at 507 with
+real taps: typing filters the list and keeps focus, Needs action toggles, select mode draws its bar and Cancel restores
+it (106 → 57 → 106), and the keyboard's fold takes the title row away and brings it back, with the visual viewport held
+at 289.
+
+**Files:** `whatsapp/InboxPanel.jsx`, `whatsapp/ConversationView.jsx`, `lib/compact-shell.js`,
+`tests/wa-inbox-layout.test.js`, `DESIGN.md`, `GLOSSARY.md`, `src/CLAUDE.md`, `src/components/CLAUDE.md`.
+
+**Correction 10: the availability line keeps its band.** He had decided to leave the dip, on numbers of mine that the
+regression pass showed were incomplete. The 41 and 33px in H3's section were taken in the evening, with the Optimiser
+off for today. With it on, which is today before 15:00 and any future day, the check runs the Optimiser, and the 56px
+band closed much further. He had decided on the wrong figures, so it went back to him, and he changed it.
+
+| Between two refused times, band's lowest height of 56 | Full speed | 2× CPU | 4× CPU |
+|---|---|---|---|
+| Optimiser off, before | 41 | 41 | 33 |
+| Optimiser on, before | 26–33 | 18–20 | 4–5, back after about 0.75s |
+| After, either way | 56 | 56 | 56 |
+
+While a refused answer is re-checked the band keeps its height and its tint, and reads "Checking the tables…" with the
+pulsing dot. Nothing stale shows, which is his rule: `useDeferredCompute` is untouched and still hands back null. The
+last refusal is kept only to draw the same line, hidden, which is what holds the height to the pixel when it wraps: 137
+on a phone, unmoved. Hidden means `inert` as well, so an old time cannot be tapped, focused or read out.
+
+- **A fast check never shows the words.** They wait out the answer's fade (`--t-tap`, as a transition delay, so it
+  survives both Reduce Motion rules), and that wait is the grace: at full speed the words stay at 0 and the answer dips
+  and returns; at 4× they reach 0.82.
+- **Two defects the height alone would not have shown, found frame by frame and fixed before committing.** When the
+  re-check found a table, the band folded with the last content `Reveal` had cached, so the words faded in on a closing
+  band, after the check had ended (0.65 at 250ms). `leaving` hides the answer and keeps the words out: 0 at both speeds.
+  And at dinner `kitchenScan` opened the body's "Checking table availability…" under the band, 36 frames on every change
+  of the time. That row now stays shut while the band is up: 0 frames.
+- **The three other paths are as they were.** The first refusal eases in from nothing, a table found eases out, and
+  both still move only the band: 56 → 0 and 0 → 56 at both speeds.
+- **The words are `aria-hidden`.** They are for the eye. The answer leaves the tree while `inert` and comes back new, so
+  a screen reader hears each answer once and nothing in between.
+
+Reduce Motion read as expected: the band folds at once, and the fade and the grace stay. A forced check of the picture at
+998 × 507 is in the session's rig; the tint stays the last answer's, because a flip between red and neutral on each change
+would be the blink this replaces, and the words say what it is.
+
+**Files:** `AvailLine.jsx`, `BookingFormModal.jsx`, `hooks/useDeferredCompute.js` (its comment), `tests/booking-logic.test.js`,
+`GLOSSARY.md`, `src/components/CLAUDE.md`.
+
+### The six entries this version parked (2026-11-01)
+
+Closing the version left six entries in ROADMAP. Patryk's instruction was to fix every one, and to decide each fork
+himself. All six were measured before he was asked, and that changed the list: **two of my entries were wrong, and I
+had written them from reasoning rather than a reading.** Corrections 11 onward are what came of it.
+
+**Correction 11: "Tables: 3 / 4 / 5" reaches the bar.** `--tbl-out-text` `#3f7f8c` → `#3e7e8b`, 4.46 → 4.53:1 on a
+dialog's sheet (`#fdfdfd`), where both pickers draw it. A heading's ink has no fill of its own, so the registry had no
+row for it. It has one now: both zones' headings, in all four themes.
+
+**Files:** `index.css`, `tests/contrast.test.js`, `ROADMAP.md`.
+
+**Correction 12: Dark's small text reaches the bar.** The entry's numbers were wrong, and one half of it was not there.
+It said faint read 3.19 on a Section and 4.05 on the sheet, and a field's rim 1.44. Read from pixels on the running app
+instead of calculated: faint 3.51 on a Section (`#363638`), 4.11 on the sheet (`#2b2b2d`), 4.35 on the main card
+(`#24272d`), and the rim 1.81 on a Section, with the fill at 1.28. That is stronger than the 1.58 he chose for Light, so
+**the rim is withdrawn**. The same walk found two low readings the entry had not named.
+
+| Ink, in Dark | Before | After | Reading |
+|---|---|---|---|
+| `--text-faint` | `#8a8a8e` | `#9e9ea3` | 4.52 on a Section, 5.61 on the main card, still 1.10× under `--text-muted` |
+| `--text-required` (the `*`) | `#ff6b6b` | `#ff7575` | 4.35 → 4.62 on a Section |
+| "Code", in the country picker | `--text-muted`, 3.94 | `--field-prompt`, `#b3b3b9` | 4.57 on a field in a Section |
+
+Each after-reading is from the pixels at 998 × 507, in Settings and the booking form. "Code" takes its own token because
+raising `--text-muted` would have moved every muted word in Dark to fix one, and it stays `--text-muted` in Light, so
+Light does not move at all. Dark's blue keeps its named exemption, as he decided. `--text-faint`'s test covers both
+themes now, and the `*` and "Code" have one of their own.
+
+**Files:** `index.css`, `CountryPicker.jsx`, `tests/contrast.test.js`, `DESIGN.md`, `ROADMAP.md`.
+
+**Correction 13: the worker's offline page gets the same blue.** `#007AFF` → `#0066d6` in `OFFLINE_HTML`, 4.02 → 5.42:1
+under white. M1 had left it, because a byte change ships a new worker to every device, and he chose to take that now.
+**This is the version's one change a revert cannot reach**, so what it does and does not do, per the worker's four
+properties: nothing near the data path moves, because `fetch` and `activate` are untouched; `CACHE` keeps its name, so
+`activate` deletes nothing and the offline copy of the app stays; there is no `skipWaiting`, so the new worker installs on
+a device's next visit and takes over on the navigation after that, never under a shift in progress; and both ways out
+stand. The page follows the system theme and the button is one value, so it was checked against both pages: 4.79 on the
+light one and 3.31 on the dark one, where `#0a84ff`'s lighter fill would have dropped the white word to 3.65. A test now
+reads those three numbers out of the worker, and no token could have, because the page is a document of its own.
+
+The change itself was verified from the file. **What cannot be tested locally is the offline page on a device**: it
+shows only on a cold start with no network, and the dev server has no worker.
+
+**Files:** `public/sw.js`, `tests/contrast.test.js`, `DESIGN.md` (its stale "shared accent" line), `ROADMAP.md`.
+
+**Correction 14: a Reshuffle that moves nobody says so.** The entry had two halves, and only one was real.
+
+- **"The line says No table when only a chosen zone is full": withdrawn.** It never does. 100,800 cases across 900 fill
+  patterns, party sizes 1–28, both Optimiser states, indoor and outdoor: auto and the preference fit together 46,232 times
+  and refuse together 54,568, and auto never fits where a preference refuses. A preference has been a wish since v18.3.1,
+  so a refusal means no zone had room, as the comment at the line already said. I had written the entry without measuring.
+- **The Reshuffle half was wider than written.** It read "Booking saved." with the Optimiser off and "Tables re-optimised."
+  with it on, and neither had happened. Both now read "No tables needed moving.", his words, through a new `savedToast`
+  kind. `flash`'s offer to the Undo pill keys on `k===true` now, because the old `k!=="saved"` would have told the pill
+  that tables had been re-optimised.
+
+On the running app with the Optimiser off, three Reshuffles at 16:00 each read the sentence. With it on the button is
+only offered by the strip's "Tables could be reshuffled", which DEV's data did not raise, so that state is the unit test's.
+
+**Files:** `lib/booking-logic.js`, `App.jsx`, `StatusToasts.jsx` (its comment), `tests/booking-logic.test.js`,
+`tests/drop-plan.test.js`, `GLOSSARY.md`, `ROADMAP.md`.
+
+**Correction 15: today, no time that has passed.** Not an entry: it turned up in the sheet for the walk-in, which offered
+18:45 to 19:30 at 20:20. Neither `findTimes` nor `findKitchenFriendlyTimes` ever looked at the clock, so at dinner the
+availability line and the kitchen's chips offered lunch, and H3 had put four of those times beside Save. His call: for
+today, only times still ahead, in the walk-in, the booking form and the WhatsApp draft card, and other days unchanged.
+
+- **One floor, `earliestOffer(date, today, nowMins)`, passed into both searches.** This quarter hour or the next today, and
+  0 otherwise, so a past date stays as it was: entering a booking after the fact is not service.
+- **It is where the walk starts, not a filter on the results.** A filter would have been wrong in the one case worth
+  thinking about: a time typed before now finds the ten after it, and those can all have passed while 19:30 is free.
+- **The draft card's check gains one dependency.** `useDraftCheck` keeps `liveBookings` out on purpose, so a card does
+  not re-check on the 15-second tick. The floor moves four times an hour and only for a request for today, and a card
+  still offering 20:00 at 20:30 is wrong rather than unsettled.
+- **The line's " No availability found." goes.** On a full evening a line with no times left is now the common case, and
+  "No table for 8 at 20:20 No availability found." says one thing twice, with no stop between. He had asked for the
+  sentence and Add to waitlist.
+
+On the running app at a 20:20 page clock: 8 at 21:00 and 2 at 21:00 read their sentence and Add to waitlist with no chips,
+where the first offered 18:45 to 19:30 before.
+
+**Files:** `lib/booking-logic.js`, `lib/draft-check.js`, `hooks/useDraftCheck.js`, `AvailLine.jsx`, `WalkinForm.jsx`,
+`BookingFormModal.jsx`, `tests/booking-logic.test.js`, `tests/draft-check.test.js`, `GLOSSARY.md`, `src/lib/CLAUDE.md`.
+
+**Correction 16: the walk-in says "no table" where you can see it.** On a full evening at 998 × 507 the dialog is 456px tall,
+the body 26–404, and the banner sat at y 906 inside 1,323px of content, with the picker's busy pills above it and nothing
+on screen to say why Seat stayed grey. He chose the booking form's line, pinned above Back and Seat, in the same red,
+over the banner above the picker, which filled the body and pushed the tables out of view.
+
+- **One sentence in both forms**, "No table for 8 at 21:00", where this one said "No tables available at 21:00." The four
+  nearest times replace the Before and After lists, and Add to waitlist sits in the row.
+- **The band logic came with it, as a hook.** `useLineBand` is what correction 10 wrote into the booking form, because
+  the walk-in's scan also reads null while it re-checks and would have blinked the same way. `AvailBanner` had no caller
+  left and is gone; `TimeChip`, which three others use, keeps its own file.
+- **A picked table settles the question**, so the line goes with that tap rather than after a scan, and Clear brings it back.
+- **The body's cue stays shut under the band**, as in the booking form.
+
+Measured at 998 × 507 and 570, Light, writes blocked, at 1× and 4× CPU, with `c16walkin.py` and `c16pick.py`:
+
+| | 507 | 570 |
+|---|---|---|
+| Line | y 365, 56 tall | y 425, 56 tall |
+| Seat | y 421 | y 481 |
+| Body | 26–348 | 30–408 |
+
+| Change | Band | Answer | Words |
+|---|---|---|---|
+| Fits → refused | 0 → 56, easing | solid | 0 |
+| Refused → refused | 56 throughout | dips to 0.68 at 4× | 0 |
+| Refused → fits | 56 → 0, easing | fades with it | 0 |
+| A chip tapped | 56 → 0, easing | fades with it | 0 |
+| A table picked | 56 → 0, easing | fades with it | 0 |
+| Clear | 0 → 56, easing | solid | 0 |
+
+On a phone at 375 × 812 it wraps to 137px, with four chips and a full-width Add to waitlist, and nothing overflows.
+
+**The cost, stated:** with the line up on a 507 tablet the body loses 56px and the picker's first tables go under the band.
+The picker can be scrolled, and at that moment its tables are busy anyway.
+
+**Files:** new `hooks/useLineBand.js`, `TimeChip.jsx` (was `AvailBanner.jsx`), `WalkinForm.jsx`, `AvailLine.jsx`,
+`BookingFormModal.jsx`, `whatsapp/DraftCard.jsx`, `atoms.jsx` (its comment), `tests/walkin.test.js`,
+`tests/booking-logic.test.js`, `tests/stretched-chips.test.js`, `GLOSSARY.md`, `DESIGN.md`, `src/components/CLAUDE.md`,
+`src/hooks/CLAUDE.md`, `ROADMAP.md`.
+
+**Correction 17: the row warning checks itself when the finger rests.** With the Optimiser on a row could say "Moves …"
+and the release could still refuse. `planDrop` is too heavy to run on every row, so H5 left that as a known gap. Measured
+for the first time, with the real `planDrop` over every booking on every row of DEV's Saturday:
+
+| Day | Guesses | Wrong | `planDrop` at 1× | At 4× CPU |
+|---|---|---|---|---|
+| Saturday, 12 bookings | 79 | 4 | median 11.8ms, max 27.5 | median 47.7ms, p90 61, max 70.6 |
+| Jammed, 26 bookings | 79 | 48 | median 50ms, max 117.5 | median 208.6ms, p90 327.9, max 495.5 |
+
+Of his three (a check when the finger rests, softer words, a check on entering each row) he took the first.
+
+- **Amber at once, as before, marked `unsure`.** Only that kind of hint is ever checked: a free row, a swap and a red row
+  were always exact.
+- **`dropCheck` is `dropPreview` with the trial switched on.** Both are one function, `rowHint`, so they cannot disagree
+  about anything but the trial. With the Optimiser off `dropPreview` is `dropCheck`, which fixes one small untruth on the
+  way: a lower candidate that was free read "Moves …" when the plan moved nobody.
+- **`planDrop`'s displacement says who it `moved`**, so a corrected row names the parties the release will move, and not
+  the first candidate's. That is what "the names correct" needed, and nothing else reads it.
+- **Once per row per drag**, held in `dropChecks` and forgotten when the drag ends. Back on a row, it answers at once.
+- **A check that agrees changes nothing on screen**: it stores the hint it checked, so no key, class or colour moves. One
+  that does not fades its words in on `--t-move`, and the row's tint eases.
+
+**"Still" had to mean still.** I told him the pause would come only while the finger was still, and a timer on the row
+alone would not have kept that: a slow drag spends more than 200ms on every row, and this is the one call that can hold a
+frame. So the wait is measured from the last time the finger's y moved more than `DROP_REST_SLOP` (8px). A real finger's
+tremble could not be measured here, because a CDP touch does not tremble, so 8 is a judgement; too low costs only that a
+trembling finger is never checked and the release says what it always said.
+
+Real paced touches, Optimiser on, 12:30 on DEV's Saturday, writes blocked, against the app's own running functions. The 79
+guesses held 4 wrong ones, all "Moves Pau" that would refuse:
+
+| | 1× | 4× CPU |
+|---|---|---|
+| Wrong guess, resting | amber, red at 227ms, the words 0 → 0.91 in 134ms | red, the check 49–55ms |
+| Right guess, resting | no change at all | no change at all |
+| One check took | 20–32ms, longest frame 33 | 49–60ms |
+| Off the row and back | amber on the next row, red again at once, no second check of that row | the same |
+| Across rows at 61–68 px/s | 2–3 checks | 3 |
+| Across rows at 88–99 px/s | 0 | 0 |
+| Across rows at 107–232 px/s | 0 | 0 |
+
+The release on a row that turned red refused with its toast, and a right guess went through. The generated-days test now
+holds the check to the release on every row: red exactly when it refuses, and the moved parties by name.
+
+**What this does not do.** The check is one synchronous call, so on a jammed day at tablet speed the block can sit still
+for 200–500ms if the finger starts moving just as it runs. He accepted that when he chose this. It also sees the data as
+it was when the check ran, like the hint before it, and the release plans again from fresh data.
+
+**Files:** `lib/drop-plan.js`, `App.jsx`, `TimelineView.jsx`, `tests/drop-plan.test.js`, `DESIGN.md`, `GLOSSARY.md`,
+`src/components/CLAUDE.md`, `src/lib/CLAUDE.md`, `ROADMAP.md`.
+
+**Correction 18: the way back from "Unsaved changes" is the obvious one.** Patryk sent the walk-in's confirm with one
+worry: it encourages anyone to tap Discard and lose the draft. It did, and part of that was this version's doing.
+Correction 5 made Keep editing a quiet button, so the safe answer became the faintest thing on the card, beside the only
+red, and the title proposed the loss ("Discard unsaved changes?"). His idea was to swap the buttons. I told him the swap
+alone would not be enough, because of a thing he could not have seen: **Enter discarded.** Measured on DEV: Escape on a
+dirty walk-in, then Enter, and the walk-in was gone, with no button in focus, since `Overlay` focuses the dialog.
+
+| | Was | Now |
+|---|---|---|
+| Buttons | Keep editing (quiet), Discard (red, right) | Discard (red), Keep editing (solid blue, right) |
+| Enter | Discards | Keeps editing |
+| Title | Discard unsaved changes? | Unsaved changes |
+| Sentence | This walk-in hasn't been saved yet. | The same, then "Discarding can't be undone." |
+
+The buttons were his choice of three I drew, and not the one I recommended: he kept both solid, because a destructive
+button is a solid red by his own rule, so nothing here needs an exception to it. The sentence's second half stands on all
+six surfaces. A Discard someone tabbed to still takes its own Enter (`activatesItself`), so the keyboard can still reach
+it on purpose. Live at 998 × 507: Discard at x 544 in `rgb(220, 38, 38)`, Keep editing at x 642 in `rgb(0, 102, 214)`,
+both 44 tall; Enter, Escape, a tap outside and Keep editing each came back to the walk-in, and only Discard closed it.
+
+**The other dialogs stay as they are, by his decision.** Delete booking, Delete reminder, Delete conversation, Cancel
+booking and Archive anyway keep Back on the left and the action on the right, because there somebody asked for the action
+and the dialog is checking it. That is the difference DESIGN.md now records: who asked decides which side the solid sits
+on. This confirm is the only one nobody asked for.
+
+**Files:** `App.jsx`, `lib/modal-keys.js`, `atoms.jsx` (its comment), `tests/modal-keys.test.js`, `DESIGN.md`,
+`GLOSSARY.md`.
+
+**Correction 19: a double tap no longer goes through a two-tap button.** The audit behind Correction 18 found this one.
+Arming changes a button's label and leaves it where it stands, deliberately, so the second tap can find it, and that is
+also why a double tap walks straight through. Measured on DEV with real touches and writes blocked: two taps 120ms apart
+on "Delete customer & all data" erased the customer on the page, the armed warning never readable. That is the worst of
+the nine, because anonymising cannot be undone. Patryk chose to guard all of them.
+
+- **For half a second after arming, a second tap does nothing** (`lib/arm-guard.js`, `ARM_GUARD_MS` 500). One clock for
+  the app, because arming another button only restarts the wait, which is the safe direction.
+- **Nine buttons, the same two lines each**: Clear this range, Remove a person, Delete customer, a duration tier, a
+  standing booking, Remove a special day, a tag, a waiting party and a WhatsApp template.
+- **`tests/arm-guard.test.js`** runs the clock and reads every file that draws "Confirm — …", so a new two-tap button
+  fails until it is on the list and takes both lines. Taking one site's check out turned it red.
+
+| Real paced touches, writes blocked | Two taps, measured apart | Still armed | A tap after the wait |
+|---|---|---|---|
+| Delete customer & all data | 205ms | yes | acts |
+| Remove Tier 1 | 171ms | yes | acts |
+| Remove (a tag) | 153ms | yes | acts |
+
+Those gaps are 120ms of wait plus the rig's own tap time. A fresh load afterwards, writes allowed and nothing tapped,
+read DEV as it was: 28 customers with the 12-visits row at the top, 5 guest and 2 occasion tags, tiers 90 / 90 / 120.
+
+**Files:** new `lib/arm-guard.js`, new `tests/arm-guard.test.js`, `ActivityLogModal.jsx`, `AdminSettings.jsx`,
+`CustomersSettings.jsx`, `Settings.jsx`, `SpecialDayModal.jsx`, `TagListEditor.jsx`, `WaitlistPanel.jsx`,
+`whatsapp/TemplatesEditor.jsx`, `tests/destructive-buttons.test.js` (two pins on a handler's shape, which now also
+require the wait), `DESIGN.md`, `GLOSSARY.md`, `src/lib/CLAUDE.md`, `src/components/CLAUDE.md`.
+
+**Correction 20: a confirm's action waits too, and this closes a bug Correction 18 introduced.** Testing a double tap on
+the buttons that open a confirm found it. On a phone the form's Back is at x 168–236, y 788–832 and the confirm's Discard
+at x 152–242, y 788–832, exactly on top. Before Correction 18 that spot held Keep editing, so my swap put the red under a
+finger that was already tapping there. Real taps on a 390 × 844 phone, writes blocked:
+
+| Second tap after | Correction 18 | With this |
+|---|---|---|
+| 150ms | missed, the sheet still sliding | the same |
+| 220ms | draft lost | stays on the confirm |
+| 300ms | draft lost | stays on the confirm |
+| 400ms | draft lost | stays on the confirm |
+| 500ms, 550 or so with the rig's tap | draft lost | lands |
+| 650ms | draft lost | lands |
+
+The last two are the half second doing what it says. I told him a tap at 650ms still lands when he chose this, and a tap
+that late on a sheet that has finished arriving is somebody tapping the thing in front of them. The tablet's booking form
+was never exposed: Back is at y 421–465 and the confirm's footer at y 288–332, so a second tap lands on the scrim and only
+closes the confirm. Delete booking does not line up on either.
+
+He chose every confirm over Discard alone, because where a button lands depends on what opened it, and I had measured only
+two of them. `CONFIRM_MODALS` names seven modals and App marks the clock when one reaches the top of the stack. The eight
+actions (Discard, Delete, Cancel booking, No show, Reshuffle, Delete reminder, Archive anyway, Delete conversation) ask
+`armSettled()` as they are tapped, and the inbox's bulk delete marks and asks by hand, because it is not in the stack. Their
+looks and order stay as he decided. Enter is not guarded: it is a key, and it cannot land by accident on a button that
+just appeared.
+
+The first version was a wrapper, `onClick={afterArm(fn)}`. The tests passed and lint went from 0 errors to 21: a function
+called in render with a closure makes the React Compiler give up on `BookingApp`
+(`react-hooks/preserve-manual-memoization`), which is every memo in the file. The check now sits inside each handler.
+
+**Files:** `lib/arm-guard.js`, `App.jsx`, `whatsapp/InboxPanel.jsx`, `tests/arm-guard.test.js`, `DESIGN.md`, `GLOSSARY.md`,
+`src/lib/CLAUDE.md`.
+
+**Correction 21: the Delete and Cancel confirms say what is true.** The audit of every red button read each confirm's
+sentence against what the code does, and two claims did not survive.
+
+| Sentence | What happens | Now |
+|---|---|---|
+| Delete: "This can't be undone." | The Undo pill arms straight after it, and restores the booking (measured) | "You can undo this for 20 seconds.", from the Undo setting; DEV's is 20 |
+| Delete and Cancel: "Tables will be re-optimised afterwards." | True only where the Optimiser is on. After 15:00 today `bookingsAfterAction`'s off path keeps every table | Shown only then |
+
+That second one was wrong in the evening, which is when most of these are tapped. `deleteWords` and `cancelWords`
+(`lib/delete-undo.js`) read the booking's own date, as both transforms do, because the off switch is today's alone. On the
+page: at 12:30 both dialogs carry the sentence, at 16:00 neither does. The inbox's bulk delete says Back instead of Cancel,
+like every other confirm, since in this app Cancel means cancel the booking. The other "permanently" and "can't be undone"
+sentences (a reminder, a conversation, Discard) were read against their code and are true.
+
+**Files:** `lib/delete-undo.js`, `App.jsx`, `whatsapp/InboxPanel.jsx`, `tests/delete-undo.test.js`.
+
+**Correction 22: the "Couldn't save" banner follows the same rule.** The same audit found that Discard on a parked write loses
+the change for good in one tap, with Retry to its left, the far side of what the rule from Correction 18 asks for. Patryk chose
+two taps with Retry on the right, the colour left as it was. So the row reads Discard, Retry, then a Dismiss when a warning is
+showing too; Discard arms to "Confirm — discard" with the half-second wait, and goes back by itself after three seconds, since
+nothing else in that row could disarm it. A second write parking while it is armed disarms it as well, because the armed tap
+would then discard more than it was armed for.
+
+DESIGN.md's armed-width rule applies here too, and the row had neither half of it: the text now has a basis, so a phone puts the
+buttons on their own line, and Discard sits in a slot reserving its armed width (136.6 measured, `PARKED_ARMED_W` 137).
+
+Measured on a really refused write, for the first time in this version. The rig's new `reject_writes` answers a write frame with
+`permission_denied` itself, so the frame never reaches DEV: four refusals, the first and its three retries, then "Yara Domínguez,
+21:30 — not saved, and undone." At 998 × 507 and at 390 × 844, Discard's right edge and Retry's position are the same at rest and
+armed, a tap at 120ms stays armed, it disarms after three seconds, and a tap after the wait discards.
+
+**Files:** `ParkedDiscard.jsx` (new), `AppBanners.jsx`, `tests/arm-guard.test.js`, `DESIGN.md`, `GLOSSARY.md`.
+
+**Correction 23: a block's flags ease in and out.** Patryk's first complaint in this round: "When new flags appear or disappear on
+booking blocks there's no transitions." DESIGN.md says the same thing of any element ("if the answer is 'the node just unmounts',
+that is the bug, not the design"), so the audit went through every element that appears, disappears or moves, by reading the code
+and by a census: a script walks seven surfaces and records every element that arrives, leaves or jumps between frames, 1,412
+rows. A row or two per tap is a real snap; many rows per tap is an ease faster than the sampling. It cannot see a drag, anything
+driven by time, a write from another device or a style-only change, so those were read from the code.
+
+On the blocks seven things snapped, on a save and on a zoom: the flags, the clash mark, line 2's ring, the "~Nm" pill, the note
+corner, the warning border and the clash band. This correction is the first four, the ones that take room. Each holds a slot now,
+a horizontal `Reveal` in rail order, and the name slides with it; `RAIL_KEYS` beside `railFlagsOf` lists the slots, and a test
+fails when the two differ, because a missing key would be a flag counted against the block's width and never drawn. The slots run
+at the chip's speed, which keeps the two together on a zoom.
+
+Measured frame by frame through the real form at 998 × 507: a deposit opens from 0 to 18px with its opacity and closes the same
+way, in about 450ms of visible motion on the 520ms token. Through a zoom on a block with more flags than fit, "Locked" reads 4.7
+of 18 at 138ms and the chip 11.4 of 43.5, the same 26%, and they stay together to the end in both directions.
+
+A closed `Reveal` used to start a timer on mount for a fold it had no reason to run, and a day would now hold a few hundred of them,
+so a Reveal that has never opened returns early.
+
+**Files:** `TimelineView.jsx`, `blockFlags.jsx`, `atoms.jsx`, `tests/block-layout.test.js`, `DESIGN.md`.
+
+**Correction 24: the note corner, the warning border and the clash band ease too.** The other three, the ones that take no room.
+The corner stays mounted at nothing and grows from the block's own corner, with its pencil fading. The border was a shorthand going
+from `none` to `3px solid` in one frame; it is always solid now, 0 or 3px, with its width and colour on `M.move` in both `TL_MOVE`
+and `TL_SETTLE`. `border` became `rim`, the colour alone, and `fold` reads it. The band keeps a leaving copy through `useRevealRows`,
+per row, and its id carries its geometry, so a span that has gone can still be drawn on the way out. A band and a border are one
+change, so the band fades on the border's token.
+
+Measured frame by frame at 998 × 507, in and out. The corner through the real form's Notes, 0 to 11px, and the pencil's opacity with
+it. DEV holds no clash, so border and band were staged by rewriting the module as served to the rig's browser, nothing in the repo:
+3px and `rgb(220, 38, 38)` arrive and leave through `rgba(220, 38, 38, 0.97)` and `0.09` in about 240ms, the bands go 0.8 and 0.09
+at the same sample, and 13 drawn bands leave 0. Chrome paints a border's width in whole device pixels, so the width comes in three
+steps with the colour easing across them. A band on a real clash has not been seen on a real day, and neither has the "~Nm" pill:
+that one is driven by the clock and was read from the code, the same slot as the flags.
+
+**Files:** `TimelineView.jsx`, `tests/block-layout.test.js`, `tests/guest-tags.test.js`, `DESIGN.md`.
+
+**Correction 25: a List card's flags ease too.** The same defect in the other view, and Patryk's condition was that the card's
+measured columns stay as they are. Each flag holds a `FlagSlot`, a horizontal `Reveal`, and every tag on the list holds one in the
+list's order, so a tag takes its place on the way in and keeps it on the way out. The box itself comes and goes on a `Reveal`, which
+is what gives the last flag on a card an exit: the box used to unmount with it. The 8px between flags moved inside the slot, because
+a flex gap stays beside a flag folded to nothing (`CARD_GAP`'s reason), and the box's negative margin hands the last flag's back, so
+a line breaks exactly where the gap broke it.
+
+Measured against a baseline taken first: all 104 elements of all 12 cards at 998, 668, 390 and 360 wide, 416 positions, 0 moved and
+0 card heights changed. Then a deposit on and off through the real form, per frame, on a tablet and a phone. On a card with flags it
+opens from 0 to 50.9px while the next flag slides from 379.6 to 430.5 in step, and the reverse on the way out. On a card with none
+it is the first flag, so nothing sits beside it: it fades in on the box, at full width, and folds on the way out.
+
+One thing stays as it was. A flag that needs a new line changes line at the frame it stops fitting, and the 4px between the lines
+comes and goes at once. Only a phone can see either, on a card with more flags than a line holds.
+
+**Files:** `ListView.jsx`, `tests/list-columns.test.js`, `DESIGN.md`.
+
+**Correction 26: three controls stop shoving their neighbours.** Patryk chose reserving the space over easing it, because a control
+that moves under the finger is the thing DESIGN.md's armed-button rule exists to stop.
+
+- **Follow** keeps "Following"'s width, 75.2 measured, `FOLLOW_W` 76. A tap on it moved the three zoom buttons 17px; the − now sits
+  at x 260 in both states.
+- **A template's buttons** reserve the armed width, 137.9 measured, `ARMED_W` 138, and "Confirm — delete" grows leftwards inside it.
+  Arming used to take 60px out of the row's text. This measured Delete alone, and Edit beside it still stretched: Correction 36.
+- **The duration Reset** was not the simple case the census made it look. It sat at the end of the stepper row, which has no room for
+  it on a two-column form: "End:" wrapped onto two lines at 29.8px, and the column grew 14px on the form and 16 on the walk-in, moving
+  Date and Time on the tap that set a duration. Reserving that width in the row would have left Date at 292px and Time at 196 for
+  good. The booking form has an empty cell beside Duration, but the walk-in has Notes there, so neither form could lend the other its
+  answer. `DurationReset` sits on the field's label line instead, in both, on a fade, smaller than it was (28px tall, from 40) because
+  it is a rare action. At rest both forms are unchanged, and the columns read 244/244 at rest and with Reset at 998 and 668, and the
+  row 324 at 390.
+
+**What I told Patryk was wrong in one word.** The question said Reset and "(auto)" would share a slot. They are in different rows, and
+the census had listed them together because one tap moved both. Reset is above. "(auto)" is the Tables row, and what it does there is
+a different fault: Correction 29.
+
+**Files:** `DurationReset.jsx` (new), `BookingFormModal.jsx`, `WalkinForm.jsx`, `TimelineZoomControls.jsx`,
+`whatsapp/TemplatesEditor.jsx`, `tests/reserved-slots.test.js` (new), `tests/a11y.test.js`, `DESIGN.md`.
+
+**Correction 27: the inbox's first count opens sideways.** Patryk's choice was that the inbox's two jumps ease, since neither can be
+reserved. One of the two was real. The first count on a tab took the filter row 23px in a frame; the count is on a horizontal `Reveal`
+now, with its 6px inside it, and the row slides from 292.6 to 315.8.
+
+**The other was a false alarm of mine.** The question said Archive jumped the conversation 36px. It does not: an archived conversation
+leaves its tab, so the pane closes (InboxPanel's "drop the selection" effect). The census matched rows by their text, and read the
+same conversation reopening under Archived, one header line taller, as one element moving. Accept does not change a header in place
+either, since it closes the inbox for the form. So nothing makes that header gain a line in front of anyone, and `ConversationView`
+is untouched: I built the ease first, found it could never run, and took it out.
+
+**Files:** `whatsapp/InboxPanel.jsx`, `tests/reserved-slots.test.js`.
+
+**Correction 28: the sentence under an armed button eases.** Patryk's choice for the last group of pop-ins was all of them, and this
+is the first. Four armed buttons explain themselves in a sentence that used to arrive and go in one frame: Remove on a person, Delete
+customer, Clear this range and a special day's Remove. Each is on a `Reveal` now. Measured at 998 × 507 at the 520ms of a disclosure:
+the person's sentence opens 0 → 38 and folds back, the customer's 0 → 59 and the log's 0 → 53, each with its opacity, in and out; the
+special day's opens 0 → 23 and goes with the modal, since nothing else disarms it. The Tags editor's hint was on a `Reveal` already.
+
+Two details decide whether it reads as an ease. The gap has to fold too, so each margin became padding inside the fold, and Admin's
+sentence left the wrapping row, because a `flexBasis: 100%` item there brings the row's `gap` with it the moment it mounts and takes it
+away the moment it unmounts. And `Reveal` keeps a leaving copy for its exit while another row can arm, so Admin's and Customers' one
+shared id goes on the copy that is armed: moving the arm from Patryk's row to Marta's read 38 → 0 on one and 0 → 38 on the other, in
+step, with one element holding the id.
+
+**Files:** `AdminSettings.jsx`, `CustomersSettings.jsx`, `ActivityLogModal.jsx`, `SpecialDayModal.jsx`, `tests/arm-guard.test.js`.
+
+**Correction 29: the form's status buttons, Clear and "was:" ease, and "(auto)" stops blinking.** Three things popped in the booking
+form, and one rule fixed two of them. A `Reveal` is a flex item even while closed, so in a row with a `gap` the gap arrives and goes at
+once, whatever the thing inside does. `RowSlot` (atoms) takes the gap back with a negative margin and carries its own inside the ease,
+keeps its content's width so a label cannot wrap on the way, and makes the leaving copy inert. At rest nothing moved: the status row at
+390 still breaks after Completed, with 6px between buttons, and Cancelled starts its line at the Section's edge.
+
+- **The status buttons** hold one fixed order now (`STATUS_ROW`, which is the order `statusTargets` offers), so each keeps its place.
+  Tapping Seated on a confirmed booking opens Confirmed 0 → 119 while Seated and Pending close, and Completed slides from 398 to 419
+  and back on the way home, all in step at 520ms.
+- **Clear** in the Tables row opens 0 → 70 and closes, and in Preferred table 0 → 78, with Done still at x 694.9 both ways.
+- **The Tables row** is the fault Correction 26 owed. The scan's answer is null for the length of a check, so on every change of the
+  time or the party the badges and "(auto)" went out for about 50ms and "was:" came in. "Never show a stale answer" stands, so the
+  answer still goes in that frame, to opacity 0. Its room stays. `TablesPreview` holds the last tables invisibly and fades the next
+  answer in where they stood, measured "(auto)" at x 332.5 throughout, opacity 0 → 1 in about 240ms. "was:" waits for the answer in
+  `useLineBand`'s idiom, so a change of guests that keeps the same tables no longer flashes it. It eases in when the tables will
+  really change, and it is on a `RowSlot`.
+
+**One version I threw away.** The first `TablesPreview` put the group in a `Reveal`, which would have slid "was:" along when the answer
+changed size. Measured, the sentence wrapped at the narrow end of the ease, and a phone needs the badges to wrap one by one at rest,
+which a width-animated group would do at every frame of an opening. So the badges stay direct children of the row. **What that leaves:**
+when the answer changes size, "was:" moves in that frame, and a Clear on its way out hops 40px when "(auto)" takes its room. And like
+the List's flags, a status button that needs another line on a phone changes line at once.
+
+**Files:** `atoms.jsx` (`RowSlot`), `TablesPreview.jsx` (new), `BookingFormModal.jsx`, `PrefPickerModal.jsx`, `tests/row-slots.test.js`
+(new), `DESIGN.md`.
+
+**Correction 30: every chevron turns.** Five disclosures swapped between two icons in a frame while the panel beside them eased: the
+Summary's lid, a customer's row, a voucher's row, and the Regular chip on the form and in the inbox. `TurnChevron` (atoms) is one
+drawing that turns on `M.move`, the notification strip's speed, as Patryk chose. Measured on all five, both ways: 0° to 90° (the Summary
+0° to 180°) and back in about 225ms with no step. `tests/turn-chevron.test.js` fails the two-icon ternary itself, anywhere under
+`src/components`.
+
+**Files:** `atoms.jsx` (`TurnChevron`), `BookingFormModal.jsx`, `CustomersSettings.jsx`, `Summary.jsx`, `VouchersSettings.jsx`,
+`whatsapp/ConversationView.jsx`, `tests/turn-chevron.test.js` (new), `tests/summary-freeing.test.js`.
+
+**Correction 31: the country menu fades both ways.** It arrived and went in one frame, with its 249 rows. It takes `mgt-pop-in` and
+`mgt-pop-out` now, the pair for a popover anchored to its trigger, from the corner under the pill: opacity 0 → 1 in about 220ms, and back
+on Escape, on a tap on the pill, on a pick and on a press outside it.
+
+It does not use `Presence`, which is the obvious tool and mounts a commit after its `show`. The search box has to take focus inside the
+tap or iOS opens no keyboard, and the effect that scrolls to the current country would find no list. So the menu keeps its own `leaving`,
+a few lines long. Three things a plain exit would have broken, each measured: the list holds its filter for the exit (3 rows stay 3,
+and `q` clears when it ends), Escape still closes only the menu, with focus back on the pill and the form open, and the leaving copy is
+inert, so Tab goes to the number field rather than into a list about to vanish. The form's name and phone suggestions are left as they
+are: they answer typing, and Patryk's choice named this menu.
+
+**Files:** `CountryPicker.jsx`, `tests/country-menu.test.js` (new).
+
+**Correction 32: a row somebody removes folds.** The census saw a removed person take 182px out of the list in a frame, and a template
+106. Reading the code for those two found six more lists with the same shape that the crawl had never pressed. `FoldRows` is one list
+for all of them, on `useRevealRows` and `useLeavingOrder` as the List and the waitlist use them, with one difference: a newcomer eases
+open, because a List card arrives at full height only since FLIP slides the rest, and nothing here does.
+
+| List | Measured, in about 400ms |
+|---|---|
+| People | the row 182 → 0, "Invite someone" 1573.5 → 1391.5 |
+| Quick-reply templates | "+ Add template" 758.5 → 652.5 |
+| Reminders | the row 108 → 0, with its opacity |
+| Tags | the heading under it 584.5 → 517.5 |
+| Special days | "Add a special day" 847.5 → 803.5 |
+| Standing bookings | the note under it 385.5 → 329.5, staged by rewriting the served module, since DEV has no rule and a rule is only made once its booking lands |
+| Booking durations | "+ Add tier" 949.5 → 1020.5, and back |
+
+**Tiers have no ids**, and a stepper changes what would name one, so a tier's place is its id: the row that opens or folds is the last,
+and each tier's values move up a row at once. Its gap sits inside each row and a negative margin hands the last one back to the column.
+**Pinned countries** are chips, so the same list takes a `gap` and opens sideways on `RowSlot`; "+ Add country" changes line at once when
+a chip's room lets it, like the List's flags and the form's status buttons on a phone. **A list that empties** hands over to its empty
+line, which opens as the last row folds: staged on the standing rules, the note under them moved 329.5 → 287.8 → 288.5, a 0.7px overshoot
+from 385ms meeting 520ms, which I left. **The templates editor's swap** between its list and its form fades in with `mgt-fade-in`, as a
+Settings tab's body does, and its height was already eased.
+
+**Files:** `FoldRows.jsx` (new), `AdminSettings.jsx`, `Reminders.jsx`, `Settings.jsx`, `TagListEditor.jsx`, `whatsapp/TemplatesEditor.jsx`,
+`tests/fold-rows.test.js` (new), `DESIGN.md`.
+
+**Correction 33: a List card's alerts ease, and so does its rim.** "No table assigned" and "Next booking…" were bare conditionals on the
+card, so one arriving pushed every card below it down 35px in a frame, with nobody pressing anything. Each now sits on a `Reveal`, and
+staged on DEV (the served module rewritten, because a warning is clock-driven and needs a table clash to exist) both open 0 → 35 with the
+next card sliding 265 → 300, and fold back the same way.
+
+The census cannot see a border, so I sampled the card while I was there: its rim went 1 → 3px and white → amber in a frame, which is what
+Correction 24 fixed on the block. My first version eased the width, as the block does, with the padding that pays for it. That shook the
+card's content: a browser snaps a border to whole device pixels while padding runs smooth, and the time's x read 33 → 32 → 33 at DPR 1.
+So only the colour eases. The width and the padding change in one step while the colour is the plain border's, which barely shows: at
+once on the way in, and on `step-end` at the end of the way out. Measured: x holds 33 in both directions, and the width steps at about 240ms
+on the way out.
+
+**Files:** `ListView.jsx`, `tests/list-columns.test.js`, `DESIGN.md`.
+
+**Correction 34: Settings opens at full size.** The other lazy surfaces sit wholly inside their `Suspense`, so they show nothing until they
+are here and then play their entrance. Settings is the one whose frame is App's, so its first open after a load was a bare footer that
+jumped when the chunk landed. `lazyChunk` gains `preload`, and App calls it for Settings at the first idle moment after the day has loaded.
+A preload takes 138.7 kB once per version, outside the startup bundle, and it also ends the first-tap failure after a deploy for this
+one screen, since the chunk is fetched while its build is still the live one.
+
+Measured at 998 × 570, first open three seconds after a load, with a control that removes only the preload call from the served `App.jsx`:
+
+| | Dialog height | Close's y |
+|---|---|---|
+| Control | 173 until 352ms, then 513 in one frame | 144.5, then 484.5 |
+| Preload | 513 from its first frame, through the card's own entrance | 484.5 |
+
+Once the chunk is here, `lazy` is handed a thenable that answers inside the call, because a real promise answers a microtask late and `lazy`
+suspends on that. That leans on how React reads a thenable, so `tests/settings-preload.test.js` runs both with `renderToString`, and if
+it ever changes the cost is the frame of fallback we had. **Left as it is:** a tap before the preload lands, in the first couple of seconds
+after a load, takes the old path. A failed preload is silent, and the open then has the ordinary reload and readable error.
+
+**Files:** `App.jsx`, `lib/after-frame.js` (`afterIdle`), `tests/settings-preload.test.js` (new), `src/CLAUDE.md`, `src/lib/CLAUDE.md`.
+
+**Correction 35: the pop-ins the census could not reach.** Re-running the census after Correction 34 left one real snap, and it should have
+been caught sooner: Seated in the edit form moves everything under the date 21px in a frame, because "Change the status to change the
+date" was a bare conditional. The census only sees what it happens to press, so I stopped trusting it for this and read every bare
+`? <x> : null` under `src/components`, 154 of them. Most are the answer to something, a static part of a card, or already inside a
+`Reveal` further up. These were hints, warnings or buttons, which is what Patryk chose to ease, and each is measured both ways:
+
+| Where | What | Measured |
+|---|---|---|
+| Edit form | "Change the status to change the date" | 0 → 17 |
+| Assign | Clear | 0 → 65.8, and the row's height no longer steps 6px at each end |
+| Booking form | a recognised guest's open voucher | 0 → 58, staged, since DEV has no such guest |
+| Customers | the Regulars stepper | 0 → 142.4 |
+| Activity log | "Pick a day or a range above to clear." | 0 → 182.6 |
+| Reminder editor | a time's row, and the × that a second time brings | "+ Add time" 267.5 → 317.5, the field 530 → 484 |
+| Layout | the two table pickers and the combo hints | 501.5 → 536.5, 478.5 → 511.5, 0 → 19 |
+| Floor plan | the inspector, and its chairs warning | 0 → 228, 0 → 23 |
+| List card | No show, when due | 0 → 107.4, staged, Assign holding 706.5 |
+| Messages and cost | the answer, with Refresh gliding under it | 570.5 → 585.5, staged |
+| Activity log and inbox | the search ✕ | opacity, at a fixed x |
+| Linked booking | the summary on its lid | opacity, staged |
+
+**The Assign row** is why the table says "no longer steps". A sideways fold cannot ease the row's height, and Clear is 6px taller than the two
+lines beside it, so the panel stepped at the first and last frame. Its text column is now as tall as Clear, which makes that panel 6px
+taller at rest, always. **The usage panel** first had its `AutoHeight` round everything, and Refresh still jumped 19px, because a block inside
+the eased box moves with its content. The box now holds the answer alone. **Staged** means the served module was rewritten for that run.
+
+**Left, with reasons.** The split menu's "too narrow" hint arrives with the step it belongs to, a whole-content swap. The waitlist's "Table
+free" and "waiting" swap text. The unread badge and dot are state marks, not hints, warnings or buttons, and they appear when a message
+lands. "Load more" sits at the end of a list. The Summary's lid text is a text swap.
+
+**Files:** `ActivityLogModal.jsx`, `BookingFormModal.jsx`, `CustomersSettings.jsx`, `FloorPlanEditor.jsx`, `LayoutSettings.jsx`,
+`ListView.jsx`, `ManualModal.jsx`, `ReminderEditor.jsx`, `Settings.jsx`, `VoucherPicker.jsx`, `atoms.jsx`, `whatsapp/InboxPanel.jsx`,
+`whatsapp/LinkedBookingCard.jsx`, `tests/row-slots.test.js`, `DESIGN.md`, `src/components/CLAUDE.md`.
+
+**Correction 36: a template's Edit holds still.** Patryk's decision was that nothing moves, and Correction 26 measured Delete and stopped.
+The two buttons share a column, a column stretches its items, and arming Delete took Edit from 78.1 to 137.9 wide in one frame, its left
+edge going 672.9 → 613.1. The final census named it, `Edit` dx −60. Each button now takes its own width from the right edge, and both
+start at `REST_W`, 79, Delete's resting 78.1 rounded up, so they still match at rest. Read at rest, armed, and after arming the next row,
+which disarms the first: Edit 672 and 79 all three times, with Delete 672 and 79 ↔ 613.1 and 137.9 inside the reserved column.
+
+The census's other open reading was an ease. `WhatsApp inbox`, dy 10 on the Gift vouchers switch, is a row under a warning that folds:
+sampled per frame it goes 346 → 456 on the way in and 456 → 346 on Keep it on, and about 10px is one step at the start of that curve.
+
+**Files:** `whatsapp/TemplatesEditor.jsx`, `tests/reserved-slots.test.js`.
+
+### Closing the version
+
+**The scan's own audit, on the final tree**, after every correction, at 998 × 507 and 570 in Light and 507 in Dark,
+across the main card, the form, the walk-in, List, Plan, Settings and, added for this pass, the inbox: no sideways
+overflow, `overscroll-behavior` none. In Light the only real text under 4.5:1 is amber 2.93–2.95 and yellow 1.84–1.85,
+Patryk's two exemptions. The yellow includes Add to waitlist on the availability line, at 1.85, in the form and since
+Correction 16 in the walk-in: `tests/contrast.test.js` names both of those buttons and `main` paints them on the same
+fill. The inbox has no text under 4.5:1 in either theme. In Dark the same two exemptions read 3.56–3.57 and 2.17–2.18,
+and the only other low is the accent, 3.65 and 4.1, under its named exemption. "Tables: 3 / 4 / 5" left Light's list
+with Correction 11, and the faint text, the required mark and a field's prompt left Dark's with Correction 12.
+
+The audit also prints readings that are the rig's, and each was traced on the page. Clipped text samples as whatever
+is behind it. "Daily cutoff", "Auto-optimiser" and the walk-in's 11, 12 and 13, at 1.01–1.25, sit under a sheet's
+bottom edge, and scrolled into view they read 7.16–16.72. This pass ran at 20:20, where the form opens on a busy
+kitchen, so "Starting at this time:" and "Kitchen busy", at 1.02–1.5, sit below the body's clip; in view they read 15.3
+and 7.53. "20:30" and "5" at 1.04–1.11 sit at y 566.5 of 570. Plan's "15:00" at 1.17–1.59 is past its ruler's left edge,
+at x −29.
+
+One looked real: four names at 3.74–3.77, `#57340a` on amber. The sampler takes the colour that contrasts most with
+the fill as the ink, and the now line crossing those names beats white on amber, so it read the line. The names are
+white, H1's 2.93, and the line sits over the blocks at z 10 on `main` as well. The one target under 24px on any screen
+is the date field's inner `<input>`, and the pill round it is what a finger hits.
+
+Between this pass and the one before Corrections 11 to 17 the form and the inbox each lost four targets, and that is
+Correction 15: at 20:20 the four nearest times have gone. On the page at that clock the form reads "No table for 2 at
+20:30" with Add to waitlist, and its kitchen section, which listed "Before:" and five past times, reads "No
+kitchen-friendly alternatives found nearby." The draft card reads "No tables for 4 at 21:00" with no "Accept at:" row;
+its text holds that sentence twice because one copy is the card's live region, and the picture has one.
+
+**Every fix's rig again, on the final tree**, H7 to M4 at the heights each takes: 17 runs on 2026-11-01, on Saturday's
+page clock at 12:30 so that the Optimiser is on, read line by line and then diffed line by line against the first
+pass, since an exit 0 only says a rig ran. Every difference is the clock or a correction. The clock: Optimiser ON in
+the Summary, no now pill before opening, amber "Moves Yara, Ariadna" where the evening read a refusal, other nearest
+times, and Save's refusal in its Optimiser-on wording. The corrections: the country codes 60 → 79 wide (Correction 3)
+and the line's dip gone (Correction 10). `h4.py`'s `toast/saved` read `None` because its regex knew only "saved"; the
+toast says "Tables re-optimised." at 472ms with the Optimiser on and "Booking saved." at 473ms with it off. M1 to L2
+ran last in the first pass, and the audit covers their colours. On the same tree:
+
+- `h5undo.py`, real DEV writes: "Lena Brandt moved to 1 — Yara Domínguez, Ariadna Puig reassigned.", 3 blocks moved, 0
+  differ after Undo, 0 after a reload.
+- `c8strip.py`: a newcomer row in the strip eases in and out, and the rows beside it hold still.
+- `rvt.py`, the tour at 4× CPU: 33 `Reveal`s at each height, none born open, 31 played in and 32 out.
+- `c9flow.py`: Correction 9's search, select mode, fold and keyboard, as measured there.
+- `c10band.py`, at 12:30 and 16:00, 1× and 4× CPU: the band eases 0 → 56 from a time that fits to a refused one with
+  the answer solid, and folds back with the words at 0.06 at most. That leg is needed because `h3flow.py`'s opening
+  series no longer opens anything: 2 at 21:00 is refused on this data at either clock, so the line is already open.
+
+The first pass, on 2026-10-31, ran in the evening, and `h5undo.py`'s drop was refused with "Can't re-seat the parties
+there without stranding one". The app was right: from 15:00 the Optimiser is off for today, the flaw H5 already
+records. Replayed with a page clock and writes blocked, nothing refuses at 9:00, 12:00 or 14:00, and it refuses at
+15:00, 16:00, 16:20, 16:50, 17:00 and 18:50. Undo was proved that day on a drop that is legal in the evening, tomorrow's
+lunch, with real DEV writes at 507 and 570: "Lena Fischer and Olga Petrova — tables swapped.", 2 blocks moved, 0 differ
+after Undo, 0 after a reload.
+
+**All of it again after Corrections 11 to 17**, which came after that pass, on the tree they left: the same 17 runs on
+the same clock, then `c8strip.py`, `rvt.py` at both heights, `c9flow.py`, `c10band.py` at both clocks and the three
+audits at 20:20, each diffed line by line against the pass above. All 17 exit 0, and the 68 lines of difference in their
+output are frame timing: the zoom group's sample offsets, `h5hover.py`'s and `l7.py`'s milliseconds, `h3flow.py`'s out
+series, and L4's mid-widths, where one run read a step of 10.6 against 5.4 and 5.6 on a single skipped sample. `h4.py`,
+`m5.py` and `m4a.py` are identical. `h5undo.py` wrote to DEV again and read the same: 3 blocks moved, 0 differ after
+Undo, 0 after a reload. `rvt.py` reads the same 33, 31 and 32, none born open.
+
+`c10band.py` now runs through `useLineBand`, the hook both forms take since Correction 16. Between two refused times the
+band holds 56 at both clocks and speeds. The answer's lowest is 0.69 and 0.28 at 16:00, 0.16 and 0 at 12:30, and the
+words stay at 0 except at 4× with the Optimiser on, where they reach 0.88, which is the case Correction 10 read at 0.82
+and the reason the words exist. From a time that fits to a refused one the band eases 0 → 56 with the answer at 1 and
+the words at 0, and folding back the words reach 0.04 at most.
+
+**All of it again after Corrections 18 to 36**, on 2026-11-02, on the tree Correction 35 left, on the same clock and diffed the same way.
+Correction 36 came out of this pass, so its row was read on its own and the inbox's census ran again on `ea76e354`. The first attempt
+measured nothing: the dev server had died with an interrupted session, every rig exited 1, and the census came back empty, which its own
+comparison reads as every jump gone. Every comparison after that read the row counts first.
+
+All 17 exit 0, with 38 lines of difference. They are frame timing, the same sample offsets, and one count: `l7.py`'s blocked writes, 3 → 4,
+which traced by path are this device's presence, its theme pref and the two drops, so nothing of these corrections. `c8strip.py` and
+`c9flow.py` exit 0. `rvt.py` reads 35 in, 36 out, 37 born closed and none born open at each height, four more each, all on its zoom step,
+where a block's marks are `Reveal`s now. `c17band.txt` differs on 44 lines of timing, and the answer's lowest is unchanged, 0.69 and 0.28
+at 16:00. The three audits are identical line for line, so nothing since the last pass moved a contrast. `h5undo.py` wrote to DEV again
+and read the same: 3 blocks moved, 0 differ after Undo, 0 after a reload.
+
+Then the rigs these corrections added:
+
+- `c22park.py`: at 390 Discard is 222.5–294.5 and Retry 304.5–363, and armed it is 157.9–294.5. A tap at 120ms stays armed, it disarms after
+  3.5s, and a tap after the wait discards.
+- `c25pos.py`: 1,344 values at 998, 390, 668 and 360, with 0 differences from Correction 25's baseline.
+- `c34open.py`: the chunk is asked for at about 1800ms, and Close sits at 484.5 from the first frame.
+
+**The census** pressed 433 things across the seven surfaces: timeline 85, list 73, plan 74, new booking 23, Settings 142, inbox 28, walk-in 8.
+Against the one the pop-ins started from, things arriving with no ease fell 34 → 9, things leaving with none 60 → 42, and groups jumping
+8px or more 94 → 30. What is left is accounted for:
+
+- **The 9** are a date change, Preferred's capacity text and an archived conversation's messages.
+- **The 42** are the view switch, a date change, a Settings tab's body, the status popup's scrim on a pick, the wipe overlay, the inbox's
+  keyed swaps and the `Archived` label on Restore. DESIGN.md's exceptions cover the swaps and the pick.
+- **The 30** are mostly one frame of an ease at its steepest: a status row's ±12, "+ Add template" and the rows above it at −12 to −17,
+  Opening hours' 29, 27, 25, 24, 22 and 20, and the Gift vouchers switch, which Correction 36 sampled. The others are a replacement or
+  a text swap: the Summary's lid on a date change, the walk-in's `Capacity:` and `Select tables below.` at ±34. Archive's 36px is the
+  conversation closing.
+
+One group was real, and that is Correction 36: three rows of `Edit` dx −60 on the three arming taps, and none on the same taps on `ea76e354`.
+
+**What the census cannot see.** It matches elements by their text and reports only what it presses. It cannot see a drag, a change the clock
+makes, another device's write or a change of style alone, and it never pressed the destructive path on six lists. So Correction 32 read those
+six and Correction 35 read all 154 bare conditionals under `src/components`, and that read found twelve more surfaces. Neither says every
+such place is gone: they say what was pressed and what was read.
+
+**Two things on the record.** Phase 1's commit, `c1ddb470`, went in with 2 lint errors, because its command did not
+stop on the gate. `84dc5227` fixed them, and every commit since has had the gate chained to it, so only a bisect
+landing on phase 1 itself sees red. And DEV's Activity log holds two crash entries, `ReferenceError: Presence is not
+defined` in `DropHint`, from a missing import while H5 was being built. Its commit imports `Presence`, so neither
+entry is a defect in any commit.
+
+**Only the hardware can settle these, for Patryk after merge:** a finger on the sticky ruler during a fast swipe, and
+edge scroll · Undo after a real drag · the pinned line with Android's keyboard up · time-picker speed with M5 ·
+pull-to-refresh in a Chrome tab · whether the tablet vibrates, and the switch · Larger text at arm's length on the
+pass · automatic dark mode at sunset · the Summary and a refusal easing in on the tablet · the ⋯ menu by finger · the
+quiet buttons and the field edge in the dim room · the inbox's merged title row, and the composer with Android's
+keyboard up · "Checking the tables…" at the tablet's real speed · the row warning's second look under a real finger,
+and whether 8px of slop survives a tremble · how long that look takes on a jammed day · the walk-in's line with
+Android's keyboard up · the new worker taking over, and its offline page · a double tap on a phone, and the half-second wait under a real
+finger · flags arriving on a block on the tablet · the 28px Reset with a wet finger · the country menu with iOS's keyboard up.
+
+**Not seen on real data.** The "~Nm" pill was read from the code alone. A clash, a recognised guest's open voucher, No show when due, the
+usage panel and the linked booking's summary were staged, because DEV has none of them.
+
+**Size:** main entry 454.25 kB (134.12 gz), 5.40 kB over the first close.
+
+**The branch:** 62 commits on `origin/main`'s `77516a63`, this one included.
+
+**Files:** `REFACTOR_LOG.md`, `ROADMAP.md`, `GLOSSARY.md`, `DESIGN.md`, `CLAUDE.md`, `src/components/CLAUDE.md`.
+
+### `/code-review` (max)
+
+The ship run's review, over all 62 commits. Each finding below was reproduced before it was fixed, on Saturday's page clock with
+writes blocked unless it says otherwise, and each has its test.
+
+**A double tap on a country code armed a save for the next form.** `pickPhoneCode` armed `resumeDoorRef` and then wrote the code. On a
+second tap the chips are still drawn, because the form is leaving, and the number already has its plus, so `joinPhone` changes nothing,
+`[form.phone]` does not fire and the door stays armed. The next form to open changes the phone, and that was the press. Measured at
+998 × 507 with two taps 120ms apart: + New opened already saying "Customer name is required.", and a booking tapped on the Timeline opened
+and closed itself 700ms later. A door that arrives filled in, Book again or Accept from WhatsApp, would have written a booking. One tap
+was clean, which is why H4's rig never saw it. The door is armed now only by a tap that writes something. After it, the same two taps
+leave + New clean and the booking open.
+
+**A refused drop went unsaid under the last move's pill.** The H5 paragraph above has the pill outranking `dragMsg` and `reshuffled`, so
+that a move's own toast could not flicker. That is right for the press that armed the pill and wrong for the next one: every drop arms a
+pill, so two moves in a row is the ordinary case, and a drop refused inside the second one's six seconds answered with nothing. Measured
+at 18:30 with the Optimiser off: Lena Brandt moved to 3, then Yara to 2. `flashDragMsg` was asked to say "Can't re-seat the parties there
+without stranding one — use Manual assign.", the block glided home, and the slot kept "Lena Brandt moved to 3 — Emil Kovacs, Óscar Ledesma
+reassigned." "No tables needed moving." sat under the pill the same way. What answers this press now goes above the pill: `dragMsg` and
+the `unmoved` half of `reshuffled`, while a plain save's "Saved & re-optimised" stays under it. After it, the same two drops show the
+refusal, and 3.9s later the slot is back on the pill with its Undo, whose timer never stopped. The pill's sentence still means nothing is
+flashed at a dispatch that lands.
+
+**A double tap on Add to waitlist put the party on twice.** The guard behind Save has one rule, one open of a form makes one create, and
+each form has a second way out that never asked it. The form stays drawn for its exit, so a second tap 120ms later reached the live
+button: from an empty waitlist, "Waitlist — 2 waiting", in the booking form, and in the walk-in with its check taken out again to measure
+it. Both now ask: `addFormToWaitlist` on `saveGuardRef`, and `addWalkinToWaitlist` through `onceWalkin`, because that guard is private to
+`useWalkin`. So Seat then Add cannot make two parties either, and a refused phone leaves the open unspent, so the corrected number still
+goes. Two taps now read "Waitlist — 1 waiting" in both forms. The WhatsApp draft's button needs none of this: the inbox stays open and
+the button turns into "On the waitlist" on the render the tap causes.
+
+The first version of this fix returned nothing from the hook: `onceWalkin` was written and left out of `return {…}`, and every test
+passed, because the harness lifts a function by name and never asks what a hook hands over. Only the rig's walk-in stayed open. The test
+now asks.
+
+**One finding was wrong, and the rig caught it before it shipped.** The review said `scroll-padding-top` on `body` does nothing, because a
+viewport takes scroll-padding from the root element. That is true of a plain page, which is what it was measured on, and false here: App's
+mount effect sets `overflow:hidden` on `html`, so `body` keeps its own overflow and is a real scrollport with Lock navigation off. In the
+app, with the layout forced to Lock off, a block focused under the ruler landed at 32 with the rule on `body`, and stayed at 21 on `html`
+or with no rule at all. So the move was made, measured and reverted. What stays is a comment saying why it is on `body`, and a test that
+holds it there, at `SCROLL_CLEAR_RULER`, beside the two inline styles it depends on.
+
+**The country menu, reopened during its exit, took no typing.** The menu fades out on the node it faded in on, so a tap inside those 260ms
+kept that node, and `autoFocus` belongs to a mount. Measured 80ms into the exit: the menu came back with focus still on the pill, and
+typing "bel" reached nothing. The menu now has a key that every open raises, so a reopen is a new node and the box takes focus in the
+tap's own commit, which is what iOS needs for its keyboard. The pop-in restarts from nothing either way, because swapping the class on
+the old node restarted the same keyframes. After it, the same taps leave the focus in the search box, and "bel" lands there.
+
+**The preload undid the chunk loader's one-reload rule.** The flag that stops a failed chunk from reloading forever is cleared by a
+successful load, and correction 34's `preload` is a successful load at every boot, a second after the day arrives, with nobody having
+asked for anything. So a chunk that can never load no longer reached its readable error. Measured with `SearchPanel`'s module refused:
+three presses of `/` were three reloads, and "Couldn't load this screen" never showed, each one throwing away whatever was on screen. The
+flag is now cleared by a surface somebody asked for, on either path, and a preload only keeps the module. The same three presses are one
+reload and then the error. Opening Settings after a preload still clears it, with the stack read off `removeItem`.
+
+**A row kept its warning about a party that had gone.** `endDrag` is what clears the row, and it runs on the block's own pointerup. A block
+can leave under a held finger, when another device deletes or moves that booking, and no pointerup reaches it then. Measured with the
+booking taken out of `saveBookings` under the finger, writes answered locally, and the finger lifted over an empty cell: "Moves Emil,
+Óscar" and the amber row stayed through the release, and were still there 4.5s later, until the next tap. Lifting over another block
+clears it, because any block's `endDrag` does, which is why the first attempts at this read clean. A change of day clears it too, because
+that remounts the grid. The block's unmount now cancels its frames and its 800ms timer, and clears the row if it was the one being
+dragged. After it, the row clears as the block leaves, with the finger still down.
+
+**Two exports were both called `nearestTimes`.** H3's `(sugg, count)` in `booking-logic.js` and the WhatsApp check's older `(times, around,
+max)` in `draft-check.js`: the same name, different arguments, and neither module's callers would notice an import from the wrong one
+until a line came back empty. H3's is `lineTimes` now, the name of what it serves. A rename and nothing else.
+
+**The hardware's list grows by what the review touched:** a real double tap on a country code and on Add to waitlist · a refused drop right
+after a move · the country menu reopened quickly by finger on iOS · the Undo pill on slow wifi and offline · a second device removing a
+booking under a held finger · Tab to a block under the ruler with Lock navigation off, in Safari, which the rig does not have.
+
+**After the review:** eight findings, seven fixed, one disproved in the app, nothing deferred and nothing added to `ROADMAP.md`. Main entry
+454.67 kB (134.20 gz), 4,241 tests, 0 lint errors and 63 warnings, style OK, on 71 commits over `origin/main`'s `77516a63`, this one
+included.

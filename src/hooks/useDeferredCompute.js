@@ -11,8 +11,7 @@
 //   const { value, pending } = useDeferredCompute(computeFn, deps);
 //
 //   value   — computeFn's result; NULL until the first result AND reset to null
-//             on every deps change (Patryk-chosen: never show a stale answer —
-//             the availability banner collapses while re-checking).
+//             on every deps change (Patryk-chosen: never show a stale answer).
 //   pending — true from a deps change until its result lands. Consumers show
 //             the ⏳ indicator on it, wrapped in <Reveal> — the Reveal's ease
 //             (--t-reveal, 520ms) IS the grace period: a fast scan unmounts

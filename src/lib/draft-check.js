@@ -67,7 +67,9 @@ export function nearestTimes(times, around, max) {
 //   kitchenSugg  `findKitchenFriendlyTimes`' {before, after} when busy, else null
 //   alts         the times the card offers: the nearest that fit, or, when the
 //                kitchen is the problem, the nearest quieter ones with a table
-export function draftAvailability(draft, bookings, liveBookings, blocks, noResh) {
+// `notBefore` is `earliestOffer`'s, so a same-day request is offered no time that
+// has passed.
+export function draftAvailability(draft, bookings, liveBookings, blocks, noResh, notBefore) {
   const size = Number(draft.size);
   const date = draft.date;
   const time = draft.time;
@@ -83,7 +85,7 @@ export function draftAvailability(draft, bookings, liveBookings, blocks, noResh)
   // nearby are still worth offering: `findTimes` clamps its walk to the day.
   if (sm < h.open * 60 || sm > lastStartMins(h.close)) {
     out.outside = true;
-    out.sugg = formatSugg(findTimes(date, size, pref, live, dur, sm, blocks, null, noResh), sm);
+    out.sugg = formatSugg(findTimes(date, size, pref, live, dur, sm, blocks, null, noResh, notBefore), sm);
     out.alts = nearestTimes(out.sugg.earlier.concat(out.sugg.later), sm);
     return out;
   }
@@ -92,7 +94,7 @@ export function draftAvailability(draft, bookings, liveBookings, blocks, noResh)
     out.fits = true;
     out.tables = tables;
   } else {
-    out.sugg = formatSugg(findTimes(date, size, pref, live, dur, sm, blocks, null, noResh), sm);
+    out.sugg = formatSugg(findTimes(date, size, pref, live, dur, sm, blocks, null, noResh, notBefore), sm);
     out.alts = nearestTimes(out.sugg.earlier.concat(out.sugg.later), sm);
   }
   // The kitchen line is the form's: the OTHER starts in this quarter, plus this
@@ -102,7 +104,7 @@ export function draftAvailability(draft, bookings, liveBookings, blocks, noResh)
   out.load = getKitchenLoad(bookings, date, time, dur, null);
   out.kitchenBusy = out.load.starts + 1 >= KITCHEN_TABLE_LIMIT;
   if (out.kitchenBusy && out.fits) {
-    out.kitchenSugg = findKitchenFriendlyTimes(bookings, date, size, pref, dur, time, null, blocks);
+    out.kitchenSugg = findKitchenFriendlyTimes(bookings, date, size, pref, dur, time, null, blocks, notBefore);
     const withTable = out.kitchenSugg.before.concat(out.kitchenSugg.after)
       .filter(function (r) { return r.hasTables; })
       .map(function (r) { return r.timeStr; });

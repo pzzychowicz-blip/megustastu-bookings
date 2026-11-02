@@ -86,6 +86,8 @@ const ASSET_RE = new RegExp(
 
 // Shown only when a navigation fails AND nothing is cached — i.e. a cold start
 // with no network. Inline, so there is no extra file that could itself 404.
+// v18.14.0 (correction 13): a document of its own, so no token reaches it. The
+// button is Light's --accent, and one value serves both pages (tests/contrast).
 const OFFLINE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Offline — MGT Bookings</title><style>
@@ -96,7 +98,7 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;paddin
 main{max-width:22rem;text-align:center}
 h1{font-size:19px;font-weight:600;margin:0 0 8px}
 p{font-size:15px;line-height:1.5;margin:0 0 18px;opacity:.75}
-button{font:inherit;font-size:15px;font-weight:600;color:#fff;background:#007AFF;
+button{font:inherit;font-size:15px;font-weight:600;color:#fff;background:#0066d6;
 border:0;border-radius:999px;padding:11px 22px;cursor:pointer}
 </style></head><body><main>
 <h1>No connection</h1>
