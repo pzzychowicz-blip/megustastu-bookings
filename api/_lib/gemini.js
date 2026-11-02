@@ -505,7 +505,8 @@ export async function parseMessage(text, { hours, existingDraft, occasions } = {
   // v18.9.2: how long the Gemini call took, on the log line. The parse runs
   // after the webhook has answered (waitUntil), so no request timing isolates
   // it, and its time against TIMEOUT_MS is the question the go-live plan's A5-7
-  // asks of the default model. A timed-out parse reads about TIMEOUT_MS. Only
+  // asks of the default model. Over TIMEOUT_MS reads as a first attempt that
+  // failed (v18.14.1), and a parse timed out twice as about double it. Only
   // when Gemini was really CALLED (/code-review): live mode with no key falls
   // back to the mock, and a near-zero `ms` on a "live" line would read as a
   // very fast model. No call, no `ms`.
@@ -609,7 +610,7 @@ export async function parseThread(history, { hours, existingDraft, occasions } =
   const mode = llmMode();
   // v18.9.2 /code-review: timed as parseMessage is, and only when Gemini is
   // called. A Re-check sends the whole transcript, the longest prompt this
-  // backend sends, so it is the parse most likely to near TIMEOUT_MS.
+  // backend sends, so it is the parse most likely to near an attempt's TIMEOUT_MS.
   const timed = geminiCalled();
   const t0 = Date.now();
   let parsed = mode === "live" ? await liveParse(transcript, ctx) : mockParse(lastInbound, ctx.occasions);

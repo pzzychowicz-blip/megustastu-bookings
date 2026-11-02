@@ -228,8 +228,8 @@ export const WA_RECHECK_HISTORY = 12;
 // The flag is set before an LLM round-trip and cleared when it lands — but if
 // the tab is closed or navigated mid-request, nothing ever clears it and the
 // conversation shows "Reading the message…" to every device, forever, with no
-// UI to fix it. Well above the 15s Gemini timeout, so a slow-but-live parse is
-// never mistaken for a dead one.
+// UI to fix it. Well above the 16s of Gemini's two attempts (v18.14.1, askGemini),
+// so a slow-but-live parse is never mistaken for a dead one.
 export const WA_PARSING_STALE_MS = 90000;
 
 // conversationMenuIds(conv, can) — what the ⋯ in a conversation's header holds, in
