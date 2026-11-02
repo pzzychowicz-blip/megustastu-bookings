@@ -40195,3 +40195,25 @@ functions with `fetch` stubbed before it counted.
 and the full gate caught it, so `b5585fff` is red on that test. Fixed in a new commit; run the whole suite per commit, it takes four seconds.
 
 **After the review:** main entry 454.67 kB (134.20 gz), unchanged; 4,274 tests; 0 lint errors, 63 warnings; style OK; 12 commits over `origin/main`'s `7393c867`, this one included.
+
+## v18.14.2 — the top of the header's buttons, in the installed app
+
+**Date:** 2026-11-02 · **Branch:** `fix/v18.14.2-compact-top-strip`
+
+**Files:** `src/App.jsx` (the shell's padding, the version) · `src/index.css` (a comment) · `tests/compact-shell.test.js` · `DESIGN.md` · `src/CLAUDE.md`.
+No persisted node, no rule, no `SCHEMA` raise. Patch: a v18.14.0 regression on the tablet's installed app.
+
+**What Patryk saw:** on the restaurant tablet the tops of Follow, zoom, the view switcher, Walk-in and + New were cut off in a straight line.
+
+**The cause, measured over CDP on the tablet's installed app (PROD, read only):** the page is 998 × 594. Walk-in's top is 8, and `elementsFromPoint` at
+y 8–11 returns `.mgt-edge` first, at y 12 the button. The strip is 12px tall, fixed, z-index 150, and paints over the page in `display-mode: standalone`
+(v18.3.1, for iOS's scroll edge effect). Its comment rested on "12px is the phone shell's top padding", which was true when it was written. v18.14.0's
+compact shell took the top padding to 8px, so 4px of every 40px control went under the strip, and the strip took their taps as well. Chrome tabs have
+no strip, and every v18.14.0 measurement ran in one, so the rig could not see it.
+
+**The fix (Patryk's choice over shrinking the strip):** compact's top padding is 12px. The strip keeps the height tested on iOS, and its comment's claim is
+true again. At 998 × 507 the 4px cost no table row: 8 rows show before and after. A pin in `tests/compact-shell.test.js` reads the strip's height out of the
+stylesheet and each of the three shells' top padding out of `App.jsx`; it fails on 8.
+
+**Verified on the tablet, DEV tab, with the strip forced on by a temporary style (a Chrome tab cannot report `standalone`; CDP's `display-mode` emulation had no effect
+there):** Walk-in and + New at 11.99, Follow at 13.99, and the top row of each answers `elementFromPoint` with the button. The 11.99 is the tablet's 1.924 device pixel ratio.

@@ -24,6 +24,23 @@ describe("isCompact", () => {
   });
 });
 
+describe("the installed app's top strip covers padding, never the header", () => {
+  const css = readFileSync(new URL("../src/index.css", import.meta.url), "utf8");
+
+  // v18.14.2: `.mgt-edge` paints over the page in an installed app, so a shell
+  // with less top padding than the strip's height loses the top of its buttons.
+  // The Chrome tab has no strip, which is how 8px got through v18.14.0.
+  it("every shell's top padding is at least the strip's height", () => {
+    const strip = Number(css.match(/\.mgt-edge \{[^}]*?\bheight: (\d+)px/)[1]);
+    const shell = appCode().match(/padding:isMobile\?"(\d+)px [^"]*":compact\?"(\d+)px [^"]*":"(\d+)px"/);
+    expect(shell).not.toBeNull();
+    const [, phone, compact, roomy] = shell.map(Number);
+    expect(phone).toBeGreaterThanOrEqual(strip);
+    expect(compact).toBeGreaterThanOrEqual(strip);
+    expect(roomy).toBeGreaterThanOrEqual(strip);
+  });
+});
+
 describe("the toolbar has one home at a time", () => {
   const App = appCode();
   const Timeline = read("components/TimelineView.jsx");

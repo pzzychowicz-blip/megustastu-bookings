@@ -449,7 +449,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.14.1"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.14.2"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -3882,7 +3882,10 @@ export function BookingApp({uid}){
       style={Object.assign({background:"var(--bg-app)",
         // v18.3.0 (N7): a phone's side paddings clear the notch in landscape;
         // the side insets are 0 in portrait, so portrait is unchanged.
-        padding:isMobile?"12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))":compact?"8px 16px 0":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"},
+        // v18.14.2: no shell's top padding may be under .mgt-edge's 12px. An
+        // installed app paints that strip OVER whatever sits in it, and compact's
+        // 8px left the top 4px of the header's buttons under it.
+        padding:isMobile?"12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))":compact?"12px 16px 0":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"},
         /* v17.5.0: shellFixed → a 100dvh flex column whose inner region scrolls,
            so the header + date rows stay put. Off = the original growing block.
            v17.5.0 correction: NO overflow:hidden here. It clipped the List
