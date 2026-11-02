@@ -183,7 +183,7 @@ describe("live with no key, where the regex answers", () => {
 describe("a reply that cannot be used", () => {
   it("is 502 and no retry: the model answered", async () => {
     const models = answers(() => http(200, reply("not json")));
-    await expect(generateScenarioMessage()).rejects.toMatchObject({ status: 502, message: "Gemini's reply was not a JSON object" });
+    await expect(generateScenarioMessage()).rejects.toMatchObject({ status: 502, message: "Gemini's reply was not valid JSON" });
     expect(models()).toHaveLength(1);
     answers(() => http(200, {}));
     await expect(generateCustomerReply([], "es")).rejects.toMatchObject({ status: 502, message: "Gemini returned no text" });

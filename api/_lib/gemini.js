@@ -401,8 +401,8 @@ function candidateText(data) {
 // An object or nothing (/code-review): a bare `null` read as "Nothing outstanding"
 // on a Re-check, and threw a TypeError, a 500, on Generate.
 function replyJson(text) {
-  let value = null;
-  try { value = JSON.parse(text); } catch { /* the sentence below, never the SyntaxError's */ }
+  let value;
+  try { value = JSON.parse(text); } catch { throw geminiFailure("Gemini's reply was not valid JSON", 502); }
   if (!value || typeof value !== "object" || Array.isArray(value)) throw geminiFailure("Gemini's reply was not a JSON object", 502);
   return value;
 }
