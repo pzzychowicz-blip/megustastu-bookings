@@ -11,6 +11,8 @@
 //   Authorization: Bearer <Firebase ID token>     (staff auth, NOT Meta HMAC —
 //                                                  same gate as api/wa-sim-*)
 //   → { intent, updated }   updated = a draft/intent was actually set
+//   → 503 / 504 / 502 { error } the model could not answer, so nobody read the
+//                                thread and the draft is left as it was (v18.14.1)
 //
 // Unlike api/wa-sim-*, this is NOT sandbox-only tooling — it is a real staff
 // feature that ships with the module. It writes through the SAME applyParse the
@@ -87,8 +89,12 @@ export default async function handler(req, res) {
     const updated = intent === "new_booking" || intent === "cancel" || intent === "modify";
     res.status(200).json({ intent, updated });
   } catch (e) {
-    // applyParse already cleared `parsing` on any path that reached it; a throw
-    // before that leaves it set, which the CLIENT clears in its catch.
+    // applyParse already cleared `parsing` on any path that reached it. A model
+    // failure throws before that, and the CLIENT's catch only runs if the tab
+    // lived through the wait (two attempts, about 16s), so it is cleared here as
+    // well (/code-review): a failed parse used to reach applyParse as a null.
+    // Best effort: a database failure is what may have brought us here.
+    try { await applyParse(phoneKey, null, Date.now()); } catch { /* the client's catch, or the staleness bound */ }
     res.status(e.status || 500).json({ error: e.message });
   }
 }

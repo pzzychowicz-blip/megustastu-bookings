@@ -397,9 +397,10 @@ describe("wa-recheck", () => {
   // v18.14.1: a model that could not answer reaches the button with its status
   // and sentence (tests/gemini-overload.test.js has what produces them), so the
   // client reads "Re-check failed: …" and never "Nothing outstanding".
-  it("a model failure keeps its own status and sentence, and writes nothing", async () => {
-    fake.state.tree = { conversations: { [KEY]: openConv() }, messages: { [KEY]: thread([{ direction: "in", text: "hola" }]) } };
-    const before = JSON.stringify(convAt(KEY));
+  it("a model failure keeps its own status and sentence, and changes only the indicator", async () => {
+    fake.state.tree = { conversations: { [KEY]: Object.assign(openConv(), { parsing: true, parsingAt: 1 }) }, messages: { [KEY]: thread([{ direction: "in", text: "hola" }]) } };
+    const { parsing: _p, parsingAt: _a, ...rest } = convAt(KEY);
+    const before = JSON.stringify(rest);
     parseThread.mockRejectedValue(Object.assign(new Error("Gemini took too long to answer. Try again in a minute."), { status: 504 }));
     const timeout = await recheck({ phoneKey: KEY });
     expect([timeout.statusCode, timeout.body.error]).toEqual([504, "Gemini took too long to answer. Try again in a minute."]);
