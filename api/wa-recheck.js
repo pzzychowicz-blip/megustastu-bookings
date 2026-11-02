@@ -89,6 +89,6 @@ export default async function handler(req, res) {
   } catch (e) {
     // applyParse already cleared `parsing` on any path that reached it; a throw
     // before that leaves it set, which the CLIENT clears in its catch.
-    res.status(e.status || 500).json({ error: e.name === "AbortError" ? "Gemini timeout" : e.message });
+    res.status(e.status || 500).json({ error: e.message });
   }
 }
