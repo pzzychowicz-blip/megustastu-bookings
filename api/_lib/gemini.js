@@ -398,8 +398,13 @@ function candidateText(data) {
 // quotes the start of the text it could not parse ("Unexpected token 'L',
 // \"Lucía Garc\"..."), and that text is the model's reply about the guest,
 // which the parse log keeps out of production logs.
+// An object or nothing (/code-review): a bare `null` read as "Nothing outstanding"
+// on a Re-check, and threw a TypeError, a 500, on Generate.
 function replyJson(text) {
-  try { return JSON.parse(text); } catch { throw geminiFailure("Gemini's reply was not valid JSON", 502); }
+  let value = null;
+  try { value = JSON.parse(text); } catch { /* the sentence below, never the SyntaxError's */ }
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw geminiFailure("Gemini's reply was not a JSON object", 502);
+  return value;
 }
 
 // ── Live parser ───────────────────────────────────────────────────────────────

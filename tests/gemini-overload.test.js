@@ -165,10 +165,17 @@ describe("when both tries fail", () => {
 describe("a reply that cannot be used", () => {
   it("is 502 and no retry: the model answered", async () => {
     const models = answers(() => http(200, reply("not json")));
-    await expect(generateScenarioMessage()).rejects.toMatchObject({ status: 502, message: "Gemini's reply was not valid JSON" });
+    await expect(generateScenarioMessage()).rejects.toMatchObject({ status: 502, message: "Gemini's reply was not a JSON object" });
     expect(models()).toHaveLength(1);
     answers(() => http(200, {}));
     await expect(generateCustomerReply([], "es")).rejects.toMatchObject({ status: 502, message: "Gemini returned no text" });
+  });
+
+  it.each([["null"], ["[]"], ['"hola"'], ["7"]])("%s is not an answer: a Re-check says so, and so does Generate", async (text) => {
+    answers(() => http(200, reply(text)));
+    await expect(parseThread([{ direction: "in", text: "hola" }])).rejects.toMatchObject({ status: 502 });
+    await expect(generateScenarioMessage()).rejects.toMatchObject({ status: 502 });
+    await expect(parseMessage("hola")).resolves.toBeNull();
   });
 
   it("never quotes the guest's words back through a SyntaxError", async () => {
