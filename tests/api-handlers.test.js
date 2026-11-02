@@ -2219,6 +2219,27 @@ describe("the simulator endpoints, enabled and signed in", () => {
     expect([res.statusCode, res.body.error]).toEqual([400, "GEMINI_API_KEY not set"]);
     expect(fake.state.writes).toEqual([]);
   });
+  // v18.14.1: what the browser's console showed as a bare 500. The real
+  // askGemini runs here, with only fetch stubbed.
+  describe.each([
+    ["wa-sim-suggest", simSuggestHandler, { history: [] }],
+    ["wa-sim-generate", simGenerateHandler, { hint: "x" }],
+  ])("%s when Gemini cannot answer", (_name, handler, body) => {
+    beforeEach(() => { vi.stubEnv("GEMINI_API_KEY", "test-key"); });
+    it("an overload is 503 with Google's sentence, on the second try's answer", async () => {
+      const f = vi.fn(async () => new Response(JSON.stringify({ error: { message: "high demand" } }), { status: 503 }));
+      vi.stubGlobal("fetch", f);
+      const res = await call(handler, { token: "staff", body });
+      expect([res.statusCode, res.body.error]).toEqual([503, "high demand"]);
+      expect(f).toHaveBeenCalledTimes(2);
+      expect(fake.state.writes).toEqual([]);
+    });
+    it("a timeout is 504, and never the runtime's own words", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => { throw Object.assign(new Error("This operation was aborted"), { name: "AbortError" }); }));
+      const res = await call(handler, { token: "staff", body });
+      expect([res.statusCode, res.body.error]).toEqual([504, "Gemini took too long to answer. Try again in a minute."]);
+    });
+  });
 });
 
 // ── api/wa-sim-inbound.js — the Business app's events (v18.9.0) ──────────────
