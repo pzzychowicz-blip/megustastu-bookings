@@ -18,7 +18,7 @@
 //   message + one-time auto-ack — auto-ack language from the cheap mockParse
 //   regex, since the LLM hasn't run yet). Statuses update by wamid. Fast RTDB
 //   writes only — the response goes out within Meta's webhook budget.
-//   PHASE B (after the response): gemini.parseMessage (live, up to 15s) →
+//   PHASE B (after the response): gemini.parseMessage (live, up to 16s) →
 //   inbound-core.applyParse patches the draft onto the conversation. On Vercel
 //   the work is registered via the request-context waitUntil so the function
 //   isn't frozen; on the local harness the long-lived process just runs it.

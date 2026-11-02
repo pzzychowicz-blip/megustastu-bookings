@@ -69,6 +69,11 @@ export const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 // where whitespace is invisible, shows a name that looks right. Blank after the
 // trim is unset, as env() already treats "".
 export function geminiModel() { return String(env("GEMINI_MODEL", "")).trim() || DEFAULT_MODEL; }
+// The second try when the model above is overloaded (v18.14.1, askGemini in
+// gemini.js). A constant, not a variable: nothing but that one call reads it,
+// and it is the model 3.5-flash-lite replaced, so it is known to take this
+// prompt and this schema. It shuts down on 2027-05-07 (ROADMAP).
+export const FALLBACK_MODEL = "gemini-3.1-flash-lite";
 
 // Whether a parse really CALLS Gemini (v18.9.2 /code-review): live mode AND a
 // key. Live with no key falls back to the regex mock (liveParse in gemini.js),

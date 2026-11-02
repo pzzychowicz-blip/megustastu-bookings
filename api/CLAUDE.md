@@ -73,6 +73,20 @@ The override can go when Vercel's runtime loads ESM through `require()`, or when
 `jwks-rsa` stops requiring `jose` synchronously. Before deleting it, show one of those
 is true on a deployment, not locally.
 
+**A Gemini overload (v18.14.1).** Every Gemini call goes through `askGemini`
+(`_lib/gemini.js`): `geminiModel()`, then one try on `FALLBACK_MODEL` (`_lib/env.js`), only
+after a timeout, no connection, a 429 or a 5xx. Each attempt has `TIMEOUT_MS`, 8s. A
+failure leaves as an Error with a `.status`, and an endpoint answers
+`res.status(e.status || 500).json({ error: e.message })`: **503** overloaded or unreachable,
+**504** timed out, **502** refused or unreadable. **A 500 from these endpoints is therefore
+not Gemini.** The two kinds of caller differ on purpose: `parseMessage` catches, because nobody
+is waiting and the message is stored either way (no draft, as before), and `parseThread`
+throws, because staff pressed Re-check and "Nothing outstanding" would be false. A new call
+goes through `askGemini`, and never puts `e.message` from a `fetch` in an answer or a log:
+the URL holds the key, and `temporaryFailure`'s `why` is what the log gets instead. A reply
+must be a JSON object (`replyJson`). A Re-check that fails clears `parsing` on the server
+as well, since the tab may be gone. Measured: 2026-11-02, in `askGemini`'s header.
+
 **`wa-media.js` — the media proxy (v18.8.0).** One function for both directions of a
 conversation's files, to keep the count low: GET views (phase 4), POST sends (phase 5).
 Four rules, each the reason for a line of it:

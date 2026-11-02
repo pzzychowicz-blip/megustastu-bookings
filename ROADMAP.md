@@ -21,6 +21,8 @@ session and keeping it in sync.
 
 - **`BookingApp` V2, V3 and V5** (`useInboxEntry`, `useWaitlistOffers`, `useBookingForm`). Designed in `MGT_Bookings_State_By_Domain_Design.md`, context folder. After WhatsApp go-live settles; each version needs its own approval and a fresh census first.
 
+- **Replace `FALLBACK_MODEL` before 2027-05-07.** `gemini-3.1-flash-lite` (`api/_lib/env.js`) shuts down that day, and the second try on an overload would then answer 404 and count as refused.
+
 - **WhatsApp coexistence: the rehearsal, then the restaurant's number.** The code
   shipped in v18.9.0 (Embedded Signup at `/wa-connect`, the four coexistence webhooks,
   contact sync, phone replies, history import, the disconnect banner, Not a customer).
@@ -41,7 +43,9 @@ session and keeping it in sync.
   its documents, resubmitted 2026-10-30, waiting for Meta), then Tech Provider onboarding and App Review for advanced
   access to `whatsapp_business_messaging` and `whatsapp_business_management` on the
   sandbox app, then the gate again; the go-live page's T1–T4 has the detail. R-17's
-  sandbox settings stay in place for that rerun. **After the rerun's verdict:** disconnect the number (R-10) and wipe the
+  sandbox settings stay in place for that rerun, **except `WA_LLM_MODE`: since 2026-11-02 the
+  sandbox is `live` again, on `GEMINI_MODEL=gemini-3.1-flash-lite`, because in mock no draft
+  is really tested. Before the rerun set it back to `mock` and delete `GEMINI_MODEL`.** **After the rerun's verdict:** disconnect the number (R-10) and wipe the
   imported WhatsApp data from DEV (conversations, messages, `waContacts`), since it is
   six months of his real chats. **Findings the rehearsal owns:** the `extras` shape FB.login takes (Embedded Signup Builder,
   "Check a launch config"); whether `META_WA_TOKEN` may send and retry the syncs on the

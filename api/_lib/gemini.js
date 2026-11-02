@@ -24,7 +24,7 @@
 // exact current string in AI Studio (the local harness exposes GET /dev/models
 // to list what the key can see).
 
-import { env, llmMode, simEnabled, geminiModel, geminiCalled } from "./env.js";
+import { env, llmMode, simEnabled, geminiModel, geminiCalled, FALLBACK_MODEL } from "./env.js";
 
 // ── Who this restaurant is, for the prompts (v18.0.0 phase 5c) ───────────────
 // The prompts carried "a small restaurant in the Canary Islands" as a literal,
@@ -51,14 +51,14 @@ import { cleanTagIds } from "../../src/lib/tags.js";
 
 // The default, 3.5-flash-lite, answered in a median of 853ms and at most
 // 3737ms over 17 live parses on the sandbox (2026-10-17, see DEFAULT_MODEL),
-// so the slowest used a quarter of this cap. This
-// generous cap catches the occasional
-// free-tier latency spike while still failing gracefully (timeout → null →
-// message saved with no draft, staff handles it). Since the async-parse change
-// (2026-06-13) this no longer holds up the webhook response — wa-inbound
-// answers Meta first and runs the parse post-response (Vercel waitUntil), so
-// the cap only bounds how long a draft can lag behind its message.
-const TIMEOUT_MS = 15000;
+// and a Re-check on 3.1-flash-lite took 1330 to 3264ms on 2026-11-02, the
+// database reads included. This cap is one ATTEMPT's (v18.14.1, askGemini),
+// more than twice the slowest of those, and it was 15000 while a call had one
+// attempt: two of them now give up in about the time one used to. Since the
+// async-parse change (2026-06-13) this no longer holds up the webhook response
+// — wa-inbound answers Meta first and runs the parse post-response (Vercel
+// waitUntil), so the cap only bounds how long a draft can lag behind its message.
+const TIMEOUT_MS = 8000;
 
 // The model all three calls use unless GEMINI_MODEL says otherwise. One
 // constant because it was three hand-typed copies of the id.
@@ -316,66 +316,131 @@ export function mockParse(text, occasions) {
   };
 }
 
+// ── One Gemini call, and one second try (v18.14.1) ───────────────────────────
+// Measured on the sandbox on 2026-11-02: gemini-3.5-flash-lite failed five calls
+// of five over two minutes (one "high demand", four timeouts at the old 15s), and
+// on 3.1-flash-lite a failure was followed at once by an 850ms answer. An overload
+// comes and goes, so a call gets a second attempt, on FALLBACK_MODEL, and only for
+// what a second attempt can change: a timeout, no connection, a 429 or a 5xx. A
+// 400 or a 404 is the request's fault and would fail the same way.
+//
+// A failure leaves here as an Error with an http-ish `.status` the endpoints
+// answer with: 503 overloaded or unreachable, 504 timed out, 502 refused or
+// unreadable. It was a bare AbortError, which `e.status || 500` turned into a 500
+// reading "This operation was aborted".
+function geminiFailure(message, status) {
+  const e = new Error(message);
+  e.status = status;
+  return e;
+}
+
+function isTemporary(status) { return status === 429 || status >= 500; }
+
+// A failure a second attempt might not meet: askGemini asks `.temporary`.
+// `why` is what happened, for the log, since `status` is what WE answer: a 429,
+// a 500 and a dropped socket are all 503 to a caller and three different days to
+// whoever reads Vercel's logs. Google's status, "timeout", or the connection's
+// error code.
+function temporaryFailure(message, status, why) {
+  return Object.assign(geminiFailure(message, status), { temporary: true, why });
+}
+
+async function attemptGemini(key, model, body) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  let res, data;
+  try {
+    res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + key, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ac.signal,
+    });
+    // Read under the same timer: a stalled body is a timeout and a dropped one
+    // no connection (/code-review: both read as an empty reply, so the failure
+    // this function exists for went untried). Only text that is not JSON, an
+    // error page, reads as empty.
+    data = await res.json().catch((e) => { if (e.name === "SyntaxError") return {}; throw e; });
+  } catch (e) {
+    // Never e.message: the request URL carries the key.
+    throw e.name === "AbortError"
+      ? temporaryFailure("Gemini took too long to answer. Try again in a minute.", 504, "timeout")
+      : temporaryFailure("Could not reach Gemini.", 503, (e.cause && e.cause.code) || e.name);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (res.ok) return data;
+  const message = (data && data.error && data.error.message) || ("Gemini error " + res.status);
+  throw isTemporary(res.status) ? temporaryFailure(message, 503, res.status) : geminiFailure(message, 502);
+}
+
+// The answer's JSON, or a throw (above). Every Gemini call goes through this.
+// With FALLBACK_MODEL as the configured model the second try is the same model,
+// which is still worth one: see the measurement above.
+async function askGemini(key, body) {
+  const model = geminiModel();
+  try {
+    return await attemptGemini(key, model, body);
+  } catch (e) {
+    if (!e.temporary) throw e;
+    console.warn("[gemini] " + model + " failed (" + e.why + ") — second try on " + FALLBACK_MODEL + ".");
+  }
+  return attemptGemini(key, FALLBACK_MODEL, body);
+}
+
+function candidateText(data) {
+  return data && data.candidates && data.candidates[0] && data.candidates[0].content
+    && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
+    && data.candidates[0].content.parts[0].text;
+}
+
+// JSON the model wrote. /code-review: never e.message for a SyntaxError. V8
+// quotes the start of the text it could not parse ("Unexpected token 'L',
+// \"Lucía Garc\"..."), and that text is the model's reply about the guest,
+// which the parse log keeps out of production logs.
+// An object or nothing (/code-review): a bare `null` read as "Nothing outstanding"
+// on a Re-check, and threw a TypeError, a 500, on Generate.
+function replyJson(text) {
+  let value;
+  try { value = JSON.parse(text); } catch { throw geminiFailure("Gemini's reply was not valid JSON", 502); }
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw geminiFailure("Gemini's reply was not a JSON object", 502);
+  return value;
+}
+
 // ── Live parser ───────────────────────────────────────────────────────────────
+// Throws (askGemini). parseMessage turns that into "saved without a draft", and
+// parseThread lets it reach api/wa-recheck, because staff pressed a button there
+// and "Nothing outstanding" would be a false answer.
 async function liveParse(text, ctx) {
   const key = env("GEMINI_API_KEY", null);
-  if (!key) { console.warn("[gemini] GEMINI_API_KEY missing — falling back to mock parse"); return mockParse(text, ctx && ctx.occasions); }
-  const model = geminiModel();
-  const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + key;
-  const body = {
+  // prefText: in thread mode `text` is the whole transcript, staff lines and
+  // labels included, and the regex reads what parseThread's mock branch gives it.
+  if (!key) { console.warn("[gemini] GEMINI_API_KEY missing — falling back to mock parse"); return mockParse((ctx && ctx.prefText) || text, ctx && ctx.occasions); }
+  const data = await askGemini(key, {
     contents: [{ parts: [{ text: buildPrompt(text, ctx) }] }],
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema: responseSchemaFor(ctx && ctx.occasions),
       temperature: 0,
     },
-  };
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: ac.signal,
-    });
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.warn("[gemini] API error " + res.status + " — message saved without draft.", errText.slice(0, 300));
-      return null;
-    }
-    const data = await res.json();
-    const jsonText = data && data.candidates && data.candidates[0] && data.candidates[0].content
-      && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
-      && data.candidates[0].content.parts[0].text;
-    if (!jsonText) { console.warn("[gemini] empty candidates — message saved without draft."); return null; }
-    const parsed = JSON.parse(jsonText);
-    // Backstop the seating preference: the LLM often leaves it null/auto even when
-    // the customer clearly wrote "outside"/"terraza" etc. Infer it from the raw
-    // message; never downgrade a stated area Gemini DID return, and fall back to
-    // the existing draft's preference (so a follow-up that doesn't mention seating
-    // keeps the earlier choice).
-    // In thread mode `text` is the whole transcript, so infer from ctx.prefText
-    // (the CUSTOMER's messages only) — otherwise a staff "terraza o dentro?"
-    // would be read as the customer stating a preference.
-    if (parsed && (!parsed.preference || parsed.preference === "auto")) {
-      const prev = ctx && ctx.existingDraft && ctx.existingDraft.preference;
-      const src = (ctx && ctx.prefText) || text;
-      parsed.preference = inferPreference(src) || (prev && prev !== "auto" ? prev : "auto");
-    }
-    return parsed;
-  } catch (e) {
-    // /code-review: never e.message for a SyntaxError. V8 quotes the start of
-    // the text it could not parse ("Unexpected token 'L', \"Lucía Garc\"..."),
-    // and that text is the model's reply about the guest, which the parse log
-    // above keeps out of production logs.
-    const why = e.name === "AbortError" ? "timeout after " + TIMEOUT_MS + "ms"
-      : e.name === "SyntaxError" ? "the reply was not valid JSON" : e.message;
-    console.warn("[gemini] " + why + " — message saved without draft.");
-    return null;
-  } finally {
-    clearTimeout(timer);
+  });
+  const jsonText = candidateText(data);
+  if (!jsonText) throw geminiFailure("Gemini returned no text", 502);
+  const parsed = replyJson(jsonText);
+  // Backstop the seating preference: the LLM often leaves it null/auto even when
+  // the customer clearly wrote "outside"/"terraza" etc. Infer it from the raw
+  // message; never downgrade a stated area Gemini DID return, and fall back to
+  // the existing draft's preference (so a follow-up that doesn't mention seating
+  // keeps the earlier choice).
+  // In thread mode `text` is the whole transcript, so infer from ctx.prefText
+  // (the CUSTOMER's messages only) — otherwise a staff "terraza o dentro?"
+  // would be read as the customer stating a preference.
+  if (parsed && (!parsed.preference || parsed.preference === "auto")) {
+    const prev = ctx && ctx.existingDraft && ctx.existingDraft.preference;
+    const src = (ctx && ctx.prefText) || text;
+    parsed.preference = inferPreference(src) || (prev && prev !== "auto" ? prev : "auto");
   }
+  return parsed;
 }
 
 // ── The parse log ─────────────────────────────────────────────────────────────
@@ -440,15 +505,25 @@ export async function parseMessage(text, { hours, existingDraft, occasions } = {
   // v18.9.2: how long the Gemini call took, on the log line. The parse runs
   // after the webhook has answered (waitUntil), so no request timing isolates
   // it, and its time against TIMEOUT_MS is the question the go-live plan's A5-7
-  // asks of the default model. A timed-out parse reads about TIMEOUT_MS. Only
+  // asks of the default model. Over TIMEOUT_MS reads as a first attempt that
+  // failed (v18.14.1), and a parse timed out twice as about double it. Only
   // when Gemini was really CALLED (/code-review): live mode with no key falls
   // back to the mock, and a near-zero `ms` on a "live" line would read as a
   // very fast model. No call, no `ms`.
   const timed = geminiCalled();
   const t0 = Date.now();
-  let parsed = mode === "live" ? await liveParse(text, ctx) : mockParse(text, ctx.occasions);
+  let parsed = null;
+  if (mode === "live") {
+    // No one is waiting on this parse, so a failure is "no draft": the message
+    // is stored either way and staff read it (v18.14.1: the catch moved here
+    // from liveParse, so that a Re-check can hear the failure).
+    try { parsed = await liveParse(text, ctx); } catch (e) { console.warn("[gemini] " + e.message + " — message saved without draft."); }
+  } else parsed = mockParse(text, ctx.occasions);
   const took = timed ? { ms: Date.now() - t0 } : {};
-  if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
+  // `timed`, not the mode (/code-review): live with no key is the regex too, and
+  // only Gemini merges for itself, so the mode alone let a follow-up replace the
+  // draft and lose its name.
+  if (!timed && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
   if (parsed) parsed.occasions = parseOccasions(parsed, occasions, existingDraft);
   // Drift-review log: every parse, one line (content only in a sandbox, above).
   const full = simEnabled();
@@ -535,12 +610,15 @@ export async function parseThread(history, { hours, existingDraft, occasions } =
   const mode = llmMode();
   // v18.9.2 /code-review: timed as parseMessage is, and only when Gemini is
   // called. A Re-check sends the whole transcript, the longest prompt this
-  // backend sends, so it is the parse most likely to near TIMEOUT_MS.
+  // backend sends, so it is the parse most likely to near an attempt's TIMEOUT_MS.
   const timed = geminiCalled();
   const t0 = Date.now();
   let parsed = mode === "live" ? await liveParse(transcript, ctx) : mockParse(lastInbound, ctx.occasions);
   const took = timed ? { ms: Date.now() - t0 } : {};
-  if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
+  // `timed`, not the mode (/code-review): live with no key is the regex too, and
+  // only Gemini merges for itself, so the mode alone let a follow-up replace the
+  // draft and lose its name.
+  if (!timed && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
   if (parsed) parsed.occasions = parseOccasions(parsed, occasions, existingDraft);
   console.log("[wa-recheck:" + mode + "] " + JSON.stringify({ msgs: list.length, merged: !!existingDraft, ...took, parsed: parseLogFields(parsed, simEnabled()) }));
   return parsed;
@@ -555,8 +633,7 @@ export async function parseThread(history, { hours, existingDraft, occasions } =
 // with an http-ish `.status` so the caller can map it to a response code.
 export async function generateCustomerReply(history, language) {
   const key = env("GEMINI_API_KEY", null);
-  if (!key) { const e = new Error("GEMINI_API_KEY not set"); e.status = 400; throw e; }
-  const model = geminiModel();
+  if (!key) throw geminiFailure("GEMINI_API_KEY not set", 400);
   const langName = language === "en" ? "English" : "Spanish";
   // Same rule as parseThread (CT-WA-08). This one is sandbox tooling and is
   // stripped from production, and it is fixed anyway: it had no whitespace
@@ -575,24 +652,10 @@ export async function generateCustomerReply(history, language) {
     "Write ONLY your next message as the customer: short, natural, informal " + langName + ", like a real WhatsApp text.",
     "Do not repeat yourself. No quotes, no role labels, no explanations.",
   ].join("\n");
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
-  try {
-    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + key, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.9, maxOutputTokens: 4000 } }),
-      signal: ac.signal,
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) { const e = new Error((data.error && data.error.message) || ("Gemini error " + r.status)); e.status = 502; throw e; }
-    const text = data.candidates && data.candidates[0] && data.candidates[0].content
-      && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text;
-    if (!text) { const e = new Error("Gemini returned no text"); e.status = 502; throw e; }
-    return text.trim();
-  } finally {
-    clearTimeout(timer);
-  }
+  const data = await askGemini(key, { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.9, maxOutputTokens: 4000 } });
+  const text = candidateText(data);
+  if (!text) throw geminiFailure("Gemini returned no text", 502);
+  return text.trim();
 }
 
 // generateScenarioMessage({ hint }) → one INVENTED, realistic inbound customer
@@ -613,8 +676,7 @@ const SCENARIO_SCHEMA = {
 };
 export async function generateScenarioMessage({ hint } = {}) {
   const key = env("GEMINI_API_KEY", null);
-  if (!key) { const e = new Error("GEMINI_API_KEY not set"); e.status = 400; throw e; }
-  const model = geminiModel();
+  if (!key) throw geminiFailure("GEMINI_API_KEY not set", 400);
   const seed = Math.random().toString(36).slice(2) + "-" + Date.now().toString(36);
   const prompt = [
     "Invent ONE realistic inbound WhatsApp message from a (potential) customer to " + waContext() + ". It is test data for a booking system — make it varied and natural.",
@@ -629,26 +691,12 @@ export async function generateScenarioMessage({ hint } = {}) {
     "Diversity seed (meaningless — just use it to make this DIFFERENT from other generations): " + seed,
     "Tester's optional steer: " + (hint && String(hint).trim() ? JSON.stringify(String(hint).trim()) : "none — surprise me"),
   ].join("\n");
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
-  try {
-    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + key, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", responseSchema: SCENARIO_SCHEMA, temperature: 1.1, maxOutputTokens: 2000 },
-      }),
-      signal: ac.signal,
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) { const e = new Error((data.error && data.error.message) || ("Gemini error " + r.status)); e.status = 502; throw e; }
-    const jsonText = data.candidates && data.candidates[0] && data.candidates[0].content
-      && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text;
-    if (!jsonText) { const e = new Error("Gemini returned no text"); e.status = 502; throw e; }
-    const out = JSON.parse(jsonText);
-    return { message: String(out.message || "").trim(), language: out.language === "en" ? "en" : "es", name: out.name || null };
-  } finally {
-    clearTimeout(timer);
-  }
+  const data = await askGemini(key, {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: "application/json", responseSchema: SCENARIO_SCHEMA, temperature: 1.1, maxOutputTokens: 2000 },
+  });
+  const jsonText = candidateText(data);
+  if (!jsonText) throw geminiFailure("Gemini returned no text", 502);
+  const out = replyJson(jsonText);
+  return { message: String(out.message || "").trim(), language: out.language === "en" ? "en" : "es", name: out.name || null };
 }

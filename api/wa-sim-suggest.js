@@ -41,6 +41,6 @@ export default async function handler(req, res) {
     const text = await generateCustomerReply(body.history, body.language);
     res.status(200).json({ text });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e.name === "AbortError" ? "Gemini timeout" : e.message });
+    res.status(e.status || 500).json({ error: e.message });
   }
 }

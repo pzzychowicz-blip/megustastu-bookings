@@ -40131,3 +40131,67 @@ booking under a held finger · Tab to a block under the ruler with Lock navigati
 **After the review:** eight findings, seven fixed, one disproved in the app, nothing deferred and nothing added to `ROADMAP.md`. Main entry
 454.67 kB (134.20 gz), 4,241 tests, 0 lint errors and 63 warnings, style OK, on 71 commits over `origin/main`'s `77516a63`, this one
 included.
+
+## v18.14.1 — a Gemini overload gets a second try and an honest answer
+
+**Date:** 2026-11-02 · **Branch:** `fix/v18.14.1-gemini-overload`
+
+**Files:** `api/_lib/gemini.js` · `api/_lib/env.js` · `api/wa-recheck.js` · `api/wa-sim-suggest.js` · `api/wa-inbound.js` (a comment) ·
+`scripts/wa-backend-dev.mjs` · `src/App.jsx` (the version) · `tests/gemini-overload.test.js` (new) · `tests/api-handlers.test.js` ·
+`api/CLAUDE.md` · `ROADMAP.md`. No persisted node, no rule, no `SCHEMA` raise. Patch: nothing new on screen, and a Re-check that failed now says so.
+
+**What Patryk saw on the sandbox:** the simulator's Suggest and Generate answering 500, drafts empty, and follow-ups changing nothing. **Two
+causes, and only one was code.**
+
+- **The empty drafts were a setting.** `WA_LLM_MODE=mock` had been set on the sandbox on 2026-10-26 for the rehearsal (R-17) and left there
+  when Meta refused the gate. `mockParse` reproduced every stored draft and every missing one: "las 9 o algo asi" as `09:00` high, "dos…
+  este viernes a las 9 y media" as a question, "Adam" as `other` with no fields, so nothing merged. `wa-config` confirmed `modes.llm: "mock"`
+  and Re-check answered `other` in 840ms. Set to `live` with `GEMINI_MODEL=gemini-3.1-flash-lite` and redeployed (his choice); Re-check on the
+  six conversations of that day then gave 6 of 6, among them Adam 21:00 for 3 with the gluten note and Laura on Friday 21:30 outside. Hedged
+  times read low, and the one chat left with no draft is a real question. **R-17 now has one exception: see ROADMAP.**
+- **The 500s were Gemini.** `wa-sim-suggest` and `wa-sim-generate` call it in either mode. On `gemini-3.5-flash-lite`: one 502 "high demand"
+  and four timeouts at 15s, five of five failing over two minutes. On 3.1: 2 of 6 Suggests answered, at about 850ms, right after a timeout. A
+  search found no report of an incident that day, so the cause on Google's side is not known. A timeout had no `.status`, so `e.status || 500`
+  made it a 500 reading "Gemini timeout", or, on Generate, "This operation was aborted".
+
+**What changed.**
+
+- **`askGemini`, one door for all three calls** (they were three copies of the fetch): `geminiModel()`, then one try on `FALLBACK_MODEL`
+  (`gemini-3.1-flash-lite`), after a timeout, no connection, a 429 or a 5xx. A 400 or 404 is not retried. With the fallback as the configured
+  model the second try is that model again, which the 3.1 reading says is still worth one. Patryk chose the fallback over a retry alone.
+- **`TIMEOUT_MS` is per attempt: 8s, was 15s.** Twice the slowest measured (3737ms, and 3264ms for a Re-check with its reads), and two
+  attempts give up in about the time one did. `WA_PARSING_STALE_MS` is 90s, well clear.
+- **Honest statuses:** 503 overloaded or unreachable, 504 timed out, 502 refused or unreadable. A 500 from these endpoints no longer means
+  Gemini. A reply that is not JSON was a raw `SyntaxError` on Generate, which quotes the model's text; it is a fixed sentence now.
+- **A failed Re-check says so.** `liveParse` swallowed every failure into `null`, so `wa-recheck` answered 200 and the button read "Nothing
+  outstanding — no changes requested" for a thread nobody had read. The catch moved to `parseMessage`, where no one is waiting and the
+  message is stored regardless; `parseThread` throws, `wa-recheck` answers the status, and the client's existing "Re-check failed: …" says why.
+  The test that pinned `[500, "Gemini timeout"]` was changed for this, and now also asserts that a failure writes nothing.
+
+**Not changed:** a webhook message whose two tries both fail is saved with no draft, with nothing on screen telling that from a message
+that needed none. That is the design as it stood, and it now takes two failures.
+
+**Verified.** Main entry 454.67 kB (134.20 gz), unchanged; 4,261 tests; 0 lint errors, 63 warnings; style OK. Mutations: dropping the second try
+fails 9 of `tests/gemini-overload.test.js`'s 20, and letting `parseThread` swallow fails 2. **Not verified live:** Vercel's functions do not run on
+the dev server and the sandbox deploys from `main`, so `askGemini` has met `fetch` only as a stub. The first deployed overload is its first real one:
+read a Suggest's answer on the sandbox after the merge. Nothing here is checked by a browser, so no dev server was started.
+
+**The review (high, 10 findings: 9 fixed, each its own commit, 1 no change needed, nothing deferred).** Every finding was measured against the real
+functions with `fetch` stubbed before it counted.
+
+- **A connection dropped on a 200 had no second try.** Any body failure but a timeout read as an empty reply: one call, 502 "Gemini returned no
+  text". The failure this version exists for. Only text that is not JSON reads as empty now.
+- **A failed Re-check left `parsing` set on the server**, a behaviour the first commit removed: a tab closed in the 16s wait had no catch to run,
+  and every device showed "Reading the message…" until the 90s bound. Cleared in `wa-recheck`'s catch, best effort.
+- **A reply of `null`** read as "Nothing outstanding" and threw a TypeError on Generate. `replyJson` wants an object.
+- **Live with no key lost a draft's fields**, an older defect in a function this version touched: both merges asked the mode, and the regex
+  also read the whole transcript on a Re-check. Both now ask `timed` (`geminiCalled()`), and the regex reads `prefText`.
+- **A 400 with a `null` body** was retried and called unreachable; **the log** printed our status, so a 429 and ECONNRESET both read "answered 503"
+  (now Google's status, "timeout" or the error code, never `e.message`); the handlers' 503 and 504 had no test; three comments still said one 15s
+  attempt; `attemptGemini`'s `{temporary, failure}` pair became a thrown Error.
+- **No change needed:** a fallback's answer has no model on the parse line, but the second-try line names it, one line above, and only then.
+
+**A slip worth keeping:** the `replyJson` commit reworded a sentence `tests/wa-parse-log.test.js` pins, the per-commit run was only the Gemini files,
+and the full gate caught it, so `b5585fff` is red on that test. Fixed in a new commit; run the whole suite per commit, it takes four seconds.
+
+**After the review:** main entry 454.67 kB (134.20 gz), unchanged; 4,274 tests; 0 lint errors, 63 warnings; style OK; 12 commits over `origin/main`'s `7393c867`, this one included.
