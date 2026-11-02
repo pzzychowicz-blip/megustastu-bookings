@@ -98,6 +98,6 @@ describe("the block's wiring", () => {
   it("a move and the touch arm both start the loop; every end stops it", () => {
     expect(Timeline.match(/kickEdge\(\);/g).length).toBe(2);
     expect(Timeline).toMatch(/if \(edgeRafRef\.current\) \{ cancelAnimationFrame\(edgeRafRef\.current\); edgeRafRef\.current = 0; \}/);
-    expect(Timeline).toMatch(/useEffect\(\(\) => \(\) => \{ cancelAnimationFrame\(edgeRafRef\.current\); \}, \[\]\);/);
+    expect(Timeline).toMatch(/useEffect\(\(\) => \(\) => \{\s*cancelAnimationFrame\(edgeRafRef\.current\);/);
   });
 });

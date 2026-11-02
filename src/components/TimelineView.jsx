@@ -505,7 +505,17 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // timestamp (0 = not running), for a time-based speed on any refresh rate.
   const edgeRafRef = useRef(0);
   const edgeLastRef = useRef(0);
-  useEffect(() => () => { cancelAnimationFrame(edgeRafRef.current); }, []);
+  // v18.14.0 (/code-review): a block can leave under a held drag, when another device
+  // deletes or moves it. No pointerup reaches it then, so `endDrag` never ran, and the
+  // row kept its warning about a party that had gone. Measured past the release, until
+  // the next tap.
+  useEffect(() => () => {
+    cancelAnimationFrame(edgeRafRef.current);
+    cancelAnimationFrame(dragRafRef.current);
+    clearTimeout(dragHoldTimer.current);
+    if (dragRef.current && dragRef.current.active && setDragHover) setDragHover(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, at unmount: `hoverRow` is new each render and only calls setters, and watching it would tear a live drag down
+  }, []);
   // v18.3.0 (M4): non-zero for exitHold("shift") after a released drag, while
   // the block travels home on TL_SETTLE (see there). A COUNT of releases, not a
   // boolean, so each release restarts the hold, and the hold is timed from the

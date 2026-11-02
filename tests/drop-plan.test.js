@@ -328,6 +328,16 @@ describe("BookingApp's saveMove", () => {
     expect(at("reshuffled")).toBeGreaterThan(at("undo"));
     expect(toasts).toContain('{key:"reshuffled",on:!!reshuffled&&reshuffled!=="unmoved",');
   });
+  // Measured: another device removed the booking under a held finger, and the pill and
+  // the amber row outlived the release, until the next tap, because `endDrag` never ran.
+  it("a block that leaves under a held drag takes the row's warning with it", () => {
+    const timeline = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "TimelineView.jsx"), "utf8")).join("\n");
+    const at = timeline.indexOf("cancelAnimationFrame(dragRafRef.current);\n    clearTimeout(dragHoldTimer.current);");
+    expect(at).toBeGreaterThan(-1);
+    const effect = timeline.slice(timeline.lastIndexOf("useEffect(() => () => {", at), timeline.indexOf("}, []);", at));
+    expect(effect).toContain("cancelAnimationFrame(edgeRafRef.current);");
+    expect(effect).toContain("if (dragRef.current && dragRef.current.active && setDragHover) setDragHover(null);");
+  });
   it("the preview goes through a stable wrapper and the same capability", () => {
     expect(flat).toContain("onDropPreview:function(id,targetId){returnR.current.previewDrop(id,targetId);}");
     expect(flat).toContain('functionpreviewDrop(id,targetId){if(!can("bookingAssign"))returnnull;');

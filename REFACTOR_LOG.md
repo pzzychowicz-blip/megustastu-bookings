@@ -40111,3 +40111,11 @@ asked for anything. So a chunk that can never load no longer reached its readabl
 three presses of `/` were three reloads, and "Couldn't load this screen" never showed, each one throwing away whatever was on screen. The
 flag is now cleared by a surface somebody asked for, on either path, and a preload only keeps the module. The same three presses are one
 reload and then the error. Opening Settings after a preload still clears it, with the stack read off `removeItem`.
+
+**A row kept its warning about a party that had gone.** `endDrag` is what clears the row, and it runs on the block's own pointerup. A block
+can leave under a held finger, when another device deletes or moves that booking, and no pointerup reaches it then. Measured with the
+booking taken out of `saveBookings` under the finger, writes answered locally, and the finger lifted over an empty cell: "Moves Emil,
+Óscar" and the amber row stayed through the release, and were still there 4.5s later, until the next tap. Lifting over another block
+clears it, because any block's `endDrag` does, which is why the first attempts at this read clean. A change of day clears it too, because
+that remounts the grid. The block's unmount now cancels its frames and its 800ms timer, and clears the row if it was the one being
+dragged. After it, the row clears as the block leaves, with the finger still down.
