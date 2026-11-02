@@ -40104,3 +40104,10 @@ kept that node, and `autoFocus` belongs to a mount. Measured 80ms into the exit:
 typing "bel" reached nothing. The menu now has a key that every open raises, so a reopen is a new node and the box takes focus in the
 tap's own commit, which is what iOS needs for its keyboard. The pop-in restarts from nothing either way, because swapping the class on
 the old node restarted the same keyframes. After it, the same taps leave the focus in the search box, and "bel" lands there.
+
+**The preload undid the chunk loader's one-reload rule.** The flag that stops a failed chunk from reloading forever is cleared by a
+successful load, and correction 34's `preload` is a successful load at every boot, a second after the day arrives, with nobody having
+asked for anything. So a chunk that can never load no longer reached its readable error. Measured with `SearchPanel`'s module refused:
+three presses of `/` were three reloads, and "Couldn't load this screen" never showed, each one throwing away whatever was on screen. The
+flag is now cleared by a surface somebody asked for, on either path, and a preload only keeps the module. The same three presses are one
+reload and then the error. Opening Settings after a preload still clears it, with the stack read off `removeItem`.

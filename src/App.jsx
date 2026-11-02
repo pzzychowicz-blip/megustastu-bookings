@@ -150,16 +150,20 @@ import { BlockModal }  from "./components/BlockModal";
 // a thenable, which tests/settings-preload.test.js runs; if that ever changes, the cost
 // is the one frame of fallback we had. A failed preload says nothing: the open then takes
 // the ordinary path, with its reload and its readable error.
+//
+// v18.14.0 (/code-review): the flag is cleared by a surface somebody ASKED for, on either
+// path, and never by a preload, which is nobody asking. It ran at every boot, so a chunk
+// that can never load reloaded the app at each press and its error never showed: three
+// presses, three reloads, measured with one screen's chunk refused.
 function lazyChunk(load,name){
   let ready=null;
-  function loaded(m){
-    ready=m;
+  function arrived(m){
     try{sessionStorage.removeItem("mgt-chunk-reload");}catch{/* ignore */}
     return m;
   }
   const chunk=lazy(function(){
-    if(ready) return {then:function(ok){ok(ready);}};
-    return load().then(loaded).catch(function(err){
+    if(ready){arrived(ready);return {then:function(ok){ok(ready);}};}
+    return load().then(arrived).catch(function(err){
       console.error("[chunk] failed to load "+name,err);
       try{
         if(!sessionStorage.getItem("mgt-chunk-reload")){
@@ -172,7 +176,7 @@ function lazyChunk(load,name){
       }};
     });
   });
-  chunk.preload=function(){load().then(loaded).catch(function(){/* ignore */});};
+  chunk.preload=function(){load().then(function(m){ready=m;}).catch(function(){/* ignore */});};
   return chunk;
 }
 const SettingsContent = lazyChunk(function(){return import("./components/Settings").then(function(m){return {default:m.SettingsContent};});},"Settings");

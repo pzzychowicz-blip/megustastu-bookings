@@ -36,16 +36,18 @@ describe("lazyChunk", () => {
   const fn = app.slice(at, app.indexOf("const SettingsContent = lazyChunk(", at));
   it("answers at once when the chunk is here, and takes the ordinary path when it is not", () => {
     expect(at).toBeGreaterThan(-1);
-    expect(fn).toContain("if(ready) return {then:function(ok){ok(ready);}};");
-    expect(fn).toContain("return load().then(loaded).catch(function(err){");
+    expect(fn).toContain("if(ready){arrived(ready);return {then:function(ok){ok(ready);}};}");
+    expect(fn).toContain("return load().then(arrived).catch(function(err){");
   });
-  it("clears the reload flag on either path, so a preload cannot leave it set", () => {
-    const loaded = fn.slice(fn.indexOf("function loaded(m){"), fn.indexOf("const chunk=lazy("));
-    expect(loaded).toContain('sessionStorage.removeItem("mgt-chunk-reload")');
+  it("clears the reload flag when a surface somebody asked for arrives, on either path", () => {
+    const arrived = fn.slice(fn.indexOf("function arrived(m){"), fn.indexOf("const chunk=lazy("));
+    expect(arrived).toContain('sessionStorage.removeItem("mgt-chunk-reload")');
     expect(fn.match(/removeItem\("mgt-chunk-reload"\)/g)).toHaveLength(1);
   });
-  it("keeps a failed preload silent: no reload, no error, the open decides", () => {
-    expect(fn).toContain("chunk.preload=function(){load().then(loaded).catch(function(){});};");
+  // Measured with one screen's chunk refused: the preload cleared the flag at every
+  // boot, so three presses were three reloads and the screen's error never showed.
+  it("keeps a preload out of it: silent if it fails, and the flag is left alone if it lands", () => {
+    expect(fn).toContain("chunk.preload=function(){load().then(function(m){ready=m;}).catch(function(){});};");
   });
 });
 
