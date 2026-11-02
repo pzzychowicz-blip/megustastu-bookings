@@ -39994,6 +39994,44 @@ words stay at 0 except at 4× with the Optimiser on, where they reach 0.88, whic
 and the reason the words exist. From a time that fits to a refused one the band eases 0 → 56 with the answer at 1 and
 the words at 0, and folding back the words reach 0.04 at most.
 
+**All of it again after Corrections 18 to 36**, on 2026-11-02, on the tree Correction 35 left, on the same clock and diffed the same way.
+Correction 36 came out of this pass, so its row was read on its own and the inbox's census ran again on `ea76e354`. The first attempt
+measured nothing: the dev server had died with an interrupted session, every rig exited 1, and the census came back empty, which its own
+comparison reads as every jump gone. Every comparison after that read the row counts first.
+
+All 17 exit 0, with 38 lines of difference. They are frame timing, the same sample offsets, and one count: `l7.py`'s blocked writes, 3 → 4,
+which traced by path are this device's presence, its theme pref and the two drops, so nothing of these corrections. `c8strip.py` and
+`c9flow.py` exit 0. `rvt.py` reads 35 in, 36 out, 37 born closed and none born open at each height, four more each, all on its zoom step,
+where a block's marks are `Reveal`s now. `c17band.txt` differs on 44 lines of timing, and the answer's lowest is unchanged, 0.69 and 0.28
+at 16:00. The three audits are identical line for line, so nothing since the last pass moved a contrast. `h5undo.py` wrote to DEV again
+and read the same: 3 blocks moved, 0 differ after Undo, 0 after a reload.
+
+Then the rigs these corrections added:
+
+- `c22park.py`: at 390 Discard is 222.5–294.5 and Retry 304.5–363, and armed it is 157.9–294.5. A tap at 120ms stays armed, it disarms after
+  3.5s, and a tap after the wait discards.
+- `c25pos.py`: 1,344 values at 998, 390, 668 and 360, with 0 differences from Correction 25's baseline.
+- `c34open.py`: the chunk is asked for at about 1800ms, and Close sits at 484.5 from the first frame.
+
+**The census** pressed 433 things across the seven surfaces: timeline 85, list 73, plan 74, new booking 23, Settings 142, inbox 28, walk-in 8.
+Against the one the pop-ins started from, things arriving with no ease fell 34 → 9, things leaving with none 60 → 42, and groups jumping
+8px or more 94 → 30. What is left is accounted for:
+
+- **The 9** are a date change, Preferred's capacity text and an archived conversation's messages.
+- **The 42** are the view switch, a date change, a Settings tab's body, the status popup's scrim on a pick, the wipe overlay, the inbox's
+  keyed swaps and the `Archived` label on Restore. DESIGN.md's exceptions cover the swaps and the pick.
+- **The 30** are mostly one frame of an ease at its steepest: a status row's ±12, "+ Add template" and the rows above it at −12 to −17,
+  Opening hours' 29, 27, 25, 24, 22 and 20, and the Gift vouchers switch, which Correction 36 sampled. The others are a replacement or
+  a text swap: the Summary's lid on a date change, the walk-in's `Capacity:` and `Select tables below.` at ±34. Archive's 36px is the
+  conversation closing.
+
+One group was real, and that is Correction 36: three rows of `Edit` dx −60 on the three arming taps, and none on the same taps on `ea76e354`.
+
+**What the census cannot see.** It matches elements by their text and reports only what it presses. It cannot see a drag, a change the clock
+makes, another device's write or a change of style alone, and it never pressed the destructive path on six lists. So Correction 32 read those
+six and Correction 35 read all 154 bare conditionals under `src/components`, and that read found twelve more surfaces. Neither says every
+such place is gone: they say what was pressed and what was read.
+
 **Two things on the record.** Phase 1's commit, `c1ddb470`, went in with 2 lint errors, because its command did not
 stop on the gate. `84dc5227` fixed them, and every commit since has had the gate chained to it, so only a bisect
 landing on phase 1 itself sees red. And DEV's Activity log holds two crash entries, `ReferenceError: Presence is not
@@ -40007,10 +40045,14 @@ pass · automatic dark mode at sunset · the Summary and a refusal easing in on 
 quiet buttons and the field edge in the dim room · the inbox's merged title row, and the composer with Android's
 keyboard up · "Checking the tables…" at the tablet's real speed · the row warning's second look under a real finger,
 and whether 8px of slop survives a tremble · how long that look takes on a jammed day · the walk-in's line with
-Android's keyboard up · the new worker taking over, and its offline page.
+Android's keyboard up · the new worker taking over, and its offline page · a double tap on a phone, and the half-second wait under a real
+finger · flags arriving on a block on the tablet · the 28px Reset with a wet finger · the country menu with iOS's keyboard up.
 
-**Size:** main entry 449.77 kB (132.54 gz), 0.92 kB over the first close.
+**Not seen on real data.** The "~Nm" pill was read from the code alone. A clash, a recognised guest's open voucher, No show when due, the
+usage panel and the linked booking's summary were staged, because DEV has none of them.
 
-**The branch:** 42 commits on `origin/main`'s `77516a63`, this one included.
+**Size:** main entry 454.25 kB (134.12 gz), 5.40 kB over the first close.
+
+**The branch:** 62 commits on `origin/main`'s `77516a63`, this one included.
 
 **Files:** `REFACTOR_LOG.md`, `ROADMAP.md`, `GLOSSARY.md`, `DESIGN.md`, `CLAUDE.md`, `src/components/CLAUDE.md`.
