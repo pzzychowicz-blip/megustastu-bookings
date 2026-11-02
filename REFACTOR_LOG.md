@@ -40123,3 +40123,11 @@ dragged. After it, the row clears as the block leaves, with the finger still dow
 **Two exports were both called `nearestTimes`.** H3's `(sugg, count)` in `booking-logic.js` and the WhatsApp check's older `(times, around,
 max)` in `draft-check.js`: the same name, different arguments, and neither module's callers would notice an import from the wrong one
 until a line came back empty. H3's is `lineTimes` now, the name of what it serves. A rename and nothing else.
+
+**The hardware's list grows by what the review touched:** a real double tap on a country code and on Add to waitlist · a refused drop right
+after a move · the country menu reopened quickly by finger on iOS · the Undo pill on slow wifi and offline · a second device removing a
+booking under a held finger · Tab to a block under the ruler with Lock navigation off, in Safari, which the rig does not have.
+
+**After the review:** eight findings, seven fixed, one disproved in the app, nothing deferred and nothing added to `ROADMAP.md`. Main entry
+454.67 kB (134.20 gz), 4,241 tests, 0 lint errors and 63 warnings, style OK, on 71 commits over `origin/main`'s `77516a63`, this one
+included.
