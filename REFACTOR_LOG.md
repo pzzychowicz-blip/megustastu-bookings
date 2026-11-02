@@ -40217,3 +40217,9 @@ stylesheet and each of the three shells' top padding out of `App.jsx`; it fails 
 
 **Verified on the tablet, DEV tab, with the strip forced on by a temporary style (a Chrome tab cannot report `standalone`; CDP's `display-mode` emulation had no effect
 there):** Walk-in and + New at 11.99, Follow at 13.99, and the top row of each answers `elementFromPoint` with the button. The 11.99 is the tablet's 1.924 device pixel ratio.
+
+**Verified on iPadOS 27, iPad Pro 13-inch simulator, as an installed app (`display-mode: standalone`, the real strip, DEV):** in a window 1058 × 476, the compact layout, Walk-in's top is
+exactly 12, Follow's is 14, and the button tops are whole at full resolution. Full screen and larger windows keep their 16px shell (Walk-in at 17). Nothing is offscreen at 1376 × 1000, 1032 × 1344,
+1322 × 936, 1092 × 840, 804 × 936 or 760 × 936. So 12px holds in real WebKit with the real strip, which the tablet could not show: its strip was a forced style. The 11-inch was not run as its own
+device; its widths fall inside the range above. **A hand-made web clip without its `ApplicationManifest` reads `navigator.standalone` true and `display-mode: standalone` false**, so the strip stays hidden,
+and that produced a false blur finding here until the clip was rebuilt from a real one.
