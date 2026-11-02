@@ -413,7 +413,9 @@ function replyJson(text) {
 // and "Nothing outstanding" would be a false answer.
 async function liveParse(text, ctx) {
   const key = env("GEMINI_API_KEY", null);
-  if (!key) { console.warn("[gemini] GEMINI_API_KEY missing — falling back to mock parse"); return mockParse(text, ctx && ctx.occasions); }
+  // prefText: in thread mode `text` is the whole transcript, staff lines and
+  // labels included, and the regex reads what parseThread's mock branch gives it.
+  if (!key) { console.warn("[gemini] GEMINI_API_KEY missing — falling back to mock parse"); return mockParse((ctx && ctx.prefText) || text, ctx && ctx.occasions); }
   const data = await askGemini(key, {
     contents: [{ parts: [{ text: buildPrompt(text, ctx) }] }],
     generationConfig: {
@@ -517,7 +519,10 @@ export async function parseMessage(text, { hours, existingDraft, occasions } = {
     try { parsed = await liveParse(text, ctx); } catch (e) { console.warn("[gemini] " + e.message + " — message saved without draft."); }
   } else parsed = mockParse(text, ctx.occasions);
   const took = timed ? { ms: Date.now() - t0 } : {};
-  if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
+  // `timed`, not the mode (/code-review): live with no key is the regex too, and
+  // only Gemini merges for itself, so the mode alone let a follow-up replace the
+  // draft and lose its name.
+  if (!timed && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
   if (parsed) parsed.occasions = parseOccasions(parsed, occasions, existingDraft);
   // Drift-review log: every parse, one line (content only in a sandbox, above).
   const full = simEnabled();
@@ -609,7 +614,10 @@ export async function parseThread(history, { hours, existingDraft, occasions } =
   const t0 = Date.now();
   let parsed = mode === "live" ? await liveParse(transcript, ctx) : mockParse(lastInbound, ctx.occasions);
   const took = timed ? { ms: Date.now() - t0 } : {};
-  if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
+  // `timed`, not the mode (/code-review): live with no key is the regex too, and
+  // only Gemini merges for itself, so the mode alone let a follow-up replace the
+  // draft and lose its name.
+  if (!timed && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
   if (parsed) parsed.occasions = parseOccasions(parsed, occasions, existingDraft);
   console.log("[wa-recheck:" + mode + "] " + JSON.stringify({ msgs: list.length, merged: !!existingDraft, ...took, parsed: parseLogFields(parsed, simEnabled()) }));
   return parsed;

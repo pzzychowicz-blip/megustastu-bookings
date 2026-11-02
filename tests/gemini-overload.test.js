@@ -162,6 +162,24 @@ describe("when both tries fail", () => {
   });
 });
 
+describe("live with no key, where the regex answers", () => {
+  const draft = { intent: "new_booking", size: 4, date: "2026-11-07", name: "Laura" };
+  beforeEach(() => vi.stubEnv("GEMINI_API_KEY", ""));
+
+  it("merges into a pending draft, as mock mode does", async () => {
+    const models = answers(() => { throw new Error("no call"); });
+    const thread = [{ direction: "in", text: "mesa para 4" }, { direction: "out", text: "¿a qué hora?" }, { direction: "in", text: "para 2 el sabado" }];
+    await expect(parseThread(thread, { existingDraft: draft })).resolves.toMatchObject({ name: "Laura", size: 2 });
+    await expect(parseMessage("para 2 el sabado", { existingDraft: draft })).resolves.toMatchObject({ name: "Laura", size: 2 });
+    expect(models()).toEqual([]);
+  });
+
+  it("reads the customer's newest line, never a staff line in the transcript", async () => {
+    const thread = [{ direction: "out", text: "tenemos mesa para 9 a las 21:00 el sabado" }, { direction: "in", text: "gracias" }];
+    await expect(parseThread(thread)).resolves.toMatchObject({ size: null, time: null });
+  });
+});
+
 describe("a reply that cannot be used", () => {
   it("is 502 and no retry: the model answered", async () => {
     const models = answers(() => http(200, reply("not json")));
