@@ -39731,7 +39731,7 @@ that moves under the finger is the thing DESIGN.md's armed-button rule exists to
 - **Follow** keeps "Following"'s width, 75.2 measured, `FOLLOW_W` 76. A tap on it moved the three zoom buttons 17px; the − now sits
   at x 260 in both states.
 - **A template's buttons** reserve the armed width, 137.9 measured, `ARMED_W` 138, and "Confirm — delete" grows leftwards inside it.
-  Arming used to take 60px out of the row's text.
+  Arming used to take 60px out of the row's text. This measured Delete alone, and Edit beside it still stretched: Correction 36.
 - **The duration Reset** was not the simple case the census made it look. It sat at the end of the stepper row, which has no room for
   it on a two-column form: "End:" wrapped onto two lines at 29.8px, and the column grew 14px on the form and 16 on the walk-in, moving
   Date and Time on the tap that set a duration. Reserving that width in the row would have left Date at 292px and Time at 196 for
@@ -39914,6 +39914,17 @@ lands. "Load more" sits at the end of a list. The Summary's lid text is a text s
 **Files:** `ActivityLogModal.jsx`, `BookingFormModal.jsx`, `CustomersSettings.jsx`, `FloorPlanEditor.jsx`, `LayoutSettings.jsx`,
 `ListView.jsx`, `ManualModal.jsx`, `ReminderEditor.jsx`, `Settings.jsx`, `VoucherPicker.jsx`, `atoms.jsx`, `whatsapp/InboxPanel.jsx`,
 `whatsapp/LinkedBookingCard.jsx`, `tests/row-slots.test.js`, `DESIGN.md`, `src/components/CLAUDE.md`.
+
+**Correction 36: a template's Edit holds still.** Patryk's decision was that nothing moves, and Correction 26 measured Delete and stopped.
+The two buttons share a column, a column stretches its items, and arming Delete took Edit from 78.1 to 137.9 wide in one frame, its left
+edge going 672.9 → 613.1. The final census named it, `Edit` dx −60. Each button now takes its own width from the right edge, and both
+start at `REST_W`, 79, Delete's resting 78.1 rounded up, so they still match at rest. Read at rest, armed, and after arming the next row,
+which disarms the first: Edit 672 and 79 all three times, with Delete 672 and 79 ↔ 613.1 and 137.9 inside the reserved column.
+
+The census's other open reading was an ease. `WhatsApp inbox`, dy 10 on the Gift vouchers switch, is a row under a warning that folds:
+sampled per frame it goes 346 → 456 on the way in and 456 → 346 on Keep it on, and about 10px is one step at the start of that curve.
+
+**Files:** `whatsapp/TemplatesEditor.jsx`, `tests/reserved-slots.test.js`.
 
 ### Closing the version
 

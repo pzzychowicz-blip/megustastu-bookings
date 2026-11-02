@@ -16,6 +16,11 @@ import { TrashIcon } from "../Icons";
 // measured and rounded up. Arming used to take 60px out of the text, so the row rewrapped
 // under the finger and the button could leave it.
 const ARMED_W = 138;
+// v18.14.0 (correction 36): the two share a column, and a column stretches its items, so
+// arming Delete stretched Edit 60px to the left in one frame. Each now takes its own width
+// from the right edge, and both start at Delete's resting width, 78.1 rounded up, so they
+// still match at rest.
+const REST_W = 79;
 
 export function TemplatesEditor({ templates, onSave, onClose }) {
   const [list, setList] = useState(() => templates.slice().map((t) => Object.assign({}, t)));
@@ -54,13 +59,13 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
           <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>{"ES: " + t.textEs}</div>
         </div>
         <div style={{ minWidth: ARMED_W, display: "flex", justifyContent: "flex-end", flexShrink: 0 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
           {/* v18.2.0: each names its template, the visible word leading,
               for the reason the reminder rows' do (tests/a11y.test.js). */}
-          <button className="mgt-hover-scale" aria-label={"Edit (" + name + ")"} style={mkBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", background: BTN.quiet })} onClick={() => openEdit(t)}>Edit</button>
+          <button className="mgt-hover-scale" aria-label={"Edit (" + name + ")"} style={mkBtn({ fontSize: T.small, minHeight: 36, minWidth: REST_W, padding: "6px 12px", background: BTN.quiet })} onClick={() => openEdit(t)}>Edit</button>
           <button className="mgt-hover-scale"
             aria-label={(armed ? "Confirm — delete (" : "Delete (") + name + ")"}
-            style={mkDangerBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", gap: 4 })}
+            style={mkDangerBtn({ fontSize: T.small, minHeight: 36, minWidth: REST_W, padding: "6px 12px", gap: 4 })}
             onClick={() => {
               if (armed) { if (!armSettled()) return; setArmedId(null); removeT(t.id); }
               else { markArmed(); setArmedId(t.id); }

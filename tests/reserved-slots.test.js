@@ -23,6 +23,13 @@ describe("a control that changes width keeps its widest", () => {
     expect(editor).toMatch(/const ARMED_W = 138;/);
     expect(editor).toMatch(/minWidth: ARMED_W, display: "flex", justifyContent: "flex-end", flexShrink: 0/);
   });
+  // Correction 36: the column stretched its items, so arming Delete stretched Edit 60px.
+  it("Edit keeps its own width while Delete arms, and the two still match at rest", () => {
+    const editor = read("whatsapp/TemplatesEditor.jsx");
+    expect(editor).toMatch(/flexDirection: "column", alignItems: "flex-end", gap: 4/);
+    expect(editor.match(/minHeight: 36, minWidth: REST_W,/g)).toHaveLength(2);
+    expect(Number((editor.match(/const REST_W = (\d+);/) || [])[1])).toBeGreaterThanOrEqual(79);
+  });
 });
 
 describe("the duration Reset", () => {
