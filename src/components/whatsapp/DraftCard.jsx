@@ -351,7 +351,8 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
           or in a booking form. */}
       {d.ambiguity ? <InlineAlert icon={WarnIcon} style={{ marginBottom: 10 }}>{d.ambiguity}</InlineAlert> : null}
       {checkEl}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {/* v18.14.2 (Patryk): on the right, as the compact bar above keeps them. */}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
         <button
           onClick={() => onAccept()}
           className="mgt-hover-scale mgt-press"
