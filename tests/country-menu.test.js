@@ -41,4 +41,10 @@ describe("the country menu", () => {
     expect(open.indexOf("setOpens(")).toBeGreaterThan(-1);
     expect(open.indexOf("setOpens(")).toBeLessThan(open.indexOf("setOpen(true)"));
   });
+  // v18.14.2, on an iPad: "pol" raised iOS's "Pół" bubble, and it outlived the form.
+  it("asks the keyboard to leave a country's name as it was typed", () => {
+    expect(src).toContain('autoCorrect="off"');
+    expect(src).toContain('autoCapitalize="none"');
+    expect(src).toContain("spellCheck={false}");
+  });
 });

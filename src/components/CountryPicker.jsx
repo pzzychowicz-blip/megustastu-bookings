@@ -166,6 +166,12 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
               onChange={function (e) { setQ(e.target.value); setActive(0); }}
               onKeyDown={onKey}
               placeholder="Search country or code"
+              /* v18.14.2: a country's name is no word to correct. Typing "pol"
+                 on an iPad with a Polish keyboard raised iOS's "Pół" bubble,
+                 which stayed on the screen after the form had closed. */
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
               role="combobox"
               aria-label="Search country or code"
               aria-expanded="true"
