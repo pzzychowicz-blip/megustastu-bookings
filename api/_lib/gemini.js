@@ -352,9 +352,11 @@ async function attemptGemini(key, model, body) {
       body: JSON.stringify(body),
       signal: ac.signal,
     });
-    // Read under the same timer: a stalled body is a timeout. Anything else
-    // that stops it is an error page, not Google's JSON.
-    data = await res.json().catch((e) => { if (e.name === "AbortError") throw e; return {}; });
+    // Read under the same timer: a stalled body is a timeout and a dropped one
+    // no connection (/code-review: both read as an empty reply, so the failure
+    // this function exists for went untried). Only text that is not JSON, an
+    // error page, reads as empty.
+    data = await res.json().catch((e) => { if (e.name === "SyntaxError") return {}; throw e; });
   } catch (e) {
     // Never e.message: the request URL carries the key.
     throw e.name === "AbortError"

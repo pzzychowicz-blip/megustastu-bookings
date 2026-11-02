@@ -80,6 +80,12 @@ describe("the second try", () => {
     expect(models()).toHaveLength(2);
   });
 
+  it("a connection dropped half way through a 200 gets the second try", async () => {
+    const models = answers(() => Promise.resolve({ ok: true, json: () => Promise.reject(new TypeError("terminated")) }), () => http(200, reply("hola")));
+    await expect(generateCustomerReply([], "es")).resolves.toBe("hola");
+    expect(models()).toHaveLength(2);
+  });
+
   it("a healthy model is asked once", async () => {
     const models = answers(() => http(200, booking));
     await parseMessage("mesa para 4");
