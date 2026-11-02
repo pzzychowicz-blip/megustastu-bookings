@@ -212,6 +212,19 @@ describe("withUndoDelta", () => {
     move.transform(fresh);
     expect(move.delta()[0].tables).toEqual(["2"]);
   });
+  // A held write's sentence is finished from `delta` and `post` together. If `post`
+  // kept the first run's list, a party moved only on the replay would go unnamed.
+  it("hands back the list the replay produced, the one the sentence reads", () => {
+    const first = [bk("a", "13:00", ["1"])];
+    const fresh = [bk("a", "13:00", ["2"]), bk("b", "14:00", ["3"])];
+    const move = withUndoDelta(moveA, delta);
+    expect(move.post()).toEqual([]);
+    const ran = move.transform(first);
+    expect(move.post()).toBe(ran);
+    const replayed = move.transform(fresh);
+    expect(move.post()).toBe(replayed);
+    expect(move.post().map((b) => b.id)).toEqual(["a", "b"]);
+  });
   it("runs the transform once per list, so the delta and the write share one optimiser pass", () => {
     let runs = 0;
     const move = withUndoDelta((list) => { runs++; return moveA(list); }, delta);
@@ -236,7 +249,7 @@ describe("withUndoDelta", () => {
   });
 });
 
-// v18.14.2: "David moved to 8 — Reilly reassigned." while six others had moved too.
+// v18.14.2: "David moved to 8 — Reilly reassigned." while seven others had moved too.
 describe("what a move says", () => {
   const before = [
     { id: "d", name: "David", tables: ["6"] },

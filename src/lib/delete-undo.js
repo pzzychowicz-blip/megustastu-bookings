@@ -101,7 +101,7 @@ export function withUndoDelta(transform,deltaOf){
 // ── What a move says ─────────────────────────────────────────────────────────
 // v18.14.2. With the Optimiser on, a drop or an assign can re-seat the whole day,
 // and the pill named only the party that gave up its table: "David moved to 8 —
-// Reilly reassigned." while six others had moved too, measured on an iPad. So the
+// Reilly reassigned." while seven others had moved too, measured on an iPad. So the
 // sentence is finished when the write lands, from what really moved, for the same
 // reason the Undo is armed there: a held write replays on a fresh list.
 //
