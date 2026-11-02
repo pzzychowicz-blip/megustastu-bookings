@@ -40232,7 +40232,9 @@ and that produced a false blur finding here until the clip was rebuilt from a re
   A swap and a free table keep their own sentence: nothing else moves there.
 - **The country menu.** With the keyboard up on the iPad it spanned 173–495 while the Save bar started at 413, so the last rows could not be tapped. `useMenuRoom` writes the menu's `maxHeight` from the room left and
   follows the keyboard and the form's scroll, without a state, because a state would re-render 249 rows a frame. Afterwards it spanned 173–406 and Zimbabwe, the last row, answered `elementFromPoint`, with the keyboard
-  arriving after the menu had opened. **Not measured on the tablet**: it was unplugged by then, so the tablet's numbers are the device check for this version.
+  arriving after the menu had opened. **On the tablet, a DEV tab in Chrome (998 wide), the room is what it is:** with the keyboard up the page is 231px tall, 63px are left under the field, and the menu keeps `MENU_ROOM_MIN`'s
+  120 (86–207, list 59), running under the footer, so about one row shows and the last rows take a scroll of the form, as they did before. The restaurant's installed app has 87px more without Chrome's bars, which
+  by the arithmetic gives the menu about 150, two or three rows. That figure is calculated, not measured: DEV does not run in the WebAPK, so it is the device check after this deploys.
 - **The country search's autocorrect.** "pol" raised iOS's "Pół" bubble, which outlived the form. `autoCorrect`, `autoCapitalize` and `spellCheck` are off on that field.
 - **Left as it is, Patryk's call:** in a resized iPad window the system's window buttons cover the top of the Settings gear. Full screen is clear, `env(safe-area-inset-*)` reads 0 there, and the restaurant has no iPad.
 - **The draft card's Accept & open and Dismiss** sit on the right, as the compact bar's already did: 758 of the card's inner 759.
