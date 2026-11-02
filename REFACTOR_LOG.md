@@ -40175,3 +40175,23 @@ that needed none. That is the design as it stood, and it now takes two failures.
 fails 9 of `tests/gemini-overload.test.js`'s 20, and letting `parseThread` swallow fails 2. **Not verified live:** Vercel's functions do not run on
 the dev server and the sandbox deploys from `main`, so `askGemini` has met `fetch` only as a stub. The first deployed overload is its first real one:
 read a Suggest's answer on the sandbox after the merge. Nothing here is checked by a browser, so no dev server was started.
+
+**The review (high, 10 findings: 9 fixed, each its own commit, 1 no change needed, nothing deferred).** Every finding was measured against the real
+functions with `fetch` stubbed before it counted.
+
+- **A connection dropped on a 200 had no second try.** Any body failure but a timeout read as an empty reply: one call, 502 "Gemini returned no
+  text". The failure this version exists for. Only text that is not JSON reads as empty now.
+- **A failed Re-check left `parsing` set on the server**, a behaviour the first commit removed: a tab closed in the 16s wait had no catch to run,
+  and every device showed "Reading the message…" until the 90s bound. Cleared in `wa-recheck`'s catch, best effort.
+- **A reply of `null`** read as "Nothing outstanding" and threw a TypeError on Generate. `replyJson` wants an object.
+- **Live with no key lost a draft's fields**, an older defect in a function this version touched: both merges asked the mode, and the regex
+  also read the whole transcript on a Re-check. Both now ask `timed` (`geminiCalled()`), and the regex reads `prefText`.
+- **A 400 with a `null` body** was retried and called unreachable; **the log** printed our status, so a 429 and ECONNRESET both read "answered 503"
+  (now Google's status, "timeout" or the error code, never `e.message`); the handlers' 503 and 504 had no test; three comments still said one 15s
+  attempt; `attemptGemini`'s `{temporary, failure}` pair became a thrown Error.
+- **No change needed:** a fallback's answer has no model on the parse line, but the second-try line names it, one line above, and only then.
+
+**A slip worth keeping:** the `replyJson` commit reworded a sentence `tests/wa-parse-log.test.js` pins, the per-commit run was only the Gemini files,
+and the full gate caught it, so `b5585fff` is red on that test. Fixed in a new commit; run the whole suite per commit, it takes four seconds.
+
+**After the review:** main entry 454.67 kB (134.20 gz), unchanged; 4,274 tests; 0 lint errors, 63 warnings; style OK; 12 commits over `origin/main`'s `7393c867`, this one included.

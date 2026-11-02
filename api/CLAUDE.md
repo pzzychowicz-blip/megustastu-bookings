@@ -83,7 +83,9 @@ not Gemini.** The two kinds of caller differ on purpose: `parseMessage` catches,
 is waiting and the message is stored either way (no draft, as before), and `parseThread`
 throws, because staff pressed Re-check and "Nothing outstanding" would be false. A new call
 goes through `askGemini`, and never puts `e.message` from a `fetch` in an answer or a log:
-the URL holds the key. Measured: 2026-11-02, in `askGemini`'s header.
+the URL holds the key, and `temporaryFailure`'s `why` is what the log gets instead. A reply
+must be a JSON object (`replyJson`). A Re-check that fails clears `parsing` on the server
+as well, since the tab may be gone. Measured: 2026-11-02, in `askGemini`'s header.
 
 **`wa-media.js` — the media proxy (v18.8.0).** One function for both directions of a
 conversation's files, to keep the count low: GET views (phase 4), POST sends (phase 5).
