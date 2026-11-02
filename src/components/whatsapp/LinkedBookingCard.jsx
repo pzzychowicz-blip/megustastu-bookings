@@ -4,7 +4,7 @@
 // collapsed it shrinks to a one-line strip. Holds the single source of truth for
 // the two booking actions — Open booking (blue) and Cancel booking (red).
 
-import { Reveal, mkSolidBtn, OutlineChip, SBadge } from "../atoms";
+import { Presence, Reveal, mkSolidBtn, OutlineChip, SBadge } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { useCollapseState } from "../../hooks/useCollapseState";
 import { T, FW, M, IC, H } from "../../lib/constants";
@@ -124,7 +124,7 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
             wrap — below the floor the summary takes its own full-width line
             instead of shrinking to nothing. It keeps the ellipsis for the case
             where even a full line is not enough. */}
-        {collapsed && !narrow ? <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.regular, flex: "1 1 auto", minWidth: SUMMARY_MIN, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span> : null}
+        <Presence tag="span" show={collapsed && !narrow} inClass="mgt-appear" outClass="mgt-ghost-out" style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.regular, flex: "1 1 auto", minWidth: SUMMARY_MIN, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{collapsed && !narrow ? summary : null}</Presence>
       </span>}
       action={<>
         {narrow ? null : actionBtns}

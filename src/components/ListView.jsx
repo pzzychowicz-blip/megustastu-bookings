@@ -40,7 +40,7 @@ import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey, formatPhone, bookingTags } from "../lib/customers";
 import { filterByTags, dayTagChips, toggleTagId, tagNames, liveTagIds } from "../lib/tag-filter";
 import { TagChips } from "./TagChips";
-import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES, textWidth, reduceMotionOn, ModalPresence } from "./atoms";
+import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, RowSlot, useFlip, InlineAlert, ALERT_TONES, textWidth, reduceMotionOn, ModalPresence } from "./atoms";
 import { AssignIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 
@@ -1103,9 +1103,9 @@ export const ListView = memo(function ListView({
                   step (NEXT_COL wide) and ⋯ now line up down the List, and a
                   late card only grows leftwards. */}
               <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }}>
-                {acts.noShow ? (
+                <RowSlot show={!!acts.noShow} gap={6}>{acts.noShow ? (
                   <button className="mgt-hover-scale" style={mkBtn({ background: BTN.orange, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onNoShow(b.id))}><NoShowIcon size={IC.control} />No show</button>
-                ) : null}
+                ) : null}</RowSlot>
                 <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onManual(b.id))}><AssignIcon size={IC.control} />Assign</button>
                 {nextBtn}
                 {moreBtn}

@@ -34,7 +34,8 @@
 
 import { S, BTN, R, T, FW, H, IC } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
-import { Overlay, Fld, InlineAlert, ModalTitle, Toggle, Reveal, mkBtn, mkSolidBtn, mkInp, mkArea, AutoHeight, DateField, mkRemoveX } from "./atoms";
+import { Overlay, Fld, InlineAlert, ModalTitle, Toggle, Reveal, RowSlot, mkBtn, mkSolidBtn, mkInp, mkArea, AutoHeight, DateField, mkRemoveX } from "./atoms";
+import { FoldRows } from "./FoldRows";
 import { CloseIcon } from "./Icons";
 import { todayStr } from "../lib/day";
 
@@ -186,8 +187,10 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
 
         <Fld label="Times" style={{ marginBottom: 12 }}>
           <div>
-            {draft.times.map((t, i) => (
-              <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+            {/* v18.14.0 (correction 35, Patryk): a time has no id, so its place is its id,
+                as a duration tier's is, and its 6px is inside the row so it folds too. */}
+            <FoldRows items={draft.times} idOf={(t, i) => String(i)}>{(t, i) => (
+              <div style={{ display: "flex", gap: 6, alignItems: "center", paddingBottom: 6 }}>
                 <input
                   type="time"
                   aria-label={"Time " + (i + 1)}
@@ -196,21 +199,23 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                   className="mgt-hover-scale"
                   style={{ ...mkInp(), flex: 1 }}
                 />
-                {draft.times.length > 1 ? (
-                  <button
-                    onClick={() => removeTime(i)}
-                    className="mgt-hover-scale"
-                    // v18.2.0 phase 63: the editors' quiet × (`mkRemoveX`), at
-                    // the time field's own height, and NAMED — it was a solid
-                    // red square with no accessible name at all.
-                    aria-label={"Remove time " + (i + 1)}
-                    style={mkRemoveX(H.control)}
-                  >
-                    <CloseIcon size={IC.control} />
-                  </button>
-                ) : null}
+                <RowSlot show={draft.times.length > 1} gap={6}>
+                  {draft.times.length > 1 ? (
+                    <button
+                      onClick={() => removeTime(i)}
+                      className="mgt-hover-scale"
+                      // v18.2.0 phase 63: the editors' quiet × (`mkRemoveX`), at
+                      // the time field's own height, and NAMED — it was a solid
+                      // red square with no accessible name at all.
+                      aria-label={"Remove time " + (i + 1)}
+                      style={mkRemoveX(H.control)}
+                    >
+                      <CloseIcon size={IC.control} />
+                    </button>
+                  ) : null}
+                </RowSlot>
               </div>
-            ))}
+            )}</FoldRows>
             <button
               onClick={addTime}
               className="mgt-hover-scale"

@@ -1386,6 +1386,8 @@ function WaCostSection() {
       onToggle={toggle}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: SP.tight, paddingTop: SP.tight }}>
+        {/* v18.14.0 (correction 35, Patryk): the answer alone, so Refresh under it glides. */}
+        <AutoHeight><div style={{ display: "flex", flexDirection: "column", gap: SP.tight }}>
         {figures ? (
           <>
             <div style={text}>
@@ -1416,6 +1418,7 @@ function WaCostSection() {
             Couldn&rsquo;t get the figures: {usage.error}.
           </InlineAlert>
         ) : null}
+        </div></AutoHeight>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.base, paddingTop: SP.tight }}>
           <button type="button" className="mgt-hover-scale mgt-press" disabled={loading} aria-busy={loading}
             onClick={function () { usage.load(); }}

@@ -72,3 +72,52 @@ describe("Preferred table's Clear", () => {
     expect(pref).toContain("<RowSlot show={prefs.length > 0} gap={8}>");
   });
 });
+
+// v18.14.0 (correction 35, Patryk): a sweep of the code rather than of taps. The census
+// only sees what it can press, so these were found by reading every bare `? <x> : null`
+// under src/components. Each is a hint, a warning or a button, and each now eases.
+describe("what the census could not reach", () => {
+  const src = read;
+  it("takes the row's gap with it: Manual's Clear, the Regulars stepper, the log's hint, No show, a time's ×", () => {
+    expect(src("ManualModal.jsx")).toContain("<RowSlot show={selected.length > 0} gap={8}>");
+    expect(src("CustomersSettings.jsx")).toContain('<RowSlot show={filter === "regulars" && !searching} gap={6}>');
+    expect(src("ActivityLogModal.jsx")).toContain("<RowSlot show={allTime} gap={SP.base}>");
+    expect(src("ListView.jsx")).toContain("<RowSlot show={!!acts.noShow} gap={6}>");
+    expect(src("ReminderEditor.jsx")).toContain("<RowSlot show={draft.times.length > 1} gap={6}>");
+  });
+  it("keeps Manual's row as tall as Clear, because a sideways fold cannot ease a row's height", () => {
+    expect(src("ManualModal.jsx")).toContain('minHeight: H.control, display: "flex", flexDirection: "column", justifyContent: "center"');
+  });
+  it("folds what sits between lines, with its space inside the fold", () => {
+    const form = src("BookingFormModal.jsx");
+    expect(form).toContain("<Reveal show={dateLocked}>{dateLocked?<div id={DATE_LOCK_ID}");
+    expect(form).toContain("color:S.muted,paddingTop:4}}>Change the status to change the date");
+    expect(src("VoucherPicker.jsx")).toContain("<Reveal show={!!(suggestions && suggestions.length)}>");
+    const layout = src("LayoutSettings.jsx");
+    expect(layout).toContain("<Reveal show={open} inert={!open}>");
+    expect(layout).toContain("<Reveal show={pickFor === gi} inert={pickFor !== gi}>");
+    expect(layout).toContain("<Reveal show={!!addDup || addIds.length === 1}>");
+    const floor = src("FloorPlanEditor.jsx");
+    expect(floor).toContain("<Reveal show={totalChairs !== cap}>");
+    expect(floor).toContain("<Reveal show={!!inspector} inert={!inspector}>");
+  });
+  it("folds a reminder's times by place, because a time has no id", () => {
+    const rem = src("ReminderEditor.jsx");
+    expect(rem).toContain("<FoldRows items={draft.times} idOf={(t, i) => String(i)}>");
+    expect(rem).not.toContain("draft.times.map(");
+  });
+  it("fades the two search crosses and the linked booking's summary both ways", () => {
+    const fade = 'inClass="mgt-appear" outClass="mgt-ghost-out"';
+    expect(src("atoms.jsx")).toContain("<Presence show={has} " + fade);
+    expect(src("whatsapp/InboxPanel.jsx")).toContain("<Presence show={!!query} " + fade);
+    expect(src("whatsapp/LinkedBookingCard.jsx")).toContain('<Presence tag="span" show={collapsed && !narrow} ' + fade);
+  });
+  it("eases the usage panel's answer alone, so Refresh under it glides", () => {
+    const s = src("Settings.jsx");
+    const at = s.indexOf("function WaCostSection()");
+    const close = s.indexOf("</AutoHeight>", at);
+    expect(close).toBeGreaterThan(-1);
+    expect(s.indexOf("<AutoHeight>", at)).toBeLessThan(close);
+    expect(s.indexOf('{loading ? "Asking…" : "Refresh"}', at)).toBeGreaterThan(close);
+  });
+});

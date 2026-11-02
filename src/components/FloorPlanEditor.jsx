@@ -23,7 +23,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { BTN, S, R, T, FW, IC } from "../lib/constants";
-import { mkBtn, mkDangerBtn } from "./atoms";
+import { mkBtn, mkDangerBtn, Reveal } from "./atoms";
 import { TrashIcon } from "./Icons";
 import { countLabel } from "../lib/booking-logic";
 // v17.1.0 (Tier 3 code-splitting): the shared geometry moved to FloorGlyphs.jsx
@@ -277,11 +277,13 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             ? [chairStep("top", "Chairs")]
             : [chairStep("top", "Top"), chairStep("right", "Right"), chairStep("bottom", "Bottom"), chairStep("left", "Left")]}
         </div>
-        {totalChairs !== cap ? (
-          <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 8 }}>
-            {countLabel(totalChairs, "chair", "chairs") + " drawn, but the table seats " + cap + " (capacity is set in the Tables editor above)."}
-          </div>
-        ) : null}
+        <Reveal show={totalChairs !== cap}>
+          {totalChairs !== cap ? (
+            <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--warn-text)", paddingTop: 8 }}>
+              {countLabel(totalChairs, "chair", "chairs") + " drawn, but the table seats " + cap + " (capacity is set in the Tables editor above)."}
+            </div>
+          ) : null}
+        </Reveal>
       </div>
     );
   } else if(sel && sel.type === "door" && fp.doors[sel.key]){
@@ -454,11 +456,15 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
           onDec={function(){ commitFp({ ...fp, room: { ...fp.room, h: fp.room.h - 50 } }); }}
           onInc={function(){ commitFp({ ...fp, room: { ...fp.room, h: fp.room.h + 50 } }); }} />
       </div>
-      {inspector ? (
-        <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: R.card, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
-          {inspector}
-        </div>
-      ) : null}
+      <Reveal show={!!inspector} inert={!inspector}>
+        {inspector ? (
+          <div style={{ paddingTop: 14 }}>
+            <div style={{ padding: "12px 14px", borderRadius: R.card, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+              {inspector}
+            </div>
+          </div>
+        ) : null}
+      </Reveal>
       <div style={{ fontSize: T.small, color: "var(--text-faint)", marginTop: 10 }}>
         All distances are in centimeters — grid squares are 50 cm, positions snap to 10 cm.
         The plan mirrors your Tables list — add, remove or rename tables in the Tables editor above; new tables appear here automatically. Shared across all devices.

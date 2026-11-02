@@ -31,7 +31,7 @@
 // with it.
 import { useId, useMemo, useState } from "react";
 import { S, T, FW, SP, R, H, IC, BTN } from "../lib/constants";
-import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, mkDangerBtn, AutoHeight, Reveal } from "./atoms";
+import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, mkDangerBtn, AutoHeight, Reveal, RowSlot } from "./atoms";
 import { rowText, activityCsv, activityCsvName } from "../lib/activity";
 // v18.0.0 session 11: the same index the Customers tab is built from, so "can
 // this row lead anywhere" is answered by the thing that would have to answer it
@@ -537,11 +537,13 @@ export function ActivityLogModal({
                 opacity: allTime || clearBusy || badDay || backwards ? 0.5 : 1,
               })}
             >{clearBusy ? "Clearing…" : armed ? "Confirm — delete this range" : "Clear this range"}</button>
-            {allTime ? (
-              <span style={{ fontSize: T.micro, color: S.muted }}>
-                Pick a day or a range above to clear.
-              </span>
-            ) : null}
+            <RowSlot show={allTime} gap={SP.base}>
+              {allTime ? (
+                <span style={{ fontSize: T.micro, color: S.muted }}>
+                  Pick a day or a range above to clear.
+                </span>
+              ) : null}
+            </RowSlot>
           </div>
           {/* v18.14.0 (correction 28, Patryk): both ease, with the gap inside the fold. */}
           <Reveal show={!!clearMsg && !armed}>

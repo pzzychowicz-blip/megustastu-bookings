@@ -29,12 +29,12 @@
 // source. The duplicate in WalkinForm has been replaced with the same import.
 
 import { useState, useEffect, useRef } from "react";
-import { S, BTN, R, M, T, FW, ALL_TABLES } from "../lib/constants";
+import { S, BTN, R, M, T, FW, H, ALL_TABLES } from "../lib/constants";
 import { isTyping } from "../lib/keyboard";
 import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd, guestsLabel, togglePick
 } from "../lib/booking-logic";
-import { Overlay, ModalTitle, Toggle, mkBtn, mkSolidBtn, AutoHeight, Reveal } from "./atoms";
+import { Overlay, ModalTitle, Toggle, mkBtn, mkSolidBtn, AutoHeight, Reveal, RowSlot } from "./atoms";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { SwapIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
@@ -290,7 +290,9 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         gap: 8, flexWrap: "wrap",
         boxShadow: "var(--shadow-card)"
       }}>
-        <div>
+        {/* v18.14.0 (correction 35, Patryk): as tall as Clear, because a horizontal
+            fold cannot ease the row's height, which stepped 6px at both ends of it. */}
+        <div style={{ minHeight: H.control, display: "flex", flexDirection: "column", justifyContent: "center" }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>
             {"Selected: " + (selected.length ? selected.join(" + ") : "none")}
           </div>
@@ -300,15 +302,17 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
             {summaryText}
           </div>
         </div>
-        {selected.length > 0 ? (
-          <button
-            className="mgt-hover-scale mgt-press"
-            style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.quiet })}
-            onClick={() => setSelected([])}
-          >
-            Clear
-          </button>
-        ) : null}
+        <RowSlot show={selected.length > 0} gap={8}>
+          {selected.length > 0 ? (
+            <button
+              className="mgt-hover-scale mgt-press"
+              style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.quiet })}
+              onClick={() => setSelected([])}
+            >
+              Clear
+            </button>
+          ) : null}
+        </RowSlot>
       </div>
       {/* v17.15.2 (follow-up): the ninth banned triple — a titled list, so an
           AlertPanel. `SwapIcon` because the panel IS the swap it is warning

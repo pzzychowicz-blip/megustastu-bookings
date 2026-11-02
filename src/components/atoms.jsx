@@ -2617,7 +2617,7 @@ export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, 
         placeholder={placeholder}
         style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", color: "inherit", font: "inherit", padding: SP.none, margin: SP.none, boxShadow: "none" }}
       />
-      {has ? (
+      <Presence show={has} inClass="mgt-appear" outClass="mgt-ghost-out" style={{ display: "flex", flexShrink: 0 }}>{has ? (
         <button
           type="button"
           className="mgt-hover-scale"
@@ -2634,7 +2634,7 @@ export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, 
             borderRadius: R.pill, boxShadow: "none", cursor: "pointer",
           }}
         ><CloseIcon size={IC.control} /></button>
-      ) : null}
+      ) : null}</Presence>
     </div>
   );
 }

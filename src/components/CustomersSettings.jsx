@@ -23,7 +23,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { S, BTN, R, T, FW, IC, H } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, identityKey, isNoShow } from "../lib/customers";
-import { Section, OutlineChip, Reveal, TurnChevron, mkInp, mkBtn, mkDangerBtn, SBadge } from "./atoms";
+import { Section, OutlineChip, Reveal, RowSlot, TurnChevron, mkInp, mkBtn, mkDangerBtn, SBadge } from "./atoms";
 import { formatDay, showsYear } from "../lib/day";
 import { guestsLabel, countLabel } from "../lib/booking-logic";
 import { WaitIcon, TrashIcon } from "./Icons";
@@ -319,7 +319,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
               the Regulars filter is active (and not overridden by a search).
               v18.2.0 phase 56 (A-1): its buttons are named, as Settings'
               steppers are — they announced "−" and "+". */}
-          {filter === "regulars" && !searching ? (
+          <RowSlot show={filter === "regulars" && !searching} gap={6}>{filter === "regulars" && !searching ? (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
               <button
                 onClick={function () { setRegularMin(function (m) { return Math.max(1, m - 1); }); }}
@@ -335,7 +335,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
                 className={regularMin >= 50 ? undefined : "mgt-hover-scale"}
                 style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.quiet, opacity: regularMin >= 50 ? 0.4 : 1, cursor: regularMin >= 50 ? "not-allowed" : "pointer" })}>+</button>
             </span>
-          ) : null}
+          ) : null}</RowSlot>
         </div>
         <div style={{ fontSize: T.small, color: S.muted, marginTop: 8 }}>Customers are recognised by phone number, or — for guests who never gave one — by having been linked to each other from the name suggestions on a booking. Deleting a customer permanently removes their personal data (and waitlist entries); the bookings themselves stay anonymised as “Data removed” for statistics.</div>
       </Section>

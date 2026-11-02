@@ -204,8 +204,8 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
               tapping one can never produce the refusal the picker would show a
               moment later. Capped at three: this is a prompt, not a catalogue,
               and the typed field below is still there for the rest. */}
-          {suggestions && suggestions.length ? (
-            <div style={{ marginBottom: 8 }}>
+          <Reveal show={!!(suggestions && suggestions.length)}>{suggestions && suggestions.length ? (
+            <div style={{ paddingBottom: 8 }}>
               {suggestions.slice(0, 3).map(function (s) {
                 return (
                   <div key={s.code}
@@ -235,7 +235,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
                 );
               })}
             </div>
-          ) : null}
+          ) : null}</Reveal>
           <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
             <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
               <input

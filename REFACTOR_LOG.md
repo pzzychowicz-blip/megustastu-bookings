@@ -39673,7 +39673,7 @@ armed, a tap at 120ms stays armed, it disarms after three seconds, and a tap aft
 **Correction 23: a block's flags ease in and out.** Patryk's first complaint in this round: "When new flags appear or disappear on
 booking blocks there's no transitions." DESIGN.md says the same thing of any element ("if the answer is 'the node just unmounts',
 that is the bug, not the design"), so the audit went through every element that appears, disappears or moves, by reading the code
-and by a census: a script taps through 19 surfaces and records every element that arrives, leaves or jumps between frames, 1,412
+and by a census: a script walks seven surfaces and records every element that arrives, leaves or jumps between frames, 1,412
 rows. A row or two per tap is a real snap; many rows per tap is an ease faster than the sampling. It cannot see a drag, anything
 driven by time, a write from another device or a style-only change, so those were read from the code.
 
@@ -39880,6 +39880,40 @@ it ever changes the cost is the frame of fallback we had. **Left as it is:** a t
 after a load, takes the old path. A failed preload is silent, and the open then has the ordinary reload and readable error.
 
 **Files:** `App.jsx`, `lib/after-frame.js` (`afterIdle`), `tests/settings-preload.test.js` (new), `src/CLAUDE.md`, `src/lib/CLAUDE.md`.
+
+**Correction 35: the pop-ins the census could not reach.** Re-running the census after Correction 34 left one real snap, and it should have
+been caught sooner: Seated in the edit form moves everything under the date 21px in a frame, because "Change the status to change the
+date" was a bare conditional. The census only sees what it happens to press, so I stopped trusting it for this and read every bare
+`? <x> : null` under `src/components`, 154 of them. Most are the answer to something, a static part of a card, or already inside a
+`Reveal` further up. These were hints, warnings or buttons, which is what Patryk chose to ease, and each is measured both ways:
+
+| Where | What | Measured |
+|---|---|---|
+| Edit form | "Change the status to change the date" | 0 → 17 |
+| Assign | Clear | 0 → 65.8, and the row's height no longer steps 6px at each end |
+| Booking form | a recognised guest's open voucher | 0 → 58, staged, since DEV has no such guest |
+| Customers | the Regulars stepper | 0 → 142.4 |
+| Activity log | "Pick a day or a range above to clear." | 0 → 182.6 |
+| Reminder editor | a time's row, and the × that a second time brings | "+ Add time" 267.5 → 317.5, the field 530 → 484 |
+| Layout | the two table pickers and the combo hints | 501.5 → 536.5, 478.5 → 511.5, 0 → 19 |
+| Floor plan | the inspector, and its chairs warning | 0 → 228, 0 → 23 |
+| List card | No show, when due | 0 → 107.4, staged, Assign holding 706.5 |
+| Messages and cost | the answer, with Refresh gliding under it | 570.5 → 585.5, staged |
+| Activity log and inbox | the search ✕ | opacity, at a fixed x |
+| Linked booking | the summary on its lid | opacity, staged |
+
+**The Assign row** is why the table says "no longer steps". A sideways fold cannot ease the row's height, and Clear is 6px taller than the two
+lines beside it, so the panel stepped at the first and last frame. Its text column is now as tall as Clear, which makes that panel 6px
+taller at rest, always. **The usage panel** first had its `AutoHeight` round everything, and Refresh still jumped 19px, because a block inside
+the eased box moves with its content. The box now holds the answer alone. **Staged** means the served module was rewritten for that run.
+
+**Left, with reasons.** The split menu's "too narrow" hint arrives with the step it belongs to, a whole-content swap. The waitlist's "Table
+free" and "waiting" swap text. The unread badge and dot are state marks, not hints, warnings or buttons, and they appear when a message
+lands. "Load more" sits at the end of a list. The Summary's lid text is a text swap.
+
+**Files:** `ActivityLogModal.jsx`, `BookingFormModal.jsx`, `CustomersSettings.jsx`, `FloorPlanEditor.jsx`, `LayoutSettings.jsx`,
+`ListView.jsx`, `ManualModal.jsx`, `ReminderEditor.jsx`, `Settings.jsx`, `VoucherPicker.jsx`, `atoms.jsx`, `whatsapp/InboxPanel.jsx`,
+`whatsapp/LinkedBookingCard.jsx`, `tests/row-slots.test.js`, `DESIGN.md`, `src/components/CLAUDE.md`.
 
 ### Closing the version
 

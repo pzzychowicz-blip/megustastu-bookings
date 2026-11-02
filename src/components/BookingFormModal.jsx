@@ -1088,7 +1088,7 @@ export function BookingFormModal({
               :Object.assign({id:fid},attrs)}
             value={form.date}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{date:e.target.value});});}}
-            style={inp()} />{dateLocked?<div id={DATE_LOCK_ID} style={{fontSize: T.small,color:S.muted,marginTop:4}}>Change the status to change the date</div>:null}</>;}}</Fld><Fld label="Time" invalid={invalidField("time")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input
+            style={inp()} /><Reveal show={dateLocked}>{dateLocked?<div id={DATE_LOCK_ID} style={{fontSize: T.small,color:S.muted,paddingTop:4}}>Change the status to change the date</div>:null}</Reveal></>;}}</Fld><Fld label="Time" invalid={invalidField("time")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input
             id={fid}
             {...attrs}
             type="time"

@@ -1832,7 +1832,8 @@ shows its time.**
   the ease, so at rest it sits where a plain child did and closed it takes no room. Its
   content keeps its width and is clipped, so a label cannot wrap on the way, and the
   leaving copy is inert. The form's status buttons hold one fixed order on these slots,
-  and each of them, Clear and "was:" ease on `M.reveal`.
+  and each of them, Clear and "was:" ease on `M.reveal`. A sideways fold cannot ease the
+  row's HEIGHT, so a row whose slot is the tallest thing in it reserves that height.
 - **A row somebody removes folds, and what sits below slides (v18.14.0, Patryk).**
   `FoldRows` is the list for a surface with no FLIP: People, the quick-reply templates,
   reminders, tags, special days, standing bookings and the duration tiers. A newcomer

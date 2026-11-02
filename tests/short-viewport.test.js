@@ -115,7 +115,8 @@ describe("on a phone the conversation's two cards start as one line", () => {
       expect(card).toContain("{narrow ? null : actionBtns}");
       expect(card).toMatch(/\{narrow \? <AlertRow first style=\{\{ paddingBottom: 8 \}\}>\{actionBtns\}<\/AlertRow> : null\}\s*<\/Reveal>/);
     }
-    expect(linked).toContain("{collapsed && !narrow ? <span");
+    expect(linked).toContain('<Presence tag="span" show={collapsed && !narrow} ');
+    expect(linked).toContain("{collapsed && !narrow ? summary : null}</Presence>");
   });
   it("the request is a toggle on a phone even with nothing else to disclose", () => {
     expect(intent).toContain("const opens = hasBody || !!narrow;");

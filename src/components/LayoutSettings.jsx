@@ -462,7 +462,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             title={"Add a table"} aria-label={"Add a table to " + label + rowIn} disabled={!avail.length}
             style={{ ...GCHIP_BTN, width: H.chip, height: H.chip, fontSize: T.title, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)", opacity: avail.length ? 1 : 0.3, cursor: avail.length ? "pointer" : "not-allowed" }}>+</button>
         </div>
-        {open ? (
+        <Reveal show={open} inert={!open}>{open ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "6px 0 2px 58px"   /* @canvas */ }}>
             {/* v17.15.6: see the two sibling PICK_CHIP lists in the Combos
                 section for why a bare id is not a name here. `label`/`rowIn`
@@ -475,7 +475,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               );
             })}
           </div>
-        ) : null}
+        ) : null}</Reveal>
       </div>
     );
   }
@@ -719,7 +719,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   aria-label={"Remove the group " + group.join(" + ")}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
               </div>
-              {pickFor === gi ? (
+              <Reveal show={pickFor === gi} inert={pickFor !== gi}>{pickFor === gi ? (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "2px 0 8px" }}>
                   {/* v17.15.6, and this is the WORST instance of the pattern in
                       the app — found by reading the computed names out of the
@@ -741,7 +741,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     );
                   }) : <span style={{ fontSize: T.small, color: "var(--text-faint)" }}>No ungrouped tables.</span>}
                 </div>
-              ) : null}
+              ) : null}</Reveal>
               {runs.map(function (run) {
                 const key = comboKey(run);
                 const sum = run.reduce(function (a, id) { return a + (capOf[id] || 0); }, 0);
@@ -853,15 +853,17 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 Add combo
               </button>
             </div>
-            {addDup ? (
-              <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", textAlign: "center", marginTop: 6 }}>
-                That combo already exists.
-              </div>
-            ) : addIds.length === 1 ? (
-              <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", textAlign: "center", marginTop: 6 }}>
-                Pick at least 2 tables.
-              </div>
-            ) : null}
+            <Reveal show={!!addDup || addIds.length === 1}>
+              {addDup ? (
+                <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", textAlign: "center", paddingTop: 6 }}>
+                  That combo already exists.
+                </div>
+              ) : addIds.length === 1 ? (
+                <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", textAlign: "center", paddingTop: 6 }}>
+                  Pick at least 2 tables.
+                </div>
+              ) : null}
+            </Reveal>
           </div>
 
         </div>
