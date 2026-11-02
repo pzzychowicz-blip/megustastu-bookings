@@ -61,6 +61,12 @@ describe("the second try", () => {
     expect(models()).toEqual([DEFAULT_MODEL]);
   });
 
+  it("a 400 whose body is the JSON null is still the request's fault", async () => {
+    const models = answers(() => new Response("null", { status: 400 }));
+    await expect(generateCustomerReply([], "es")).rejects.toMatchObject({ status: 502, message: "Gemini error 400" });
+    expect(models()).toHaveLength(1);
+  });
+
   it("a timeout is temporary, and each attempt has its own timer", async () => {
     vi.useFakeTimers();
     const models = answers(stalls, () => http(200, reply("hola")));

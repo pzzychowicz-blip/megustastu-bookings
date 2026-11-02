@@ -366,7 +366,7 @@ async function attemptGemini(key, model, body) {
     clearTimeout(timer);
   }
   if (res.ok) return data;
-  const message = (data.error && data.error.message) || ("Gemini error " + res.status);
+  const message = (data && data.error && data.error.message) || ("Gemini error " + res.status);
   throw isTemporary(res.status) ? temporaryFailure(message, 503) : geminiFailure(message, 502);
 }
 
