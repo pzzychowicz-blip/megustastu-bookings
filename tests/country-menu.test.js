@@ -35,7 +35,7 @@ describe("the country menu", () => {
   // Measured: reopened 80ms into the exit, focus stayed on the pill and typing "bel"
   // reached nothing, because `autoFocus` runs at a mount and that node never left.
   it("is a new menu for every open, so the search box takes the focus on a reopen too", () => {
-    expect(src).toContain('<div key={opens} className={open ? "mgt-pop-in" : "mgt-pop-out"}');
+    expect(src).toContain('<div ref={menuRef} key={opens} className={open ? "mgt-pop-in" : "mgt-pop-out"}');
     expect(src).toContain("autoFocus");
     const open = src.slice(src.indexOf("function openList("));
     expect(open.indexOf("setOpens(")).toBeGreaterThan(-1);

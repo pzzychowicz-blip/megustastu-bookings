@@ -33,7 +33,12 @@ import { afterFrame } from "../lib/after-frame";
 import { mkInp } from "./atoms";
 import { ChevronDownIcon, CheckIcon } from "./Icons";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
+import { useMenuRoom } from "../hooks/useMenuRoom";
 import { COUNTRIES, countryByIso, flagOf, dialLabel, matchesCountry } from "../lib/phone-countries";
+
+// The search box plus AC_MENU's 264 of list. `useMenuRoom` takes it lower where
+// the form's footer or the keyboard leaves less.
+const MENU_TALL = 320;
 
 const HEAD = {
   padding: "6px 12px", fontSize: T.micro, fontWeight: FW.bold, color: S.muted,
@@ -60,9 +65,11 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
   const rootRef = useRef(null);
   const btnRef = useRef(null);
   const listRef = useRef(null);
+  const menuRef = useRef(null);
   const uid = useId();
   const acRow = useAcRow();
   const cur = countryByIso(iso);
+  useMenuRoom(menuRef, open, MENU_TALL);
 
   // The rows on screen, in order. Unfiltered: pinned first, then every country
   // (a pinned one appears in both, as in every phone app — the long list is
@@ -157,7 +164,7 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
         <span aria-hidden="true" style={{ color: S.muted, display: "flex" }}><ChevronDownIcon size={IC.inline} /></span>
       </button>
       {open || leaving ? (
-        <div key={opens} className={open ? "mgt-pop-in" : "mgt-pop-out"} inert={!open} style={Object.assign({}, AC_MENU, { transformOrigin: "top left", display: "flex", flexDirection: "column", overflowY: "hidden", maxHeight: 320 /* @canvas the search box plus AC_MENU's 264 of list */ })}>
+        <div ref={menuRef} key={opens} className={open ? "mgt-pop-in" : "mgt-pop-out"} inert={!open} style={Object.assign({}, AC_MENU, { transformOrigin: "top left", display: "flex", flexDirection: "column", overflowY: "hidden", maxHeight: MENU_TALL })}>
           <div style={{ padding: SP.base, borderBottom: "1px solid var(--border-soft)", flexShrink: 0 }}>
             <input
               autoFocus
