@@ -11,6 +11,9 @@ import { menuRoom, MENU_ROOM_MIN } from "../src/hooks/useMenuRoom.js";
 
 const hook = stripComments(readFileSync("src/hooks/useMenuRoom.js", "utf8")).join("\n");
 const picker = stripComments(readFileSync("src/components/CountryPicker.jsx", "utf8")).join("\n");
+const acMenu = stripComments(readFileSync("src/components/AcMenu.jsx", "utf8")).join("\n");
+const form = stripComments(readFileSync("src/components/BookingFormModal.jsx", "utf8")).join("\n");
+const voucher = stripComments(readFileSync("src/components/VoucherPicker.jsx", "utf8")).join("\n");
 
 describe("menuRoom", () => {
   it("stops above the footer: the iPad's anchor at 169, the port's end at 413", () => {
@@ -56,5 +59,13 @@ describe("the hook", () => {
   it("is the country menu's", () => {
     expect(picker).toContain("useMenuRoom(menuRef, open, MENU_TALL)");
     expect(picker).toContain("ref={menuRef}");
+  });
+  // The review's finding: the fix went on one of the four lists that had the fault,
+  // and the name list is the one a phone booking opens every time.
+  it("is every suggestion list's: none draws AC_MENU itself", () => {
+    expect(acMenu).toContain("useMenuRoom(ref, true, AC_MENU.maxHeight)");
+    expect(form.match(/<AcMenu>/g)).toHaveLength(2);
+    expect(voucher).toContain("<AcMenu menuRef={menuRef}>");
+    for (const src of [form, voucher]) expect(src).not.toContain("AC_MENU");
   });
 });

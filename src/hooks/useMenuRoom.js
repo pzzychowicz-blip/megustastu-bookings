@@ -1,6 +1,7 @@
 // src/hooks/useMenuRoom.js
 // v18.14.2 — `useMenuRoom(menuRef, open, tall)`: an `AC_MENU` dropdown stops
 // where its scroll port stops, instead of running on under the form's footer.
+// The country menu calls it, and `AcMenu` for every other suggestion list.
 //
 // Measured on an iPad Pro simulator (installed app, keyboard up): the country
 // menu spanned 173–495, and everything below 413 was behind the Save bar, so the
@@ -28,9 +29,10 @@
 import { useLayoutEffect } from "react";
 import { scrollPort } from "../lib/edge-scroll";
 
-// The search box and a row and a half: below that the list is a slit. A menu on
-// a screen with less room than this stays this tall and runs under the footer,
-// where a scroll of the form still reaches it.
+// A country menu's search box and a row and a half, or two and a half rows of a
+// plain list: below that it is a slit. A menu on a screen with less room than
+// this stays this tall and runs under the footer, where a scroll of the form
+// still reaches it.
 export const MENU_ROOM_MIN = 120;
 
 // AC_MENU's own 4px margin under the anchor, and 8px of air above the footer.

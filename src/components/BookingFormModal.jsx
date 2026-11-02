@@ -80,7 +80,8 @@ import { useDeferredCompute } from "../hooks/useDeferredCompute";
 import { TablesPreview } from "./TablesPreview";
 import { DurationReset } from "./DurationReset";
 import { useLineBand } from "../hooks/useLineBand";
-import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
+import { useAcRow, AC_ROW } from "../hooks/useAcRow";
+import { AcMenu } from "./AcMenu";
 import { VoucherPicker } from "./VoucherPicker";
 import { PhoneField } from "./PhoneField";
 // v18.0.0 session 8 (item 2b): a recognised guest's own open vouchers, plus the
@@ -386,7 +387,7 @@ export function BookingFormModal({
   // Dropdown rows use onMouseDown/onTouchStart (fire BEFORE the input's blur)
   // so the tap lands before phoneFocus flips false. Opaque sheet token per the
   // popover rule (a translucent card reads see-through over form content).
-  const phoneDropdown=phoneMatches.length?<div style={AC_MENU}>{phoneMatches.map(function(c){return (
+  const phoneDropdown=phoneMatches.length?<AcMenu>{phoneMatches.map(function(c){return (
     <div
       key={c.phone}
       className="mgt-ac-row"
@@ -395,17 +396,17 @@ export function BookingFormModal({
               border in the matching hue PLUS bold text in a third shade. They are
               the same counts as the Customers tab's chips, so they are now the
               same chip. */}{c.visits>0?<OutlineChip tone="success">{countLabel(c.visits,"visit","visits")}</OutlineChip>:null}{c.noShowCount>0?<OutlineChip tone="warn">{countLabel(c.noShowCount,"no-show","no-shows")}</OutlineChip>:null}</div></div>
-  );})}</div>:null;
+  );})}</AcMenu>:null;
   // v16.4.0: name-search dropdown — same opaque-sheet chrome as phoneDropdown.
   // Each row shows the phone (or "no phone") + last date so two same-name
   // phone-less guests are visually distinguishable (they are separate rows).
-  const nameDropdown=nameMatches.length?<div style={AC_MENU}>{nameMatches.map(function(r){return (
+  const nameDropdown=nameMatches.length?<AcMenu>{nameMatches.map(function(r){return (
     <div
       key={r.key}
       className="mgt-ac-row"
       {...acRowHandlers(function(){pickGuest(r);})}
       style={AC_ROW}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+formatDay(r.latestDate):"")+(r.count>1?"  ·  "+countLabel(r.count,"booking","bookings"):"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
-  );})}</div>:null;
+  );})}</AcMenu>:null;
 
   const formCols=isMobile?"1fr":"1fr 1fr";
   const auto=getDur(Number(form.size));
