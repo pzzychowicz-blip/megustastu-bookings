@@ -34,8 +34,9 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { APP_NAME } from "../src/lib/constants.js";
+import { APP_NAME, SCROLL_CLEAR_RULER } from "../src/lib/constants.js";
 import { stripComments as stripJs } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const HTML = readFileSync(join(ROOT, "index.html"), "utf8");
@@ -464,6 +465,18 @@ describe("the install card names the tenant, and the source names nobody", () =>
 
 // v18.14.0 (L3): on `html` as well as App's inline rule on `body`: the viewport takes
 // its overscroll from the root, and a pull in a Chrome tab reloads over an open form.
+// v18.14.0 (/code-review): a review moved this to `html`, on a plain test page's
+// word, and a focused block then sat under the ruler. App's mount effect is why.
+describe("the page's own scroll clears the Timeline's ruler", () => {
+  it("is on body, the scrollport App makes it, at the constant's value", () => {
+    const body = /(?:^|\n)body \{[^}]*\}/.exec(stripComments(CSS_SRC))[0];
+    expect(body).toContain("scroll-padding-top: " + SCROLL_CLEAR_RULER + "px;");
+    const app = appCode();
+    expect(app).toContain('document.documentElement.style.cssText="height:100%;overflow:hidden;"');
+    expect(app).toMatch(/document\.body\.style\.cssText="height:100%;overflow:auto;/);
+  });
+});
+
 describe("the page does not pull to refresh", () => {
   it("is set on the root element, in the stylesheet", () => {
     const css = readFileSync(new URL("../src/index.css", import.meta.url), "utf8");

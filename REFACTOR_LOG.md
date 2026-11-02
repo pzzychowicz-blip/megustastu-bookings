@@ -40091,3 +40091,10 @@ the button turns into "On the waitlist" on the render the tap causes.
 The first version of this fix returned nothing from the hook: `onceWalkin` was written and left out of `return {…}`, and every test
 passed, because the harness lifts a function by name and never asks what a hook hands over. Only the rig's walk-in stayed open. The test
 now asks.
+
+**One finding was wrong, and the rig caught it before it shipped.** The review said `scroll-padding-top` on `body` does nothing, because a
+viewport takes scroll-padding from the root element. That is true of a plain page, which is what it was measured on, and false here: App's
+mount effect sets `overflow:hidden` on `html`, so `body` keeps its own overflow and is a real scrollport with Lock navigation off. In the
+app, with the layout forced to Lock off, a block focused under the ruler landed at 32 with the rule on `body`, and stayed at 21 on `html`
+or with no rule at all. So the move was made, measured and reverted. What stays is a comment saying why it is on `body`, and a test that
+holds it there, at `SCROLL_CLEAR_RULER`, beside the two inline styles it depends on.

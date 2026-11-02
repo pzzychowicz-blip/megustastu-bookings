@@ -999,7 +999,11 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   html.mgt-scroll-lock body { overflow: hidden !important; }
 }
 body {
-  /* v18.14.0: clears the Timeline's sticky ruler (SCROLL_CLEAR_RULER, constants.js). */
+  /* v18.14.0: clears the Timeline's sticky ruler (SCROLL_CLEAR_RULER, constants.js).
+     On body, and only here does it work. App's mount effect hides html's overflow,
+     so with Lock navigation off body is the scrollport, not the viewport. A plain
+     test page says the opposite, because it has no such effect: measured in the
+     app, a focused block lands at 32 with this, and under the ruler on html. */
   scroll-padding-top: 32px;
   background: var(--bg-app);
   min-height: 100dvh;
