@@ -39,8 +39,8 @@
 //  undoInfo        — {snapshot, kind:"cancel"|"delete"|"edit", noShow} | null
 //                    (v17.4.0 general undo); drives the Undo pill + its label.
 //                    v18.14.0 (H5): the kinds "move"|"assign"|"reshuffle" bring
-//                    `label`, the action's own sentence, because this pill
-//                    outranks `dragMsg` and `reshuffled` and would swallow them
+//                    `label`, the action's own sentence, in place of the toast a
+//                    move used to flash
 //  onUndo          — App's undoLastAction()
 //  undoNote        — extra clause appended to the undo label (v17.4.0). The
 //                    undo pill outranks the `reshuffled` toast in the one-slot
@@ -116,6 +116,15 @@ export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown
       node:toast("var(--app-saved-text)","Resolved a table conflict after syncing.")},
     {key:"waitadded",on:waitAddedShown,
       node:toast("var(--success-text)","Added to the waitlist.")},
+    // v18.14.0 (/code-review): what answers THIS press goes above the pill, which is
+    // left from the press before it. Every drop arms one, so moving two parties in
+    // a row is the ordinary case, and the second one's refusal went unsaid under the
+    // first one's pill: measured, the block glided home with the slot unchanged.
+    // The pill comes back when these end, and its timer has not stopped.
+    {key:"dragmsg",on:!!dragMsg,
+      node:toast(dragMsg&&dragMsg.good?"var(--success-text)":"var(--warn-text)",dragMsg?dragMsg.text:"")},
+    {key:"unmoved",on:reshuffled==="unmoved",
+      node:toast("var(--app-saved-text)",reshuffledMsg)},
     // The undo pill is the one toast the user ACTS on, so it keeps its trailing
     // button — and a neutral dot, because "booking cancelled" states a fact
     // rather than raising an alarm. pointerEvents:auto because the layer is inert.
@@ -127,9 +136,7 @@ export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown
           className="mgt-hover-scale mgt-press"
           style={mkBtn({fontSize: T.body,minHeight:H.compact,padding:"4px 12px",background:"var(--accent)",flexShrink:0})}>Undo</button>
       </span>,{pointerEvents:"auto",padding:"6px 10px 6px 14px"})},
-    {key:"dragmsg",on:!!dragMsg,
-      node:toast(dragMsg&&dragMsg.good?"var(--success-text)":"var(--warn-text)",dragMsg?dragMsg.text:"")},
-    {key:"reshuffled",on:reshuffled,
+    {key:"reshuffled",on:!!reshuffled&&reshuffled!=="unmoved",
       node:toast("var(--app-saved-text)",reshuffledMsg)},
     {key:"load",on:loadShown,
       node:toast("var(--status-online)",loadMsg)},

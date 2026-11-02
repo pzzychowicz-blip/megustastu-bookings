@@ -40069,3 +40069,13 @@ second tap the chips are still drawn, because the form is leaving, and the numbe
 and closed itself 700ms later. A door that arrives filled in, Book again or Accept from WhatsApp, would have written a booking. One tap
 was clean, which is why H4's rig never saw it. The door is armed now only by a tap that writes something. After it, the same two taps
 leave + New clean and the booking open.
+
+**A refused drop went unsaid under the last move's pill.** The H5 paragraph above has the pill outranking `dragMsg` and `reshuffled`, so
+that a move's own toast could not flicker. That is right for the press that armed the pill and wrong for the next one: every drop arms a
+pill, so two moves in a row is the ordinary case, and a drop refused inside the second one's six seconds answered with nothing. Measured
+at 18:30 with the Optimiser off: Lena Brandt moved to 3, then Yara to 2. `flashDragMsg` was asked to say "Can't re-seat the parties there
+without stranding one — use Manual assign.", the block glided home, and the slot kept "Lena Brandt moved to 3 — Emil Kovacs, Óscar Ledesma
+reassigned." "No tables needed moving." sat under the pill the same way. What answers this press now goes above the pill: `dragMsg` and
+the `unmoved` half of `reshuffled`, while a plain save's "Saved & re-optimised" stays under it. After it, the same two drops show the
+refusal, and 3.9s later the slot is back on the pill with its Undo, whose timer never stopped. The pill's sentence still means nothing is
+flashed at a dispatch that lands.

@@ -315,6 +315,19 @@ describe("BookingApp's saveMove", () => {
     const toasts = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "StatusToasts.jsx"), "utf8")).join("\n");
     expect(toasts).toContain('!undoInfo?"":undoInfo.label?undoInfo.label:undoInfo.noShow?');
   });
+  // Every drop arms a pill, so a refusal right after one is the ordinary case. It
+  // went unsaid under the last move's pill, measured with the toast's own text.
+  it("what answers this press sits above the pill, and a plain save's toast under it", () => {
+    const toasts = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "StatusToasts.jsx"), "utf8")).join("\n");
+    const at = (k) => toasts.indexOf('{key:"' + k + '"');
+    expect(at("undo")).toBeGreaterThan(-1);
+    expect(at("dragmsg")).toBeGreaterThan(-1);
+    expect(at("dragmsg")).toBeLessThan(at("undo"));
+    expect(at("unmoved")).toBeGreaterThan(-1);
+    expect(at("unmoved")).toBeLessThan(at("undo"));
+    expect(at("reshuffled")).toBeGreaterThan(at("undo"));
+    expect(toasts).toContain('{key:"reshuffled",on:!!reshuffled&&reshuffled!=="unmoved",');
+  });
   it("the preview goes through a stable wrapper and the same capability", () => {
     expect(flat).toContain("onDropPreview:function(id,targetId){returnR.current.previewDrop(id,targetId);}");
     expect(flat).toContain('functionpreviewDrop(id,targetId){if(!can("bookingAssign"))returnnull;');

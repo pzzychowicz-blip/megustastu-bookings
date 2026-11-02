@@ -2438,10 +2438,9 @@ export function BookingApp({uid}){
   //   It is armed when the write LANDS, not when it is dispatched: a refused
   // write must not offer an Undo, and a held one replays on a fresh `prev`
   // (`withUndoDelta`, which is why the delta is not taken here).
-  //   The pill carries the action's sentence, because it outranks `dragMsg` and
-  // `reshuffled` in the toast slot and would swallow them. So nothing is flashed
-  // at the dispatch either: a toast that became the pill a tenth of a second
-  // later is a flicker. `quiet` is the feedback for a write that moved nobody.
+  //   The pill carries the action's sentence, so nothing is flashed at the
+  // dispatch: a toast that became the pill a tenth of a second later is a flicker.
+  // `quiet` is the feedback for a write that moved nobody.
   //   A landing later than the pill would have lasted offers nothing. It would
   // restore snapshots taken before whatever has happened since, and it would
   // appear long after anyone was looking.
