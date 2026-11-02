@@ -1872,6 +1872,10 @@ export function BookingApp({uid}){
   // "Add to waitlist" from the booking form's no-tables banner: capture the
   // draft's fields as a waiting entry, close the form, flash the toast.
   function addFormToWaitlist(){
+    // v18.14.0 (/code-review): one open of the form is one party, by either way out
+    // (lib/submitGuard.js). The form stays drawn for its exit, so two taps 120ms
+    // apart put the same party on the waitlist twice, measured from an empty one.
+    if(!mayDispatch(saveGuardRef.current)) return;
     if(refused("waitlistManage"))return;
     phoneDoorRef.current="waitlist";
     // v18.2.0 phase 80 (round 2's loose end): the waitlist takes the phone the
@@ -1889,6 +1893,7 @@ export function BookingApp({uid}){
     const w=waitlistEntry(formRef.current,{checkPhone:true,pinned:generalSettings.pinnedCountries,prefix:generalSettings.phonePrefix,date:viewDate});
     if(w.refusal){setErrorField("phone");setError(w.refusal);return;}
     addToWaitlist(w.entry);
+    saveGuardRef.current=DISPATCHED;
     setShowForm(false);
     setWaitAddedShown(true);
     setTimeout(function(){setWaitAddedShown(false);},3000);
@@ -1898,10 +1903,13 @@ export function BookingApp({uid}){
     if(refused("waitlistManage"))return;
     // v18.11.0: `waitlistEntry`, with no phone check (the form has no phone
     // field) and no zone, which this door never passed.
-    addToWaitlist(waitlistEntry(Object.assign({},walkinForm,{date:todayStr(),preference:undefined}),{prefix:generalSettings.phonePrefix}).entry);
-    setShowWalkin(false);
-    setWaitAddedShown(true);
-    setTimeout(function(){setWaitAddedShown(false);},3000);
+    // v18.14.0 (/code-review): `onceWalkin`, the same second tap as the form's.
+    onceWalkin(function(){
+      addToWaitlist(waitlistEntry(Object.assign({},walkinForm,{date:todayStr(),preference:undefined}),{prefix:generalSettings.phonePrefix}).entry);
+      setShowWalkin(false);
+      setWaitAddedShown(true);
+      setTimeout(function(){setWaitAddedShown(false);},3000);
+    });
   }
 
   // v16.0.0: delete a customer = delete EVERY booking carrying their phone
@@ -2062,7 +2070,7 @@ export function BookingApp({uid}){
     walkinForm, setWalkinForm,
     walkinError, walkinDirty,
     getNextWalkinNum,
-    openWalkin: openWalkinRaw, saveWalkin, doSaveWalkin,
+    openWalkin: openWalkinRaw, saveWalkin, doSaveWalkin, onceWalkin,
   } = useWalkin({
     bookings, saveBookings,
     setViewDate, getUser,

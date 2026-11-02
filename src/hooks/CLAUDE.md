@@ -27,7 +27,7 @@ the Rule of law; `src/CLAUDE.md` holds the app-code architecture and gotchas.
 
 - **useAutoOptimizer.js** — the optimizer thermostat and its daily reset (cutoff and auto-switch from `useOptimizerSettings`).
 
-- **useWalkin.js** — the walk-in draft and its handlers. The record it writes is `walkinBooking` (`lib/booking-save.js`). `doSaveWalkin` keeps the commit-once guard, both refusals, the write (`prev.concat([nb])`, which `tests/submit-guard.test.js` reads) and the close. `walkinBaseline` is STATE set in `openWalkin` only (→ `walkinDirty`). Visibility (`showWalkin`) is App's modal stack; the draft stays here.
+- **useWalkin.js** — the walk-in draft and its handlers. The record it writes is `walkinBooking` (`lib/booking-save.js`). `doSaveWalkin` keeps the commit-once guard (`onceWalkin` lends it to App's Add to waitlist, the form's other way out), both refusals, the write (`prev.concat([nb])`, which `tests/submit-guard.test.js` reads) and the close. `walkinBaseline` is STATE set in `openWalkin` only (→ `walkinDirty`). Visibility (`showWalkin`) is App's modal stack; the draft stays here.
 
 - **useWinW.js** — the viewport width.
 - **useWinH.js** — the viewport height, read by the WhatsApp inbox (`INBOX_COMPACT_HEIGHT`) and App (`isCompact`).

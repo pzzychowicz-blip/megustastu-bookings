@@ -9,7 +9,7 @@
 //
 // TWO HALVES, and the second is the one that bites. `mayDispatch` on its own is
 // a one-line predicate; what actually prevents the bug is the SEQUENCING at the
-// four call sites, and this repo has no DOM test environment to exercise them
+// six call sites, and this repo has no DOM test environment to exercise them
 // through. So the second half sweeps the source: a guard that is correct and
 // unwired is exactly the shape of the defect it was written for.
 
@@ -199,9 +199,28 @@ describe("the booking form is wired to the guard", () => {
 
   it("arms in exactly as many places as it dispatches", () => {
     // A third save path added later without arming would pass every test above.
+    // v18.14.0: Add to waitlist closes the form on a line of its own.
     const arms = (app.match(/saveGuardRef\.current=DISPATCHED/g) || []).length;
     const closes = (app.match(/setShowForm\(false\);setViewDate\(f\.date\);/g) || []).length;
-    expect(arms).toBe(closes);
+    const toWaitlist = (app.match(/setShowForm\(false\);\s*setWaitAddedShown\(true\);/g) || []).length;
+    expect(toWaitlist).toBe(1);
+    expect(arms).toBe(closes + toWaitlist);
+  });
+
+  // v18.14.0 (/code-review): the form's other way out. Measured: two taps 120ms
+  // apart, and an empty waitlist read "2 waiting".
+  it("Add to waitlist asks before anything, and arms after the write", () => {
+    const body = app.slice(app.indexOf("function addFormToWaitlist(){"), app.indexOf("function addWalkinToWaitlist(){"));
+    const check = body.indexOf("mayDispatch(saveGuardRef.current)");
+    const refusal = body.indexOf("if(w.refusal)");
+    const write = body.indexOf("addToWaitlist(w.entry);");
+    const arm = body.indexOf("saveGuardRef.current=DISPATCHED;");
+    const close = body.indexOf("setShowForm(false);");
+    expect(check).toBeGreaterThan(-1);
+    expect(check).toBeLessThan(refusal);
+    expect(refusal).toBeLessThan(write);
+    expect(write).toBeLessThan(arm);
+    expect(arm).toBeLessThan(close);
   });
 });
 
@@ -236,6 +255,21 @@ describe("the walk-in form is wired to the guard", () => {
     expect(check).toBeGreaterThan(-1);
     expect(kitchen).toBeGreaterThan(-1);
     expect(check).toBeLessThan(kitchen);
+  });
+
+  it("Add to waitlist goes through the same guard, and arms after the write", () => {
+    const app = appCode();
+    const once = walkin.slice(walkin.indexOf("function onceWalkin(dispatch){"));
+    expect(once.indexOf("mayDispatch(walkinGuardRef.current)")).toBeGreaterThan(-1);
+    expect(once.indexOf("mayDispatch(walkinGuardRef.current)")).toBeLessThan(once.indexOf("dispatch();"));
+    expect(once.indexOf("dispatch();")).toBeLessThan(once.indexOf("walkinGuardRef.current=DISPATCHED"));
+    const body = app.slice(app.indexOf("function addWalkinToWaitlist(){"));
+    expect(body.indexOf("onceWalkin(function(){")).toBeGreaterThan(-1);
+    expect(body.indexOf("onceWalkin(function(){")).toBeLessThan(body.indexOf("addToWaitlist("));
+    // The hook must hand it over: left out of the return, the button throws and the
+    // form stays open, which is how the first version of this fix measured.
+    expect(walkin.slice(walkin.lastIndexOf("return {"))).toContain("onceWalkin");
+    expect(app).toMatch(/\bdoSaveWalkin, onceWalkin,[\s\S]{0,200}\} = useWalkin\(/);
   });
 
   it("holds the guard in a ref, not in state", () => {

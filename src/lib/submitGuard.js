@@ -5,6 +5,9 @@
 //
 //     ONE OPEN OF A FORM PRODUCES AT MOST ONE CREATE.
 //
+// v18.14.0 (/code-review): Add to waitlist is a create too. Each form has that
+// second way out and neither asked, so a double tap put the party on twice.
+//
 // WHY THIS EXISTS. Tapping Save twice creates two bookings. Measured in the
 // v17.15.7 crash test: two clicks 200 ms apart produced two confirmed
 // reservations on two different tables, and three synchronous clicks produced

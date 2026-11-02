@@ -40079,3 +40079,15 @@ reassigned." "No tables needed moving." sat under the pill the same way. What an
 the `unmoved` half of `reshuffled`, while a plain save's "Saved & re-optimised" stays under it. After it, the same two drops show the
 refusal, and 3.9s later the slot is back on the pill with its Undo, whose timer never stopped. The pill's sentence still means nothing is
 flashed at a dispatch that lands.
+
+**A double tap on Add to waitlist put the party on twice.** The guard behind Save has one rule, one open of a form makes one create, and
+each form has a second way out that never asked it. The form stays drawn for its exit, so a second tap 120ms later reached the live
+button: from an empty waitlist, "Waitlist — 2 waiting", in the booking form, and in the walk-in with its check taken out again to measure
+it. Both now ask: `addFormToWaitlist` on `saveGuardRef`, and `addWalkinToWaitlist` through `onceWalkin`, because that guard is private to
+`useWalkin`. So Seat then Add cannot make two parties either, and a refused phone leaves the open unspent, so the corrected number still
+goes. Two taps now read "Waitlist — 1 waiting" in both forms. The WhatsApp draft's button needs none of this: the inbox stays open and
+the button turns into "On the waitlist" on the render the tap causes.
+
+The first version of this fix returned nothing from the hook: `onceWalkin` was written and left out of `return {…}`, and every test
+passed, because the harness lifts a function by name and never asks what a hook hands over. Only the rig's walk-in stayed open. The test
+now asks.

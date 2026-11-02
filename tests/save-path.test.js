@@ -2697,6 +2697,69 @@ describe("Seat — a walk-in", () => {
   });
 });
 
+
+// v18.14.0 (/code-review): each form's second way out. The form stays drawn for its
+// exit, so a double tap reached this twice, measured: "2 waiting" from an empty list.
+describe("Add to waitlist is one party for one open of the form", () => {
+  function formTaps(opts) {
+    const added = [], calls = [];
+    const guard = { current: submitGuard.READY };
+    const fns = compile(APP, [liftFunction(APP, "addFormToWaitlist")], {
+      saveGuardRef: guard, phoneDoorRef: { current: null },
+      formRef: { current: Object.assign({ name: "Ana", size: 2, date: TODAY, time: "19:30", notes: "", phone: "+34 612345678" }, opts && opts.form) },
+      generalSettings: { pinnedCountries: ["ES"], phonePrefix: "+34" }, viewDate: TODAY,
+      refused: () => false, addToWaitlist: (e) => added.push(e.name),
+      setShowForm: (v) => calls.push("setShowForm(" + v + ")"),
+      setWaitAddedShown: (v) => { if (v) calls.push("toast"); },
+      setErrorField: (v) => calls.push("setErrorField(" + v + ")"), setError: () => calls.push("setError"),
+      setTimeout: () => {},
+    });
+    return { fns, added, calls, guard };
+  }
+  it("the booking form's second tap adds nothing", () => {
+    const r = formTaps();
+    r.fns.addFormToWaitlist();
+    r.fns.addFormToWaitlist();
+    expect(r.added).toEqual(["Ana"]);
+    expect(r.calls).toEqual(["setShowForm(false)", "toast"]);
+    expect(r.guard.current).toBe(submitGuard.DISPATCHED);
+  });
+  it("a refused phone leaves the open unspent, so the corrected number can go", () => {
+    const r = formTaps({ form: { phone: "612345678" } });
+    r.fns.addFormToWaitlist();
+    expect(r.added).toEqual([]);
+    expect(r.calls).toEqual(["setErrorField(phone)", "setError"]);
+    expect(r.guard.current).toBe(submitGuard.READY);
+  });
+  function walkinTaps(guard) {
+    const added = [], calls = [];
+    const ref = { current: guard };
+    const { onceWalkin } = compile(WALKIN, [liftFunction(WALKIN, "onceWalkin")], { walkinGuardRef: ref });
+    const { addWalkinToWaitlist } = compile(APP, [liftFunction(APP, "addWalkinToWaitlist")], {
+      onceWalkin, walkinForm: { size: 2, notes: "", tables: [], time: "19:30" },
+      generalSettings: { phonePrefix: "+34" }, refused: () => false,
+      addToWaitlist: (e) => added.push(e.size),
+      setShowWalkin: (v) => calls.push("setShowWalkin(" + v + ")"),
+      setWaitAddedShown: (v) => { if (v) calls.push("toast"); },
+      setTimeout: () => {},
+    });
+    return { addWalkinToWaitlist, added, calls, ref };
+  }
+  it("the walk-in's second tap adds nothing", () => {
+    const r = walkinTaps(submitGuard.READY);
+    r.addWalkinToWaitlist();
+    r.addWalkinToWaitlist();
+    expect(r.added).toEqual([2]);
+    expect(r.calls).toEqual(["setShowWalkin(false)", "toast"]);
+    expect(r.ref.current).toBe(submitGuard.DISPATCHED);
+  });
+  it("nor does a tap after Seat went out", () => {
+    const r = walkinTaps(submitGuard.DISPATCHED);
+    r.addWalkinToWaitlist();
+    expect(r.added).toEqual([]);
+  });
+});
+
 // ═════════════════════════════════════════════════════════════════════════════
 describe("the weekly generator", () => {
   it("books the weeks after a rule's start", () => {
