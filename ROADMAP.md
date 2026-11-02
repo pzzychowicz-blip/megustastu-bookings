@@ -117,12 +117,6 @@ and `MGT_Bookings_Tech_Debt_Scan_2026-10-30.md`.
 
 - **Refresh the `.design-sync` snapshot (#39).** It is behind `atoms.jsx`.
 
-- **A timeline row's hint names one party where a drop re-seats the day.** With the Optimiser on, the
-  row said "Moves Reilly" and the release moved eight (`rowHint`, `lib/drop-plan.js`; measured on an iPad
-  Pro simulator, DEV, 2026-11-02). v18.14.2's review found it: the pill after the drop now says who
-  really moved, the hint before it does not. It takes the count the sentence uses, from `dropCheck`'s
-  trial. That runs the Optimiser under a settled finger, so measure the cost on the tablet first.
-
 ## Designed, not implemented
 
 Nothing at present.

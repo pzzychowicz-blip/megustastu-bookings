@@ -1870,7 +1870,7 @@ exactly like an empty one, and a drop there moved two other parties.
 - **A row checks itself when the finger rests.** With the Optimiser on, "Moves …" is
   a guess, because the real answer is too heavy for a drag. Amber shows at once;
   after 200ms of a still finger the real plan runs once for that row, and a wrong
-  guess turns red, or free, or names the right parties. Still, not merely on the
+  guess turns red, or free, or names everyone that plan re-seats. Still, not merely on the
   row: within 8px, which a moving finger leaves, so nothing holds a frame during a drag.
   A check that agrees changes nothing on screen. One that does not fades the new
   words in on `--t-move`, because they replace the old ones under a stopped finger

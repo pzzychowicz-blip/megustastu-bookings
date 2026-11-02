@@ -40240,7 +40240,7 @@ and that produced a false blur finding here until the clip was rebuilt from a re
 - **The draft card's Accept & open and Dismiss** sit on the right, as the compact bar's already did: 758 of the card's inner 759.
 - **Follow and zoom** stay on the right when a phone wraps them under the Optimiser, where `space-between` has nothing to spread a lone item against: 350 of the row's 350 at 375 wide.
 
-**`/code-review` over the branch raised nine.** Four fixed, one deferred, one left as a device check, three closed.
+**`/code-review` over the branch raised nine.** Five fixed, one left as a device check, three closed.
 
 - **Fixed: the other three lists.** The menu fix had gone on the country menu alone. The name, phone and voucher lists drew `AC_MENU` themselves and ran on under the Save bar, and the name list is the one a phone booking
   opens every time. `AcMenu` is that sheet with `useMenuRoom` on it, so no list draws one without the other, and `CountryPicker` stays its own because it fades and holds a search box. **Measured on the tablet, a DEV tab in Chrome,
@@ -40250,9 +40250,12 @@ and that produced a false blur finding here until the clip was rebuilt from a re
 - **Fixed: the menu's port.** `scrollParentY` passes over a form with nothing to scroll yet, and over the root, so a form that fitted when the menu opened was never watched once the keyboard shrank it. `useMenuRoom` finds its port by
   style, through `scrollPort`, moved to `lib/edge-scroll.js` from `atoms.jsx` so there is one copy.
 - **Fixed: a count, and a test.** Two comments said six others moved; it was seven. And nothing held `post()` to the replay's list, though a held write's sentence is read from it.
-- **Deferred:** a timeline row's hint still names one party where the drop re-seats the day. It is a behaviour change beyond this patch: `ROADMAP.md`.
+- **Fixed: the row's hint before the drop.** The pill after a drop said who really moved and the row before it still named only who was in the way: "Moves Reilly" over a drop that moved eight. I sent this to `ROADMAP.md` in the ship run, and Patryk
+  had it fixed in the version. That entry also claimed the fix would run the Optimiser under a settled finger and wanted costing, which was wrong: `dropCheck` already runs `planDrop`, whose trial is the answer. `planDrop` now hands it out as `post`, and the settled row
+  reads `movedNames` over it, the function the pill uses, so it adds no optimiser pass and the two counts cannot differ. Over the generated days the hint is held to the list `transform` writes. **Measured on the tablet, DEV tab, Optimiser on, a paced touch drag of
+  Victoria from table 1 onto Rosanna's row:** "Moves Rosanna, Mike, Andrea +2". The touch was cancelled and all 11 bookings stayed as they were. The first answer before the finger settles stays the cheap guess, marked `unsure`, as it was.
 - **Left as a device check:** the floor on a short screen. Its overflow is measured in a Chrome tab; the room in the installed app is still the calculation above.
 - **Closed:** "Victoria and Victoria moved." is a true sentence, the two are two bookings. `saveMove`'s six arguments are a matter of reading, with pins in three tests. `SearchField`'s autocorrect: the review asked whether other searches
   raise the same bubble, nothing was measured, and it is an iOS bubble on an app the restaurant runs on Android.
 
-**After:** main entry 455.44 kB (134.44 gz); 4,298 tests; 0 lint errors, 63 warnings; style OK.
+**After:** main entry 455.52 kB (134.47 gz); 4,299 tests; 0 lint errors, 63 warnings; style OK.
