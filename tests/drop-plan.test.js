@@ -98,7 +98,8 @@ describe("planDrop: one party in the way", () => {
     // `a` has no table, so there is no set to hand `b` in exchange.
     const list = [bk("a", "19:00", 2, []), bk("b", "19:00", 2, ["4"], { _manual: true, _locked: true })];
     const plan = drop(list, "a", "4");
-    expect(plan.done).toBe("A moved to 4 — B reassigned.");
+    expect(plan.done).toBe("A moved to 4 — B moved.");
+    expect(plan.lead).toBe("A moved to 4");
     const out = plan.transform(list);
     expect(byId(out, "a")).toMatchObject({ tables: ["4"], _manual: true, _locked: true });
     const b = byId(out, "b");
@@ -278,7 +279,7 @@ describe("BookingApp's dropOnTable", () => {
     expect(App, "the two lists stay separate arguments").toMatch(/function dropCtx\(id,targetId\)\{return \{id:id,targetId:targetId,liveBookings:liveBookings,bookings:bookings,/);
     // v18.14.0 (H5): the sentence comes when the write LANDS, on the Undo pill,
     // so a refused write is never shown as a move (the v15.4.0 rule, tighter).
-    expect(fn).toContain('saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);});');
+    expect(fn).toContain('saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);},plan);');
     expect(fn.split("\n").length).toBeLessThan(12);
   });
 });
@@ -295,7 +296,7 @@ describe("BookingApp's saveMove", () => {
     expect(fn).toMatch(/onLanded:function\(\)\{/);
     const landed = fn.slice(fn.indexOf("onLanded"));
     expect(landed).toContain("const delta=move.delta();");
-    expect(landed).toContain("armUndo(delta,id,kind,false,sentence);");
+    expect(landed).toContain("armUndo(delta,id,kind,false,landedSentence(plan,sentence,delta,move.post(),id));");
     expect(fn.slice(0, fn.indexOf("onLanded")), "nothing is armed at the dispatch").not.toContain("armUndo(");
   });
   it("a write that moved nobody still answers the press, and a late landing offers nothing", () => {
@@ -406,7 +407,7 @@ describe("planDrop: what a displaced party is left with", () => {
       bk("b", "18:00", 2, ["4", "5"], { _manual: true, _locked: true }),
       bk("c", "20:00", 2, ["4"], { _manual: true, _locked: true })];
     const plan = drop(list, "a", "4");
-    expect(plan.done).toBe("A moved to 4 — B, C reassigned.");
+    expect(plan.done).toBe("A moved to 4 — B and C moved.");
     const out = plan.transform(list);
     expect(byId(out, "a").tables).toEqual(["4"]);
     for (const id of ["b", "c"]) {

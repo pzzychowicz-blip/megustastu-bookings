@@ -33,6 +33,7 @@
 import { bookingsAfterAction, histEntry as defaultHistEntry, isLocked, toMins, findFreeSlot } from "./booking-logic.js";
 import { releaseSwapped } from "./booking-save.js";
 import { getDur } from "./booking-fields.js";
+import { moveSentence } from "./delete-undo.js";
 
 export function swapSlot(f){
   const size=Number(f&&f.size)||2;
@@ -48,9 +49,10 @@ export function planAssign(ctx){
   const viewDate=ctx.viewDate,tableBlocks=ctx.tableBlocks,autoOptimizer=ctx.autoOptimizer,user=ctx.user;
   const histEntry=ctx.stamp||defaultHistEntry;
   const nameOf=function(id){const hit=(ctx.bookings||[]).find(function(x){return x.id===id;});return hit?hit.name:"";};
-  const moved=(affected||[]).map(function(a){return nameOf(a.id);}).filter(Boolean);
-  const done=nameOf(bookingId)+" moved to "+tables.join("+")+(moved.length?" — "+moved.join(", ")+" reassigned.":".");
-  return {done:done,transform:function(b){
+  // v18.14.2: finished when the write lands, as a drop's is (lib/drop-plan.js).
+  const lead=nameOf(bookingId)+" moved to "+tables.join("+");
+  const done=moveSentence(lead,(affected||[]).map(function(a){return nameOf(a.id);}).filter(Boolean));
+  return {done:done,lead:lead,moved:affected,transform:function(b){
     const updated=b.map(function(x){
       if(x.id===bookingId) return Object.assign({},x,{tables:tables,_conflict:false,_manual:true,_locked:locked===true,history:(x.history||[]).concat([histEntry("tables manually assigned: "+tables.join(", "),user)])});
       // If swapping, strip taken tables from affected bookings and unlock them for re-optimization

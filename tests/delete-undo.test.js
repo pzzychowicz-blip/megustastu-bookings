@@ -8,7 +8,7 @@
 // in REFACTOR_LOG, since it needs the old code. These are the cases that stay:
 // one per outcome, each asserting what is ASKED or what is WRITTEN.
 import { describe, it, expect, vi } from "vitest";
-import { planDelete, planUndo, planCustomerDelete, withUndoDelta, deleteWords, cancelWords } from "../src/lib/delete-undo.js";
+import { planDelete, planUndo, planCustomerDelete, withUndoDelta, movedNames, moveSentence, landedSentence, deleteWords, cancelWords } from "../src/lib/delete-undo.js";
 import { undoSnapshots } from "../src/lib/booking-logic.js";
 import { guestTagMap, guestTagsOf } from "../src/lib/customers.js";
 import { sanitizeVoucher } from "../src/lib/vouchers.js";
@@ -233,6 +233,51 @@ describe("withUndoDelta", () => {
     const move = withUndoDelta((list) => list, delta);
     move.transform([bk("a", "13:00", ["1"])]);
     expect(move.delta()).toEqual([]);
+  });
+});
+
+// v18.14.2: "David moved to 8 — Reilly reassigned." while six others had moved too.
+describe("what a move says", () => {
+  const before = [
+    { id: "d", name: "David", tables: ["6"] },
+    { id: "m", name: "Mike", tables: ["1", "2"] },
+    { id: "r", name: "Reilly", tables: ["8"] },
+    { id: "s", name: "Sue", tables: ["3"], notes: "x" },
+  ];
+  const seat = (id, tables) => before.map((b) => b.id === id ? Object.assign({}, b, { tables }) : b);
+
+  it("says the lead alone when nobody else moved", () => {
+    expect(moveSentence("David moved to 8", [])).toBe("David moved to 8.");
+  });
+  it("names one party, then two, then the first and a count", () => {
+    expect(moveSentence("D moved to 8", ["R"])).toBe("D moved to 8 — R moved.");
+    expect(moveSentence("D moved to 8", ["R", "M"])).toBe("D moved to 8 — R and M moved.");
+    expect(moveSentence("David moved to 8", ["Reilly", "A", "B", "C", "E", "F", "G"]))
+      .toBe("David moved to 8 — Reilly and 6 others moved.");
+  });
+  it("leaves out the party the action moved, and leads with whoever it displaced", () => {
+    const post = [{ id: "d", name: "David", tables: ["8"] }, { id: "m", name: "Mike", tables: ["4", "5"] },
+      { id: "r", name: "Reilly", tables: ["6"] }, before[3]];
+    expect(movedNames(before.slice(0, 3), post, "d", [{ id: "r" }])).toEqual(["Reilly", "Mike"]);
+  });
+  it("counts a table moved, not a field changed: a delta entry can be anything else", () => {
+    const post = seat("x", []);
+    expect(movedNames([before[3]], post, "d", [])).toEqual([]);
+  });
+  it("does not count the same tables handed back in another order", () => {
+    expect(movedNames([before[1]], seat("m", ["2", "1"]), "d", [])).toEqual([]);
+  });
+  it("skips a party the write removed", () => {
+    expect(movedNames([before[3]], before.filter((b) => b.id !== "s"), "d", [])).toEqual([]);
+  });
+  it("keeps a plan's own sentence when it has no lead: a swap has already named both", () => {
+    expect(landedSentence({ done: "A and B — tables swapped." }, "A and B — tables swapped.", before, before, "d"))
+      .toBe("A and B — tables swapped.");
+    expect(landedSentence(undefined, "Tables re-optimised.", before, before, null)).toBe("Tables re-optimised.");
+  });
+  it("finishes a lead from what the write moved", () => {
+    expect(landedSentence({ lead: "David moved to 6", moved: [] }, "stale", [before[1]], seat("m", ["7"]), "d"))
+      .toBe("David moved to 6 — Mike moved.");
   });
 });
 

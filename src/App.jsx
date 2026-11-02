@@ -68,7 +68,7 @@ import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStac
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { dueOccurrences, withOccurrences } from "./lib/recurring";
-import { planDelete, planUndo, planCustomerDelete, withUndoDelta, deleteWords, cancelWords } from "./lib/delete-undo";
+import { planDelete, planUndo, planCustomerDelete, withUndoDelta, landedSentence, deleteWords, cancelWords } from "./lib/delete-undo";
 import { CONFIRM_MODALS, markArmed, armSettled } from "./lib/arm-guard";
 import { afterIdle } from "./lib/after-frame";
 import { planSettle, settleEffects, carryTransform } from "./lib/voucher-settle";
@@ -2456,12 +2456,14 @@ export function BookingApp({uid}){
   //   A landing later than the pill would have lasted offers nothing. It would
   // restore snapshots taken before whatever has happened since, and it would
   // appear long after anyone was looking.
-  function saveMove(transform,id,kind,sentence,quiet){
+  // v18.14.2: a `plan` with a `lead` has its sentence finished here, from what the
+  // write moved (`landedSentence`), where a whole-day re-seat can be seen.
+  function saveMove(transform,id,kind,sentence,quiet,plan){
     const move=withUndoDelta(transform,undoDelta);
     return saveBookings(move.transform,false,Object.assign(id==null?{}:goneReport(id),{onLanded:function(){
       const delta=move.delta();
       if(!delta.length){if(quiet)quiet();return;}
-      if(move.age()<=(generalSettings.undoSecs||10)*1000) armUndo(delta,id,kind,false,sentence);
+      if(move.age()<=(generalSettings.undoSecs||10)*1000) armUndo(delta,id,kind,false,landedSentence(plan,sentence,delta,move.post(),id));
     }}));
   }
   // v18.4.5 (#17): WHAT a drop does is `planDrop` (lib/drop-plan.js), which
@@ -2471,7 +2473,7 @@ export function BookingApp({uid}){
     const plan=planDrop(dropCtx(id,targetId));
     if(!plan) return;
     if(plan.refuse){flashDragMsg(plan.refuse);return;}
-    saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);});
+    saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);},plan);
   }
   // v18.14.0 (H5): what the row under a dragged block says. TimelineView asks once
   // per row, through a `VA` wrapper, so this reads the list as it stands then.
@@ -2964,7 +2966,7 @@ export function BookingApp({uid}){
   // (lib/manual-assign.js); this keeps the write, the close and the flash.
   function manualAssign(bookingId,tables,locked,affected){
     const plan=planAssign({bookingId:bookingId,tables:tables,locked:locked,affected:affected,bookings:bookings,viewDate:viewDate,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,user:getUser()});
-    saveMove(plan.transform,bookingId,"assign",plan.done,plan.reshuffles?flash:null);
+    saveMove(plan.transform,bookingId,"assign",plan.done,plan.reshuffles?flash:null,plan);
     setManualTarget(null);
   }
 

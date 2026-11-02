@@ -50,6 +50,7 @@ import {
   bookingsAfterAction, optimizerActiveFor, histEntry as defaultHistEntry,
 } from "./booking-logic.js";
 import { releaseSwapped } from "./booking-save.js";
+import { moveSentence } from "./delete-undo.js";
 
 // ── dropSite: what stands at the target ──────────────────────────────────────
 // v18.14.0 (H5): the first half of `planDrop`, moved up here unchanged, so the
@@ -265,7 +266,10 @@ export function planDrop(ctx){
     const trial=transform(bookings);
     const stranded=dOcc.find(function(o){const t=trial.find(function(x){return x.id===o.id;});return !t||(t.tables||[]).length===0||t._conflict;});
     if(stranded) continue;
-    return {transform:transform,moved:dOcc,done:src.name+" moved to "+dSet.join("+")+" — "+dOcc.map(function(o){return o.name;}).join(", ")+" reassigned."};
+    // v18.14.2: `done` is what is known now, `lead` what `saveMove` finishes from
+    // what the write really moved (`landedSentence`, lib/delete-undo.js).
+    const lead=src.name+" moved to "+dSet.join("+");
+    return {transform:transform,moved:dOcc,lead:lead,done:moveSentence(lead,dOcc.map(function(o){return o.name;}))};
   }
   const seatedOcc=occ.find(function(b){return b.status==="seated";});
   if(seatedOcc) return {refuse:seatedOcc.name+" is seated on "+targetId+"'s tables — can't move them."};
