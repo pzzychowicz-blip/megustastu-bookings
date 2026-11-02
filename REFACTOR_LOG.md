@@ -40056,3 +40056,16 @@ usage panel and the linked booking's summary were staged, because DEV has none o
 **The branch:** 62 commits on `origin/main`'s `77516a63`, this one included.
 
 **Files:** `REFACTOR_LOG.md`, `ROADMAP.md`, `GLOSSARY.md`, `DESIGN.md`, `CLAUDE.md`, `src/components/CLAUDE.md`.
+
+### `/code-review` (max)
+
+The ship run's review, over all 62 commits. Each finding below was reproduced before it was fixed, on Saturday's page clock with
+writes blocked unless it says otherwise, and each has its test.
+
+**A double tap on a country code armed a save for the next form.** `pickPhoneCode` armed `resumeDoorRef` and then wrote the code. On a
+second tap the chips are still drawn, because the form is leaving, and the number already has its plus, so `joinPhone` changes nothing,
+`[form.phone]` does not fire and the door stays armed. The next form to open changes the phone, and that was the press. Measured at
+998 × 507 with two taps 120ms apart: + New opened already saying "Customer name is required.", and a booking tapped on the Timeline opened
+and closed itself 700ms later. A door that arrives filled in, Book again or Accept from WhatsApp, would have written a booking. One tap
+was clean, which is why H4's rig never saw it. The door is armed now only by a tap that writes something. After it, the same two taps
+leave + New clean and the booking open.

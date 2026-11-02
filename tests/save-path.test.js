@@ -2986,6 +2986,7 @@ describe("a tapped country code resumes the door that was refused", () => {
     let form = { phone };
     const env = {
       phoneDoorRef: { current: door }, resumeDoorRef: { current: null },
+      formRef: { get current() { return form; } },
       setForm: (fn) => { form = fn(form); calls.push("setForm"); },
       doSave: () => calls.push("doSave"),
       addFormToWaitlist: () => calls.push("addFormToWaitlist"),
@@ -2995,7 +2996,7 @@ describe("a tapped country code resumes the door that was refused", () => {
     const inHandler = calls.slice();
     fns.resume();
     fns.resume(); // a later change of the phone resumes nothing
-    return { inHandler, calls, phone: form.phone, armed: env.resumeDoorRef.current };
+    return { inHandler, calls, phone: form.phone, armed: env.resumeDoorRef.current, fns, env };
   }
 
   it("writes the code the way the picker does, and resumes only once it is committed", () => {
@@ -3008,6 +3009,18 @@ describe("a tapped country code resumes the door that was refused", () => {
 
   it("Add to waitlist is resumed as Add to waitlist", () => {
     expect(tap("waitlist", "07700900123", "GB").calls).toEqual(["setForm", "addFormToWaitlist"]);
+  });
+
+  // Measured on DEV: a double tap saved, and the second tap left the door armed, so
+  // the next form to open saved itself, with nothing pressed.
+  it("a second tap on the way out arms nothing, because it writes nothing", () => {
+    const r = tap("save", "612345678", "ES");
+    r.fns.pickPhoneCode("ES");
+    r.fns.pickPhoneCode("GB");
+    expect(r.env.resumeDoorRef.current).toBe(null);
+    r.fns.resume();
+    expect(r.calls).toEqual(["setForm", "doSave"]);
+    expect(r.phone).toBe("+34 612345678");
   });
 
   it("each door says so before it asks for the phone", () => {

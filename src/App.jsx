@@ -2347,9 +2347,16 @@ export function BookingApp({uid}){
   // (above `viewActionsRef`) resumes whichever door was refused. That is `doSave` and
   // not `save` for a save: the refusal comes after the kitchen question, so it is
   // answered.
+  // Only a tap that writes the code may arm the door. The chips stay drawn while the
+  // form leaves, so a double tap lands here again with the code already there, which
+  // changes nothing, so the effect never runs. An armed door then waited for the next
+  // change of the phone, which is the next form opening: measured on DEV, a booking
+  // opened and closed itself, and + New opened already refused.
   function pickPhoneCode(iso){
+    const phone=joinPhone(iso,formRef.current.phone);
+    if(phone===formRef.current.phone) return;
     resumeDoorRef.current=phoneDoorRef.current;
-    setForm(function(f){return Object.assign({},f,{phone:joinPhone(iso,f.phone)});});
+    setForm(function(f){return Object.assign({},f,{phone:phone});});
   }
   function save(statusOverride){
     // v17.16.0: the guard is checked HERE as well as in doSave, because this is
