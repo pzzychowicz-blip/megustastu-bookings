@@ -634,6 +634,21 @@ export function isUsableTime(v) { return typeof v === "string" && isReadableTime
 // there are none; a parse without it is left without it. Which ids the
 // restaurant HAS is asked where the list is known: `parseMessage` on the
 // server, and `draftOccasions` when a draft opens the form.
+//
+// v18.15.0: the free text is bounded too. A draft is stored on the conversation
+// row (`draftData`), which every device downloads with the inbox, and nothing
+// bounded how long a `notes` the model could write: a message asking for a
+// ten-thousand-word note would cost every tablet that download on every write
+// to the row. Each of `name`, `notes` and `ambiguity`, when the parse has the
+// key, is cut to its cap in whole characters (an emoji is never split), and a
+// value that is not a string becomes null: the response schema says STRING, and
+// an answer that ignores it is not trusted for its type either. The notes cap
+// is the most of the message the model ever reads (WA_PARSE_TEXT_LEN).
+export const WA_DRAFT_TEXT_MAX = { name: 80, notes: WA_PARSE_TEXT_LEN, ambiguity: 300 };
+function capText(v, max) {
+  if (typeof v !== "string") return null;
+  return v.length <= max ? v : Array.from(v).slice(0, max).join("");
+}
 export function sanitizeParse(parse) {
   if (!parse || typeof parse !== "object") return parse;
   const out = Object.assign({}, parse, {
@@ -641,6 +656,9 @@ export function sanitizeParse(parse) {
     date: isUsableDate(parse.date) ? parse.date : null,
     time: isUsableTime(parse.time) ? parse.time : null,
   });
+  for (const k of Object.keys(WA_DRAFT_TEXT_MAX)) {
+    if (parse[k] !== undefined) out[k] = capText(parse[k], WA_DRAFT_TEXT_MAX[k]);
+  }
   if (parse.occasions !== undefined) {
     const occ = cleanTagIds(parse.occasions);
     out.occasions = occ.length ? occ : null;

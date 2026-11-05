@@ -99,6 +99,13 @@ that is module state, and a warm container is shared between requests.
 `tests/clock-reads.test.js` fails an ISO date slice anywhere under `api/`, and
 `tests/wa-time-zone.test.js` reads the prompt the real parse sends.
 
+**The customer's words are never an instruction (v18.15.0).** Both prompts quote the
+customer's text as a JSON literal AND say what the quotes mean, the single-message one since
+this version (`tests/wa-parse-guard.test.js`). `sanitizeParse` caps `name` (80), `notes`
+(1000) and `ambiguity` (300), because a draft is stored on the conversation row every device
+downloads. The auto-reply is a fixed template, so no model output reaches a customer unread.
+`scripts/wa-eval.mjs` is the live check (`scripts/CLAUDE.md`).
+
 **At most 20 automatic drafts an hour per number (v18.15.0).** Every customer message
 bought one Gemini call. `parseOverLimit` (`_lib/inbound-core.js`) counts the number's
 inbound messages in the last hour through the indexed `ts` query (`readRecentMessages`,

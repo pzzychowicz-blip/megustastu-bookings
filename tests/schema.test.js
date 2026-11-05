@@ -207,7 +207,10 @@ const PINNED = {
       // It cleans what the model ANSWERS (now `occasions` too) before the server
       // writes a draft; no reader whitelists `draftData` through it. A browser
       // only update()s a conversation's status fields, so no build drops the key.
-      "lib/whatsapp.js:sanitizeParse": "7dbe9a2ce5",
+      // v18.15.0: re-pinned WITHOUT a SCHEMA raise, for the same reason: it
+      // now also caps the free text (`name`, `notes`, `ambiguity`) the server
+      // writes into a draft, and still no reader whitelists through it.
+      "lib/whatsapp.js:sanitizeParse": "9fbbe5fd1b",
       "BOOKING_FIELDS": "id,name,phone,date,time,scheduledTime,size,duration,originalDuration,preference,notes,status,tables,customDur,_manual,_locked,_conflict,preferredTables,returnOf,history,noShow,deposit,voucherCode,recurringId,recurringDate,anonymized,guestId,stayedMin,updatedAt,tags,guestTags,guestTagsAt"
   },
 };

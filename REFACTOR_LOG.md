@@ -40373,3 +40373,26 @@ the failed-read rule, measured by accident.
 
 **Files:** `src/lib/whatsapp.js` · `api/_lib/rtdb.js` · `api/_lib/inbound-core.js` · `api/wa-inbound.js` · `api/CLAUDE.md` · `GLOSSARY.md` ·
 `tests/api-handlers.test.js` · `tests/wa-rtdb-hardening.test.js` (its sanitised-path count, 15 → 16).
+
+### Phase 7 — the customer's words are never an instruction
+
+The auto-reply is a fixed template (`AUTO_ACK_TEXT`), so model output never reaches a customer without a person reading it, and a draft is only a
+suggestion staff accept. Three gaps closed:
+
+- **The single-message prompt** quoted the message as a JSON literal but did not say what the quotes mean, the sentence the Re-check's transcript
+  prompt has carried since v18.0.0. It now does, right above "Customer message:". `tests/wa-parse-guard.test.js` reads the prompt the real parse
+  sends for an injected "Rules:" block: the sentence is on the line above, the message is one quoted line, and "Rules:" appears once. It fails on
+  the old `gemini.js`.
+- **The draft's free text was unbounded.** `sanitizeParse` left `name` and `notes` whole by a v18.0.0 decision ("the app only ever displays it"),
+  pinned by a test. True of the screen, not of the download: a draft is stored on the conversation row, which every device fetches with the inbox,
+  so a notes flood a message talked the model into costs every tablet. `WA_DRAFT_TEXT_MAX` caps `name` 80, `notes` 1000 (the most of the message
+  the model reads) and `ambiguity` 300, in whole characters (an emoji is never split), and a value that is not a string becomes null. A parse
+  without the key stays without it. The v18.0.0 test is rewritten, with the reason, and its enum half is unchanged. `sanitizeParse`'s schema
+  fingerprint is re-pinned WITHOUT a `SCHEMA` raise, for v18.11.0's reason: no reader whitelists `draftData` through it.
+- **No eval set.** `scripts/wa-eval.mjs` sends 15 messages, seven of them injection attempts, through the real parse against live Gemini and
+  prints a row each, exit 1 on a failure. It refuses CI and a missing key. Its checker is tested on canned answers (`tests/wa-eval.test.js`).
+  **Measured with Gemini stubbed by the mock parser:** the plumbing runs end to end and the mock fails 8 of 15, five of them injections, which shows
+  the rows discriminate. **Not yet run live:** this Mac has no `.env.local` with a key. It is Patryk's to run with the sandbox key.
+
+**Files:** `api/_lib/gemini.js` · `src/lib/whatsapp.js` · `scripts/wa-eval.mjs` (new) · `scripts/CLAUDE.md` · `api/CLAUDE.md` ·
+`tests/wa-parse-guard.test.js` · `tests/wa-eval.test.js` (new) · `tests/schema.test.js`.
