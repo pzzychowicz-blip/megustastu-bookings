@@ -68,6 +68,24 @@ const fake = vi.hoisted(() => {
             return snapOf(Object.keys(out).length ? out : undefined);
           },
         }),
+        // v18.15.0 (rtdb.js, readRecentMessages): `orderByChild(k).startAt(v)`,
+        // as RTDB orders it: a number at or after `v` comes, and so does a
+        // string or an object (they sort after every number); null, a boolean
+        // and a smaller number do not.
+        startAt: (start) => ({
+          get: async () => {
+            state.queries.push({ path, orderByChild: k, startAt: start });
+            if (state.noIndex) throw new Error('Index not defined, add ".indexOn": "' + k + '", for path "/' + path + '", to the rules');
+            const node = read(path);
+            if (node == null || typeof node !== "object") return snapOf(undefined);
+            const out = {};
+            Object.keys(node).forEach((id) => {
+              const v = node[id] != null && typeof node[id] === "object" ? node[id][k] : undefined;
+              if ((typeof v === "number" && v >= start) || typeof v === "string" || (v != null && typeof v === "object")) out[id] = node[id];
+            });
+            return snapOf(Object.keys(out).length ? out : undefined);
+          },
+        }),
       }),
       set: async (v) => {
         if (state.failWrite && state.failWrite("set", path)) throw new Error("database unavailable");
@@ -127,7 +145,7 @@ import { readJsonBody, bearerToken } from "../api/_lib/request.js";
 import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyRequested, historyStatus, WA_IMPORT_ARCHIVE_MS, disconnectSentence } from "../src/lib/wa-coexist.js";
 import { verifySignature, sendText, sendMedia, uploadMedia } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
-import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE, replyUnarchives } from "../src/lib/whatsapp.js";
+import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE, replyUnarchives, recentInbound, parseThrottled, WA_PARSES_PER_HOUR, WA_PARSE_WINDOW_MS } from "../src/lib/whatsapp.js";
 import { simMediaMessage } from "../src/lib/wa-mock-media.js";
 import { DEFAULT_TAG_LIST } from "../src/lib/tags.js";
 import { simHistoryValue, simEchoValue, simContent, SIM_HISTORY_RECENT, SIM_HISTORY_OLD, SIM_HISTORY_PHOTO_ID, SIM_WABA_ID, SIM_PHONE_NUMBER_ID } from "../src/lib/wa-sim-coexist.js";
@@ -1015,6 +1033,115 @@ describe("applyParse", () => {
     expect(convAt(KEY).draftData.occasions).toEqual(["o-birthday"]);
     await applyParse(KEY, { intent: "new_booking", language: "es", occasions: [] }, 11);
     expect(convAt(KEY).draftData.occasions ?? null).toBe(null); // RTDB drops a null; the fake keeps it
+  });
+});
+
+// ── v18.15.0: at most 20 automatic drafts an hour for one number ────────────
+// Every customer message bought one Gemini call, with nothing bounding how many
+// one number could buy. Over the limit a message is stored and shown, with no
+// draft and no "analyzing…" flag, and Re-check still parses it.
+describe("the per-number parse limit (v18.15.0)", () => {
+  const HOUR = WA_PARSE_WINDOW_MS;
+  // `n` customer messages, the newest a minute old, one a minute apart.
+  const recent = (n, extra) => Object.fromEntries(Array.from({ length: n }, (_, i) =>
+    ["r" + i, Object.assign({ id: "r" + i, direction: "in", text: "hola " + i, ts: Date.now() - 60000 * (i + 1) }, extra)]));
+  const textMsg = (id) => inMsg({ id, type: "text", text: { body: "Mesa para 4 mañana a las 21:00" } });
+
+  it("counts the customer's messages in the last hour, and nothing else", () => {
+    const now = 10 * HOUR;
+    const msgs = [
+      { direction: "in", ts: now - 1 },
+      { direction: "in", ts: now - HOUR + 1 }, // just inside
+      { direction: "in", ts: now - HOUR }, // exactly an hour ago: outside
+      { direction: "out", ts: now - 1 }, // staff and the auto-ack do not count
+      { direction: "in", ts: String(now - 1) }, // not a number
+      { direction: "in" }, null,
+    ];
+    expect(recentInbound(msgs, now)).toBe(2);
+    expect(recentInbound({ a: msgs[0], b: msgs[1] }, now)).toBe(2); // RTDB's keyed shape
+    expect(recentInbound(null, now)).toBe(0);
+    const n = (k) => Array.from({ length: k }, () => ({ direction: "in", ts: now - 5 }));
+    expect(WA_PARSES_PER_HOUR).toBe(20);
+    expect(parseThrottled(n(19), now)).toBe(false);
+    expect(parseThrottled(n(20), now)).toBe(true);
+  });
+
+  it("the webhook parses the 20th message of the hour and stores the 21st without a draft", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    fake.state.tree = { messages: { [KEY]: recent(19) } };
+    await deliver({ messages: [textMsg("wamid.A")] });
+    expect(scheduled).toHaveLength(1);
+    await scheduled[0];
+    expect(convAt(KEY).draftData).toMatchObject({ size: 4 });
+
+    const log = vi.mocked(console.log);
+    log.mockClear();
+    await deliver({ messages: [textMsg("wamid.B")] });
+    expect(scheduled).toHaveLength(1); // nothing new scheduled
+    expect(inbound()).toHaveLength(21); // stored and shown all the same
+    expect("parsing" in convAt(KEY)).toBe(false); // no flag left waiting
+    const line = log.mock.calls.map((c) => String(c[0])).find((l) => l.includes("parse limit"));
+    expect(line).toMatch(/parse limit: 20 messages from one number in the last hour \(limit 20\)/);
+    expect(line).not.toMatch(/34600|Mesa/); // counts only: no number, no text
+  });
+
+  it("asks only for the last hour, through the ts index, and older messages do not count", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    const old = Object.fromEntries(Array.from({ length: 30 }, (_, i) => ["o" + i, { id: "o" + i, direction: "in", ts: Date.now() - HOUR - 60000 * (i + 1) }]));
+    fake.state.tree = { messages: { [KEY]: old } };
+    const before = Date.now();
+    await deliver({ messages: [textMsg("wamid.A")] });
+    expect(scheduled).toHaveLength(1);
+    const q = fake.state.queries.find((x) => x.startAt !== undefined);
+    expect(q).toMatchObject({ path: "messages/" + KEY, orderByChild: "ts" });
+    expect(q.startAt).toBeGreaterThanOrEqual(before - HOUR);
+    expect(q.startAt).toBeLessThanOrEqual(Date.now() - HOUR);
+  });
+
+  it("rules without the index: the thread is read whole, and the limit still holds", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    fake.state.tree = { messages: { [KEY]: recent(20) } };
+    fake.state.noIndex = true;
+    await deliver({ messages: [textMsg("wamid.A")] });
+    expect(scheduled).toEqual([]);
+  });
+
+  it("a read that fails parses, as before the limit", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    fake.state.tree = { messages: { [KEY]: recent(25) } };
+    const ref = fake.db.ref;
+    const broken = { get: async () => { throw new Error("offline"); } };
+    fake.db.ref = (p) => (p === "messages/" + KEY ? Object.assign({}, ref(p), { orderByChild: () => ({ startAt: () => broken }) }) : ref(p));
+    try {
+      await deliver({ messages: [textMsg("wamid.A")] });
+    } finally { fake.db.ref = ref; }
+    expect(scheduled).toHaveLength(1);
+    expect(vi.mocked(console.warn).mock.calls.some((c) => /parse limit unreadable/.test(String(c[0])))).toBe(true);
+  });
+
+  it("a muted conversation costs no read", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    fake.state.tree = { conversations: { [KEY]: { phoneKey: KEY, autoAckSent: true, muted: true } }, messages: { [KEY]: recent(25) } };
+    await deliver({ messages: [textMsg("wamid.A")] });
+    expect(fake.state.queries.filter((x) => x.startAt !== undefined)).toEqual([]);
+  });
+
+  it("the simulator meets the same limit", async () => {
+    fake.state.tree = { messages: { [KEY]: recent(20) } };
+    let later = null;
+    const r = await injectSimInbound({ phone: KEY, text: "Mesa para 4 personas mañana a las 21:00", name: "Sim" }, (p) => { later = p; });
+    expect(r).toMatchObject({ skipped: false, muted: false });
+    expect(later).toBeNull();
+    expect("parsing" in convAt(KEY)).toBe(false);
+    expect(msgsAt(KEY).filter((m) => m.direction === "in")).toHaveLength(21);
+  });
+
+  it("Re-check is a staff press and is not limited", async () => {
+    fake.state.tree = { conversations: { [KEY]: openConv() }, messages: { [KEY]: recent(25) } };
+    parseThread.mockResolvedValue({ intent: "question", language: "es" });
+    const res = await call(recheckHandler, { token: "staff", body: { phoneKey: KEY } });
+    expect(res.statusCode).toBe(200);
+    expect(parseThread).toHaveBeenCalledTimes(1);
   });
 });
 

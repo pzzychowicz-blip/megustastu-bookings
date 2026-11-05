@@ -176,7 +176,8 @@ describe("WA hardening — phoneKey is sanitized at the path boundary", () => {
     // 14 since v18.9.0: `findMessageByWamid` (an edit or a delete finds its
     // message) and `updateMessage` (and patches it). 15: `writeImportedThread`,
     // which builds both an imported thread's paths from one sanitised key.
-    expect((src.match(/sanitizeKey\(phoneKey\)/g) || []).length).toBe(15);
+    // 16 since v18.15.0: `readRecentMessages`, the per-number parse limit's query.
+    expect((src.match(/sanitizeKey\(phoneKey\)/g) || []).length).toBe(16);
   });
 });
 

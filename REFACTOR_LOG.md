@@ -40350,3 +40350,26 @@ and unset changes nothing for Me Gustas Tú (`tests/wa-time-zone.test.js` holds 
 **Files:** `api/_lib/env.js` · `api/_lib/rtdb.js` · `api/_lib/gemini.js` · `api/_lib/inbound-core.js` · `api/wa-inbound.js` · `api/wa-recheck.js` ·
 `api/wa-config.js` · `src/lib/day.js` · `.env.local.example` · `api/CLAUDE.md` · `tests/wa-time-zone.test.js` (new) · `tests/api-handlers.test.js` ·
 `tests/clock-reads.test.js`.
+
+### Phase 6 — at most 20 automatic drafts an hour per number
+
+Every customer message bought one Gemini call, and nothing bounded how many one number could buy. The webhook is HMAC-gated and the staff endpoints
+need a token, so this is a cost limit, not an access one. `WA_PARSES_PER_HOUR` (20, Patryk's number) and `recentInbound` / `parseThrottled` are pure,
+in `src/lib/whatsapp.js`. They count the customer's stored messages (`direction: "in"`, a numeric `ts` inside the last hour), parsed or not, so a number
+that keeps sending stays limited until it stops rather than getting one parse through every few minutes. Asked before the new message is stored,
+so no rolling hour holds more than 20 automatic parses.
+
+`parseOverLimit(phoneKey, conv)` (`api/_lib/inbound-core.js`) reads `readRecentMessages` (`api/_lib/rtdb.js`), the indexed `ts` query the nightly
+prune uses, from the other end (`startAt`). It falls back to a whole read where the rules lack the index, like the prune. The webhook and
+`injectSimInbound` ask it before `processInbound`, so a message over the limit is stored with `willParse` false and no "analyzing…" flag is left
+waiting. A muted conversation costs no read. A failed read parses, as before this version. Re-check is not limited. One log line, with counts only:
+"parse limit: 20 messages from one number in the last hour (limit 20); stored without a draft". No new field, so no `SCHEMA` change.
+
+**Measured** in `tests/api-handlers.test.js` (the fake database gained `startAt`, ordered as RTDB orders it). With 19 earlier messages the 20th is
+parsed and the 21st is stored with no draft, no flag and nothing scheduled. Messages more than an hour old do not count. The limit holds with no
+index, a failed read parses, a muted thread asks nothing, the simulator meets the limit, and Re-check still runs. Against the old webhook and
+`inbound-core.js`, five of the eight fail. Before this, the existing suite passed only because the fake had no `startAt`, so the limit failed open:
+the failed-read rule, measured by accident.
+
+**Files:** `src/lib/whatsapp.js` · `api/_lib/rtdb.js` · `api/_lib/inbound-core.js` · `api/wa-inbound.js` · `api/CLAUDE.md` · `GLOSSARY.md` ·
+`tests/api-handlers.test.js` · `tests/wa-rtdb-hardening.test.js` (its sanitised-path count, 15 → 16).

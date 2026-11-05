@@ -99,6 +99,16 @@ that is module state, and a warm container is shared between requests.
 `tests/clock-reads.test.js` fails an ISO date slice anywhere under `api/`, and
 `tests/wa-time-zone.test.js` reads the prompt the real parse sends.
 
+**At most 20 automatic drafts an hour per number (v18.15.0).** Every customer message
+bought one Gemini call. `parseOverLimit` (`_lib/inbound-core.js`) counts the number's
+inbound messages in the last hour through the indexed `ts` query (`readRecentMessages`,
+`_lib/rtdb.js`; read whole if the index is missing, as the prune does), and the webhook and
+the simulator ask it BEFORE `processInbound`, so a message over the limit is stored with
+`willParse` false and no "analyzing…" flag is left behind. Every inbound message counts,
+parsed or not, so a number that keeps sending stays limited until it stops. Re-check is a
+staff press and is not limited. **A failed read parses:** the limit bounds cost, and a blip
+must not cost a customer their draft. The log line carries counts only.
+
 **`wa-media.js` — the media proxy (v18.8.0).** One function for both directions of a
 conversation's files, to keep the count low: GET views (phase 4), POST sends (phase 5).
 Four rules, each the reason for a line of it:

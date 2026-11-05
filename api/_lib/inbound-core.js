@@ -27,11 +27,36 @@
 // message id is the sanitized wamid, so a redelivery targets the same RTDB
 // path; we additionally skip the whole upsert when the message already exists.
 
-import { normalizePhone, isPhoneKey, pendingDraftOf, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet, simMarkPatch } from "../../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey, pendingDraftOf, parseThrottled, recentInbound, WA_PARSES_PER_HOUR, WA_PARSE_WINDOW_MS, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, WA_UNSUPPORTED_CODE, WA_UNSUPPORTED_LINE, mediaLabel, mediaSnippet, simMarkPatch } from "../../src/lib/whatsapp.js";
 import { simMediaMessage } from "../../src/lib/wa-mock-media.js";
-import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours, readOccasionTags, readWaAutoReply, readTimeZone } from "./rtdb.js";
+import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours, readOccasionTags, readWaAutoReply, readTimeZone, readRecentMessages } from "./rtdb.js";
 import { sendText } from "./meta.js";
 import { parseMessage, mockParse } from "./gemini.js";
+
+// ── The per-number parse limit (v18.15.0) ────────────────────────────────────
+// parseOverLimit(phoneKey, conv) → is this number over WA_PARSES_PER_HOUR
+// (src/lib/whatsapp.js)? Asked by both schedulers of an automatic parse, the
+// webhook and the simulator, BEFORE processInbound, so a message over the
+// limit is stored with `willParse` false and no "analyzing…" flag is left
+// waiting for a parse that never runs. A muted conversation is never parsed,
+// so it costs no read. One counts-only log line, with no number and no text.
+//
+// A read that FAILS parses, as before this version: the limit bounds cost, and
+// a database blip must not cost a real customer their draft.
+export async function parseOverLimit(phoneKey, conv, nowMs = Date.now()) {
+  if (!isPhoneKey(phoneKey) || (conv && conv.muted)) return false;
+  let msgs;
+  try {
+    msgs = await readRecentMessages(phoneKey, nowMs - WA_PARSE_WINDOW_MS);
+  } catch (e) {
+    console.warn("[wa-inbound] parse limit unreadable (" + e.message + "); parsing");
+    return false;
+  }
+  if (!parseThrottled(msgs, nowMs)) return false;
+  console.log("[wa-inbound] parse limit: " + recentInbound(msgs, nowMs) + " messages from one number in the last hour (limit "
+    + WA_PARSES_PER_HOUR + "); stored without a draft");
+  return true;
+}
 
 // draftPatchFromParse(parse, ts) — the conversation fields a draft-intent
 // parse sets. Shared by processInbound (when called with a parse — the
@@ -315,6 +340,9 @@ export async function injectSimInbound({ phone, text, name, agoMs = 0, media }, 
   const existingDraft = pendingDraftOf(conv);
   const content = inboundContent((media && simMediaMessage(media, text)) || { type: "text", text: { body: String(text || "") } });
   const parseText = content.parseText;
+  // v18.15.0: the simulator buys the same Gemini calls, so it meets the same
+  // limit, which is also how the limit can be seen working on the sandbox.
+  const overLimit = parseText ? await parseOverLimit(normalizePhone(phone), conv) : false;
   const r = await processInbound({
     phone, text: content.text, ts,
     wamid: "sim." + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
@@ -324,7 +352,7 @@ export async function injectSimInbound({ phone, text, name, agoMs = 0, media }, 
     preloadedConv: conv,
     media: content.media,
     snippetText: content.snippet,
-    willParse: !!parseText, // flags "analyzing…" until applyParse lands the draft
+    willParse: !!parseText && !overLimit, // flags "analyzing…" until applyParse lands the draft
     sim: true, // v18.12.0: a conversation this creates is the simulator's; nothing it sends leaves
   });
   // /code-review v18.0.0 phase 6: nothing was stored, so there is nothing to
@@ -334,7 +362,7 @@ export async function injectSimInbound({ phone, text, name, agoMs = 0, media }, 
   // result `applyParse` then discarded on the null key. The rule applied at one
   // of the two places that schedule a parse. v18.8.0: and a voice note or a
   // photo without a caption has nothing to parse, as in the webhook.
-  if (r.skipped || !r.phoneKey || !parseText || r.muted) return r;
+  if (r.skipped || !r.phoneKey || !parseText || r.muted || overLimit) return r;
   afterResponse((async () => {
     try {
       const [hours, occasions, timeZone] = await Promise.all([readOperatingHours(), readOccasionTags(), readTimeZone()]);

@@ -525,6 +525,26 @@ export async function readOldMessages(phoneKey, before) {
   return snap.exists() ? snap.val() || {} : {};
 }
 
+// v18.15.0: one conversation's messages from `since` (ms) on, keyed like
+// readMessageNode, for the per-number parse limit (inbound-core.js,
+// parseOverLimit). The same indexed `ts` query as readOldMessages, from the
+// other end, so a regular customer's thread costs one inbound message only its
+// last hour. RTDB's `startAt(number)` also returns a `ts` that is a string
+// (strings sort after numbers); `recentInbound` counts only numbers. And the
+// same fallback: a query the published rules do not index is refused, so the
+// thread is read whole rather than the limit failing.
+export async function readRecentMessages(phoneKey, since) {
+  const node = getDb().ref("messages/" + sanitizeKey(phoneKey));
+  let snap;
+  try {
+    snap = await node.orderByChild("ts").startAt(since).get();
+  } catch (e) {
+    if (!/index not defined/i.test(String(e && e.message))) throw e;
+    snap = await node.get();
+  }
+  return snap.exists() ? snap.val() || {} : {};
+}
+
 // Deletes the conversation only if `stillOld(stored)` holds at the moment of
 // the write, so a message that arrived after the prune read the list keeps its
 // thread. Resolves true when it was deleted.
