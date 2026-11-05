@@ -40488,3 +40488,9 @@ The two controls show that the rig records a write when one is due, so the four 
 
 **Not covered here:** the installed app on the tablet, the Settings picker on a device, the server's dating of a WhatsApp message sent at 00:30
 Canary time (which needs the sandbox after the merge), and the crash trail on a second device.
+
+**`mgt-backups` landed (2026-11-05).** Patryk merged its branch as
+[pzzychowicz-blip/mgt-backups#2](https://github.com/pzzychowicz-blip/mgt-backups/pull/2), holding the four commits, and approved setting the
+repository's Actions retention to 30 days. The setting read 90 before and reads 30 after (a `gh api` read-back). `crash-digest` is registered
+and active, and its first scheduled run is 07:00 UTC on 2026-11-06. `RUNBOOK.md` no longer says these wait on that PR, and its crash-digest
+line now says 30 hours rather than 24, which is what the job reads.

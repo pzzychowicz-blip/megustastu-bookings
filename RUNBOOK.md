@@ -52,8 +52,8 @@ new deployment). The sandbox follows `main`, so it shows the fix first.
 
 **Where the backups are.** Every day the `mgt-backups` repo takes an encrypted copy of
 the PROD database (`backup.yml`, about 04:30 UTC, often hours late because GitHub
-starts scheduled jobs late), and keeps it for 30 days (90 until that repo's 2026-11
-PR). A second job (`freshness.yml`, every day from that PR, Mondays before it) fails,
+starts scheduled jobs late), and keeps it for 30 days (a backup saved before 2026-11-05
+keeps the 90 days it was saved with). A second job (`freshness.yml`, every day) fails,
 and GitHub emails you, when the newest backup is more than 48 hours old. Settings → General →
 **Download backup** makes one by hand at any moment.
 
@@ -97,10 +97,10 @@ blip; UptimeRobot also emails when it comes back.
 2. **In the app (v18.15.0).** An admin sees a red number on the Settings gear, the
    Admin tab, **Open the log** and the **Crashes** chip: crashes they have not looked
    at yet. Turning the Crashes chip on clears it.
-3. **By email (the crash digest).** A daily job in `mgt-backups` reads the last 24
-   hours of crash entries and FAILS when there are any, so GitHub's failure email is
-   the digest. No crashes, no email. (Added in that repo's own PR; until it merges,
-   only 1 and 2 exist.)
+3. **By email (the crash digest).** A daily job in `mgt-backups` (`crash-digest.yml`,
+   07:00 UTC) reads the last 30 hours of crash entries and FAILS when there are any,
+   so GitHub's failure email is the digest. No crashes, no email. It looks back 30
+   hours, not 24, because GitHub starts scheduled jobs hours late.
 
 **Reading a crash.** Settings → Admin → Open the log → Crashes → **Download crash
 data**, then decode the stack by rebuilding that version (`scripts/CLAUDE.md`, "Reading
