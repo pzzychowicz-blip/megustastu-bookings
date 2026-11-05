@@ -40431,3 +40431,29 @@ which stay in DEV's log as two crash entries ("v18.15.0 crash trail check").
 carries `/* @canvas */` because the badge keeps its pixels. **Measured, a scan of every second-and-later occurrence under `src/`:** one hidden
 literal before this commit (`src/App.jsx:3982`, the badge), none after. So the rule's gap hides nothing today. Making it judge every occurrence is
 linter work of its own, outside this version.
+
+### Phase 9 — RUNBOOK.md, and the backup docs catch up
+
+`RUNBOOK.md` (new, root) holds the steps for when production goes wrong, each pointing at where its details live:
+
+- **Roll back first**: Vercel's Instant Rollback, which on Hobby reaches only the immediately previous production deployment and stops `main` from going
+  live until Undo Rollback (Vercel's docs, read 2026-11-06). Then what it cannot undo: a raised `SCHEMA` (old builds stop saving until `/schema/v` is
+  lowered in the console, which v18.15.0 itself will need after a rollback), data already written, hand-deployed rules, environment variables, and
+  the service worker. The permanent fix is a revert or a fix on `main`.
+- **Restore**: the daily encrypted backup in `mgt-backups`, its Monday freshness check, and the console steps in `database.rules.README.md`.
+- **The uptime monitor**, which Patryk sets up: an UptimeRobot keyword monitor on the live URL for "MGT Bookings" every 5 minutes, and what it cannot
+  see (Firebase).
+- **Crashes**: the entry, the v18.15.0 crash trail, and the crash digest from `mgt-backups` (that repo's own PR).
+- **Spending**, per service. Gemini: AI Studio's per-project monthly spend cap stops spending, and a Cloud budget only alerts. Meta: the in-app cost
+  counter. Vercel Hobby and Firebase Spark send no bill but pause or switch off at their limits. GitHub Actions minutes.
+
+**Two findings for Patryk, written into the runbook and not decided here.** Vercel's own Hobby page says the plan is for non-commercial, personal use
+only, and this is a restaurant's app. And on Spark, going over any monthly limit turns the app off until the next cycle, not just slower. Today's
+usage is far below every limit (ROADMAP's archive entry, 2026-10-09: 0.15%, 5.5%, 4 of 100). UptimeRobot's free-plan terms on commercial use
+disagree between sources, so the runbook says to read them when signing up.
+
+`CLAUDE.md` points at the runbook, and its "Firebase free plan" Gotchas row now names the daily backup and the switch-off (37,404 of 40,000
+characters). `database.rules.README.md` § Backups said the manual download was "the only one", which had been stale since `mgt-backups` began. It
+now names both. Nothing on `ROADMAP.md` covered these items, so nothing was removed.
+
+**Files:** `RUNBOOK.md` (new) · `CLAUDE.md` · `database.rules.README.md`.
