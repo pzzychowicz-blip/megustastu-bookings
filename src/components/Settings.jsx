@@ -31,7 +31,7 @@ import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
 import { FoldRows } from "./FoldRows";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, InlineAlert, ALERT_TONES, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE, textWidth } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, InlineAlert, ALERT_TONES, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE, textWidth, CountBadge } from "./atoms";
 import { connectionLines } from "../lib/wa-coexist";
 import { useIntegrationStatus } from "../hooks/useIntegrationStatus";
 import { useWaUsage } from "../hooks/useWaUsage";
@@ -108,7 +108,10 @@ const TAB_ROW_PAD = 12;     // a tab's side padding in the natural row
 const TAB_CELL_PAD = 6;     // the same in a grid cell, where the cell sets the width
 // The labels' widths come from `textWidth` (atoms.jsx): this bar's own
 // measure until v18.2.0 phase 75 made it the app's one.
-export function TabBar({ tabs, current, onSelect }) {
+// v18.15.0: `alerts` is a count per tab id (the Admin tab's new crashes), drawn
+// on the tab's corner as `CountBadge`. Absolutely placed, so the measured label
+// widths above still decide the bar's shape.
+export function TabBar({ tabs, current, onSelect, alerts }) {
   const barRef = useRef(null);
   const [cols, setCols] = useState(0);   // 0 = one natural row
   // The labels as one string, so the effect re-measures when the SET of tabs
@@ -169,10 +172,12 @@ export function TabBar({ tabs, current, onSelect }) {
               whiteSpace: "nowrap",
               padding: "8px " + (grid ? TAB_CELL_PAD : TAB_ROW_PAD) + "px",
               borderRadius: grid ? R.inset : R.pill,
+              position: "relative",
               ...(grid ? null : { flex: "1 0 0%" })
             }}
           >
             {t.label}
+            {alerts && alerts[t.id] ? <CountBadge n={alerts[t.id].n} plus={alerts[t.id].plus} float background="var(--app-danger-solid)" srText={alerts[t.id].srText} /> : null}
           </button>
         );
       })}
@@ -1544,6 +1549,8 @@ export function SettingsContent({
   // v18.0.0 session 8: the activity log opens from the Admin tab, above this
   // overlay — App owns the modal, this only carries the door handle down.
   onOpenActivity,
+  // v18.15.0: the crash trail's count, on the Admin tab and its "Open the log".
+  newCrashes, moreCrashes,
   customerSeek,
   activityRetentionDays,
   onSetActivityRetention,
@@ -1708,7 +1715,7 @@ export function SettingsContent({
       modules={modules} onSetModule={onSetModule} moduleWarning={moduleWarning}
       onSetRole={onSetRole} onRemoveUser={onRemoveUser} onInvite={onInvite}
       onWithdrawInvite={onWithdrawInvite} onApplyInvite={onApplyInvite}
-      onOpenCapabilities={onOpenCapabilities} onOpenActivity={onOpenActivity} retentionDays={activityRetentionDays} onSetRetention={onSetActivityRetention}
+      onOpenCapabilities={onOpenCapabilities} onOpenActivity={onOpenActivity} newCrashes={newCrashes} moreCrashes={moreCrashes} retentionDays={activityRetentionDays} onSetRetention={onSetActivityRetention}
       waRetentionDays={waRetentionDays} onSetWaRetention={onSetWaRetention} />;
   } else if (cur === "app") {
     content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} planAvail={planAvail} onTogglePlanAvail={onTogglePlanAvail} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} largeText={largeText} onToggleLargeText={onToggleLargeText} indoorTint={indoorTint} onToggleIndoorTint={onToggleIndoorTint} vibrateOnDrag={vibrateOnDrag} onToggleVibrate={onToggleVibrate} />;
@@ -1757,6 +1764,7 @@ export function SettingsContent({
         tabs={tabs}
         current={cur}
         onSelect={selectTab}
+        alerts={newCrashes > 0 ? { admin: { n: newCrashes, plus: !!moreCrashes, srText: "new crash" + (newCrashes === 1 && !moreCrashes ? "" : "es") } } : null}
       />
       {/* v15.8.0: tab body eases its height (AutoHeight) + crossfades on switch
           (key+mgt-fade-in) — the modal card follows the eased height. */}

@@ -15,7 +15,9 @@
 //
 // ── What syncs, and what deliberately does NOT ───────────────────────────────
 // Syncs (Patryk's call): theme · reduceMotion · planGestures · navLocked ·
-// splitEnabled — all judgements about how the app should behave. v18.2.0
+// splitEnabled — all judgements about how the app should behave. v18.15.0
+// adds crashSeenAt, the newest crash an admin has seen, per person so the
+// trail clears on every device they use and stays for another admin. v18.2.0
 // phase 21 adds planAvail (the Plan view's table availability, on by default),
 // per person like planGestures beside it — Patryk's call over a
 // restaurant-wide switch.
@@ -68,7 +70,8 @@ export const DEFAULT_USER_PREFS = {
   planGestures: null,   // boolean | null
   navLocked: null,      // boolean | null
   splitEnabled: null,   // boolean | null
-  planAvail: null       // boolean | null (v18.2.0 phase 21)
+  planAvail: null,      // boolean | null (v18.2.0 phase 21)
+  crashSeenAt: null     // ms, server time | null (v18.15.0: the admin's crash trail)
 };
 
 // ── v17.14.0: the boolean prefs, described once ─────────────────────────────
@@ -129,7 +132,12 @@ export function sanitizeUserPrefs(raw){
     planGestures: triBool(src.planGestures),
     navLocked: triBool(src.navLocked),
     splitEnabled: triBool(src.splitEnabled),
-    planAvail: triBool(src.planAvail)
+    planAvail: triBool(src.planAvail),
+    // v18.15.0: the newest crash this person has seen (`crashTrail`,
+    // lib/crash-report.js). A number, not a tri-state, so it is not in
+    // PREF_SPEC (which is the booleans) and has no localStorage mirror: nothing
+    // reads it before the node loads, and the badge waits for the node.
+    crashSeenAt: typeof src.crashSeenAt === "number" && Number.isFinite(src.crashSeenAt) && src.crashSeenAt > 0 ? src.crashSeenAt : null
   };
 }
 

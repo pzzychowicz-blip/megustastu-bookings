@@ -31,7 +31,7 @@
 // with it.
 import { useId, useMemo, useState } from "react";
 import { S, T, FW, SP, R, H, IC, BTN } from "../lib/constants";
-import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, mkDangerBtn, AutoHeight, Reveal, RowSlot } from "./atoms";
+import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, mkDangerBtn, AutoHeight, Reveal, RowSlot, CountBadge } from "./atoms";
 import { rowText, activityCsv, activityCsvName } from "../lib/activity";
 // v18.0.0 session 11: the same index the Customers tab is built from, so "can
 // this row lead anywhere" is answered by the thing that would have to answer it
@@ -104,6 +104,9 @@ export function ActivityLogModal({
   fromDay, toDay, onSetFromDay, onSetToDay, badDay, backwards,
   rows, loading, loadingMore, hasMore, onLoadOlder,
   canClear, clearBusy, clearMsg, onClearRange, onDownload, canDownloadCrashes, onDownloadCrashes,
+  // v18.15.0: the crash trail. The Crashes chip carries the count, and turning
+  // it ON is "I have looked": App stores the newest crash's time.
+  newCrashes, moreCrashes, onCrashesSeen,
   onOpenCustomer, retentionText,
   bookings, onOpenBooking, onClose,
 }) {
@@ -208,6 +211,7 @@ export function ActivityLogModal({
   function toggleKind(k) {
     // The sentence answers one press, and is stale the moment the chip goes off.
     if (k === "crash") setCrashMsg("");
+    if (k === "crash" && !kinds.crash && onCrashesSeen) onCrashesSeen();
     setKinds(function (prev) {
       const next = Object.assign({}, prev);
       if (next[k]) delete next[k]; else next[k] = true;
@@ -313,7 +317,7 @@ export function ActivityLogModal({
               key={k} as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={on ? "success" : "neutral"}
               aria-pressed={on}
               onClick={function () { toggleKind(k); }}
-            >{KIND_LABEL[k]}</OutlineChip>
+            >{KIND_LABEL[k]}{k === "crash" ? <CountBadge n={newCrashes} plus={!!moreCrashes} background="var(--app-danger-solid)" srText={"new crash" + (newCrashes === 1 && !moreCrashes ? "" : "es")} /> : null}</OutlineChip>
           );
         })}
         {/* Not a kind, so it is separated by a gap rather than sitting in the

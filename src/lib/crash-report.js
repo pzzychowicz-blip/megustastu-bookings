@@ -31,6 +31,27 @@
 // allows one entry per signature and five per page load.
 
 export const MAX_PER_LOAD = 5;
+
+// ── The admin's crash trail (v18.15.0) ──────────────────────────────────────
+// How many of `entries` (activity entries of kind `crash`) are newer than
+// `seenAt`, the newest crash this person has already seen (their prefs'
+// `crashSeenAt`; null = never looked, so every crash is new), and the newest
+// `at` among them, which is what pressing the log's Crashes chip stores.
+// Server time on both sides: an entry's `at` is a serverTimestamp, and storing
+// the newest ENTRY's time rather than this device's `Date.now()` means a device
+// whose clock is wrong can neither hide a crash nor bring one back.
+export function crashTrail(entries, seenAt) {
+  const seen = typeof seenAt === "number" && seenAt > 0 ? seenAt : 0;
+  const list = Array.isArray(entries) ? entries : (entries && typeof entries === "object" ? Object.values(entries) : []);
+  let count = 0;
+  let latest = 0;
+  for (const e of list) {
+    if (!e || e.kind !== "crash" || typeof e.at !== "number" || !Number.isFinite(e.at)) continue;
+    if (e.at > latest) latest = e.at;
+    if (e.at > seen) count++;
+  }
+  return { count, latest };
+}
 const MESSAGE_MAX = 300;
 // How much of a message the mask reads. Its address pattern is quadratic on a long token
 // (50 KB took 2.5 s, measured), this runs on the main thread inside an error handler, and

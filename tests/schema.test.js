@@ -158,7 +158,9 @@ const PINNED = {
   // 3: v18.8.0, `settings/admin.waRetentionDays` (sanitizeAdminSettings).
   // 4: v18.10.0, `settings/operatingHours.exceptions` (sanitizeExceptions).
   // 5: v18.12.0, `settings/whatsapp.autoReply` (sanitizeWa).
-  // 6: v18.15.0, `settings/general.timeZone` (sanitizeGeneral).
+  // 6: v18.15.0, `settings/general.timeZone` (sanitizeGeneral), and in the
+  //    same unreleased version `settings/users/$uid/prefs.crashSeenAt`
+  //    (sanitizeUserPrefs). One raise covers both: no build between them shipped.
   schema: 6,
   prints: {
       "hooks/useBookingDefaults.js:sanitizeTiers": "8d1b9808c9",
@@ -169,7 +171,7 @@ const PINNED = {
       "hooks/useLayout.js:sanitizeLayout": "317b68da39",
       "hooks/useOptimizerSettings.js:sanitizeOptimizer": "74794693a2",
       "hooks/useRoles.js:sanitizeAdminSettings": "42a2f8f352",
-      "hooks/useUserPrefs.js:sanitizeUserPrefs": "fb820d1b7b",
+      "hooks/useUserPrefs.js:sanitizeUserPrefs": "2fa28e308a",
       "hooks/useVoucherDefaults.js:sanitizeVoucherDefaults": "7abe4b008f",
       "hooks/useWaSettings.js:sanitizeWa": "1964c16116",
       "lib/booking-fields.js:sanitizeByTable": "1b03b3eeed",

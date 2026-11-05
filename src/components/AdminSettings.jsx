@@ -23,7 +23,7 @@
 import { useState, useRef, useEffect, useId } from "react";
 import { BTN, R, T, FW, SP, H, IC } from "../lib/constants";
 import { FoldRows } from "./FoldRows";
-import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel, mkDangerBtn } from "./atoms";
+import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel, mkDangerBtn, CountBadge } from "./atoms";
 import { TrashIcon } from "./Icons";
 import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, isGranted, effectiveRole, displayName } from "../lib/roles";
 import { MODULES, moduleOn } from "../lib/modules";
@@ -675,6 +675,8 @@ export function AdminTabContent({
   // v18.0.0 session 8: opens the activity log, which App owns — this tab holds
   // the door handle, not the modal.
   onOpenActivity,
+  // v18.15.0: crashes this admin has not seen (the trail from the gear).
+  newCrashes, moreCrashes,
   retentionDays,
   onSetRetention,
   // v18.8.0 phase 7: how long WhatsApp messages are kept.
@@ -918,8 +920,8 @@ export function AdminTabContent({
             type="button"
             className="mgt-hover-scale"
             onClick={onOpenActivity}
-            style={mkBtn({ background: BTN.quiet, flexShrink: 0 })}
-          >Open the log</button>
+            style={mkBtn({ background: BTN.quiet, flexShrink: 0, display: "inline-flex", alignItems: "center" })}
+          >Open the log<CountBadge n={newCrashes} plus={!!moreCrashes} background="var(--app-danger-solid)" srText={"new crash" + (newCrashes === 1 && !moreCrashes ? "" : "es")} /></button>
         </div>
         {/* v18.0.0 session 11: the retention window, which was hard-coded in
             TWO languages until this version — `PRUNE_AFTER_MS` in the app and

@@ -40396,3 +40396,38 @@ suggestion staff accept. Three gaps closed:
 
 **Files:** `api/_lib/gemini.js` · `src/lib/whatsapp.js` · `scripts/wa-eval.mjs` (new) · `scripts/CLAUDE.md` · `api/CLAUDE.md` ·
 `tests/wa-parse-guard.test.js` · `tests/wa-eval.test.js` (new) · `tests/schema.test.js`.
+
+### Phase 8 — admins see new crashes from the header
+
+A crash entry (v18.13.0) was visible only to somebody who went looking: Settings → Admin → Open the log → Crashes. Now the count of crashes this admin
+has not seen is on each of those four steps, so the trail leads from the header to the list. Turning the Crashes chip ON clears it.
+
+- **What is counted** is pure: `crashTrail(entries, seenAt)` (`lib/crash-report.js`) counts the crash entries newer than `seenAt` and finds the
+  newest `at`. **`seenAt` is the newest crash's own time, not this device's clock**: an entry's `at` is a serverTimestamp, so storing it means a
+  device whose clock is wrong can neither hide a crash nor bring one back. Never looked (null) is every crash new. On DEV that was 19 the first time.
+- **Where it is stored**: `crashSeenAt` in the person's prefs (`settings/users/$uid/prefs`), so it clears on every device they use and stays for
+  another admin. A number outside `PREF_SPEC`, like `theme`, with no localStorage mirror. `sanitizeUserPrefs` changed, so its fingerprint is
+  re-pinned under the same `SCHEMA` 6 as phase 3's `timeZone`: one raise for one unreleased version (`tests/schema.test.js` says so).
+- **One listener**, `useCrashTrail` (new): `activity` by `kind == "crash"`, the newest 50 (`limitToLast`, on the existing `kind` index), only while
+  `can("settingsAdmin") && prefsLoaded`. Staff spend nothing, and the badge never flashes every crash before `crashSeenAt` arrives. Past 50 it reads
+  "50+".
+- **The badge** is `CountBadge` (atoms.jsx, new), the WhatsApp button's unread count moved there unchanged, in `--app-danger-solid`, which is already
+  registered against `--text-on-accent`. On the gear and the Admin tab it sits on the corner, absolutely placed, so the tab bar's measured widths
+  are untouched. On "Open the log" and the chip it sits inline. Each says "new crash(es)" to a screen reader, and the gear's name does too.
+
+**Measured on DEV** (Browser pane, 1100×800; read from the DOM, since the automation tree's names left the badge's text out). The gear read
+"Settings & keyboard shortcuts, 19 new crashes", with 19 on the Admin tab, on Open the log and on the chip. The Admin tab's badge is inside its
+scroll container (top 88.75 against 15.75). Turning the chip on cleared all four at once. A thrown error brought back "1 new crash", singular.
+Turning the chip off kept it and on cleared it. A reload kept it cleared, so the write landed. The console showed only the two deliberate errors,
+which stay in DEV's log as two crash entries ("v18.15.0 crash trail check").
+
+**Files:** `src/lib/crash-report.js` · `src/hooks/useCrashTrail.js` (new) · `src/hooks/useUserPrefs.js` · `src/components/atoms.jsx` ·
+`src/App.jsx` · `src/components/Settings.jsx` · `src/components/AdminSettings.jsx` · `src/components/ActivityLogModal.jsx` · `GLOSSARY.md` ·
+`src/hooks/CLAUDE.md` · `src/components/CLAUDE.md` · `tests/crash-trail.test.js` (new) · `tests/prefs.test.js` · `tests/schema.test.js`.
+
+**Found on the way, not fixed:** `check:style`'s spacing rule reads only the FIRST occurrence of each key on a line (`line.search` and
+`styleValue`), so the WhatsApp badge's off-scale `padding: "0 5px"` passed in App unseen: its one-line JSX began with the button's own
+`padding:"8px 14px"`, which is on the scale. Measured: that line holds no exemption marker. Moved into `atoms.jsx` it failed at once, and it now
+carries `/* @canvas */` because the badge keeps its pixels. **Measured, a scan of every second-and-later occurrence under `src/`:** one hidden
+literal before this commit (`src/App.jsx:3982`, the badge), none after. So the rule's gap hides nothing today. Making it judge every occurrence is
+linter work of its own, outside this version.

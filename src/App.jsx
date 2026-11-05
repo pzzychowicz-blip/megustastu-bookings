@@ -100,7 +100,7 @@ import { useSettingsPanel } from "./hooks/useSettingsPanel";
 // First component file in the codebase using JSX syntax. App.jsx now also
 // uses JSX (Phase C3b) so the original B1 note about RC()-vs-JSX
 // compatibility no longer applies — both files share a single style.
-import { DateField, Overlay, ModalTitle, mkBtn, mkSolidBtn, mkDangerConfirm, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
+import { DateField, Overlay, ModalTitle, mkBtn, mkSolidBtn, mkDangerConfirm, Reveal, Presence, ModalPresence, SlideView, CountBadge } from "./components/atoms";
 // v17.3.4: the two notification-layout render units (state stays in BookingApp).
 import { StatusToasts } from "./components/StatusToasts";
 import { RefusalToast } from "./components/RefusalToast";
@@ -367,6 +367,8 @@ import { knownTagIds } from "./lib/tags";
 // v18.0.0 session 8: the activity log. `useActivityLog` installs the module-level
 // sink every writer emits into.
 import { useActivityLog, redactGuest } from "./hooks/useActivityLog";
+// v18.15.0: the admin's crash trail (the count on the gear → Admin → the log).
+import { useCrashTrail } from "./hooks/useCrashTrail";
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
@@ -523,6 +525,8 @@ const CHROME_BTN=mkBtn({
   background:BTN.quiet, width:H.chrome, height:H.chrome, minHeight:H.chrome, padding:0,
   display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0
 });
+// v18.15.0: the gear, positioned, so the crash trail's count can sit on its corner.
+const GEAR_BTN=Object.assign({},CHROME_BTN,{position:"relative"});
 
 // ── How far the date controls sit below the top of their row (v17.9.1) ────────
 // v18.14.0 (L5): the card no longer grows when the Summary opens (its body has a row
@@ -1194,6 +1198,17 @@ export function BookingApp({uid}){
   // may simulate", and the module switch is restaurant data that says "this
   // restaurant uses WhatsApp". Only the SIMULATOR still asks WA_SANDBOX.
   const whatsappOn = hasModule("whatsapp");
+  // v18.15.0: the admin's crash trail. How many crashes this person has not
+  // seen, on the gear, the Admin tab, "Open the log" and the log's Crashes chip.
+  // Only for whoever has the Admin tab, and only once their prefs have loaded,
+  // so the count never flashes every crash before `crashSeenAt` arrives.
+  // Pressing the Crashes chip stores the newest crash's OWN time (server
+  // time), never this device's clock (`crashTrail`, lib/crash-report.js).
+  const crashes = useCrashTrail(can("settingsAdmin") && prefsLoaded, userPrefs.crashSeenAt);
+  function markCrashesSeen(){
+    if(crashes.latest>(userPrefs.crashSeenAt||0)) saveUserPrefs({crashSeenAt:crashes.latest});
+  }
+  const crashWord=crashes.count>0?crashes.count+(crashes.more?"+":"")+" new crash"+(crashes.count===1&&!crashes.more?"":"es"):"";
   // v18.0.0 phase 5: settings/whatsapp — the module's own restaurant-wide
   // settings (currently just auto-archive-on-complete). Gated on the MODULE now
   // rather than on WA_SANDBOX, so an admin switching WhatsApp on is what
@@ -3939,10 +3954,10 @@ export function BookingApp({uid}){
               On a phone the block is the whole first row and ends with the
               connection dot (phase 79). */}<div ref={headTitleRef} style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:isMobile?"1 1 100%":undefined}}><button
               onClick={function(){setShowSettings(true);}}
-              title="Settings & keyboard shortcuts"
-              aria-label="Settings & keyboard shortcuts"
+              title={"Settings & keyboard shortcuts"+(crashWord?" · "+crashWord:"")}
+              aria-label={"Settings & keyboard shortcuts"+(crashWord?", "+crashWord:"")}
               className="mgt-hover-scale"
-              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile||compact?T.title:T.display,fontWeight: FW.bold,margin:0,whiteSpace:compact?"nowrap":undefined}}>{generalSettings.restaurantName}</h1>{compact?null:<div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{/* v18.2.0: separators. The double spaces between the three facts were
+              style={GEAR_BTN}><CogIcon size={IC.chrome} /><CountBadge n={crashes.count} plus={crashes.more} float background="var(--app-danger-solid)" /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile||compact?T.title:T.display,fontWeight: FW.bold,margin:0,whiteSpace:compact?"nowrap":undefined}}>{generalSettings.restaurantName}</h1>{compact?null:<div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{/* v18.2.0: separators. The double spaces between the three facts were
                 collapsed by HTML to one, so it read "4 indoor 9 outdoor 13:00 -
                 22:00" — one run of numbers (the design critique). A middle dot
                 between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))+(viewHours.special?" · "+(viewHours.note||"special day"):"")}</div>}</div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div>{/* v18.14.0 (H7): Follow and zoom on a short screen, after the
@@ -3979,7 +3994,7 @@ export function BookingApp({uid}){
               onClick={function(){setShowInbox(true);}}
               className="mgt-hover-scale"
               title="WhatsApp inbox (I)"
-              style={mkSolidBtn("var(--wa-green)",{position:"relative",padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>WhatsApp{wa.unreadCount>0?<span style={{position:"absolute",top:-6,right:-6,minWidth:18,height:18,padding:"0 5px",borderRadius:R.pill,background:"var(--wa-unread-dot)",color:"var(--text-on-accent)",fontSize: T.small,fontWeight: FW.bold,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"var(--shadow-flat)",boxSizing:"border-box"}}>{wa.unreadCount}</span>:null}</button>:null}{/* v17.9.0 (Patryk): Find-a-booking moved here from the date-nav
+              style={mkSolidBtn("var(--wa-green)",{position:"relative",padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>WhatsApp<CountBadge n={wa.unreadCount} float background="var(--wa-unread-dot)" /></button>:null}{/* v17.9.0 (Patryk): Find-a-booking moved here from the date-nav
               toolbar, between "+ New" and the dot. Searching is an ACTION, and
               this is the row of them — it reads as the counterpart to adding a
               booking rather than as view chrome. */}<button
@@ -4335,6 +4350,8 @@ export function BookingApp({uid}){
             onApplyInvite={applyInvite}
             onOpenCapabilities={setRolesFor}
             onOpenActivity={function(){setActivityOpen(true);}}
+            newCrashes={crashes.count}
+            moreCrashes={crashes.more}
             customerSeek={customerSeek}
             activityRetentionDays={activityRetentionDays}
             onSetActivityRetention={setActivityRetention}
@@ -4468,6 +4485,9 @@ export function BookingApp({uid}){
           onDownload={doDownloadActivity}
           canDownloadCrashes={can("dataExport")}
           onDownloadCrashes={doDownloadCrashes}
+          newCrashes={crashes.count}
+          moreCrashes={crashes.more}
+          onCrashesSeen={markCrashesSeen}
           onOpenCustomer={openCustomerByName}
           retentionText={retentionLabel(activityRetentionDays)}
           bookings={bookings}

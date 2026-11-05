@@ -776,6 +776,36 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
   );
 }
 
+// ── CountBadge — a number on a control (v18.15.0) ───────────────────────────
+// The WhatsApp button's unread count, moved here unchanged when the crash trail
+// needed the same shape: one atom rather than a second inline copy. `float`
+// pins it to the control's top-right corner, and the control must then be
+// positioned (`position: relative`); without it, the count sits inline after
+// the label. `background` is required, as ModalTitle's is: the fill says what
+// the number counts (WhatsApp's unread red, a crash's danger), and each pair is
+// registered in tests/contrast.test.js against `--text-on-accent`.
+// `srText` follows the number for a screen reader only ("new crashes"), so a
+// chip is named "Crashes 2 new crashes" rather than "Crashes2". Nothing at all
+// for zero, or for anything that is not a positive number.
+// `plus` adds a "+" (a count that stopped at its listener's limit: "50+").
+// The 18px pill and its 5px side padding are the WhatsApp badge's own, kept to
+// the pixel, hence the @canvas mark. Inline in App the same literal passed
+// check:style unseen: the rule reads only the FIRST `padding:` on a line, and
+// that line's first was the button's own, on the scale.
+export function CountBadge({ n, background, float = false, srText, plus = false }) {
+  if (!(typeof n === "number" && n > 0)) return null;
+  return (
+    <span style={Object.assign({
+      minWidth: 18, height: 18, padding: "0 5px",   /* @canvas */ borderRadius: R.pill,
+      background, color: "var(--text-on-accent)", fontSize: T.small, fontWeight: FW.bold,
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      boxShadow: "var(--shadow-flat)", boxSizing: "border-box", flexShrink: 0,
+    }, float ? { position: "absolute", top: -6, right: -6 } : { marginLeft: SP.snug })}>
+      {n}{plus ? "+" : ""}{srText ? <span className="mgt-sr-only">{" " + srText}</span> : null}
+    </span>
+  );
+}
+
 // ── InlineAlert — a notification-strip section, inside a modal (v17.15.0) ────
 // The message a form shows when it refuses to save: "Text is required.", "No
 // free table for that time", the walk-in capacity error. There were three
