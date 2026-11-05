@@ -8,6 +8,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { zoneList, zonePlace, zoneName, offsetLabel, matchesZone, zoneNote } from "../src/lib/time-zones.js";
+import { appCode } from "./app-source.js";
 
 const SUMMER = Date.UTC(2026, 6, 1, 12);
 const WINTER = Date.UTC(2026, 0, 15, 12);
@@ -100,5 +101,16 @@ describe("the setting is stored, seeded and applied", () => {
     const S = read("src/components/Settings.jsx");
     expect(S).toContain("<TimeZoneSetting gs={gs} onSave={onSaveGeneralSettings} />");
     expect(S).toContain("onSave({ timeZone: tz })");
+  });
+});
+
+describe("the header's note is drawn from the setting, beside the date", () => {
+  it("reads zoneNote of the restaurant's zone and renders only when it answers", () => {
+    const A = appCode();
+    expect(A).toContain("const clockNote=zoneNote(generalSettings.timeZone);");
+    // Right after the date controls' <nav>, ahead of Today, so it sits by the date.
+    const nav = A.indexOf('</nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:dateCtrlMotion}}>{clockNote?<span');
+    expect(nav).toBeGreaterThan(-1);
+    expect(A.indexOf("{clockNote}</span>:null}<Presence show={viewDate!==todayStr()}")).toBeGreaterThan(nav);
   });
 });

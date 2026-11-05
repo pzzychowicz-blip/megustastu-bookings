@@ -397,6 +397,8 @@ import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan vie
 import { DaySheet } from "./components/DaySheet";
 import { useWindowAtTop } from "./hooks/useWindowAtTop";
 import { todayStr, stepDate, formatDay } from "./lib/day";
+// v18.15.0: the header's "whose clock is this" note.
+import { zoneNote, offsetLabel } from "./lib/time-zones";
 import { onPrintEnd, printOrReport, PRINT_IGNORED_TEXT } from "./lib/print-end";
 import { retentionLabel } from "./lib/activity";
 import { noteCrashView } from "./lib/crash-report";
@@ -3767,6 +3769,11 @@ export function BookingApp({uid}){
   const dateCtrlMotion=summaryLine.settled?"transform "+M.shift:"none";
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
+  // v18.15.0: "Canary time" beside the date while THIS device's clock reads
+  // differently from the restaurant's (offsets compared, so Lisbon shows
+  // nothing). Every time on screen is the restaurant's (lib/day.js), and this
+  // is what tells somebody on a phone abroad that the now-line is not wrong.
+  const clockNote=zoneNote(generalSettings.timeZone);
   const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} vouchersOn={vouchersOn} tagList={tagList} guestTags={guestTags} />;
   // v18.4.0: the printed timeline, mounted for the one print that asked for it.
   const TimelineSheet=printJob&&printJob.kind!=="sheet"?printJob.Sheet:null;
@@ -4030,7 +4037,11 @@ export function BookingApp({uid}){
               inputProps={{"aria-label":"Viewed date"}}
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
-              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:dateCtrlMotion}}><Presence show={viewDate!==todayStr()} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
+              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:dateCtrlMotion}}>{clockNote?<span
+              title={"Every time here is the restaurant's: "+generalSettings.timeZone+", "+offsetLabel(generalSettings.timeZone)+". This device's clock reads differently."}
+              /* The row is top-aligned, so the label takes a control's height
+                 to sit on the date pill's centre line. */
+              style={{display:"inline-flex",alignItems:"center",minHeight:H.control,fontSize: T.small,fontWeight: FW.semi,color:"var(--text-secondary)",whiteSpace:"nowrap"}}>{clockNote}</span>:null}<Presence show={viewDate!==todayStr()} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
               onClick={function(){goToDate(todayStr());}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence>{/* v16.0.0: waitlist badge — lives in the Today slot (to Today's right when

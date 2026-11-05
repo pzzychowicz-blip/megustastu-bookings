@@ -40317,3 +40317,11 @@ to 22:33 with no reload, and typing "canary" + Enter put it back, with Settings 
 
 `tests/time-zones.test.js`: the list, the names, the offsets (Canary summer and winter, New York, Kolkata, St John's), the search, the tenant's zone, the
 boot order, the whitelist and seed, and `applyClock` above both `setGS`. `tests/schema.test.js` re-pinned at 6.
+
+### Phase 4 — the header says whose clock it is
+
+"Canary time" beside the viewed date (`clockNote`, from `zoneNote(generalSettings.timeZone)`, `lib/time-zones.js`), shown only while this device's offset
+differs from the restaurant's, so Lisbon and London show nothing next to the Canaries and a phone in Poland does. Its tooltip names the zone and its
+offset. It takes a control's height (`H.control`) because the date row is top-aligned: without it the text sat on the pill's top edge (seen on DEV).
+`--text-secondary` on the app's own background, no new fill. **Measured on DEV with this Mac on Africa/Cairo:** the note shows, centred on the date pill,
+and the now-line beside it reads the Canaries' 21:36 at the Mac's 23:36. `tests/time-zones.test.js` pins its place after the date `<nav>` and before Today.
