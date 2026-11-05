@@ -40463,3 +40463,28 @@ entries: grouping, Canary times, `::` neutralised, no email in any line); and th
 proposal. `RUNBOOK.md` says which of these wait on that PR.
 
 **Files:** `RUNBOOK.md` (new) · `CLAUDE.md` · `database.rules.README.md`.
+
+### The live zone check
+
+Run headless on the worktree's dev server (`:5179`, DEV Firebase), on a copy of the capture profile, with the device's zone set per run
+(Playwright `timezoneId`). Every write the page sent was dropped and recorded, so nothing reached DEV. Measured 2026-11-05, 22:16 in the Canaries.
+
+**Ten runs: five device zones at two clocks** (the real clock, and `Date` shifted from the first line so the restaurant reads 15:30). In every run
+the app's zone was Atlantic/Canary, and its date was 2026-11-05. That held in Tokyo too, where the device read 07:17 and 00:30 on the 6th. The
+now-line stood at the restaurant's minute, the walk-in form opened on that minute, and the header note read "Canary time" in Warsaw, New York and
+Tokyo but not in the Canaries or Lisbon (the same offset). The device's own clock was read in the same run, to show the zone had taken.
+
+**Auto-extend and auto-complete, with a seated party injected into the page's copy of `/bookings`** over the socket (14:30, 90 minutes, so it
+ends at 16:00 in the Canaries; never written to DEV):
+
+| Restaurant clock · device zone | Device read | Write the page attempted |
+|---|---|---|
+| 15:30 · Canaries, Warsaw, New York, Tokyo | 15:30 · 16:30 · 10:30 · 00:30 (6th) | none in any of the four. The old code extended it in Warsaw |
+| 16:30 · Canaries (the control) | 16:30 | duration 90 → 120 |
+| 16:30 · New York | 11:30 | duration 90 → 120. The old code wrote nothing |
+| 22:16 · Canaries, New York (after close) | 22:16 · 17:16 | completed, duration 450 (14:30 to the 22:00 close) in both. The old code wrote nothing in New York |
+
+The two controls show that the rig records a write when one is due, so the four empty rows mean nothing was attempted, not that the rig missed it.
+
+**Not covered here:** the installed app on the tablet, the Settings picker on a device, the server's dating of a WhatsApp message sent at 00:30
+Canary time (which needs the sandbox after the merge), and the crash trail on a second device.
