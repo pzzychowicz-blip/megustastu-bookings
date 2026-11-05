@@ -40494,3 +40494,7 @@ Canary time (which needs the sandbox after the merge), and the crash trail on a 
 repository's Actions retention to 30 days. The setting read 90 before and reads 30 after (a `gh api` read-back). `crash-digest` is registered
 and active, and its first scheduled run is 07:00 UTC on 2026-11-06. `RUNBOOK.md` no longer says these wait on that PR, and its crash-digest
 line now says 30 hours rather than 24, which is what the job reads.
+Its first run against PROD was a manual one over 720 hours, at Patryk's request
+([run 42121524651](https://github.com/pzzychowicz-blip/mgt-backups/actions/runs/42121524651), 10 seconds). It printed "No crashes in the
+last 720 hours." and passed. That shows the token exchange and the `kind`-indexed read work on PROD: a refused token, or a query PROD's rules
+have no index for, fails the run. PROD logged no crash in those 30 days. The two test crashes are on DEV.
