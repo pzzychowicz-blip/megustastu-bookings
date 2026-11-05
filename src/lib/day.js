@@ -28,6 +28,163 @@
 // dependency-free; if a helper needs a live binding, it belongs in
 // booking-logic.js instead.
 
+// ── v18.15.0: the RESTAURANT's clock, not the device's ───────────────────────
+// Until this version every reading of "now" asked the DEVICE (`getHours()`,
+// `getDate()`), which is only the restaurant's clock while the device sits in
+// the restaurant's zone. A phone in Poland (an hour ahead of the Canaries all
+// year) drew the now-line an hour late, raised late warnings an hour early, and
+// — the part that reached the database — had auto-extend stretch every seated
+// party by the hour it believed had passed. West of the Canaries, a walk-in in
+// the evening was filed under yesterday.
+//
+// A booking's own `date` + `time` are a WALL-CLOCK pair with no zone, which is
+// right: 20:00 means 20:00 at the restaurant, wherever it is read. What had to
+// change is every reading of an INSTANT (now, a stored `at`) into a wall clock.
+// That now happens here and only here: `wallClock(instant)` gives the
+// restaurant's date and time for an instant, and every helper below is built
+// on it. `tests/clock-reads.test.js` fails a local getter anywhere else.
+//
+// The zone is set, not imported (this file imports nothing): `main.jsx` sets
+// the tenant's `profile.timeZone` before the first render, and
+// `useGeneralSettings` sets `settings/general.timeZone` when it loads, so no
+// render ever reads the device's zone by accident. UNSET (null) means the
+// device's zone, which is what every test that does not set one gets, and is
+// exactly the behaviour before this version.
+let ZONE = null;
+
+// Is `tz` a zone this engine can format in? A typo, an empty string or a zone
+// the engine has never heard of answers false, and `setTimeZone` then falls
+// back to the device's zone rather than throwing from inside a render.
+export function isValidTimeZone(tz) {
+  if (typeof tz !== "string" || tz === "") return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Returns the zone actually in force (null = the device's), so a caller can
+// tell an accepted zone from a rejected one.
+export function setTimeZone(tz) {
+  ZONE = isValidTimeZone(tz) ? tz : null;
+  return ZONE;
+}
+
+// The zone in force, or null for the device's own.
+export function timeZone() {
+  return ZONE;
+}
+
+// The device's own zone, for the header's "whose clock is this" label. null
+// when the engine will not say.
+export function deviceTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
+
+// One formatter per zone: building an Intl.DateTimeFormat is the expensive
+// part, and the app formats in one zone all day.
+const FORMATTERS = new Map();
+function formatterFor(tz) {
+  let f = FORMATTERS.get(tz);
+  if (!f) {
+    // `hourCycle: "h23"`, never `hour12: false`: the latter prints midnight as
+    // "24" in some engines, which would read as 1440 minutes.
+    f = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hourCycle: "h23", weekday: "short",
+      year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric",
+    });
+    FORMATTERS.set(tz, f);
+  }
+  return f;
+}
+const DOW = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+// A one-entry cache, keyed on the zone and the MINUTE. "Now" is read many times
+// per render (every booking's late state, the now-line, `todayStr()` in a
+// dozen places) and always lands in the same minute, so this turns all of those
+// into one `formatToParts`. Minute precision is safe because every real zone's
+// offset is a whole number of minutes, and nothing here reports seconds.
+let lastKey = null;
+let lastClock = null;
+
+// The wall clock at the restaurant for an instant: `{y, m, d, h, min, dow}`,
+// month 1–12, weekday 0 = Sunday. `now` is a Date, a millisecond count, or
+// absent for the current instant. `tz` overrides the zone in force (the server
+// passes the restaurant's explicitly; `undefined` means "the one set").
+//
+// An invalid instant answers NaN in every field, as the local getters did, so a
+// caller that formatted garbage before formats the same garbage now rather
+// than throwing (`formatToParts` throws a RangeError on an Invalid Date).
+export function wallClock(now, tz) {
+  const d = now == null ? new Date() : (now instanceof Date ? now : new Date(now));
+  const t = d.getTime();
+  const zone = tz === undefined ? ZONE : (isValidTimeZone(tz) ? tz : null);
+  if (!Number.isFinite(t)) return { y: NaN, m: NaN, d: NaN, h: NaN, min: NaN, dow: NaN };
+  if (!zone) {
+    // The device's zone: the getters this version replaced, verbatim.
+    return { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate(), h: d.getHours(), min: d.getMinutes(), dow: d.getDay() };
+  }
+  const key = zone + "|" + Math.floor(t / 60000);
+  if (key === lastKey) return lastClock;
+  const out = { y: 0, m: 0, d: 0, h: 0, min: 0, dow: 0 };
+  for (const p of formatterFor(zone).formatToParts(d)) {
+    if (p.type === "year") out.y = Number(p.value);
+    else if (p.type === "month") out.m = Number(p.value);
+    else if (p.type === "day") out.d = Number(p.value);
+    else if (p.type === "hour") out.h = Number(p.value) % 24;
+    else if (p.type === "minute") out.min = Number(p.value);
+    else if (p.type === "weekday") out.dow = DOW[p.value];
+  }
+  lastKey = key;
+  lastClock = out;
+  return out;
+}
+
+// Minutes since the restaurant's midnight, now (or at `now`). The `nowMins`
+// every view and effect works in: `useNowMins` ticks it.
+export function nowMinutes(now) {
+  const c = wallClock(now);
+  return c.h * 60 + c.min;
+}
+
+// "HH:MM" at the restaurant for an instant: a stored `at`, a message's `ts`.
+// "" for anything that is not an instant, so a row with no stamp shows nothing
+// rather than "NaN:NaN".
+export function clockTime(at) {
+  if (at == null || at === "") return "";
+  const c = wallClock(at);
+  if (!Number.isFinite(c.h)) return "";
+  return String(c.h).padStart(2, "0") + ":" + String(c.min).padStart(2, "0");
+}
+
+// The zone's offset from UTC at an instant, in minutes (Canary summer: 60).
+// From the wall clock itself, so it agrees with `wallClock` by construction.
+// NaN for an invalid instant.
+export function zoneOffsetMinutes(at, tz) {
+  const t = at == null ? Date.now() : (at instanceof Date ? at.getTime() : new Date(at).getTime());
+  if (!Number.isFinite(t)) return NaN;
+  const c = wallClock(t, tz);
+  return (Date.UTC(c.y, c.m - 1, c.d, c.h, c.min) - Math.floor(t / 60000) * 60000) / 60000;
+}
+
+// The INSTANT a wall-clock time at the restaurant names — the inverse of
+// `wallClock`. Two passes, because the offset to use is the one in force AT the
+// answer, which the first guess may sit on the wrong side of a clock change
+// from. A time that does not exist (inside a spring-forward gap) lands after
+// the gap; one that exists twice (an autumn hour) takes the first.
+export function wallToInstant(y, m, d, h, min) {
+  if (!ZONE) return new Date(y, m - 1, d, h, min).getTime();
+  const guess = Date.UTC(y, m - 1, d, h, min);
+  const first = guess - zoneOffsetMinutes(guess, ZONE) * 60000;
+  return guess - zoneOffsetMinutes(first, ZONE) * 60000;
+}
+
 // v17.16.2 (CT-2B-03): TODAY, in the local timezone.
 //
 // This replaces 44 copies of `new Date().toISOString().slice(0,10)`, which
@@ -50,11 +207,14 @@
 // pass a date-only string: that parses as UTC midnight, which lands on the
 // PREVIOUS local day in any zone west of UTC, i.e. it reintroduces the bug this
 // function exists to remove.
+//
+// v18.15.0: "local" now means the RESTAURANT's zone (`wallClock`, above), and
+// the device's only while no zone is set.
 export function todayStr(now) {
-  const d = now || new Date();
-  return String(d.getFullYear()) + "-" +
-    String(d.getMonth() + 1).padStart(2, "0") + "-" +
-    String(d.getDate()).padStart(2, "0");
+  const c = wallClock(now || new Date());
+  return String(c.y) + "-" +
+    String(c.m).padStart(2, "0") + "-" +
+    String(c.d).padStart(2, "0");
 }
 
 // Whole days FROM `fromDateStr` TO `toDateStr` — positive when `to` is later.
@@ -162,11 +322,25 @@ export function isReadableDate(v) {
 // three become NaN the moment `"T00:00:00"` is appended, because that suffix
 // only makes sense on an ISO date (measured, node 24). Defined by its OUTPUT,
 // the way `stepUTC` is, rather than by a format it hopes covers the inputs.
+//
+// v18.15.0: the RESTAURANT's midnight to its next one (`wallToInstant`), so the
+// log shows the restaurant's day on a device in another zone. The accepted
+// inputs are unchanged: only a "YYYY-MM-DD" with a month 1–12 and a day 1–31,
+// which is exactly what the `"T00:00:00"` parse accepted (it rolls 02-30 over
+// to March the same way `Date.UTC` does). The end is the NEXT midnight rather
+// than `from + 24 h`, so a clock-change day is 23 or 25 hours long, as it is.
+const DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 export function dayRangeMs(dateStr) {
   if (!isReadableDate(dateStr)) return null;
-  const from = new Date(dateStr + "T00:00:00").getTime();
-  if (!Number.isFinite(from)) return null;
-  return { from: from, to: from + 86400000 - 1 };
+  const m = DAY_RE.exec(dateStr);
+  if (!m) return null;
+  const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const from = wallToInstant(y, mo, d, 0, 0);
+  const next = new Date(Date.UTC(y, mo - 1, d + 1));
+  const to = wallToInstant(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), 0, 0) - 1;
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
+  return { from: from, to: to };
 }
 
 // v17.16.11: `addDays` for the four sites that step the VIEWED date, anchoring

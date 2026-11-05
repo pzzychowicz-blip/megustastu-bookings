@@ -40259,3 +40259,26 @@ and that produced a false blur finding here until the clip was rebuilt from a re
   raise the same bubble, nothing was measured, and it is an iOS bubble on an app the restaurant runs on Android.
 
 **After:** main entry 455.52 kB (134.47 gz); 4,299 tests; 0 lint errors, 63 warnings; style OK.
+
+## v18.15.0 — the restaurant's clock, and the production-readiness fixes
+
+**Date:** 2026-11-05 · **Branch:** `feat/v18.15.0-production-ready`
+
+**Why:** Patryk put a generic "production-ready checklist" to the app and asked what happens when it is opened in a time zone other than the restaurant's.
+The answer was a defect: every reading of "now" asked the DEVICE's clock. A phone in Poland drew the now-line an hour late and raised late warnings an
+hour early, and auto-extend, auto-complete at close and "complete seated" wrote durations an hour long into the shared database. West of the Canaries,
+an evening walk-in was filed under yesterday. The server told Gemini "Today is" in UTC. The rest of the checklist became the other phases of this version
+(the plan: `/Users/patrykzychowicz/.claude/plans/elegant-baking-puzzle.md`). Two findings were withdrawn on checking: backups are automatic (the private
+`mgt-backups` repo, daily, encrypted, restore rehearsed 2026-10-10), and the API has no open endpoint (the webhook is HMAC-gated, the rest need a staff token).
+
+### Phase 1 — the restaurant's clock in `lib/day.js`
+
+`wallClock(instant, tz?)` is the one reading of an instant as a wall clock: `{y, m, d, h, min, dow}` in the zone set by `setTimeZone`, from one cached
+`Intl.DateTimeFormat` per zone (`hourCycle: "h23"`, so midnight is 0, never 24) and a one-entry cache keyed on zone and minute, since "now" is read many
+times a render and always in the same minute. `todayStr`, the new `nowMinutes`, `clockTime(at)`, `zoneOffsetMinutes` and `wallToInstant` (its inverse,
+two passes so a clock-change day lands right) are built on it. `dayRangeMs` is the restaurant's midnight to its NEXT midnight, so the change days are 23
+and 25 hours long, as they are; its accepted inputs are unchanged. **No zone set means the device's**, with the old getters verbatim, so every test that
+sets none, and every caller before phase 3 sets one, behaves exactly as before. The file still imports nothing.
+
+`tests/day.test.js`: the restaurant at Atlantic/Canary, the device moved through Warsaw, New York, UTC, the Canaries and Kiritimati; today, now, the two
+2026 clock changes, the offset, the inverse, the day range, an unknown zone (refused, device clock, never a throw) and an invalid instant.
