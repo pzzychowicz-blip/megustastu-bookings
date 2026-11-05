@@ -40456,4 +40456,10 @@ disagree between sources, so the runbook says to read them when signing up.
 characters). `database.rules.README.md` § Backups said the manual download was "the only one", which had been stale since `mgt-backups` began. It
 now names both. Nothing on `ROADMAP.md` covered these items, so nothing was removed.
 
+**In `mgt-backups`, on its own branch and PR** (`v18.15.0-retention-and-digest`, four commits, not pushed): backups kept 30 days instead of 90
+(the repository's own retention setting reads 90 today, measured with a read-only `gh api` call, and is Patryk's to change); the daily crash digest
+(`crash-digest.mjs` + `crash-digest.yml`, looking back 30 hours because scheduled runs start hours late; its pure half was checked on synthetic
+entries: grouping, Canary times, `::` neutralised, no email in any line); and the freshness check every day instead of every Monday, the plan's
+proposal. `RUNBOOK.md` says which of these wait on that PR.
+
 **Files:** `RUNBOOK.md` (new) · `CLAUDE.md` · `database.rules.README.md`.

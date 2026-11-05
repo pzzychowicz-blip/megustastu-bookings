@@ -52,8 +52,9 @@ new deployment). The sandbox follows `main`, so it shows the fix first.
 
 **Where the backups are.** Every day the `mgt-backups` repo takes an encrypted copy of
 the PROD database (`backup.yml`, about 04:30 UTC, often hours late because GitHub
-starts scheduled jobs late). A second job (`freshness.yml`, every Monday) fails, and
-GitHub emails you, when the newest backup is more than 48 hours old. Settings → General →
+starts scheduled jobs late), and keeps it for 30 days (90 until that repo's 2026-11
+PR). A second job (`freshness.yml`, every day from that PR, Mondays before it) fails,
+and GitHub emails you, when the newest backup is more than 48 hours old. Settings → General →
 **Download backup** makes one by hand at any moment.
 
 **Restoring** is a Firebase-console job, and it is written out step by step in
