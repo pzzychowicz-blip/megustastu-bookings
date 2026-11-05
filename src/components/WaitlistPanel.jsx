@@ -63,7 +63,7 @@
 import { useState } from "react";
 import { BTN, S, BLOCK_BG, R, T, FW, IC, SP, ROW_FOLD } from "../lib/constants";
 import { formatPhone } from "../lib/customers";
-import { formatDay } from "../lib/day";
+import { formatDay, clockTime } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
 import { tagLabels } from "../lib/tags";
 import { markArmed, armSettled } from "../lib/arm-guard";
@@ -89,8 +89,7 @@ const ZONE_FLAG = { display: "inline-flex", alignItems: "center", gap: SP.tight,
 
 function addedLabel(ts){
   if(!ts) return "";
-  const d=new Date(ts);
-  return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+  return clockTime(ts); // v18.15.0: the restaurant's clock
 }
 
 export function WaitlistPanel({ entries, availability, date, onBook, onRemove, onClose, catchingUp = false, tagList }){

@@ -55,7 +55,7 @@ import {
   getDur, nowTime, getKitchenLoad, walkinRefusal
 } from "../lib/booking-logic";
 import { walkinBooking } from "../lib/booking-save";
-import { todayStr } from "../lib/day";
+import { todayStr, nowMinutes } from "../lib/day";
 
 // v17.14.0: `showWalkin` is now OWNED BY APP and passed in — it is one entry in
 // the app's single modal stack, the same "legitimately shared" arrangement
@@ -141,7 +141,7 @@ export function useWalkin({
   // v18.3.3: the refusal for a walk-in right now, or null (`walkinRefusal`).
   function closedNow(){
     const d=new Date();
-    return walkinRefusal(todayStr(d),todayStr(d),d.getHours()*60+d.getMinutes());
+    return walkinRefusal(todayStr(d),todayStr(d),nowMinutes(d));
   }
   // saveWalkin: kitchen-load guard. If adding this walk-in would push
   // simultaneous starts over KITCHEN_TABLE_LIMIT, raise the shared

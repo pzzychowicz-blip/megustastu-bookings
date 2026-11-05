@@ -7,7 +7,7 @@
 // lines 441–521. No semantic changes.
 
 import { toMins } from "./booking-logic";
-import { todayStr } from "./day";
+import { todayStr, nowMinutes, weekdayShort, WEEKDAY_SHORT } from "./day";
 
 // ── v14 preview 7: Reminder helpers (module-level, pure) ────────────────────
 // `rem_<id>_<YYYY-MM-DD>_<HH:MM>` — identifies one fire slot. Per-slot keys
@@ -16,13 +16,17 @@ import { todayStr } from "./day";
 export function reminderFireKey(id,date,time){return "rem_"+id+"_"+date+"_"+time;}
 
 // Is this reminder active for the given date? Handles both recurrence types.
-// For weekly, noon-local is used to sidestep DST shifts crossing midnight.
+// For weekly, the weekday of the DATE itself (v18.15.0: through `weekdayShort`,
+// all-UTC, where it read `new Date(date+"T12:00:00").getDay()`, local noon, to
+// sidestep DST; both name the date's own weekday, and a non-canonical date
+// matches no weekday in either).
 export function reminderAppliesTo(r,date){
   if(!r||!r.active) return false;
   var rec=r.recurrence||{};
   if(rec.type==="once") return rec.date===date;
   if(rec.type==="weekly"){
-    var dow=new Date(date+"T12:00:00").getDay();
+    var wd=weekdayShort(date);
+    var dow=wd?WEEKDAY_SHORT.indexOf(wd):-1;
     return Array.isArray(rec.days)&&rec.days.indexOf(dow)>=0;
   }
   return false;
@@ -83,7 +87,7 @@ export function validateReminderDraft(d){
     var now=new Date();var today=todayStr(now);
     if(rec.date<today) return "Date is in the past.";
     if(rec.date===today){
-      var nowM=now.getHours()*60+now.getMinutes();
+      var nowM=nowMinutes(now);
       var anyFuture=d.times.some(function(t){return toMins(t)>nowM;});
       if(!anyFuture) return "All times are in the past.";
     }

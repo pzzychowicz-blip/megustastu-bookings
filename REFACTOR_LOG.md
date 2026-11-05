@@ -40282,3 +40282,17 @@ sets none, and every caller before phase 3 sets one, behaves exactly as before. 
 
 `tests/day.test.js`: the restaurant at Atlantic/Canary, the device moved through Warsaw, New York, UTC, the Canaries and Kiritimati; today, now, the two
 2026 clock changes, the offset, the inverse, the day range, an unknown zone (refused, device clock, never a throw) and an invalid instant.
+
+### Phase 2 — every clock read goes through `lib/day.js`
+
+Each site that read an instant on the device's clock now asks `day.js`: `nowMinutes()` in `useNowMins`, `useAutoOptimizer`, `useWalkin`'s
+`closedNow`, `bookingsAfterAction`, `nowTime` and both seated → completed durations in `booking-save.js`; `clockTime(at)` for the waitlist's
+"added", the activity log's rows and its CSV `stamp`, a booking's history, the WhatsApp bubbles (`formatClockTime`) and the usage panel's
+"updated"; `wallClock().dow` for a new weekly reminder's default day; `wallClock` + `wallToInstant` for a voucher's expiry, so its last day is
+the restaurant's. Two sites read a DATE and were already zone-proof; they moved anyway so the guard can be absolute: `reminderAppliesTo` takes the
+weekday through `weekdayShort` (all-UTC) instead of local noon. The simulator's "today" (App's `todayIso`, `WaSimulator`'s default, the scenarios'
+`isoPlus` / `nextDow`) was UTC's and is now `todayStr()` stepped with `addDays`.
+
+**The guard:** `tests/clock-reads.test.js` scans `src/` and `api/`, comments stripped, for a local getter or setter, a locale date or time format
+or an `Intl.DateTimeFormat` without `timeZone`, and `new Date().toISOString().slice(0, 10)`. Only `day.js` is allowed. Date-only arithmetic
+(`getUTC*`) and number formatting do not match, which the guard's own first test pins.

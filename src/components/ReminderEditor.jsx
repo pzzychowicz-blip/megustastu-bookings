@@ -37,7 +37,7 @@ import { validateReminderDraft } from "../lib/reminders";
 import { Overlay, Fld, InlineAlert, ModalTitle, Toggle, Reveal, RowSlot, mkBtn, mkSolidBtn, mkInp, mkArea, AutoHeight, DateField, mkRemoveX } from "./atoms";
 import { FoldRows } from "./FoldRows";
 import { CloseIcon } from "./Icons";
-import { todayStr } from "../lib/day";
+import { todayStr, wallClock } from "../lib/day";
 
 // Mon-first display order; `i` is the underlying getDay() index stored in
 // recurrence.days. Sun is at the end (index 0).
@@ -83,7 +83,8 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
       newRec = {
         type: "weekly",
         date: rec.date || today,
-        days: rec.days && rec.days.length ? rec.days : [new Date().getDay()]
+        // v18.15.0: today's weekday at the restaurant (`wallClock`), not the device's.
+        days: rec.days && rec.days.length ? rec.days : [wallClock().dow]
       };
     }
     setDraft({ ...draft, recurrence: newRec });

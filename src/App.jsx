@@ -1305,7 +1305,7 @@ export function BookingApp({uid}){
     if(!WA_SANDBOX) return;
     let cancelled=false;
     const ctx=function(){return waSimCtxRef.current;};
-    const todayIso=function(){return new Date().toISOString().slice(0,10);};
+    const todayIso=function(){return todayStr();}; // v18.15.0: the restaurant's day, was UTC's
     Promise.all([import("./lib/wa-sim"),import("./lib/wa-sim-scenarios")]).then(function(mods){
     if(cancelled) return;
     const simulateInbound=mods[0].simulateInbound;

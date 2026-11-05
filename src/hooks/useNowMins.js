@@ -18,16 +18,17 @@
 // use the system clock. Keeping the setter internal makes that explicit.
 
 import { useState, useEffect } from "react";
+// v18.15.0: minutes since the RESTAURANT's midnight (`nowMinutes`, lib/day.js),
+// not the device's, so a phone in another zone draws the same now-line.
+import { nowMinutes } from "../lib/day";
 
 export function useNowMins(){
   const [nowMins, setNowMins] = useState(function(){
-    const d=new Date();
-    return d.getHours()*60+d.getMinutes();
+    return nowMinutes();
   });
   useEffect(function(){
     const t=setInterval(function(){
-      const d=new Date();
-      setNowMins(d.getHours()*60+d.getMinutes());
+      setNowMins(nowMinutes());
     },15000);
     return function(){clearInterval(t);};
   },[]);

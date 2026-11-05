@@ -27,7 +27,7 @@ import {
   PICK_RULES,
   TURN_BUFFER
 } from "./constants.js"; // WA sandbox: explicit ".js" — Node ESM chain, see customers.js
-import { todayStr, nowOn } from "./day.js"; // WA sandbox: same ESM chain — see above
+import { todayStr, nowOn, nowMinutes } from "./day.js"; // WA sandbox: same ESM chain — see above
 // v18.3.2: the phone rule's two halves, for `phoneForSave`. `phone-countries.js`
 // imports nothing, so this edge cannot close a cycle; ".js" for the ESM chain.
 import { withTypedCode, phoneHasCode } from "./phone-countries.js";
@@ -1637,8 +1637,7 @@ function sameBookings(a,b){
 // as immutable — none of them mutates it today (all read via map/filter/find),
 // and the returned array may now BE the caller's own input.
 export function bookingsAfterAction(updatedBks,date,blocks,changedId,forceReassign,autoOptimizerState){
-  var today=todayStr();
-  var d=new Date();var nowM=d.getHours()*60+d.getMinutes();
+  var now=new Date();var today=todayStr(now);var nowM=nowMinutes(now);
   var synced=syncLiveDurations(updatedBks,today,nowM);
   var out=computeAfterAction(synced,date,blocks,changedId,forceReassign,autoOptimizerState);
   return sameBookings(out,updatedBks)?updatedBks:out;
@@ -1899,7 +1898,7 @@ export function checkInefficent(bookings,date){
 // Current local time as "HH:MM" — module-level convenience for any caller
 // that needs "right now" formatted as a clock string. Previously inlined in
 // App.jsx and WalkinForm (`localNowTime`).
-export function nowTime(){var d=new Date();return toTime(d.getHours()*60+d.getMinutes());}
+export function nowTime(){return toTime(nowMinutes());}
 
 // Sort priority for the day-list view: seated first (most operationally
 // urgent), then confirmed (upcoming), pending (awaiting confirmation, v17.0.0),

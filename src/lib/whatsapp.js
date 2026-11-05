@@ -402,7 +402,7 @@ import { formatPhone as _formatPhone, matchCustomerByPhone as _matchByPhone, nor
 // re-expressed — see sanitizeParse below. Both files carry their explicit .js
 // extension because api/_lib imports this module under Node ESM.
 import { isReadableTime, countLabel } from "./booking-logic.js";
-import { isReadableDate, formatDay, localDay, stepDate } from "./day.js";
+import { isReadableDate, formatDay, localDay, stepDate, clockTime } from "./day.js";
 // v18.11.0: the occasion ids a parse may carry are a booking's tag ids, so they
 // are cleaned by the rule a booking's are (`cleanTagIds`). tags.js imports nothing.
 import { cleanTagIds, knownTagIds, unionTagIds } from "./tags.js";
@@ -505,11 +505,11 @@ export function threadItems(messages, today) {
   return out;
 }
 
-// Format a timestamp as an inline bubble caption ("14:32").
+// Format a timestamp as an inline bubble caption ("14:32"), at the restaurant
+// (v18.15.0: `clockTime`, lib/day.js).
 export function formatClockTime(ts) {
   if (!ts) return "";
-  const d = new Date(ts);
-  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  return clockTime(ts);
 }
 
 // Format remaining time on the 24h WA window → { label, expired } or null.

@@ -47,7 +47,7 @@ import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
 // v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay
 // order) — since v18.0.0 session 7's /code-review, lib/day.js's WEEKDAY_SHORT,
 // which this line used to copy byte for byte.
-import { WEEKDAY_SHORT as RULE_WD, todayStr } from "../lib/day";
+import { WEEKDAY_SHORT as RULE_WD, todayStr, clockTime } from "../lib/day";
 import { guestsLabel, countLabel } from "../lib/booking-logic";
 
 // v18.2.0 phase 51: a standing-booking row's switch + Delete RESERVE their
@@ -1375,7 +1375,7 @@ function WaCostSection() {
   const text = { fontSize: T.body, color: "var(--text-primary)", textAlign: "left" };
   const faint = { fontSize: T.micro, color: "var(--text-muted)", textAlign: "left" };
   const updated = figures && Number.isFinite(d.at)
-    ? new Date(d.at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+    ? clockTime(d.at) // v18.15.0: the restaurant's clock
     : null;
   return (
     <Collapsible

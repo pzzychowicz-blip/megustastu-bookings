@@ -49,7 +49,7 @@ import { customerIndex } from "../lib/customers";
 // `addDays` rather than hand-rolled date arithmetic for the quick ranges,
 // because `setDate(getDate() - 6)` returns the SAME date on the spring-forward
 // day (v17.16.2).
-import { todayStr, addDays, formatDay, formatDaysIn, localDay, showsYear } from "../lib/day";
+import { todayStr, addDays, formatDay, formatDaysIn, localDay, showsYear, clockTime } from "../lib/day";
 import { DownloadIcon } from "./Icons";
 // v18.2.0 /code-review: the entry count joins its word like every other count.
 import { countLabel } from "../lib/booking-logic";
@@ -79,8 +79,7 @@ const CHIP_H = { minHeight: H.chip };
 
 function timeOf(ms) {
   if (!ms) return "";
-  const d = new Date(ms);
-  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  return clockTime(ms); // v18.15.0: the restaurant's clock
 }
 
 // v18.0.0 session 11: the day, for a list that can now span them. `dd.mm`

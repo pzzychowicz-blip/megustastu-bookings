@@ -51,7 +51,7 @@
 // v18.2.0 (the design critique, C1): the module's one import, so a refusal
 // names the other booking's day the way the rest of the app writes it. day.js
 // imports nothing, so this cannot close a loop.
-import { formatDay } from "./day.js";
+import { formatDay, wallClock, wallToInstant } from "./day.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -188,9 +188,11 @@ export function redeemedTotal(v) {
 //
 // Two details that are decisions rather than arithmetic:
 //
-//   * The result is the END of the target day (23:59:59.999 local). A voucher
-//     sold at 21:00 and given 12 months is usable for the whole of its last
-//     day, which is what a customer holding it would assume.
+//   * The result is the END of the target day (23:59:59.999 at the restaurant:
+//     since v18.15.0 its calendar, `wallClock` / `wallToInstant`, so a voucher
+//     sold from a device in another zone ends on the restaurant's day). A
+//     voucher sold at 21:00 and given 12 months is usable for the whole of its
+//     last day, which is what a customer holding it would assume.
 //   * A day-of-month that does not exist in the target month is CLAMPED back to
 //     that month's last day, not overflowed. Jan 31 + 1 month is Feb 28, not
 //     Mar 3 — `Date.setMonth` alone gives the latter, and silently handing out
@@ -200,14 +202,13 @@ export function expiryFrom(issuedAt, months) {
   const m = Math.floor(Number(months) || 0);
   if (m <= 0) return null;
   const base = Number(issuedAt) || Date.now();
-  const d = new Date(base);
-  const day = d.getDate();
-  d.setDate(1);
-  d.setMonth(d.getMonth() + m);
-  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  d.setDate(Math.min(day, lastDay));
-  d.setHours(23, 59, 59, 999);
-  return d.getTime();
+  const c = wallClock(base);
+  const total = c.m - 1 + m;
+  const y = c.y + Math.floor(total / 12);
+  const mo = (total % 12) + 1;
+  // Day 0 of the NEXT month is this month's last day; all-UTC, so no zone moves it.
+  const lastDay = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  return wallToInstant(y, mo, Math.min(c.d, lastDay), 23, 59) + 59999;
 }
 
 export function isExpired(v, now) {
