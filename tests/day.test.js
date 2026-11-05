@@ -18,7 +18,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import process from "node:process";
 import { todayStr, dayDiff, nowOn, addDays, stepDate, isReadableDate, dayRangeMs, weekdayShort,
-  setTimeZone, timeZone, isValidTimeZone, wallClock, nowMinutes, clockTime, zoneOffsetMinutes, wallToInstant } from "../src/lib/day.js";
+  setTimeZone, timeZone, isValidTimeZone, wallClock, nowMinutes, clockTime, zoneOffsetMinutes, wallToInstant, onTimeZoneChange } from "../src/lib/day.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
 
 const REAL_TZ = process.env.TZ;
@@ -510,5 +510,21 @@ describe("the restaurant's clock — the device's zone no longer matters", () =>
       expect(todayStr(bad)).toBe(deviceAnswer);
       for (const v of [null, "", "abc", NaN]) expect(clockTime(v), String(v)).toBe("");
     });
+  });
+});
+
+describe("onTimeZoneChange — a held reading re-reads when the zone moves", () => {
+  it("fires once per CHANGE, after the zone is in force, and unsubscribes", () => {
+    const seen = [];
+    const off = onTimeZoneChange((tz) => seen.push([tz, timeZone()]));
+    try {
+      setTimeZone("Atlantic/Canary");
+      setTimeZone("Atlantic/Canary"); // no change, no call
+      setTimeZone("Europe/Warsaw");
+      setTimeZone("Mars/Olympus");    // refused: back to the device's, a change
+    } finally { off(); setTimeZone(null); }
+    expect(seen).toEqual([["Atlantic/Canary", "Atlantic/Canary"], ["Europe/Warsaw", "Europe/Warsaw"], [null, null]]);
+    setTimeZone("Atlantic/Canary"); setTimeZone(null);
+    expect(seen).toHaveLength(3);
   });
 });

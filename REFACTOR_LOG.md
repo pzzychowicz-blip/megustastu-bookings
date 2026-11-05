@@ -40296,3 +40296,24 @@ weekday through `weekdayShort` (all-UTC) instead of local noon. The simulator's 
 **The guard:** `tests/clock-reads.test.js` scans `src/` and `api/`, comments stripped, for a local getter or setter, a locale date or time format
 or an `Intl.DateTimeFormat` without `timeZone`, and `new Date().toISOString().slice(0, 10)`. Only `day.js` is allowed. Date-only arithmetic
 (`getUTC*`) and number formatting do not match, which the guard's own first test pins.
+
+### Phase 3 — the time zone is a restaurant setting
+
+`settings/general.timeZone` (whitelisted in `sanitizeGeneral`: a zone the engine can format in, else the seed), seeded from the tenant's new
+`profile.timeZone: "Atlantic/Canary"`, the way `restaurantName` is seeded from `profile.name` (Patryk's choice over the tenant file alone, so an admin
+can change it without a deploy and the server reads the same value). **`SCHEMA` 5 → 6**: the node is read through a whitelist, so a build without the key
+would save the general settings with the zone gone. No rules change: the node's `.write` validates no field.
+
+- **When the clock moves:** `main.jsx` sets the tenant's zone before `render`, so nothing runs on the device's zone while the node loads. The hook calls
+  `setTimeZone` on the line ABOVE each of its two `setGS` calls (the snapshot and the save), never from an effect, so the render showing the new settings
+  is already on the new clock. `onTimeZoneChange` (`day.js`) re-reads `useNowMins`' held minute at once rather than on its next 15s tick.
+- **The picker** (`TimeZonePicker.jsx`, CountryPicker's shape): every zone the engine knows, searchable by place, region or UTC offset
+  (`lib/time-zones.js`: `zoneList`, `zoneName`, `offsetLabel` with a real minus and half hours, `matchesZone`). In Settings → General → Restaurant, under
+  the name, with one sentence saying what follows it and that bookings keep their times. Its row handlers are the shared `acRowHandlersFor`, called at
+  event time from one set on the listbox: spread per row they were 420 handler objects a render and a React-Compiler ref warning past the lint cap of 63.
+
+**Measured on DEV, on this Mac set to Africa/Cairo (UTC+2, 23:32):** the now-line read 21:32, the Canaries' time. Picking Europe/Warsaw by tap moved it
+to 22:33 with no reload, and typing "canary" + Enter put it back, with Settings left open (Enter stops at the search box).
+
+`tests/time-zones.test.js`: the list, the names, the offsets (Canary summer and winter, New York, Kolkata, St John's), the search, the tenant's zone, the
+boot order, the whitelist and seed, and `applyClock` above both `setGS`. `tests/schema.test.js` re-pinned at 6.

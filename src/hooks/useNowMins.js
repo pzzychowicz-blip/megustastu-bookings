@@ -20,7 +20,7 @@
 import { useState, useEffect } from "react";
 // v18.15.0: minutes since the RESTAURANT's midnight (`nowMinutes`, lib/day.js),
 // not the device's, so a phone in another zone draws the same now-line.
-import { nowMinutes } from "../lib/day";
+import { nowMinutes, onTimeZoneChange } from "../lib/day";
 
 export function useNowMins(){
   const [nowMins, setNowMins] = useState(function(){
@@ -30,7 +30,10 @@ export function useNowMins(){
     const t=setInterval(function(){
       setNowMins(nowMinutes());
     },15000);
-    return function(){clearInterval(t);};
+    // v18.15.0: an admin changing the restaurant's zone moves "now" at once,
+    // not on the next tick.
+    const off=onTimeZoneChange(function(){setNowMins(nowMinutes());});
+    return function(){clearInterval(t);off();};
   },[]);
 
   return { nowMins };

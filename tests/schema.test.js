@@ -158,12 +158,13 @@ const PINNED = {
   // 3: v18.8.0, `settings/admin.waRetentionDays` (sanitizeAdminSettings).
   // 4: v18.10.0, `settings/operatingHours.exceptions` (sanitizeExceptions).
   // 5: v18.12.0, `settings/whatsapp.autoReply` (sanitizeWa).
-  schema: 5,
+  // 6: v18.15.0, `settings/general.timeZone` (sanitizeGeneral).
+  schema: 6,
   prints: {
       "hooks/useBookingDefaults.js:sanitizeTiers": "8d1b9808c9",
       "hooks/useBookingDefaults.js:sanitizeBookingDefaults": "7a6d45c5c4",
       "hooks/useDayShifts.js:sanitizeShifts": "42278cbe80",
-      "hooks/useGeneralSettings.js:sanitizeGeneral": "9497dee0b6",
+      "hooks/useGeneralSettings.js:sanitizeGeneral": "9bbbca8b76",
       "hooks/useLayout.js:sanitizeFloorPlan": "1c43f674f3",
       "hooks/useLayout.js:sanitizeLayout": "317b68da39",
       "hooks/useOptimizerSettings.js:sanitizeOptimizer": "74794693a2",

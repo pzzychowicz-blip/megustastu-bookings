@@ -22,10 +22,16 @@
 //   waitMatchWin   — the waitlist matcher's ± window (minutes) around the
 //                    wanted time (was ±90 in the waitAvail effect).
 //   undoSecs       — how long the undo-after-cancel toast stays (was 10 s).
+//   timeZone       — v18.15.0: where the restaurant IS (an IANA zone). Every
+//                    "now" and "today" is read in it (`setTimeZone`,
+//                    lib/day.js), so a device in another zone shows and writes
+//                    the restaurant's clock. Seeded from the tenant's
+//                    `profile.timeZone`; the server reads this node too
+//                    (`readTimeZone`, api/_lib/rtdb.js).
 //
 // Model: { v, restaurantName, currency, phonePrefix, regularMin,
 // lateCollapseMax, waitMatchWin, undoSecs, defaultBookingSize,
-// defaultWalkinSize (v17.2.0), phoneCountry, pinnedCountries (v18.1.0) }. `v:1` is the presence marker
+// defaultWalkinSize (v17.2.0), phoneCountry, pinnedCountries (v18.1.0), timeZone (v18.15.0) }. `v:1` is the presence marker
 // (the v15.9.0 priorities lesson). Seed = the historical literals, so an
 // absent node is a no-op. Write-guard mirrors useBookingDefaults: `loaded`
 // ref + revGuard CAS (generalRev) — the v16.0.0 rule of law for new nodes.
@@ -37,6 +43,8 @@ import { ref, onValue } from "firebase/database";
 import { db, profile } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clampStep } from "../lib/clamp";
+// v18.15.0: the restaurant's clock.
+import { isValidTimeZone, setTimeZone } from "../lib/day";
 import { dbError } from "../lib/dbError";
 // v18.0.0 session 8: the activity log.
 import { settingsWriteEntry } from "../lib/activity";
@@ -76,7 +84,10 @@ export const DEFAULT_GENERAL_SETTINGS = {
   // seeds neither field. Both stay in the model and the sanitizer because a
   // version still rolling out reads them; `pinnedCountries` is the live one.
   phoneCountry: null,
-  pinnedCountries: DEFAULT_PINNED
+  pinnedCountries: DEFAULT_PINNED,
+  // v18.15.0: the tenant's zone, or null (the device's) for a tenant file that
+  // names none or names one this engine does not know.
+  timeZone: isValidTimeZone(profile.timeZone) ? profile.timeZone : null
 };
 
 // ── The restaurant name's pre-auth cache (v17.9.0) ───────────────────────────
@@ -134,8 +145,20 @@ function sanitizeGeneral(raw){
     // RTDB stores no empty array — writing [] deletes the key — so "nothing
     // pinned" reads back as ABSENT, which would restore the seed. `"none"` is
     // the explicit empty: stored when the list is emptied, read as [].
-    pinnedCountries: src.pinnedCountries === "none" ? [] : cleanPinned(src.pinnedCountries)
+    pinnedCountries: src.pinnedCountries === "none" ? [] : cleanPinned(src.pinnedCountries),
+    // v18.15.0: a zone this engine can format in, else the seed. A stored zone
+    // that a device's engine does not know falls back on THAT device only,
+    // and is never written back as the seed: a save re-sanitises `prev`,
+    // which holds what this device read.
+    timeZone: isValidTimeZone(src.timeZone) ? src.timeZone : d.timeZone
   };
+}
+
+// v18.15.0: the clock follows the node. Called on the line ABOVE each
+// `setGS`, never from an effect, so the render that shows the new settings is
+// already on the new clock (an effect would give one frame on the old one).
+function applyClock(gs){
+  setTimeZone(gs.timeZone);
 }
 
 export function useGeneralSettings(){
@@ -152,7 +175,9 @@ export function useGeneralSettings(){
     const unsub = onValue(ref(db, "settings/general"), function(snap){
       const val = snap.val();
       if(val && typeof val === "object"){
-        setGS(sanitizeGeneral(val));
+        const next = sanitizeGeneral(val);
+        applyClock(next);
+        setGS(next);
       }
       // Node absent (first run): keep the defaults (= the historical literals).
       loaded.current = true;
@@ -202,6 +227,7 @@ export function useGeneralSettings(){
     // from, for that reason.
     const prev = generalSettings;
     const next = sanitizeGeneral({ ...prev, ...(partial || {}) });
+    applyClock(next);
     setGS(next);
     // v18.1.0: an emptied pinned list is written as "none" (see sanitizeGeneral).
     const stored = next.pinnedCountries.length ? next : { ...next, pinnedCountries: "none" };

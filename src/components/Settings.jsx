@@ -40,6 +40,7 @@ import { BTN, R, M, T, FW, H, IC, SP, APP_NAME } from "../lib/constants";
 // v18.2.0: how TabBar lays its tabs out.
 import { tabColumns } from "../lib/tab-rows";
 import { CountryPicker } from "./CountryPicker";
+import { TimeZonePicker } from "./TimeZonePicker";
 import { countryByIso, flagOf, dialLabel, MAX_PINNED } from "../lib/phone-countries";
 // v18.0.0 phase 2 /code-review: the seed itself, not a hand-typed copy of it.
 import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
@@ -256,6 +257,27 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
         onBlur={() => { if (draft !== value) onCommit(draft); }}
         onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
         style={{ ...mkInp(), width: width || 180, boxSizing: "border-box" }} />
+    </div>
+  );
+}
+
+// ── v18.15.0: where the restaurant is ────────────────────────────────────────
+// Every "now" and "today" is read in this zone (lib/day.js), so a device in
+// another zone shows and writes the restaurant's clock. It commits on the pick,
+// like the pinned countries (nothing to guard), and the picker's list is drawn
+// against this POSITIONED wrapper. The sentence under it says what moves and
+// what does not, because the answer is not obvious: bookings are wall-clock
+// times at the restaurant and keep them.
+function TimeZoneSetting({ gs, onSave }) {
+  return (
+    <div role="group" aria-labelledby="gs-tz-label">
+      <div id="gs-tz-label" style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: SP.snug }}>Time zone</div>
+      <div style={{ position: "relative", width: 320 /* @canvas wide enough for a zone and its offset in the list */, maxWidth: "100%" }}>
+        <TimeZonePicker value={gs.timeZone} onPick={(tz) => { if (tz !== gs.timeZone) onSave({ timeZone: tz }); }} />
+      </div>
+      <div style={{ fontSize: T.body, color: "var(--text-muted)", paddingTop: SP.snug }}>
+        Where the restaurant is. &ldquo;Now&rdquo;, today and the times in the log follow it on every device; bookings keep their times.
+      </div>
     </div>
   );
 }
@@ -803,12 +825,13 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
       {sw ? (
       <Collapsible
         title="Restaurant"
-        subtitle="Name, currency and the phone field's countries."
+        subtitle="Name, time zone, currency and the phone field's countries."
         summary={gs.restaurantName}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
           <GsTextField label="Restaurant name" value={gs.restaurantName} width={260} onDirty={onDirty} dirtyId="gs-name"
             onCommit={(v) => onSaveGeneralSettings({ restaurantName: v })} />
+          <TimeZoneSetting gs={gs} onSave={onSaveGeneralSettings} />
           <GsTextField label="Currency symbol" value={gs.currency} width={80} onDirty={onDirty} dirtyId="gs-currency"
             onCommit={(v) => onSaveGeneralSettings({ currency: v })} />
           <PinnedCountriesSetting gs={gs} onSave={onSaveGeneralSettings} />

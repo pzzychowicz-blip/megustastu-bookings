@@ -66,10 +66,25 @@ export function isValidTimeZone(tz) {
 }
 
 // Returns the zone actually in force (null = the device's), so a caller can
-// tell an accepted zone from a rejected one.
+// tell an accepted zone from a rejected one. A CHANGE tells every
+// `onTimeZoneChange` listener, after the zone is in force.
+const ZONE_LISTENERS = new Set();
 export function setTimeZone(tz) {
-  ZONE = isValidTimeZone(tz) ? tz : null;
+  const next = isValidTimeZone(tz) ? tz : null;
+  if (next === ZONE) return ZONE;
+  ZONE = next;
+  for (const fn of Array.from(ZONE_LISTENERS)) {
+    try { fn(ZONE); } catch (err) { console.warn("[day] a time-zone listener threw", err); }
+  }
   return ZONE;
+}
+
+// Something that HOLDS a reading of the clock (`useNowMins`' state) re-reads
+// it when the zone changes, instead of waiting up to 15s for its next tick.
+// Returns the unsubscribe.
+export function onTimeZoneChange(fn) {
+  ZONE_LISTENERS.add(fn);
+  return function () { ZONE_LISTENERS.delete(fn); };
 }
 
 // The zone in force, or null for the device's own.

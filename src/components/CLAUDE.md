@@ -123,6 +123,8 @@ git history, `git show 18f3ee66:src/components/CLAUDE.md`). The visual system is
 
 - **CountryPicker.jsx** — searchable calling-code picker, pinned countries first. Root `display: contents`, menu absolute, so the CALLER's positioned ancestor sets the width. **Enter and Escape are stopped at its search box**, or the global handler saves or closes the booking form. The current row tints through `--row-bg`, never `background`. With no country it reads "Code". `useMenuRoom` holds the menu above the form's footer and the keyboard (v18.14.2).
 
+- **TimeZonePicker.jsx** (v18.15.0) — the restaurant's zone in Settings → General, over every zone the engine knows (`zoneList`), searchable by place, region or offset. **CountryPicker's shape, not a second design**: same pill, search box, `useAcRow` rows, keys and Escape stopped at the box, menu absolute against the caller's positioned wrapper. **One difference: its row handlers are `acRowHandlersFor`, called at event time from ONE set on the listbox** (the row found by `data-idx`), not `{...acRow(fn)}` per row: 420 handler objects a render, and a React-Compiler ref warning past the lint cap. Commits on the pick.
+
 - **WalkinForm.jsx** — walk-in entry. Its steppers and Reset go through `stepPress` and are named. A table pre-selected from the Plan (`_pre`) survives guest-count edits; plain-path steppers reset tables. Hand picks take `togglePick` (`src/CLAUDE.md`, Layout config); "Add to waitlist" under the no-tables banner.
 
 - **WaitlistPanel.jsx** — the waitlist Overlay: the day's entries first come first served, fits-now chip, Book (prefills the form) and a two-tap Remove (`mkDangerBtn`).

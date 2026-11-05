@@ -54,7 +54,10 @@
 // without it saves a weekday's hours with every special day gone).
 // 5: v18.12.0, `settings/whatsapp.autoReply` (a build without it saves the
 // WhatsApp settings with the switch gone, and the auto-reply reads as on).
-export const SCHEMA = 5;
+// 6: v18.15.0, `settings/general.timeZone` (a build without it saves the
+// general settings with the zone gone, and every device reads the tenant's
+// seed again, which is wrong for a restaurant that changed it).
+export const SCHEMA = 6;
 
 export const SCHEMA_ENFORCE_KEY = "mgt.schemaEnforce";
 
