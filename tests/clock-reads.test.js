@@ -91,6 +91,26 @@ describe("no clock read outside lib/day.js", () => {
     expect(found).toEqual({});
   });
 
+  // v18.15.0 phase 5: the server does no date-string arithmetic of its own, so
+  // ANY ISO slice there is UTC's today under another name. The parse's two
+  // "Today is" lines were `now.toISOString().slice(0, 10)`, which the "UTC
+  // today" shape above (written for `new Date()…`) does not see. The calendar
+  // it needs is gemini.js's `restaurantToday`.
+  it("api/ names no date by slicing an ISO string", () => {
+    const found = [];
+    (function walk(dir) {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name);
+        if (e.isDirectory()) walk(p);
+        else if (/\.(js|mjs)$/.test(e.name)) {
+          const src = stripComments(readFileSync(p, "utf8")).join("\n");
+          if (/\.toISOString\(\)\.slice\(\s*0\s*,\s*10\s*\)/.test(src)) found.push(p.slice(ROOT.length + 1));
+        }
+      }
+    })(join(ROOT, "api"));
+    expect(found).toEqual([]);
+  });
+
   it("every allowed file still exists, so the list cannot outlive its reason", () => {
     for (const rel of Object.keys(ALLOWED)) {
       expect(() => readFileSync(join(ROOT, rel), "utf8"), rel).not.toThrow();

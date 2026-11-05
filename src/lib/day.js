@@ -224,9 +224,11 @@ export function wallToInstant(y, m, d, h, min) {
 // function exists to remove.
 //
 // v18.15.0: "local" now means the RESTAURANT's zone (`wallClock`, above), and
-// the device's only while no zone is set.
-export function todayStr(now) {
-  const c = wallClock(now || new Date());
+// the device's only while no zone is set. `tz` names the zone explicitly, for
+// the server (api/_lib/gemini.js), which never sets one: a serverless container
+// is shared, so a module-level zone there would be whichever request set it last.
+export function todayStr(now, tz) {
+  const c = wallClock(now || new Date(), tz);
   return String(c.y) + "-" +
     String(c.m).padStart(2, "0") + "-" +
     String(c.d).padStart(2, "0");

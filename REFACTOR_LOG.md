@@ -40325,3 +40325,28 @@ differs from the restaurant's, so Lisbon and London show nothing next to the Can
 offset. It takes a control's height (`H.control`) because the date row is top-aligned: without it the text sat on the pill's top edge (seen on DEV).
 `--text-secondary` on the app's own background, no new fill. **Measured on DEV with this Mac on Africa/Cairo:** the note shows, centred on the date pill,
 and the now-line beside it reads the Canaries' 21:36 at the Mac's 23:36. `tests/time-zones.test.js` pins its place after the date `<nav>` and before Today.
+
+### Phase 5 — the server dates WhatsApp messages in the restaurant's zone
+
+The parse told the model "Today is" in UTC (`now.toISOString().slice(0, 10)` and `getUTCDay()`, in both `parseMessage` and `parseThread`), and the
+mock parser stepped UTC days. Vercel runs in UTC, so a message sent between 00:00 and 01:00 on a Canary summer night was dated a day early: "mañana"
+became the day the customer meant as today, and "el jueves" sent on a Thursday became that Thursday rather than the next.
+
+`readTimeZone()` (`api/_lib/rtdb.js`) reads `settings/general.timeZone` through day.js's `isValidTimeZone`, the check the client's `sanitizeGeneral`
+makes, and falls back to `tenantTimeZone()` (`api/_lib/env.js`): `TENANT_TIME_ZONE`, then `Atlantic/Canary`. It never answers null, so a failed read
+cannot move the calendar to UTC. An invalid variable is refused with a warning. `restaurantToday(timeZone, now)` (`api/_lib/gemini.js`) gives the
+date, the weekday and the zone used. `todayStr` gained an optional `tz`, because the server passes the zone and never sets it: `setTimeZone` is module
+state, and a warm container is shared between requests. The webhook, the simulator's inbound and the Re-check read the zone beside the hours and pass
+it as `timeZone`. The auto-ack's language hint still calls `mockParse` without one and reads no date.
+
+**Measured** at 23:30 UTC on 15 July 2026 (00:30 on the 16th in the Canaries), with fake timers. The prompt reads "Today is 2026-07-16 (Thursday)."
+for the Canaries and "2026-07-15 (Wednesday)." for New York. "Mañana" through the webhook is dated the 17th, or the 16th with New York stored. "El
+jueves" through the simulator is dated the 23rd. Against the old `gemini.js` the webhook and simulator tests fail with the UTC dates.
+`tests/clock-reads.test.js` now also fails any ISO date slice under `api/`. It failed on the old file and passes now.
+
+`TENANT_TIME_ZONE` is listed in `api/wa-config.js`'s keys and in `.env.local.example`, beside `TENANT_WA_CONTEXT`. Like that variable it is optional,
+and unset changes nothing for Me Gustas Tú (`tests/wa-time-zone.test.js` holds the fallback equal to `src/tenants/mgt.js`'s `profile.timeZone`).
+
+**Files:** `api/_lib/env.js` · `api/_lib/rtdb.js` · `api/_lib/gemini.js` · `api/_lib/inbound-core.js` · `api/wa-inbound.js` · `api/wa-recheck.js` ·
+`api/wa-config.js` · `src/lib/day.js` · `.env.local.example` · `api/CLAUDE.md` · `tests/wa-time-zone.test.js` (new) · `tests/api-handlers.test.js` ·
+`tests/clock-reads.test.js`.

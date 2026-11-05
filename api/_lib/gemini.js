@@ -24,7 +24,7 @@
 // exact current string in AI Studio (the local harness exposes GET /dev/models
 // to list what the key can see).
 
-import { env, llmMode, simEnabled, geminiModel, geminiCalled, FALLBACK_MODEL } from "./env.js";
+import { env, llmMode, simEnabled, geminiModel, geminiCalled, FALLBACK_MODEL, tenantTimeZone } from "./env.js";
 
 // ── Who this restaurant is, for the prompts (v18.0.0 phase 5c) ───────────────
 // The prompts carried "a small restaurant in the Canary Islands" as a literal,
@@ -48,6 +48,25 @@ function waContext() {
 }
 import { mergeDraft, occasionIdsIn, WA_PARSE_TEXT_LEN } from "../../src/lib/whatsapp.js";
 import { cleanTagIds } from "../../src/lib/tags.js";
+import { wallClock, todayStr, addDays, isValidTimeZone, WEEKDAY_LONG } from "../../src/lib/day.js";
+
+// ── The restaurant's today (v18.15.0) ────────────────────────────────────────
+// "Today" for the prompt's "Today is …" line and for the mock's today /
+// tomorrow / weekday words: the restaurant's calendar date at `now`, in
+// `timeZone` (rtdb.js, readTimeZone), never the server's. Vercel runs in UTC,
+// so until this version a message sent between 00:00 and 01:00 on a Canary
+// summer night was dated a day early: "mañana" became the day the customer
+// meant as today, and "el jueves", sent on a Thursday, became that same day
+// rather than the next week's. A caller with no zone (the auto-ack's language
+// hint, which reads no date) gets the tenant's.
+//
+// The zone is passed, never set: `setTimeZone` is module state, and a warm
+// serverless container is shared between requests.
+export function restaurantToday(timeZone, now) {
+  const tz = isValidTimeZone(timeZone) ? timeZone : tenantTimeZone();
+  const at = now == null ? new Date() : now;
+  return { iso: todayStr(at, tz), dow: wallClock(at, tz).dow, timeZone: tz };
+}
 
 // The default, 3.5-flash-lite, answered in a median of 853ms and at most
 // 3737ms over 17 live parses on the sandbox (2026-10-17, see DEFAULT_MODEL),
@@ -262,7 +281,7 @@ export function inferPreference(text) {
 }
 
 // ── Mock parser (deterministic, no network) ───────────────────────────────────
-export function mockParse(text, occasions) {
+export function mockParse(text, occasions, timeZone) {
   const t = String(text || "").toLowerCase();
   // Language: Spanish-specific markers only (accents/inverted punctuation are
   // the strongest signal). Beware substrings shared with English — "reserv"
@@ -284,18 +303,16 @@ export function mockParse(text, occasions) {
     if (h >= 1 && h <= 11 && /noche|cena|dinner|evening/.test(t)) h += 12; // evening heuristic
     time = String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
   }
-  // Date: today/tomorrow words, else a weekday name → the NEXT such day (UTC).
-  const today = new Date();
+  // Date: today/tomorrow words, else a weekday name → the NEXT such day, on the
+  // restaurant's calendar (v18.15.0, restaurantToday; it was UTC's).
+  const today = restaurantToday(timeZone);
   let date = null;
   const WEEKDAYS = [["domingo", "sunday"], ["lunes", "monday"], ["martes", "tuesday"], ["miércoles", "miercoles", "wednesday"], ["jueves", "thursday"], ["viernes", "friday"], ["sábado", "sabado", "saturday"]];
-  if (/hoy|tonight|esta noche|today/.test(t)) date = today.toISOString().slice(0, 10);
-  else if (/mañana|manana|tomorrow/.test(t)) { const d = new Date(); d.setUTCDate(d.getUTCDate() + 1); date = d.toISOString().slice(0, 10); }
+  if (/hoy|tonight|esta noche|today/.test(t)) date = today.iso;
+  else if (/mañana|manana|tomorrow/.test(t)) date = addDays(today.iso, 1);
   else {
     for (let dow = 0; dow < 7 && !date; dow++) {
-      if (WEEKDAYS[dow].some((w) => t.includes(w))) {
-        const d = new Date(); const diff = (dow - d.getUTCDay() + 7) % 7 || 7;
-        d.setUTCDate(d.getUTCDate() + diff); date = d.toISOString().slice(0, 10);
-      }
+      if (WEEKDAYS[dow].some((w) => t.includes(w))) date = addDays(today.iso, (dow - today.dow + 7) % 7 || 7);
     }
   }
   const draftIntent = intent === "new_booking" || intent === "cancel" || intent === "modify";
@@ -415,7 +432,7 @@ async function liveParse(text, ctx) {
   const key = env("GEMINI_API_KEY", null);
   // prefText: in thread mode `text` is the whole transcript, staff lines and
   // labels included, and the regex reads what parseThread's mock branch gives it.
-  if (!key) { console.warn("[gemini] GEMINI_API_KEY missing — falling back to mock parse"); return mockParse((ctx && ctx.prefText) || text, ctx && ctx.occasions); }
+  if (!key) { console.warn("[gemini] GEMINI_API_KEY missing — falling back to mock parse"); return mockParse((ctx && ctx.prefText) || text, ctx && ctx.occasions, ctx && ctx.timeZone); }
   const data = await askGemini(key, {
     contents: [{ parts: [{ text: buildPrompt(text, ctx) }] }],
     generationConfig: {
@@ -481,22 +498,25 @@ export function hoursLineOf(hours) {
   return "Operating hours config (per weekday, 24h): " + JSON.stringify(weekly);
 }
 
-// parseMessage(text, {hours, existingDraft, occasions}) → parse object or null
-// (= save without draft). hours: the settings/operatingHours node or null.
+// parseMessage(text, {hours, existingDraft, occasions, timeZone}) → parse object
+// or null (= save without draft). hours: the settings/operatingHours node or null.
+// timeZone: the restaurant's (readTimeZone), the calendar "today" and "mañana"
+// are read on (v18.15.0, restaurantToday); absent → the tenant's.
 // occasions: the restaurant's occasion tags, `[{id, label}]` (readOccasionTags),
 // or null/absent when they could not be read, which leaves occasions out of the
 // request and keeps a pending draft's own (v18.11.0, parseOccasions).
 // existingDraft: the conversation's PENDING draftData (draftStatus "parsed") or
 // null — when present, live mode lets Gemini merge semantically (see
 // buildPrompt) and mock mode applies the shared mechanical mergeDraft rule.
-export async function parseMessage(text, { hours, existingDraft, occasions } = {}) {
+export async function parseMessage(text, { hours, existingDraft, occasions, timeZone } = {}) {
   // Prompt-size guard: only the first WA_PARSE_TEXT_LEN chars reach the LLM —
   // a real booking request fits many times over; oversize input is quota abuse.
   text = String(text == null ? "" : text).slice(0, WA_PARSE_TEXT_LEN);
-  const now = new Date();
+  const today = restaurantToday(timeZone);
   const ctx = {
-    todayIso: now.toISOString().slice(0, 10),
-    weekday: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][now.getUTCDay()],
+    todayIso: today.iso,
+    weekday: WEEKDAY_LONG[today.dow],
+    timeZone: today.timeZone,
     hoursLine: hoursLineOf(hours),
     existingDraft: existingDraft || null,
     occasions: occasionList(occasions),
@@ -518,7 +538,7 @@ export async function parseMessage(text, { hours, existingDraft, occasions } = {
     // is stored either way and staff read it (v18.14.1: the catch moved here
     // from liveParse, so that a Re-check can hear the failure).
     try { parsed = await liveParse(text, ctx); } catch (e) { console.warn("[gemini] " + e.message + " — message saved without draft."); }
-  } else parsed = mockParse(text, ctx.occasions);
+  } else parsed = mockParse(text, ctx.occasions, ctx.timeZone);
   const took = timed ? { ms: Date.now() - t0 } : {};
   // `timed`, not the mode (/code-review): live with no key is the regex too, and
   // only Gemini merges for itself, so the mode alone let a follow-up replace the
@@ -533,7 +553,7 @@ export async function parseMessage(text, { hours, existingDraft, occasions } = {
   return parsed;
 }
 
-// parseThread(history, {hours, existingDraft, occasions}) → parse object or null. The
+// parseThread(history, {hours, existingDraft, occasions, timeZone}) → parse object or null. The
 // MANUAL re-check's parser (api/wa-recheck): same schema, same rules and the
 // same return contract as parseMessage — the caller feeds the result to the
 // very same applyParse — but the model sees the recent TRANSCRIPT (both
@@ -546,7 +566,7 @@ export async function parseMessage(text, { hours, existingDraft, occasions } = {
 //
 // Mock mode has no notion of a thread, so it degrades to parsing the last
 // inbound message — which is what the automatic path already did.
-export async function parseThread(history, { hours, existingDraft, occasions } = {}) {
+export async function parseThread(history, { hours, existingDraft, occasions, timeZone } = {}) {
   const list = Array.isArray(history) ? history.filter((m) => m && m.text) : [];
   if (!list.length) return null;
   const inbound = list.filter((m) => m.direction === "in");
@@ -593,10 +613,11 @@ export async function parseThread(history, { hours, existingDraft, occasions } =
     newest.text = newest.text.slice(0, Math.max(0, newest.text.length + budget));
   }
   const transcript = kept.map(line).join("\n");
-  const now = new Date();
+  const today = restaurantToday(timeZone);
   const ctx = {
-    todayIso: now.toISOString().slice(0, 10),
-    weekday: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][now.getUTCDay()],
+    todayIso: today.iso,
+    weekday: WEEKDAY_LONG[today.dow],
+    timeZone: today.timeZone,
     hoursLine: hoursLineOf(hours),
     existingDraft: existingDraft || null,
     threadMode: true,
@@ -613,7 +634,7 @@ export async function parseThread(history, { hours, existingDraft, occasions } =
   // backend sends, so it is the parse most likely to near an attempt's TIMEOUT_MS.
   const timed = geminiCalled();
   const t0 = Date.now();
-  let parsed = mode === "live" ? await liveParse(transcript, ctx) : mockParse(lastInbound, ctx.occasions);
+  let parsed = mode === "live" ? await liveParse(transcript, ctx) : mockParse(lastInbound, ctx.occasions, ctx.timeZone);
   const took = timed ? { ms: Date.now() - t0 } : {};
   // `timed`, not the mode (/code-review): live with no key is the regex too, and
   // only Gemini merges for itself, so the mode alone let a follow-up replace the

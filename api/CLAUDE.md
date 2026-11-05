@@ -87,6 +87,18 @@ the URL holds the key, and `temporaryFailure`'s `why` is what the log gets inste
 must be a JSON object (`replyJson`). A Re-check that fails clears `parsing` on the server
 as well, since the tab may be gone. Measured: 2026-11-02, in `askGemini`'s header.
 
+**The parse's calendar is the restaurant's (v18.15.0).** Vercel runs in UTC, so "today" on
+the server is the Canaries' yesterday from 00:00 to 01:00 every summer night, and a message
+sent then had "mañana" dated the day the customer meant as today. `readTimeZone()`
+(`_lib/rtdb.js`) reads `settings/general.timeZone`, falling back to `TENANT_TIME_ZONE` and
+then to `Atlantic/Canary` (`tenantTimeZone`, `_lib/env.js`), and never answers null. Every
+caller that reads the hours for a parse reads the zone beside them and passes it as
+`timeZone`. `restaurantToday` (`_lib/gemini.js`) turns it into the prompt's "Today is" line
+and the mock's today, tomorrow and weekday. **Pass the zone, never `setTimeZone` here:**
+that is module state, and a warm container is shared between requests.
+`tests/clock-reads.test.js` fails an ISO date slice anywhere under `api/`, and
+`tests/wa-time-zone.test.js` reads the prompt the real parse sends.
+
 **`wa-media.js` — the media proxy (v18.8.0).** One function for both directions of a
 conversation's files, to keep the count low: GET views (phase 4), POST sends (phase 5).
 Four rules, each the reason for a line of it:

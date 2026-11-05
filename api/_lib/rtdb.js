@@ -41,10 +41,11 @@
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getDatabase } from "firebase-admin/database";
 import { getAuth } from "firebase-admin/auth";
-import { dbUrl, serviceAccount, staffEmails, requireStaffAllowList } from "./env.js";
+import { dbUrl, serviceAccount, staffEmails, requireStaffAllowList, tenantTimeZone } from "./env.js";
 import { statusWins, waAutoReplyOn } from "../../src/lib/whatsapp.js";
 import { isAdminEntry, sanitizeRole, can } from "../../src/lib/roles.js";
 import { sanitizeTagList } from "../../src/lib/tags.js";
+import { isValidTimeZone } from "../../src/lib/day.js";
 
 let cachedApp = null;
 let cachedDb = null;
@@ -337,6 +338,22 @@ export async function readOperatingHours() {
   } catch {
     return null; // prompt falls back to the default hours line
   }
+}
+
+// v18.15.0: the restaurant's time zone (Settings → General), so a parse reads
+// "today", "mañana" and "el jueves" on the restaurant's calendar and not the
+// server's. Vercel runs in UTC, where the Canaries' first hour of every summer
+// day is still yesterday. Read through day.js's own `isValidTimeZone`, the check
+// the client's `sanitizeGeneral` applies. Absent, invalid or unreadable → the
+// tenant's, from the environment (env.js, tenantTimeZone). Never null: a parse
+// always has a calendar, and a blip must not move it to UTC.
+export async function readTimeZone() {
+  try {
+    const snap = await getDb().ref("settings/general/timeZone").get();
+    const v = snap.exists() ? snap.val() : null;
+    if (isValidTimeZone(v)) return v;
+  } catch { /* the tenant's zone, below */ }
+  return tenantTimeZone();
 }
 
 // v18.11.0: the restaurant's occasion tags, `[{id, label}]`, for the parse's

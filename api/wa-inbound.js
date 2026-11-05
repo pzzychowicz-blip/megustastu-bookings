@@ -53,7 +53,7 @@ import { env } from "./_lib/env.js";
 import { verifySignature } from "./_lib/meta.js";
 import { parseMessage, mockParse } from "./_lib/gemini.js";
 import { processInbound, applyParse, inboundContent } from "./_lib/inbound-core.js";
-import { updateMessageStatusByWamid, readOperatingHours, readOccasionTags, getConversation } from "./_lib/rtdb.js";
+import { updateMessageStatusByWamid, readOperatingHours, readOccasionTags, readTimeZone, getConversation } from "./_lib/rtdb.js";
 import {
   makeNumberGuard, COEXIST_HANDLERS, applyMessageChange, freshResults, newMeasure, noteChange, recordBegun, reportDelivery,
 } from "./_lib/coexist-core.js";
@@ -325,10 +325,11 @@ export default async function handler(req, res) {
   if (parseJobs.length > 0) {
     scheduleAfterResponse((async () => {
       // v18.11.0: and the occasion tags, read with the hours, once per payload.
-      const [hours, occasions] = await Promise.all([readOperatingHours(), readOccasionTags()]);
+      // v18.15.0: and the restaurant's time zone, the calendar "mañana" is on.
+      const [hours, occasions, timeZone] = await Promise.all([readOperatingHours(), readOccasionTags(), readTimeZone()]);
       for (const job of parseJobs) {
         try {
-          const parse = await parseMessage(job.text, { hours, existingDraft: job.existingDraft, occasions });
+          const parse = await parseMessage(job.text, { hours, existingDraft: job.existingDraft, occasions, timeZone });
           await applyParse(job.phoneKey, parse, job.ts);
         } catch (e) {
           // Parse failure = message stays draft-less (the designed failure
