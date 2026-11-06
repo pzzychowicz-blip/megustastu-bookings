@@ -40517,3 +40517,6 @@ Nine findings. Eight held up and were fixed, one commit each; one was disproved.
   51, and `crashBadge` (`lib/crash-report.js`, pure, tested) caps the count at 50 and says more only when an unseen crash lies past it.
 - **The minute's clock reading is frozen.** `wallClock` hands every caller in one minute the same cached object, so a caller that wrote
   to it would have moved "now" for the whole app until the minute turned. No caller writes to it today (all six read), and now none can.
+- **The server says when it falls back to the tenant's zone.** `readTimeZone` swallowed a failed read, and a stored zone it could not
+  use, with nothing in Vercel's logs: every draft would have been dated on the tenant's calendar with no trace of why. Both now log one
+  `[tz]` line (the read's error message, or that the value is no zone the server knows); an absent zone is the normal state and logs nothing.

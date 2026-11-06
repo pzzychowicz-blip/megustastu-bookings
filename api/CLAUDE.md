@@ -91,7 +91,8 @@ as well, since the tab may be gone. Measured: 2026-11-02, in `askGemini`'s heade
 the server is the Canaries' yesterday from 00:00 to 01:00 every summer night, and a message
 sent then had "mañana" dated the day the customer meant as today. `readTimeZone()`
 (`_lib/rtdb.js`) reads `settings/general.timeZone`, falling back to `TENANT_TIME_ZONE` and
-then to `Atlantic/Canary` (`tenantTimeZone`, `_lib/env.js`), and never answers null. Every
+then to `Atlantic/Canary` (`tenantTimeZone`, `_lib/env.js`), and never answers null; a stored
+zone it cannot use, or a read that failed, logs one `[tz]` line naming why. Every
 caller that reads the hours for a parse reads the zone beside them and passes it as
 `timeZone`. `restaurantToday` (`_lib/gemini.js`) turns it into the prompt's "Today is" line
 and the mock's today, tomorrow and weekday. **Pass the zone, never `setTimeZone` here:**

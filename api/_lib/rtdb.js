@@ -344,15 +344,22 @@ export async function readOperatingHours() {
 // "today", "mañana" and "el jueves" on the restaurant's calendar and not the
 // server's. Vercel runs in UTC, where the Canaries' first hour of every summer
 // day is still yesterday. Read through day.js's own `isValidTimeZone`, the check
-// the client's `sanitizeGeneral` applies. Absent, invalid or unreadable → the
-// tenant's, from the environment (env.js, tenantTimeZone). Never null: a parse
-// always has a calendar, and a blip must not move it to UTC.
+// the client's `applyClock` applies before it uses a stored zone. Absent,
+// invalid or unreadable → the tenant's, from the environment (env.js,
+// tenantTimeZone). Never null: a parse always has a calendar, and a blip must
+// not move it to UTC. A stored zone that is not used, or a read that failed,
+// says so in the log (the v18.15.0 /code-review): the fallback is right, but a
+// silent one would date every draft on the tenant's calendar with nothing in
+// Vercel's logs to say why. Absent is the normal state and says nothing.
 export async function readTimeZone() {
   try {
     const snap = await getDb().ref("settings/general/timeZone").get();
     const v = snap.exists() ? snap.val() : null;
     if (isValidTimeZone(v)) return v;
-  } catch { /* the tenant's zone, below */ }
+    if (v != null) console.warn("[tz] settings/general/timeZone holds no zone this server knows; using the tenant's");
+  } catch (e) {
+    console.warn("[tz] settings/general/timeZone could not be read (" + (e && e.message ? e.message : String(e)) + "); using the tenant's");
+  }
   return tenantTimeZone();
 }
 
