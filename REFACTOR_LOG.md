@@ -40520,3 +40520,5 @@ Nine findings. Eight held up and were fixed, one commit each; one was disproved.
 - **The server says when it falls back to the tenant's zone.** `readTimeZone` swallowed a failed read, and a stored zone it could not
   use, with nothing in Vercel's logs: every draft would have been dated on the tenant's calendar with no trace of why. Both now log one
   `[tz]` line (the read's error message, or that the value is no zone the server knows); an absent zone is the normal state and logs nothing.
+- **The lines this version wrote in `reminders.js` and `booking-logic.js` declare with `const`** (CLAUDE.md: never `var` in new code);
+  the files' older lines stay as they were. `validateReminder`'s comment no longer calls its clock local.

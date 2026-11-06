@@ -25,8 +25,8 @@ export function reminderAppliesTo(r,date){
   var rec=r.recurrence||{};
   if(rec.type==="once") return rec.date===date;
   if(rec.type==="weekly"){
-    var wd=weekdayShort(date);
-    var dow=wd?WEEKDAY_SHORT.indexOf(wd):-1;
+    const wd=weekdayShort(date);
+    const dow=wd?WEEKDAY_SHORT.indexOf(wd):-1;
     return Array.isArray(rec.days)&&rec.days.indexOf(dow)>=0;
   }
   return false;
@@ -80,14 +80,15 @@ export function validateReminderDraft(d){
   var rec=d.recurrence||{};
   if(rec.type==="once"){
     if(!rec.date) return "Pick a date.";
-    // v17.16.2 (CT-2B-03): `today` must be LOCAL, because `nowM` two lines below
-    // is local (getHours). Reading it from toISOString made this function compare
-    // a UTC date against a local clock — so all summer, between 00:00 and 01:00,
-    // a reminder for the real today skipped the past-times check entirely.
+    // v17.16.2 (CT-2B-03): `today` and `nowM` must read ONE clock. Reading the
+    // date from toISOString compared a UTC date against a local clock, so all
+    // summer, between 00:00 and 01:00, a reminder for the real today skipped the
+    // past-times check entirely. Since v18.15.0 both are the restaurant's clock
+    // (`todayStr` and `nowMinutes` on the same instant).
     var now=new Date();var today=todayStr(now);
     if(rec.date<today) return "Date is in the past.";
     if(rec.date===today){
-      var nowM=nowMinutes(now);
+      const nowM=nowMinutes(now);
       var anyFuture=d.times.some(function(t){return toMins(t)>nowM;});
       if(!anyFuture) return "All times are in the past.";
     }

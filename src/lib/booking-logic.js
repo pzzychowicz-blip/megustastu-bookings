@@ -1637,7 +1637,7 @@ function sameBookings(a,b){
 // as immutable — none of them mutates it today (all read via map/filter/find),
 // and the returned array may now BE the caller's own input.
 export function bookingsAfterAction(updatedBks,date,blocks,changedId,forceReassign,autoOptimizerState){
-  var now=new Date();var today=todayStr(now);var nowM=nowMinutes(now);
+  const now=new Date();const today=todayStr(now);const nowM=nowMinutes(now);
   var synced=syncLiveDurations(updatedBks,today,nowM);
   var out=computeAfterAction(synced,date,blocks,changedId,forceReassign,autoOptimizerState);
   return sameBookings(out,updatedBks)?updatedBks:out;
