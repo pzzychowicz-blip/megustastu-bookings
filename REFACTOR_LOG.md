@@ -40521,10 +40521,13 @@ Nine findings. Eight held up and were fixed, one commit each; one was disproved.
   use, with nothing in Vercel's logs: every draft would have been dated on the tenant's calendar with no trace of why. Both now log one
   `[tz]` line (the read's error message, or that the value is no zone the server knows); an absent zone is the normal state and logs nothing.
 - **The lines this version wrote in `reminders.js` and `booking-logic.js` declare with `const`** (CLAUDE.md: never `var` in new code);
-  the files' older lines stay as they were. `validateReminder`'s comment no longer calls its clock local.
+  the files' older lines stay as they were. `validateReminderDraft`'s comment no longer calls its clock local.
 - **One rule says "N new crashes".** The gear, the Admin tab, Open the log and the Crashes chip each built the words by hand, four copies
   of one plural. `newCrashesWord` / `newCrashesText` (`lib/crash-report.js`) are now the only spelling, and the gear's phrase joins the
   count and its words with a no-break space like every other count; `tests/crash-trail.test.js` fails a hand copy.
 - **The two `ts` queries are one helper.** `readOldMessages` (the prune) and `readRecentMessages` (the parse limit) were the same query and
   fallback written out twice, and only the prune's copy logged that it had read a thread whole. Both are `readByTs` now, and each says
   so once per warm container under its own tag (`[wa-prune]`, `[wa-limit]`).
+- **Disproved: the inbound path's reads run one after another on purpose.** The review flagged `processInbound` reading the conversation,
+  then the parse limit, then the settings, where some could run together. The order is the point: a muted conversation stops after its
+  first read and costs nothing more, which `tests/api-handlers.test.js` pins ("a muted conversation costs no read"). Nothing changed.
