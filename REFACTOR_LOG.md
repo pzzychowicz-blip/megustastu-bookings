@@ -40528,6 +40528,7 @@ Nine findings. Eight held up and were fixed, one commit each; one was disproved.
 - **The two `ts` queries are one helper.** `readOldMessages` (the prune) and `readRecentMessages` (the parse limit) were the same query and
   fallback written out twice, and only the prune's copy logged that it had read a thread whole. Both are `readByTs` now, and each says
   so once per warm container under its own tag (`[wa-prune]`, `[wa-limit]`).
-- **Disproved: the inbound path's reads run one after another on purpose.** The review flagged `processInbound` reading the conversation,
-  then the parse limit, then the settings, where some could run together. The order is the point: a muted conversation stops after its
-  first read and costs nothing more, which `tests/api-handlers.test.js` pins ("a muted conversation costs no read"). Nothing changed.
+- **Disproved: the webhook's two reads run one after the other on purpose.** The review flagged `api/wa-inbound.js` reading the
+  conversation (`getConversation`) and then the parse limit (`parseOverLimit`) in turn, where the two could run together. The limit takes
+  that conversation and returns at once for a muted one, so a muted conversation costs no second read; run together, every message would
+  pay for both. `tests/api-handlers.test.js` pins it ("a muted conversation costs no read"). Nothing changed.
