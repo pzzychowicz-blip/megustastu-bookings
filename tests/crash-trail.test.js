@@ -10,13 +10,27 @@
 
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { crashTrail } from "../src/lib/crash-report.js";
+import { crashTrail, crashBadge } from "../src/lib/crash-report.js";
 import { sanitizeUserPrefs, DEFAULT_USER_PREFS } from "../src/hooks/useUserPrefs.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { appCode } from "./app-source.js";
 
 const read = (p) => stripComments(readFileSync(new URL("../" + p, import.meta.url), "utf8")).join("\n");
 const crash = (at) => ({ kind: "crash", at, text: "TypeError" });
+
+describe("crashBadge — 50 is 50, and 50+ means more (the /code-review)", () => {
+  const many = (n) => Array.from({ length: n }, (_, i) => crash(1000 + i));
+  it("an exact limit is shown exactly", () => {
+    expect(crashBadge(many(50), null, 50)).toEqual({ count: 50, latest: 1049, more: false });
+  });
+  it("one past the limit is the limit and more", () => {
+    expect(crashBadge(many(51), null, 50)).toEqual({ count: 50, latest: 1050, more: true });
+  });
+  it("a seen crash beyond the limit is not more", () => {
+    // 51 read, the oldest already seen: exactly 50 new.
+    expect(crashBadge(many(51), 1000, 50)).toEqual({ count: 50, latest: 1050, more: false });
+  });
+});
 
 describe("crashTrail", () => {
   it("counts the crashes newer than the newest one seen, and finds the newest", () => {
@@ -51,7 +65,8 @@ describe("crashSeenAt in the person's prefs", () => {
 describe("the trail's wiring", () => {
   it("one listener, on the kind index, the newest 50 crashes", () => {
     const h = read("src/hooks/useCrashTrail.js");
-    expect(h).toContain('query(ref(db, "activity"), orderByChild("kind"), equalTo("crash"), limitToLast(CRASH_TRAIL_LIMIT))');
+    expect(h).toContain('query(ref(db, "activity"), orderByChild("kind"), equalTo("crash"), limitToLast(CRASH_TRAIL_LIMIT + 1))');
+    expect(h).toContain("return crashBadge(entries, seenAt, CRASH_TRAIL_LIMIT);");
     expect(h).toContain("export const CRASH_TRAIL_LIMIT = 50;");
     expect(h).toContain('dbError("activity (crash trail)")');
     expect(h).toMatch(/if \(!enabled\) return undefined;/);

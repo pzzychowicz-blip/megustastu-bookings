@@ -52,6 +52,15 @@ export function crashTrail(entries, seenAt) {
   }
   return { count, latest };
 }
+
+// What the badge says, from a listener that read at most `limit + 1` entries
+// (the v18.15.0 /code-review): the count capped at `limit`, and `more` only
+// when an unseen crash lies beyond it. Reading exactly `limit` entries could not
+// tell 50 from more than 50, so the badge said "50+" for an exact 50.
+export function crashBadge(entries, seenAt, limit) {
+  const t = crashTrail(entries, seenAt);
+  return { count: Math.min(t.count, limit), latest: t.latest, more: t.count > limit };
+}
 const MESSAGE_MAX = 300;
 // How much of a message the mask reads. Its address pattern is quadratic on a long token
 // (50 KB took 2.5 s, measured), this runs on the main thread inside an error handler, and
