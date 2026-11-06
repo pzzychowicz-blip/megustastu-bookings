@@ -138,6 +138,9 @@ const DOW = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 // dozen places) and always lands in the same minute, so this turns all of those
 // into one `formatToParts`. Minute precision is safe because every real zone's
 // offset is a whole number of minutes, and nothing here reports seconds.
+// The cached reading is FROZEN, because every caller in that minute gets the
+// same object: one that wrote to it (`c.d += 1` to step a day, say) would move
+// "now" for the whole app until the minute turned (the v18.15.0 /code-review).
 let lastKey = null;
 let lastClock = null;
 
@@ -170,8 +173,8 @@ export function wallClock(now, tz) {
     else if (p.type === "weekday") out.dow = DOW[p.value];
   }
   lastKey = key;
-  lastClock = out;
-  return out;
+  lastClock = Object.freeze(out);
+  return lastClock;
 }
 
 // Minutes since the restaurant's midnight, now (or at `now`). The `nowMins`

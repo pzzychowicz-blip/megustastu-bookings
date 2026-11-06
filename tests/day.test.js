@@ -490,6 +490,17 @@ describe("the restaurant's clock — the device's zone no longer matters", () =>
     }));
   });
 
+  it("hands out a frozen reading, so no caller can move the minute's shared answer (the /code-review)", () => {
+    atCanary(() => {
+      const at = Date.UTC(2026, 7, 31, 19, 0);
+      const c = wallClock(at);
+      expect(Object.isFrozen(c)).toBe(true);
+      expect(() => { "use strict"; c.d = 99; }).toThrow(TypeError);
+      expect(wallClock(at).d).toBe(31);
+      expect(todayStr(new Date(at))).toBe("2026-08-31");
+    });
+  });
+
   it("asks the engine once per name, so a list of every zone builds no formatter twice (the /code-review)", () => {
     const Real = Intl.DateTimeFormat;
     let built = 0;

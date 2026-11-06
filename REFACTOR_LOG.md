@@ -40515,3 +40515,5 @@ Nine findings. Eight held up and were fixed, one commit each; one was disproved.
   clash in the first version of this fix, which the build would have refused too.
 - **An exact 50 unseen crashes read "50+".** The listener read 50 entries and called it more at 50, so it could not tell 50 from 51. It now reads
   51, and `crashBadge` (`lib/crash-report.js`, pure, tested) caps the count at 50 and says more only when an unseen crash lies past it.
+- **The minute's clock reading is frozen.** `wallClock` hands every caller in one minute the same cached object, so a caller that wrote
+  to it would have moved "now" for the whole app until the minute turned. No caller writes to it today (all six read), and now none can.
