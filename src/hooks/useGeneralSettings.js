@@ -45,6 +45,7 @@ import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clampStep } from "../lib/clamp";
 // v18.15.0: the restaurant's clock.
 import { isValidTimeZone, setTimeZone } from "../lib/day";
+import { storedZone } from "../lib/time-zones";
 import { dbError } from "../lib/dbError";
 // v18.0.0 session 8: the activity log.
 import { settingsWriteEntry } from "../lib/activity";
@@ -146,19 +147,23 @@ function sanitizeGeneral(raw){
     // pinned" reads back as ABSENT, which would restore the seed. `"none"` is
     // the explicit empty: stored when the list is emptied, read as [].
     pinnedCountries: src.pinnedCountries === "none" ? [] : cleanPinned(src.pinnedCountries),
-    // v18.15.0: a zone this engine can format in, else the seed. A stored zone
-    // that a device's engine does not know falls back on THAT device only,
-    // and is never written back as the seed: a save re-sanitises `prev`,
-    // which holds what this device read.
-    timeZone: isValidTimeZone(src.timeZone) ? src.timeZone : d.timeZone
+    // v18.15.0: the stored zone AS STORED when it is shaped like one, else the
+    // seed (`storedZone`, lib/time-zones.js). Not "a zone this engine knows":
+    // this object is written back whole by every save, so a device whose
+    // engine lacks the zone would write the seed over the restaurant's choice
+    // (the /code-review finding). Whether this device can USE it is
+    // `applyClock`'s question, below.
+    timeZone: storedZone(src.timeZone, d.timeZone)
   };
 }
 
 // v18.15.0: the clock follows the node. Called on the line ABOVE each
 // `setGS`, never from an effect, so the render that shows the new settings is
 // already on the new clock (an effect would give one frame on the old one).
+// A stored zone this engine cannot format in runs THIS device on the seed,
+// the tenant's zone, rather than on its own; the stored value is untouched.
 function applyClock(gs){
-  setTimeZone(gs.timeZone);
+  setTimeZone(isValidTimeZone(gs.timeZone) ? gs.timeZone : DEFAULT_GENERAL_SETTINGS.timeZone);
 }
 
 export function useGeneralSettings(){

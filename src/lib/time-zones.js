@@ -10,6 +10,20 @@
 
 import { zoneOffsetMinutes, isValidTimeZone } from "./day.js";
 
+// The zone to KEEP for a stored value: the value itself when it is shaped like
+// an IANA name, whether or not this engine can format in it, else `seed`.
+// Shape, not validity, because `settings/general` is written whole: a device
+// whose engine is older than the zone an admin picked (Europe/Kyiv, say, on
+// one that knows only Europe/Kiev) would otherwise hold the seed in its state
+// and write it over the restaurant's choice with its next settings save, for
+// every device (the v18.15.0 /code-review). Whether the zone can be USED is
+// asked where it is applied: `setTimeZone` and `zoneNote` refuse one the engine
+// does not know. `"UTC"` and `"Etc/GMT+1"` are shapes the engine itself lists.
+const ZONE_SHAPE = /^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+){0,2}$/;
+export function storedZone(v, seed) {
+  return typeof v === "string" && v.length <= 64 && ZONE_SHAPE.test(v) ? v : seed;
+}
+
 // Every zone this engine knows, sorted, always including `keep` (the zone in
 // force), so a stored zone missing from an older engine's list still shows as
 // chosen rather than vanishing from its own picker.

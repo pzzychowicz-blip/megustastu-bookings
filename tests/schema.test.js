@@ -161,12 +161,16 @@ const PINNED = {
   // 6: v18.15.0, `settings/general.timeZone` (sanitizeGeneral), and in the
   //    same unreleased version `settings/users/$uid/prefs.crashSeenAt`
   //    (sanitizeUserPrefs). One raise covers both: no build between them shipped.
+  //    sanitizeGeneral was re-pinned again inside the same version by its
+  //    /code-review: a zone-SHAPED value is kept as stored even when this engine
+  //    cannot format in it (storedZone), where the first cut replaced it with the
+  //    seed. Same key, same meaning, still unreleased, so no second raise.
   schema: 6,
   prints: {
       "hooks/useBookingDefaults.js:sanitizeTiers": "8d1b9808c9",
       "hooks/useBookingDefaults.js:sanitizeBookingDefaults": "7a6d45c5c4",
       "hooks/useDayShifts.js:sanitizeShifts": "42278cbe80",
-      "hooks/useGeneralSettings.js:sanitizeGeneral": "9bbbca8b76",
+      "hooks/useGeneralSettings.js:sanitizeGeneral": "b223f7387d",
       "hooks/useLayout.js:sanitizeFloorPlan": "1c43f674f3",
       "hooks/useLayout.js:sanitizeLayout": "317b68da39",
       "hooks/useOptimizerSettings.js:sanitizeOptimizer": "74794693a2",

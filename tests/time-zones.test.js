@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { zoneList, zonePlace, zoneName, offsetLabel, matchesZone, zoneNote } from "../src/lib/time-zones.js";
+import { zoneList, zonePlace, zoneName, offsetLabel, matchesZone, zoneNote, storedZone } from "../src/lib/time-zones.js";
 import { appCode } from "./app-source.js";
 
 const SUMMER = Date.UTC(2026, 6, 1, 12);
@@ -75,6 +75,27 @@ describe("the header's note — only when the device's clock differs", () => {
   });
 });
 
+describe("a stored zone is kept as stored (the v18.15.0 /code-review)", () => {
+  // settings/general is written whole by every save. A device whose engine is
+  // older than the zone an admin picked must write that zone back, not its seed.
+  it("keeps a zone-shaped value whether or not this engine knows it", () => {
+    expect(storedZone("Atlantic/Canary", "Europe/Madrid")).toBe("Atlantic/Canary");
+    expect(storedZone("America/Argentina/Buenos_Aires", null)).toBe("America/Argentina/Buenos_Aires");
+    expect(storedZone("Etc/GMT+1", null)).toBe("Etc/GMT+1");
+    expect(storedZone("UTC", null)).toBe("UTC");
+    // A name no engine knows today is still a name: it survives the round trip.
+    expect(storedZone("Mars/Olympus_Mons", "Atlantic/Canary")).toBe("Mars/Olympus_Mons");
+  });
+  it("replaces what is not a zone name with the seed", () => {
+    for (const v of [undefined, null, "", 42, {}, "Atlantic/", "/Canary", "Atlantic Canary", "<b>x</b>", "a/b/c/d", "A/" + "x".repeat(70)]) {
+      expect(storedZone(v, "Atlantic/Canary"), JSON.stringify(v)).toBe("Atlantic/Canary");
+    }
+  });
+  it("every zone the engine lists has the shape", () => {
+    for (const tz of zoneList()) expect(storedZone(tz, null), tz).toBe(tz);
+  });
+});
+
 describe("the setting is stored, seeded and applied", () => {
   const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
   const read = (p) => stripComments(readFileSync(join(ROOT, p), "utf8")).join("\n");
@@ -91,7 +112,10 @@ describe("the setting is stored, seeded and applied", () => {
   it("the hook whitelists the key, seeds it from the tenant and applies it above each setGS", () => {
     const H = read("src/hooks/useGeneralSettings.js");
     expect(H).toContain("timeZone: isValidTimeZone(profile.timeZone) ? profile.timeZone : null");
-    expect(H).toContain("timeZone: isValidTimeZone(src.timeZone) ? src.timeZone : d.timeZone");
+    expect(H).toContain("timeZone: storedZone(src.timeZone, d.timeZone)");
+    // What this device RUNS on is asked where the zone is applied, so a zone its
+    // engine lacks is still the one it writes back (the /code-review finding).
+    expect(H).toContain("setTimeZone(isValidTimeZone(gs.timeZone) ? gs.timeZone : DEFAULT_GENERAL_SETTINGS.timeZone);");
     // Both writers of the state put the clock in force on the line above it.
     expect(H).toContain("applyClock(next);\n        setGS(next);");
     expect(H).toContain("applyClock(next);\n    setGS(next);");

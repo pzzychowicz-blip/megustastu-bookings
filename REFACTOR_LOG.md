@@ -40498,3 +40498,12 @@ Its first run against PROD was a manual one over 720 hours, at Patryk's request
 ([run 42121524651](https://github.com/pzzychowicz-blip/mgt-backups/actions/runs/42121524651), 10 seconds). It printed "No crashes in the
 last 720 hours." and passed. That shows the token exchange and the `kind`-indexed read work on PROD: a refused token, or a query PROD's rules
 have no index for, fails the run. PROD logged no crash in those 30 days. The two test crashes are on DEV.
+
+### `/code-review` (xhigh)
+
+Nine findings. Eight held up and were fixed, one commit each; one was disproved.
+
+- **A zone this device's engine does not know was written back as the seed.** `sanitizeGeneral` replaced it with the tenant's seed in state, and
+  `settings/general` is written whole, so the device's next save of any General setting overwrote the restaurant's chosen zone for every device.
+  The comment above it said the opposite. Now `storedZone` (`lib/time-zones.js`) keeps a value shaped like a zone name as stored, and `applyClock`
+  runs a device that cannot format in it on the seed. The stored value is untouched. `sanitizeGeneral` re-pinned under schema 6, still unreleased.
