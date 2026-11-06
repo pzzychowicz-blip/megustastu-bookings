@@ -110,7 +110,7 @@ downloads. The auto-reply is a fixed template, so no model output reaches a cust
 **At most 20 automatic drafts an hour per number (v18.15.0).** Every customer message
 bought one Gemini call. `parseOverLimit` (`_lib/inbound-core.js`) counts the number's
 inbound messages in the last hour through the indexed `ts` query (`readRecentMessages`,
-`_lib/rtdb.js`; read whole if the index is missing, as the prune does), and the webhook and
+`_lib/rtdb.js`; read whole if the index is missing, through the prune's own `readByTs`), and the webhook and
 the simulator ask it BEFORE `processInbound`, so a message over the limit is stored with
 `willParse` false and no "analyzing…" flag is left behind. Every inbound message counts,
 parsed or not, so a number that keeps sending stays limited until it stops. Re-check is a

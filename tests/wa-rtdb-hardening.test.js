@@ -177,7 +177,9 @@ describe("WA hardening — phoneKey is sanitized at the path boundary", () => {
     // message) and `updateMessage` (and patches it). 15: `writeImportedThread`,
     // which builds both an imported thread's paths from one sanitised key.
     // 16 since v18.15.0: `readRecentMessages`, the per-number parse limit's query.
-    expect((src.match(/sanitizeKey\(phoneKey\)/g) || []).length).toBe(16);
+    // 15 since its /code-review: that reader and `readOldMessages` share one
+    // helper, `readByTs`, which builds the path once for both.
+    expect((src.match(/sanitizeKey\(phoneKey\)/g) || []).length).toBe(15);
   });
 });
 

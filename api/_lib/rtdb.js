@@ -503,53 +503,53 @@ export async function readMessageNode(phoneKey) {
   return snap.exists() ? snap.val() || {} : {};
 }
 
-// One conversation's messages older than `before` (ms), keyed like
-// readMessageNode, for a thread the prune is NOT deleting (/code-review). A
+// One conversation's messages in a range of `ts`, keyed like readMessageNode:
+// the shape both readers below share (the v18.15.0 /code-review: it was written
+// out twice, and only one copy said in the log that it had fallen back). A
 // query on `ts`, indexed in database.rules.json (`messages/$phoneKey`), so a
-// regular customer's thread costs the night only its old messages rather than
-// its whole history. A message with no `ts` comes too (null sorts first); a
-// `ts` that is a string does not (strings sort after numbers). The caller
-// filters either way. Both measured on the emulator through firebase-admin.
+// regular customer's thread costs only the messages in range rather than its
+// whole history. `range` narrows the ordered query; `tag` names the caller in
+// the log.
 //
 // **A `get()` on a query the rules do not index is REFUSED** ("Index not
 // defined"), not filtered for the SDK as a listener's is: measured on the
 // emulator. So until the rules carrying the index are published, the thread is
-// read whole, as before it, and the deploy order does not matter.
-let warnedNoIndex = false;
-export async function readOldMessages(phoneKey, before) {
+// read whole, as before it, and the deploy order does not matter. Each caller
+// says so once per warm container, under its own tag.
+const warnedNoIndex = new Set();
+async function readByTs(phoneKey, range, tag) {
   const node = getDb().ref("messages/" + sanitizeKey(phoneKey));
   let snap;
   try {
-    snap = await node.orderByChild("ts").endAt(before - 1).get();
+    snap = await range(node.orderByChild("ts")).get();
   } catch (e) {
     if (!/index not defined/i.test(String(e && e.message))) throw e;
-    if (!warnedNoIndex) {
-      warnedNoIndex = true;
-      console.warn("[wa-prune] messages/$phoneKey has no .indexOn ts yet (publish database.rules.json); reading threads whole");
+    if (!warnedNoIndex.has(tag)) {
+      warnedNoIndex.add(tag);
+      console.warn("[" + tag + "] messages/$phoneKey has no .indexOn ts yet (publish database.rules.json); reading threads whole");
     }
     snap = await node.get();
   }
   return snap.exists() ? snap.val() || {} : {};
 }
 
-// v18.15.0: one conversation's messages from `since` (ms) on, keyed like
-// readMessageNode, for the per-number parse limit (inbound-core.js,
-// parseOverLimit). The same indexed `ts` query as readOldMessages, from the
-// other end, so a regular customer's thread costs one inbound message only its
-// last hour. RTDB's `startAt(number)` also returns a `ts` that is a string
-// (strings sort after numbers); `recentInbound` counts only numbers. And the
-// same fallback: a query the published rules do not index is refused, so the
-// thread is read whole rather than the limit failing.
-export async function readRecentMessages(phoneKey, since) {
-  const node = getDb().ref("messages/" + sanitizeKey(phoneKey));
-  let snap;
-  try {
-    snap = await node.orderByChild("ts").startAt(since).get();
-  } catch (e) {
-    if (!/index not defined/i.test(String(e && e.message))) throw e;
-    snap = await node.get();
-  }
-  return snap.exists() ? snap.val() || {} : {};
+// The messages older than `before` (ms), for a thread the prune is NOT
+// deleting (/code-review). A message with no `ts` comes too (null sorts
+// first); a `ts` that is a string does not (strings sort after numbers). The
+// caller filters either way. Both measured on the emulator through
+// firebase-admin.
+export function readOldMessages(phoneKey, before) {
+  return readByTs(phoneKey, function (q) { return q.endAt(before - 1); }, "wa-prune");
+}
+
+// v18.15.0: the messages from `since` (ms) on, for the per-number parse limit
+// (inbound-core.js, parseOverLimit): the same query from the other end, so one
+// inbound message costs a regular customer's thread only its last hour. RTDB's
+// `startAt(number)` also returns a `ts` that is a string (strings sort after
+// numbers); `recentInbound` counts only numbers. Without the index the thread
+// is read whole rather than the limit failing.
+export function readRecentMessages(phoneKey, since) {
+  return readByTs(phoneKey, function (q) { return q.startAt(since); }, "wa-limit");
 }
 
 // Deletes the conversation only if `stillOld(stored)` holds at the moment of

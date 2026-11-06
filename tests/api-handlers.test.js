@@ -1102,8 +1102,17 @@ describe("the per-number parse limit (v18.15.0)", () => {
     vi.stubEnv("META_APP_SECRET", SECRET);
     fake.state.tree = { messages: { [KEY]: recent(20) } };
     fake.state.noIndex = true;
-    await deliver({ messages: [textMsg("wamid.A")] });
-    expect(scheduled).toEqual([]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await deliver({ messages: [textMsg("wamid.A")] });
+      await deliver({ messages: [textMsg("wamid.B")] });
+      expect(scheduled).toEqual([]);
+      // The log says so, once per warm container (the /code-review: only the
+      // prune's copy of this read used to). This is the file's first read
+      // without the index under this tag, so the once is this test's.
+      const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[wa-limit]"));
+      expect(lines).toEqual(["[wa-limit] messages/$phoneKey has no .indexOn ts yet (publish database.rules.json); reading threads whole"]);
+    } finally { warn.mockRestore(); }
   });
 
   it("a read that fails parses, as before the limit", async () => {

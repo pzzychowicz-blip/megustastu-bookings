@@ -40525,3 +40525,6 @@ Nine findings. Eight held up and were fixed, one commit each; one was disproved.
 - **One rule says "N new crashes".** The gear, the Admin tab, Open the log and the Crashes chip each built the words by hand, four copies
   of one plural. `newCrashesWord` / `newCrashesText` (`lib/crash-report.js`) are now the only spelling, and the gear's phrase joins the
   count and its words with a no-break space like every other count; `tests/crash-trail.test.js` fails a hand copy.
+- **The two `ts` queries are one helper.** `readOldMessages` (the prune) and `readRecentMessages` (the parse limit) were the same query and
+  fallback written out twice, and only the prune's copy logged that it had read a thread whole. Both are `readByTs` now, and each says
+  so once per warm container under its own tag (`[wa-prune]`, `[wa-limit]`).
