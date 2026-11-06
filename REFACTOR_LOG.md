@@ -40507,3 +40507,9 @@ Nine findings. Eight held up and were fixed, one commit each; one was disproved.
   `settings/general` is written whole, so the device's next save of any General setting overwrote the restaurant's chosen zone for every device.
   The comment above it said the opposite. Now `storedZone` (`lib/time-zones.js`) keeps a value shaped like a zone name as stored, and `applyClock`
   runs a device that cannot format in it on the seed. The stored value is untouched. `sanitizeGeneral` re-pinned under schema 6, still unreleased.
+- **The zone picker rebuilt 836 date formatters on every render.** `isValidTimeZone` built a new `Intl.DateTimeFormat` each call, and the picker asked
+  for all 418 zones twice per row, per render (a row hover included), and again in each keystroke's filter. Measured in Node on this Mac: 19.7 ms
+  a render and 16.6 ms a keystroke. Now the answer is cached per name (at most 1000), and the picker reads every zone's offset once per opening
+  and filters against that map (`matchesZone`'s new `offset` argument): 0 formatters, 0.9 ms an opening, 0.18 ms a keystroke. Checked live on DEV:
+  418 rows, "warsaw" and "utc+9" find what they should, and Escape closes the list and leaves Settings open. The live check also caught a name
+  clash in the first version of this fix, which the build would have refused too.

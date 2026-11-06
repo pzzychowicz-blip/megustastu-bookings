@@ -19,7 +19,7 @@
 // ref inside them as a ref read during render, a lint warning past the cap. The
 // tap-versus-scroll logic is the same function either way.
 
-import { useState, useRef, useEffect, useId } from "react";
+import { useState, useRef, useEffect, useId, useMemo } from "react";
 import { S, T, FW, SP, IC, EXIT_MS } from "../lib/constants";
 import { afterFrame } from "../lib/after-frame";
 import { mkInp } from "./atoms";
@@ -44,10 +44,22 @@ export function TimeZonePicker({ value, onPick, ariaLabel = "Time zone", style }
   const touchRef = useRef({ x: 0, y: 0, scroll: false, ts: 0 });
   useMenuRoom(menuRef, open, MENU_TALL);
 
-  // Offsets are read at "now" (`offsetLabel`'s default). A row could relabel
-  // only if a clock change happened while the list was open.
-  const all = zoneList(value);
-  const rows = q ? all.filter(function (tz) { return matchesZone(tz, q); }) : all;
+  // Offsets are read at "now" (`offsetLabel`'s default), ONCE per opening, and
+  // both the rows and the search read that map (the v18.15.0 /code-review: read
+  // per row and again per keystroke, the list rebuilt every zone's label on each
+  // render, a hover included). A row could relabel only if a clock change
+  // happened while the list was open. `listUp` stays true through the exit fade,
+  // so the closing list keeps its labels.
+  const listUp = open || leaving;
+  const all = useMemo(function () { return zoneList(value); }, [value]);
+  const offsets = useMemo(function () {
+    const m = new Map();
+    if (listUp) for (const tz of all) m.set(tz, offsetLabel(tz));
+    return m;
+  }, [all, listUp]);
+  const rows = useMemo(function () {
+    return q ? all.filter(function (tz) { return matchesZone(tz, q, undefined, offsets.get(tz)); }) : all;
+  }, [all, q, offsets]);
 
   function close(refocus) {
     setOpen(false);
@@ -170,7 +182,7 @@ export function TimeZonePicker({ value, onPick, ariaLabel = "Time zone", style }
                   style={Object.assign({}, AC_ROW, i === active ? { "--row-bg": "var(--bg-ac-hover)" } : null)}
                 >
                   <span style={{ flex: 1, minWidth: 0, fontSize: T.body, fontWeight: sel ? FW.bold : FW.medium, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{zoneName(tz)}</span>
-                  <span style={{ fontSize: T.body, color: S.muted, flexShrink: 0 }}>{offsetLabel(tz)}</span>
+                  <span style={{ fontSize: T.body, color: S.muted, flexShrink: 0 }}>{offsets.get(tz)}</span>
                   {sel ? <span aria-hidden="true" style={{ color: "var(--accent)", display: "flex", flexShrink: 0 }}><CheckIcon size={IC.inline} /></span> : null}
                 </div>
               );

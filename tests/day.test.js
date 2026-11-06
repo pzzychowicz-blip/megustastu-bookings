@@ -490,6 +490,18 @@ describe("the restaurant's clock — the device's zone no longer matters", () =>
     }));
   });
 
+  it("asks the engine once per name, so a list of every zone builds no formatter twice (the /code-review)", () => {
+    const Real = Intl.DateTimeFormat;
+    let built = 0;
+    Intl.DateTimeFormat = function (...a) { built++; return new Real(...a); };
+    try {
+      for (let i = 0; i < 5; i++) { isValidTimeZone("Pacific/Chatham"); isValidTimeZone("Nowhere/Never"); }
+    } finally { Intl.DateTimeFormat = Real; }
+    expect(built).toBeLessThanOrEqual(2);
+    expect(isValidTimeZone("Pacific/Chatham")).toBe(true);
+    expect(isValidTimeZone("Nowhere/Never")).toBe(false);
+  });
+
   it("an unknown zone is refused and the device's clock is used, never a throw", () => {
     expect(isValidTimeZone("Atlantic/Canary")).toBe(true);
     for (const v of ["", "Mars/Olympus", "canary", null, undefined, 60]) expect(isValidTimeZone(v), String(v)).toBe(false);

@@ -55,14 +55,27 @@ let ZONE = null;
 // Is `tz` a zone this engine can format in? A typo, an empty string or a zone
 // the engine has never heard of answers false, and `setTimeZone` then falls
 // back to the device's zone rather than throwing from inside a render.
+//
+// The answer is cached per name (the v18.15.0 /code-review): building an
+// Intl.DateTimeFormat is the expensive part, and the Settings picker asked for
+// all ~418 zones twice per render, 836 formatters and 20 ms a render measured on
+// a Mac, before a keystroke's filter asked again. An engine's zone list does
+// not change while the page is open. Capped, because a name can come from
+// stored data, and 1000 is more than twice the zones any engine lists.
+const ZONE_VALID = new Map();
 export function isValidTimeZone(tz) {
   if (typeof tz !== "string" || tz === "") return false;
+  const known = ZONE_VALID.get(tz);
+  if (known !== undefined) return known;
+  let ok;
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: tz });
-    return true;
+    ok = true;
   } catch {
-    return false;
+    ok = false;
   }
+  if (ZONE_VALID.size < 1000) ZONE_VALID.set(tz, ok);
+  return ok;
 }
 
 // Returns the zone actually in force (null = the device's), so a caller can

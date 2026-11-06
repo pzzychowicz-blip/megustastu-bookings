@@ -67,14 +67,16 @@ export function offsetLabel(tz, at) {
 // Does `tz` answer the query typed into the picker's search box? Case and
 // accents ignored, "/" and "_" read as spaces, and the offset label counts, so
 // "canary", "new york" and "utc+1" all find what a person expects. An empty
-// query matches everything.
+// query matches everything. `offset` is the zone's label when the caller has
+// already read it (the picker reads every zone's once per opening), so a
+// keystroke does not read all of them again.
 function fold(s) {
   return String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[/_]/g, " ").replace(/−/g, "-");
 }
-export function matchesZone(tz, q, at) {
+export function matchesZone(tz, q, at, offset) {
   const needle = fold(q).trim();
   if (!needle) return true;
-  return fold(tz).indexOf(needle) >= 0 || fold(offsetLabel(tz, at)).indexOf(needle) >= 0;
+  return fold(tz).indexOf(needle) >= 0 || fold(offset != null ? offset : offsetLabel(tz, at)).indexOf(needle) >= 0;
 }
 
 // The header's note: "Canary time" while THIS device's clock reads differently
