@@ -54,6 +54,7 @@ import { DownloadIcon } from "./Icons";
 // v18.2.0 /code-review: the entry count joins its word like every other count.
 import { countLabel } from "../lib/booking-logic";
 import { markArmed, armSettled } from "../lib/arm-guard";
+import { newCrashesWord } from "../lib/crash-report";
 
 // The kinds a person would filter by, in the order they matter during service.
 // `session` and `data` are deliberately last: signing in and exporting a backup
@@ -317,7 +318,7 @@ export function ActivityLogModal({
               key={k} as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={on ? "success" : "neutral"}
               aria-pressed={on}
               onClick={function () { toggleKind(k); }}
-            >{KIND_LABEL[k]}{k === "crash" ? <CountBadge n={newCrashes} plus={!!moreCrashes} background="var(--app-danger-solid)" srText={"new crash" + (newCrashes === 1 && !moreCrashes ? "" : "es")} /> : null}</OutlineChip>
+            >{KIND_LABEL[k]}{k === "crash" ? <CountBadge n={newCrashes} plus={!!moreCrashes} background="var(--app-danger-solid)" srText={newCrashesWord(newCrashes, !!moreCrashes)} /> : null}</OutlineChip>
           );
         })}
         {/* Not a kind, so it is separated by a gap rather than sitting in the

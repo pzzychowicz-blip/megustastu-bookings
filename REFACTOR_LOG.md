@@ -40522,3 +40522,6 @@ Nine findings. Eight held up and were fixed, one commit each; one was disproved.
   `[tz]` line (the read's error message, or that the value is no zone the server knows); an absent zone is the normal state and logs nothing.
 - **The lines this version wrote in `reminders.js` and `booking-logic.js` declare with `const`** (CLAUDE.md: never `var` in new code);
   the files' older lines stay as they were. `validateReminder`'s comment no longer calls its clock local.
+- **One rule says "N new crashes".** The gear, the Admin tab, Open the log and the Crashes chip each built the words by hand, four copies
+  of one plural. `newCrashesWord` / `newCrashesText` (`lib/crash-report.js`) are now the only spelling, and the gear's phrase joins the
+  count and its words with a no-break space like every other count; `tests/crash-trail.test.js` fails a hand copy.

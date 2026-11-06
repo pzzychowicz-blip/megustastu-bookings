@@ -29,6 +29,7 @@ import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, 
 import { MODULES, moduleOn } from "../lib/modules";
 import { RETENTION_CHOICES } from "../lib/activity";
 import { markArmed, armSettled } from "../lib/arm-guard";
+import { newCrashesWord } from "../lib/crash-report";
 import { useIntegrationStatus } from "../hooks/useIntegrationStatus";
 
 const LEVEL_LABEL = { staff: "Staff", manager: "Manager", admin: "Admin" };
@@ -921,7 +922,7 @@ export function AdminTabContent({
             className="mgt-hover-scale"
             onClick={onOpenActivity}
             style={mkBtn({ background: BTN.quiet, flexShrink: 0, display: "inline-flex", alignItems: "center" })}
-          >Open the log<CountBadge n={newCrashes} plus={!!moreCrashes} background="var(--app-danger-solid)" srText={"new crash" + (newCrashes === 1 && !moreCrashes ? "" : "es")} /></button>
+          >Open the log<CountBadge n={newCrashes} plus={!!moreCrashes} background="var(--app-danger-solid)" srText={newCrashesWord(newCrashes, !!moreCrashes)} /></button>
         </div>
         {/* v18.0.0 session 11: the retention window, which was hard-coded in
             TWO languages until this version — `PRUNE_AFTER_MS` in the app and

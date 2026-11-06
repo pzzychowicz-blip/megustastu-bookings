@@ -77,6 +77,7 @@ import { canVibrate } from "../lib/haptics";
 import { splitExceptions, rangeLabel, specialHoursLabel } from "../lib/special-days";
 import { waAutoReplyOn, AUTO_ACK_TEXT } from "../lib/whatsapp";
 import { markArmed, armSettled } from "../lib/arm-guard";
+import { newCrashesWord } from "../lib/crash-report";
 import { CloseIcon, DownloadIcon, TrashIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
@@ -1764,7 +1765,7 @@ export function SettingsContent({
         tabs={tabs}
         current={cur}
         onSelect={selectTab}
-        alerts={newCrashes > 0 ? { admin: { n: newCrashes, plus: !!moreCrashes, srText: "new crash" + (newCrashes === 1 && !moreCrashes ? "" : "es") } } : null}
+        alerts={newCrashes > 0 ? { admin: { n: newCrashes, plus: !!moreCrashes, srText: newCrashesWord(newCrashes, !!moreCrashes) } } : null}
       />
       {/* v15.8.0: tab body eases its height (AutoHeight) + crossfades on switch
           (key+mgt-fade-in) — the modal card follows the eased height. */}

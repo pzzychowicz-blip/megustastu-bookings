@@ -403,7 +403,7 @@ import { todayStr, stepDate, formatDay } from "./lib/day";
 import { zoneNote, offsetLabel } from "./lib/time-zones";
 import { onPrintEnd, printOrReport, PRINT_IGNORED_TEXT } from "./lib/print-end";
 import { retentionLabel } from "./lib/activity";
-import { noteCrashView } from "./lib/crash-report";
+import { noteCrashView, newCrashesText } from "./lib/crash-report";
 
 // ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
 // `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
@@ -1208,7 +1208,7 @@ export function BookingApp({uid}){
   function markCrashesSeen(){
     if(crashes.latest>(userPrefs.crashSeenAt||0)) saveUserPrefs({crashSeenAt:crashes.latest});
   }
-  const crashWord=crashes.count>0?crashes.count+(crashes.more?"+":"")+" new crash"+(crashes.count===1&&!crashes.more?"":"es"):"";
+  const crashWord=newCrashesText(crashes.count,crashes.more);
   // v18.0.0 phase 5: settings/whatsapp — the module's own restaurant-wide
   // settings (currently just auto-archive-on-complete). Gated on the MODULE now
   // rather than on WA_SANDBOX, so an admin switching WhatsApp on is what

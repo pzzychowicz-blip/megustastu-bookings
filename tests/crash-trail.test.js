@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { crashTrail, crashBadge } from "../src/lib/crash-report.js";
+import { crashTrail, crashBadge, newCrashesWord, newCrashesText } from "../src/lib/crash-report.js";
 import { sanitizeUserPrefs, DEFAULT_USER_PREFS } from "../src/hooks/useUserPrefs.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { appCode } from "./app-source.js";
@@ -29,6 +29,26 @@ describe("crashBadge — 50 is 50, and 50+ means more (the /code-review)", () =>
   it("a seen crash beyond the limit is not more", () => {
     // 51 read, the oldest already seen: exactly 50 new.
     expect(crashBadge(many(51), 1000, 50)).toEqual({ count: 50, latest: 1050, more: false });
+  });
+});
+
+describe("the crash count's words — one rule, four places (the /code-review)", () => {
+  it("one is singular; more than one, or 50+, is plural; none says nothing", () => {
+    expect(newCrashesWord(1, false)).toBe("new crash");
+    expect(newCrashesWord(2, false)).toBe("new crashes");
+    expect(newCrashesWord(1, true), "1+ is more than one").toBe("new crashes");
+    expect(newCrashesText(0, false)).toBe("");
+    expect(newCrashesText(1, false)).toBe("1\u00a0new crash");
+    expect(newCrashesText(50, true)).toBe("50+\u00a0new crashes");
+  });
+  it("no file under src/ spells the words by hand", () => {
+    const app = appCode();
+    expect(app).not.toMatch(/"new crash/);
+    expect(app).toContain("const crashWord=newCrashesText(crashes.count,crashes.more);");
+    for (const f of ["src/components/Settings.jsx", "src/components/AdminSettings.jsx", "src/components/ActivityLogModal.jsx"]) {
+      expect(read(f), f).not.toMatch(/"new crash/);
+      expect(read(f), f).toContain("newCrashesWord(newCrashes, !!moreCrashes)");
+    }
   });
 });
 
