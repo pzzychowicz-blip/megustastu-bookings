@@ -1102,17 +1102,14 @@ describe("the per-number parse limit (v18.15.0)", () => {
     vi.stubEnv("META_APP_SECRET", SECRET);
     fake.state.tree = { messages: { [KEY]: recent(20) } };
     fake.state.noIndex = true;
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      await deliver({ messages: [textMsg("wamid.A")] });
-      await deliver({ messages: [textMsg("wamid.B")] });
-      expect(scheduled).toEqual([]);
-      // The log says so, once per warm container (the /code-review: only the
-      // prune's copy of this read used to). This is the file's first read
-      // without the index under this tag, so the once is this test's.
-      const lines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[wa-limit]"));
-      expect(lines).toEqual(["[wa-limit] messages/$phoneKey has no .indexOn ts yet (publish database.rules.json); reading threads whole"]);
-    } finally { warn.mockRestore(); }
+    await deliver({ messages: [textMsg("wamid.A")] });
+    await deliver({ messages: [textMsg("wamid.B")] });
+    expect(scheduled).toEqual([]);
+    // The log says so, once per warm container (the /code-review: only the
+    // prune's copy of this read used to). This is the file's first read
+    // without the index under this tag, so the once is this test's.
+    const lines = vi.mocked(console.warn).mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[wa-limit]"));
+    expect(lines).toEqual(["[wa-limit] messages/$phoneKey has no .indexOn ts yet (publish database.rules.json); reading threads whole"]);
   });
 
   it("a read that fails parses, as before the limit", async () => {
@@ -1165,38 +1162,36 @@ describe("the restaurant's time zone on the server (v18.15.0)", () => {
   afterEach(() => { vi.useRealTimers(); });
 
   it("readTimeZone answers the stored zone, else the tenant's, and never null", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      fake.state.tree = { settings: { general: { timeZone: "America/New_York" } } };
-      expect(await readTimeZone()).toBe("America/New_York");
-      fake.state.tree = {};
-      expect(await readTimeZone()).toBe("Atlantic/Canary");
-      // A stored zone or an absent one is the normal state: nothing in the log.
-      expect(warn).not.toHaveBeenCalled();
-      // A value the client's applyClock would not use is not used here either,
-      // and the log says so (the /code-review).
-      for (const bad of ["Mars/Olympus", 5, "", { tz: "x" }]) {
-        fake.state.tree = { settings: { general: { timeZone: bad } } };
-        warn.mockClear();
-        expect(await readTimeZone(), JSON.stringify(bad)).toBe("Atlantic/Canary");
-        expect(warn, JSON.stringify(bad)).toHaveBeenCalledTimes(1);
-        expect(String(warn.mock.calls[0][0])).toMatch(/^\[tz\] .*no zone this server knows/);
-      }
-      vi.stubEnv("TENANT_TIME_ZONE", "Asia/Tokyo");
-      fake.state.tree = {};
-      expect(await readTimeZone()).toBe("Asia/Tokyo");
-    } finally { warn.mockRestore(); }
+    const warn = vi.mocked(console.warn);
+    fake.state.tree = { settings: { general: { timeZone: "America/New_York" } } };
+    expect(await readTimeZone()).toBe("America/New_York");
+    fake.state.tree = {};
+    expect(await readTimeZone()).toBe("Atlantic/Canary");
+    // A stored zone or an absent one is the normal state: nothing in the log.
+    expect(warn).not.toHaveBeenCalled();
+    // A value the client's applyClock would not use is not used here either,
+    // and the log says so (the /code-review).
+    for (const bad of ["Mars/Olympus", 5, "", { tz: "x" }]) {
+      fake.state.tree = { settings: { general: { timeZone: bad } } };
+      warn.mockClear();
+      expect(await readTimeZone(), JSON.stringify(bad)).toBe("Atlantic/Canary");
+      expect(warn, JSON.stringify(bad)).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toMatch(/^\[tz\] .*no zone this server knows/);
+    }
+    vi.stubEnv("TENANT_TIME_ZONE", "Asia/Tokyo");
+    fake.state.tree = {};
+    expect(await readTimeZone()).toBe("Asia/Tokyo");
   });
 
   it("a read that fails is the tenant's zone, not UTC, and the log names the error", async () => {
     const ref = fake.db.ref;
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.mocked(console.warn);
     fake.db.ref = (p) => (p === "settings/general/timeZone" ? { get: async () => { throw new Error("offline"); } } : ref(p));
     try {
       expect(await readTimeZone()).toBe("Atlantic/Canary");
       expect(warn).toHaveBeenCalledTimes(1);
       expect(String(warn.mock.calls[0][0])).toMatch(/^\[tz\] .*could not be read \(offline\)/);
-    } finally { fake.db.ref = ref; warn.mockRestore(); }
+    } finally { fake.db.ref = ref; }
   });
 
   it("the webhook dates \"mañana\" on the Canary calendar", async () => {
