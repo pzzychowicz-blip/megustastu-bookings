@@ -42,7 +42,7 @@ import { cleanTagIds } from "./tags.js";
 import { isNoShow, NO_SHOW_CLEARED, isReadableTime } from "./booking-fields.js";
 import { normalizeCode, attachRefusal } from "./vouchers.js";
 import { EMPTY_FORM, hoursFor, KITCHEN_TABLE_LIMIT } from "./constants.js";
-import { todayStr, WEEKDAY_LONG } from "./day.js";
+import { todayStr, nowMinutes, WEEKDAY_LONG } from "./day.js";
 
 // ── memoByPrev ───────────────────────────────────────────────────────────────
 // v17.4.0 /code-review: prev-identity memo for a save transform. The synchronous
@@ -294,7 +294,7 @@ export function applyEdit(input){
   // BOOKING's — so completing a booking dated anything but today clamped to
   // the 15-minute floor. seatedElapsed projects and caps at that day's
   // close, so this agrees with what auto-complete would have written.
-  if(f.status==="completed"&&orig&&orig.status==="seated"&&!f.customDur){const now=new Date();const actualDur=Math.max(15,seatedElapsed({date:f.date,time:f.time},todayStr(now),now.getHours()*60+now.getMinutes()));saveDur=actualDur;saveCustDur=actualDur;}
+  if(f.status==="completed"&&orig&&orig.status==="seated"&&!f.customDur){const now=new Date();const actualDur=Math.max(15,seatedElapsed({date:f.date,time:f.time},todayStr(now),nowMinutes(now)));saveDur=actualDur;saveCustDur=actualDur;}
   // v17.6.0: record how long they ACTUALLY stayed, so the List card can
   // show it after the visit (booking-logic's stayedMins). Computed for
   // EVERY seated→completed save, including the `f.customDur` case the
@@ -306,7 +306,7 @@ export function applyEdit(input){
     const nowD=new Date();
     // Same axis fix as the truncation above — the register's "completing
     // records stayedMin = 15".
-    saveStayed=Math.max(15,seatedElapsed({date:f.date,time:f.time},todayStr(nowD),nowD.getHours()*60+nowD.getMinutes()));
+    saveStayed=Math.max(15,seatedElapsed({date:f.date,time:f.time},todayStr(nowD),nowMinutes(nowD)));
   }
   // Apply seated shift (if any) to the values we'll write. Overrides plan
   // numbers above — the shift always wins over default-duration logic.

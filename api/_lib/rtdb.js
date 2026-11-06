@@ -41,10 +41,11 @@
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getDatabase } from "firebase-admin/database";
 import { getAuth } from "firebase-admin/auth";
-import { dbUrl, serviceAccount, staffEmails, requireStaffAllowList } from "./env.js";
+import { dbUrl, serviceAccount, staffEmails, requireStaffAllowList, tenantTimeZone } from "./env.js";
 import { statusWins, waAutoReplyOn } from "../../src/lib/whatsapp.js";
 import { isAdminEntry, sanitizeRole, can } from "../../src/lib/roles.js";
 import { sanitizeTagList } from "../../src/lib/tags.js";
+import { isValidTimeZone } from "../../src/lib/day.js";
 
 let cachedApp = null;
 let cachedDb = null;
@@ -339,6 +340,29 @@ export async function readOperatingHours() {
   }
 }
 
+// v18.15.0: the restaurant's time zone (Settings → General), so a parse reads
+// "today", "mañana" and "el jueves" on the restaurant's calendar and not the
+// server's. Vercel runs in UTC, where the Canaries' first hour of every summer
+// day is still yesterday. Read through day.js's own `isValidTimeZone`, the check
+// the client's `applyClock` applies before it uses a stored zone. Absent,
+// invalid or unreadable → the tenant's, from the environment (env.js,
+// tenantTimeZone). Never null: a parse always has a calendar, and a blip must
+// not move it to UTC. A stored zone that is not used, or a read that failed,
+// says so in the log (the v18.15.0 /code-review): the fallback is right, but a
+// silent one would date every draft on the tenant's calendar with nothing in
+// Vercel's logs to say why. Absent is the normal state and says nothing.
+export async function readTimeZone() {
+  try {
+    const snap = await getDb().ref("settings/general/timeZone").get();
+    const v = snap.exists() ? snap.val() : null;
+    if (isValidTimeZone(v)) return v;
+    if (v != null) console.warn("[tz] settings/general/timeZone holds no zone this server knows; using the tenant's");
+  } catch (e) {
+    console.warn("[tz] settings/general/timeZone could not be read (" + (e && e.message ? e.message : String(e)) + "); using the tenant's");
+  }
+  return tenantTimeZone();
+}
+
 // v18.11.0: the restaurant's occasion tags, `[{id, label}]`, for the parse's
 // occasions (gemini.js, responseSchemaFor). Read through the client's own
 // `sanitizeTagList`, so an absent node is the seed list exactly as the booking
@@ -479,33 +503,53 @@ export async function readMessageNode(phoneKey) {
   return snap.exists() ? snap.val() || {} : {};
 }
 
-// One conversation's messages older than `before` (ms), keyed like
-// readMessageNode, for a thread the prune is NOT deleting (/code-review). A
+// One conversation's messages in a range of `ts`, keyed like readMessageNode:
+// the shape both readers below share (the v18.15.0 /code-review: it was written
+// out twice, and only one copy said in the log that it had fallen back). A
 // query on `ts`, indexed in database.rules.json (`messages/$phoneKey`), so a
-// regular customer's thread costs the night only its old messages rather than
-// its whole history. A message with no `ts` comes too (null sorts first); a
-// `ts` that is a string does not (strings sort after numbers). The caller
-// filters either way. Both measured on the emulator through firebase-admin.
+// regular customer's thread costs only the messages in range rather than its
+// whole history. `range` narrows the ordered query; `tag` names the caller in
+// the log.
 //
 // **A `get()` on a query the rules do not index is REFUSED** ("Index not
 // defined"), not filtered for the SDK as a listener's is: measured on the
 // emulator. So until the rules carrying the index are published, the thread is
-// read whole, as before it, and the deploy order does not matter.
-let warnedNoIndex = false;
-export async function readOldMessages(phoneKey, before) {
+// read whole, as before it, and the deploy order does not matter. Each caller
+// says so once per warm container, under its own tag.
+const warnedNoIndex = new Set();
+async function readByTs(phoneKey, range, tag) {
   const node = getDb().ref("messages/" + sanitizeKey(phoneKey));
   let snap;
   try {
-    snap = await node.orderByChild("ts").endAt(before - 1).get();
+    snap = await range(node.orderByChild("ts")).get();
   } catch (e) {
     if (!/index not defined/i.test(String(e && e.message))) throw e;
-    if (!warnedNoIndex) {
-      warnedNoIndex = true;
-      console.warn("[wa-prune] messages/$phoneKey has no .indexOn ts yet (publish database.rules.json); reading threads whole");
+    if (!warnedNoIndex.has(tag)) {
+      warnedNoIndex.add(tag);
+      console.warn("[" + tag + "] messages/$phoneKey has no .indexOn ts yet (publish database.rules.json); reading threads whole");
     }
     snap = await node.get();
   }
   return snap.exists() ? snap.val() || {} : {};
+}
+
+// The messages older than `before` (ms), for a thread the prune is NOT
+// deleting (/code-review). A message with no `ts` comes too (null sorts
+// first); a `ts` that is a string does not (strings sort after numbers). The
+// caller filters either way. Both measured on the emulator through
+// firebase-admin.
+export function readOldMessages(phoneKey, before) {
+  return readByTs(phoneKey, function (q) { return q.endAt(before - 1); }, "wa-prune");
+}
+
+// v18.15.0: the messages from `since` (ms) on, for the per-number parse limit
+// (inbound-core.js, parseOverLimit): the same query from the other end, so one
+// inbound message costs a regular customer's thread only its last hour. RTDB's
+// `startAt(number)` also returns a `ts` that is a string (strings sort after
+// numbers); `recentInbound` counts only numbers. Without the index the thread
+// is read whole rather than the limit failing.
+export function readRecentMessages(phoneKey, since) {
+  return readByTs(phoneKey, function (q) { return q.startAt(since); }, "wa-limit");
 }
 
 // Deletes the conversation only if `stillOld(stored)` holds at the moment of

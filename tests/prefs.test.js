@@ -55,7 +55,9 @@ describe("PREF_SPEC agrees with everything that depends on it", () => {
   it("covers exactly the synced booleans, and not `theme`", () => {
     // theme is a tri-state string with a ?theme= override that must skip both
     // branches of the seeding effect. It stays written out in full on purpose.
-    const boolFields = Object.keys(DEFAULT_USER_PREFS).filter((k) => k !== "v" && k !== "theme");
+    // v18.15.0: nor `crashSeenAt`, a number (the newest crash an admin has
+    // seen) with no localStorage mirror and nothing to seed from a device.
+    const boolFields = Object.keys(DEFAULT_USER_PREFS).filter((k) => k !== "v" && k !== "theme" && k !== "crashSeenAt");
     expect([...PREF_NAMES].sort()).toEqual(boolFields.sort());
     expect(PREF_SPEC.theme).toBeUndefined();
   });

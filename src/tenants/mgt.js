@@ -52,6 +52,16 @@ export const profile = {
   // belongs; wire it at the point a consumer actually exists, not before.
   locale: "es-ES",
 
+  // v18.15.0 — where the restaurant IS, as an IANA zone. Every "now" and
+  // "today" in the app is read in this zone (`setTimeZone`, src/lib/day.js),
+  // so a device elsewhere shows and writes the restaurant's clock. It is the
+  // SEED of `settings/general.timeZone`, which an admin can change in
+  // Settings → General, the way `name` seeds `restaurantName`; `main.jsx` sets
+  // it before the first render, so nothing runs on the device's zone while that
+  // node loads. The server reads the same node, falling back to the
+  // `TENANT_TIME_ZONE` env var and then to "Atlantic/Canary" (`api/_lib/env.js`).
+  timeZone: "Atlantic/Canary",
+
   // One sentence describing the restaurant, for the WhatsApp module's Gemini
   // prompts. Read there through a `TENANT_WA_CONTEXT` env var: this is the
   // value's home, not its delivery route.

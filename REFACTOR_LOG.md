@@ -40259,3 +40259,276 @@ and that produced a false blur finding here until the clip was rebuilt from a re
   raise the same bubble, nothing was measured, and it is an iOS bubble on an app the restaurant runs on Android.
 
 **After:** main entry 455.52 kB (134.47 gz); 4,299 tests; 0 lint errors, 63 warnings; style OK.
+
+## v18.15.0 — the restaurant's clock, and the production-readiness fixes
+
+**Date:** 2026-11-05 · **Branch:** `feat/v18.15.0-production-ready`
+
+**Why:** Patryk put a generic "production-ready checklist" to the app and asked what happens when it is opened in a time zone other than the restaurant's.
+The answer was a defect: every reading of "now" asked the DEVICE's clock. A phone in Poland drew the now-line an hour late and raised late warnings an
+hour early, and auto-extend, auto-complete at close and "complete seated" wrote durations an hour long into the shared database. West of the Canaries,
+an evening walk-in was filed under yesterday. The server told Gemini "Today is" in UTC. The rest of the checklist became the other phases of this version
+(the plan: `/Users/patrykzychowicz/.claude/plans/elegant-baking-puzzle.md`). Two findings were withdrawn on checking: backups are automatic (the private
+`mgt-backups` repo, daily, encrypted, restore rehearsed 2026-10-10), and the API has no open endpoint (the webhook is HMAC-gated, the rest need a staff token).
+
+### Phase 1 — the restaurant's clock in `lib/day.js`
+
+`wallClock(instant, tz?)` is the one reading of an instant as a wall clock: `{y, m, d, h, min, dow}` in the zone set by `setTimeZone`, from one cached
+`Intl.DateTimeFormat` per zone (`hourCycle: "h23"`, so midnight is 0, never 24) and a one-entry cache keyed on zone and minute, since "now" is read many
+times a render and always in the same minute. `todayStr`, the new `nowMinutes`, `clockTime(at)`, `zoneOffsetMinutes` and `wallToInstant` (its inverse,
+two passes so a clock-change day lands right) are built on it. `dayRangeMs` is the restaurant's midnight to its NEXT midnight, so the change days are 23
+and 25 hours long, as they are; its accepted inputs are unchanged. **No zone set means the device's**, with the old getters verbatim, so every test that
+sets none, and every caller before phase 3 sets one, behaves exactly as before. The file still imports nothing.
+
+`tests/day.test.js`: the restaurant at Atlantic/Canary, the device moved through Warsaw, New York, UTC, the Canaries and Kiritimati; today, now, the two
+2026 clock changes, the offset, the inverse, the day range, an unknown zone (refused, device clock, never a throw) and an invalid instant.
+
+### Phase 2 — every clock read goes through `lib/day.js`
+
+Each site that read an instant on the device's clock now asks `day.js`: `nowMinutes()` in `useNowMins`, `useAutoOptimizer`, `useWalkin`'s
+`closedNow`, `bookingsAfterAction`, `nowTime` and both seated → completed durations in `booking-save.js`; `clockTime(at)` for the waitlist's
+"added", the activity log's rows and its CSV `stamp`, a booking's history, the WhatsApp bubbles (`formatClockTime`) and the usage panel's
+"updated"; `wallClock().dow` for a new weekly reminder's default day; `wallClock` + `wallToInstant` for a voucher's expiry, so its last day is
+the restaurant's. Two sites read a DATE and were already zone-proof; they moved anyway so the guard can be absolute: `reminderAppliesTo` takes the
+weekday through `weekdayShort` (all-UTC) instead of local noon. The simulator's "today" (App's `todayIso`, `WaSimulator`'s default, the scenarios'
+`isoPlus` / `nextDow`) was UTC's and is now `todayStr()` stepped with `addDays`.
+
+**The guard:** `tests/clock-reads.test.js` scans `src/` and `api/`, comments stripped, for a local getter or setter, a locale date or time format
+or an `Intl.DateTimeFormat` without `timeZone`, and `new Date().toISOString().slice(0, 10)`. Only `day.js` is allowed. Date-only arithmetic
+(`getUTC*`) and number formatting do not match, which the guard's own first test pins.
+
+### Phase 3 — the time zone is a restaurant setting
+
+`settings/general.timeZone` (whitelisted in `sanitizeGeneral`: a zone the engine can format in, else the seed), seeded from the tenant's new
+`profile.timeZone: "Atlantic/Canary"`, the way `restaurantName` is seeded from `profile.name` (Patryk's choice over the tenant file alone, so an admin
+can change it without a deploy and the server reads the same value). **`SCHEMA` 5 → 6**: the node is read through a whitelist, so a build without the key
+would save the general settings with the zone gone. No rules change: the node's `.write` validates no field.
+
+- **When the clock moves:** `main.jsx` sets the tenant's zone before `render`, so nothing runs on the device's zone while the node loads. The hook calls
+  `setTimeZone` on the line ABOVE each of its two `setGS` calls (the snapshot and the save), never from an effect, so the render showing the new settings
+  is already on the new clock. `onTimeZoneChange` (`day.js`) re-reads `useNowMins`' held minute at once rather than on its next 15s tick.
+- **The picker** (`TimeZonePicker.jsx`, CountryPicker's shape): every zone the engine knows, searchable by place, region or UTC offset
+  (`lib/time-zones.js`: `zoneList`, `zoneName`, `offsetLabel` with a real minus and half hours, `matchesZone`). In Settings → General → Restaurant, under
+  the name, with one sentence saying what follows it and that bookings keep their times. Its row handlers are the shared `acRowHandlersFor`, called at
+  event time from one set on the listbox: spread per row they were 420 handler objects a render and a React-Compiler ref warning past the lint cap of 63.
+
+**Measured on DEV, on this Mac set to Africa/Cairo (UTC+2, 23:32):** the now-line read 21:32, the Canaries' time. Picking Europe/Warsaw by tap moved it
+to 22:33 with no reload, and typing "canary" + Enter put it back, with Settings left open (Enter stops at the search box).
+
+`tests/time-zones.test.js`: the list, the names, the offsets (Canary summer and winter, New York, Kolkata, St John's), the search, the tenant's zone, the
+boot order, the whitelist and seed, and `applyClock` above both `setGS`. `tests/schema.test.js` re-pinned at 6.
+
+### Phase 4 — the header says whose clock it is
+
+"Canary time" beside the viewed date (`clockNote`, from `zoneNote(generalSettings.timeZone)`, `lib/time-zones.js`), shown only while this device's offset
+differs from the restaurant's, so Lisbon and London show nothing next to the Canaries and a phone in Poland does. Its tooltip names the zone and its
+offset. It takes a control's height (`H.control`) because the date row is top-aligned: without it the text sat on the pill's top edge (seen on DEV).
+`--text-secondary` on the app's own background, no new fill. **Measured on DEV with this Mac on Africa/Cairo:** the note shows, centred on the date pill,
+and the now-line beside it reads the Canaries' 21:36 at the Mac's 23:36. `tests/time-zones.test.js` pins its place after the date `<nav>` and before Today.
+
+### Phase 5 — the server dates WhatsApp messages in the restaurant's zone
+
+The parse told the model "Today is" in UTC (`now.toISOString().slice(0, 10)` and `getUTCDay()`, in both `parseMessage` and `parseThread`), and the
+mock parser stepped UTC days. Vercel runs in UTC, so a message sent between 00:00 and 01:00 on a Canary summer night was dated a day early: "mañana"
+became the day the customer meant as today, and "el jueves" sent on a Thursday became that Thursday rather than the next.
+
+`readTimeZone()` (`api/_lib/rtdb.js`) reads `settings/general.timeZone` through day.js's `isValidTimeZone`, the check the client's `sanitizeGeneral`
+makes, and falls back to `tenantTimeZone()` (`api/_lib/env.js`): `TENANT_TIME_ZONE`, then `Atlantic/Canary`. It never answers null, so a failed read
+cannot move the calendar to UTC. An invalid variable is refused with a warning. `restaurantToday(timeZone, now)` (`api/_lib/gemini.js`) gives the
+date, the weekday and the zone used. `todayStr` gained an optional `tz`, because the server passes the zone and never sets it: `setTimeZone` is module
+state, and a warm container is shared between requests. The webhook, the simulator's inbound and the Re-check read the zone beside the hours and pass
+it as `timeZone`. The auto-ack's language hint still calls `mockParse` without one and reads no date.
+
+**Measured** at 23:30 UTC on 15 July 2026 (00:30 on the 16th in the Canaries), with fake timers. The prompt reads "Today is 2026-07-16 (Thursday)."
+for the Canaries and "2026-07-15 (Wednesday)." for New York. "Mañana" through the webhook is dated the 17th, or the 16th with New York stored. "El
+jueves" through the simulator is dated the 23rd. Against the old `gemini.js` the webhook and simulator tests fail with the UTC dates.
+`tests/clock-reads.test.js` now also fails any ISO date slice under `api/`. It failed on the old file and passes now.
+
+`TENANT_TIME_ZONE` is listed in `api/wa-config.js`'s keys and in `.env.local.example`, beside `TENANT_WA_CONTEXT`. Like that variable it is optional,
+and unset changes nothing for Me Gustas Tú (`tests/wa-time-zone.test.js` holds the fallback equal to `src/tenants/mgt.js`'s `profile.timeZone`).
+
+**Files:** `api/_lib/env.js` · `api/_lib/rtdb.js` · `api/_lib/gemini.js` · `api/_lib/inbound-core.js` · `api/wa-inbound.js` · `api/wa-recheck.js` ·
+`api/wa-config.js` · `src/lib/day.js` · `.env.local.example` · `api/CLAUDE.md` · `tests/wa-time-zone.test.js` (new) · `tests/api-handlers.test.js` ·
+`tests/clock-reads.test.js`.
+
+### Phase 6 — at most 20 automatic drafts an hour per number
+
+Every customer message bought one Gemini call, and nothing bounded how many one number could buy. The webhook is HMAC-gated and the staff endpoints
+need a token, so this is a cost limit, not an access one. `WA_PARSES_PER_HOUR` (20, Patryk's number) and `recentInbound` / `parseThrottled` are pure,
+in `src/lib/whatsapp.js`. They count the customer's stored messages (`direction: "in"`, a numeric `ts` inside the last hour), parsed or not, so a number
+that keeps sending stays limited until it stops rather than getting one parse through every few minutes. Asked before the new message is stored,
+so no rolling hour holds more than 20 automatic parses.
+
+`parseOverLimit(phoneKey, conv)` (`api/_lib/inbound-core.js`) reads `readRecentMessages` (`api/_lib/rtdb.js`), the indexed `ts` query the nightly
+prune uses, from the other end (`startAt`). It falls back to a whole read where the rules lack the index, like the prune. The webhook and
+`injectSimInbound` ask it before `processInbound`, so a message over the limit is stored with `willParse` false and no "analyzing…" flag is left
+waiting. A muted conversation costs no read. A failed read parses, as before this version. Re-check is not limited. One log line, with counts only:
+"parse limit: 20 messages from one number in the last hour (limit 20); stored without a draft". No new field, so no `SCHEMA` change.
+
+**Measured** in `tests/api-handlers.test.js` (the fake database gained `startAt`, ordered as RTDB orders it). With 19 earlier messages the 20th is
+parsed and the 21st is stored with no draft, no flag and nothing scheduled. Messages more than an hour old do not count. The limit holds with no
+index, a failed read parses, a muted thread asks nothing, the simulator meets the limit, and Re-check still runs. Against the old webhook and
+`inbound-core.js`, five of the eight fail. Before this, the existing suite passed only because the fake had no `startAt`, so the limit failed open:
+the failed-read rule, measured by accident.
+
+**Files:** `src/lib/whatsapp.js` · `api/_lib/rtdb.js` · `api/_lib/inbound-core.js` · `api/wa-inbound.js` · `api/CLAUDE.md` · `GLOSSARY.md` ·
+`tests/api-handlers.test.js` · `tests/wa-rtdb-hardening.test.js` (its sanitised-path count, 15 → 16).
+
+### Phase 7 — the customer's words are never an instruction
+
+The auto-reply is a fixed template (`AUTO_ACK_TEXT`), so model output never reaches a customer without a person reading it, and a draft is only a
+suggestion staff accept. Three gaps closed:
+
+- **The single-message prompt** quoted the message as a JSON literal but did not say what the quotes mean, the sentence the Re-check's transcript
+  prompt has carried since v18.0.0. It now does, right above "Customer message:". `tests/wa-parse-guard.test.js` reads the prompt the real parse
+  sends for an injected "Rules:" block: the sentence is on the line above, the message is one quoted line, and "Rules:" appears once. It fails on
+  the old `gemini.js`.
+- **The draft's free text was unbounded.** `sanitizeParse` left `name` and `notes` whole by a v18.0.0 decision ("the app only ever displays it"),
+  pinned by a test. True of the screen, not of the download: a draft is stored on the conversation row, which every device fetches with the inbox,
+  so a notes flood a message talked the model into costs every tablet. `WA_DRAFT_TEXT_MAX` caps `name` 80, `notes` 1000 (the most of the message
+  the model reads) and `ambiguity` 300, in whole characters (an emoji is never split), and a value that is not a string becomes null. A parse
+  without the key stays without it. The v18.0.0 test is rewritten, with the reason, and its enum half is unchanged. `sanitizeParse`'s schema
+  fingerprint is re-pinned WITHOUT a `SCHEMA` raise, for v18.11.0's reason: no reader whitelists `draftData` through it.
+- **No eval set.** `scripts/wa-eval.mjs` sends 15 messages, seven of them injection attempts, through the real parse against live Gemini and
+  prints a row each, exit 1 on a failure. It refuses CI and a missing key. Its checker is tested on canned answers (`tests/wa-eval.test.js`).
+  **Measured with Gemini stubbed by the mock parser:** the plumbing runs end to end and the mock fails 8 of 15, five of them injections, which shows
+  the rows discriminate. **Not yet run live:** this Mac has no `.env.local` with a key. It is Patryk's to run with the sandbox key.
+
+**Files:** `api/_lib/gemini.js` · `src/lib/whatsapp.js` · `scripts/wa-eval.mjs` (new) · `scripts/CLAUDE.md` · `api/CLAUDE.md` ·
+`tests/wa-parse-guard.test.js` · `tests/wa-eval.test.js` (new) · `tests/schema.test.js`.
+
+### Phase 8 — admins see new crashes from the header
+
+A crash entry (v18.13.0) was visible only to somebody who went looking: Settings → Admin → Open the log → Crashes. Now the count of crashes this admin
+has not seen is on each of those four steps, so the trail leads from the header to the list. Turning the Crashes chip ON clears it.
+
+- **What is counted** is pure: `crashTrail(entries, seenAt)` (`lib/crash-report.js`) counts the crash entries newer than `seenAt` and finds the
+  newest `at`. **`seenAt` is the newest crash's own time, not this device's clock**: an entry's `at` is a serverTimestamp, so storing it means a
+  device whose clock is wrong can neither hide a crash nor bring one back. Never looked (null) is every crash new. On DEV that was 19 the first time.
+- **Where it is stored**: `crashSeenAt` in the person's prefs (`settings/users/$uid/prefs`), so it clears on every device they use and stays for
+  another admin. A number outside `PREF_SPEC`, like `theme`, with no localStorage mirror. `sanitizeUserPrefs` changed, so its fingerprint is
+  re-pinned under the same `SCHEMA` 6 as phase 3's `timeZone`: one raise for one unreleased version (`tests/schema.test.js` says so).
+- **One listener**, `useCrashTrail` (new): `activity` by `kind == "crash"`, the newest 50 (`limitToLast`, on the existing `kind` index), only while
+  `can("settingsAdmin") && prefsLoaded`. Staff spend nothing, and the badge never flashes every crash before `crashSeenAt` arrives. Past 50 it reads
+  "50+".
+- **The badge** is `CountBadge` (atoms.jsx, new), the WhatsApp button's unread count moved there unchanged, in `--app-danger-solid`, which is already
+  registered against `--text-on-accent`. On the gear and the Admin tab it sits on the corner, absolutely placed, so the tab bar's measured widths
+  are untouched. On "Open the log" and the chip it sits inline. Each says "new crash(es)" to a screen reader, and the gear's name does too.
+
+**Measured on DEV** (Browser pane, 1100×800; read from the DOM, since the automation tree's names left the badge's text out). The gear read
+"Settings & keyboard shortcuts, 19 new crashes", with 19 on the Admin tab, on Open the log and on the chip. The Admin tab's badge is inside its
+scroll container (top 88.75 against 15.75). Turning the chip on cleared all four at once. A thrown error brought back "1 new crash", singular.
+Turning the chip off kept it and on cleared it. A reload kept it cleared, so the write landed. The console showed only the two deliberate errors,
+which stay in DEV's log as two crash entries ("v18.15.0 crash trail check").
+
+**Files:** `src/lib/crash-report.js` · `src/hooks/useCrashTrail.js` (new) · `src/hooks/useUserPrefs.js` · `src/components/atoms.jsx` ·
+`src/App.jsx` · `src/components/Settings.jsx` · `src/components/AdminSettings.jsx` · `src/components/ActivityLogModal.jsx` · `GLOSSARY.md` ·
+`src/hooks/CLAUDE.md` · `src/components/CLAUDE.md` · `tests/crash-trail.test.js` (new) · `tests/prefs.test.js` · `tests/schema.test.js`.
+
+**Found on the way, not fixed:** `check:style`'s spacing rule reads only the FIRST occurrence of each key on a line (`line.search` and
+`styleValue`), so the WhatsApp badge's off-scale `padding: "0 5px"` passed in App unseen: its one-line JSX began with the button's own
+`padding:"8px 14px"`, which is on the scale. Measured: that line holds no exemption marker. Moved into `atoms.jsx` it failed at once, and it now
+carries `/* @canvas */` because the badge keeps its pixels. **Measured, a scan of every second-and-later occurrence under `src/`:** one hidden
+literal before this commit (`src/App.jsx:3982`, the badge), none after. So the rule's gap hides nothing today. Making it judge every occurrence is
+linter work of its own, outside this version.
+
+### Phase 9 — RUNBOOK.md, and the backup docs catch up
+
+`RUNBOOK.md` (new, root) holds the steps for when production goes wrong, each pointing at where its details live:
+
+- **Roll back first**: Vercel's Instant Rollback, which on Hobby reaches only the immediately previous production deployment and stops `main` from going
+  live until Undo Rollback (Vercel's docs, read 2026-11-06). Then what it cannot undo: a raised `SCHEMA` (old builds stop saving until `/schema/v` is
+  lowered in the console, which v18.15.0 itself will need after a rollback), data already written, hand-deployed rules, environment variables, and
+  the service worker. The permanent fix is a revert or a fix on `main`.
+- **Restore**: the daily encrypted backup in `mgt-backups`, its Monday freshness check, and the console steps in `database.rules.README.md`.
+- **The uptime monitor**, which Patryk sets up: an UptimeRobot keyword monitor on the live URL for "MGT Bookings" every 5 minutes, and what it cannot
+  see (Firebase).
+- **Crashes**: the entry, the v18.15.0 crash trail, and the crash digest from `mgt-backups` (that repo's own PR).
+- **Spending**, per service. Gemini: AI Studio's per-project monthly spend cap stops spending, and a Cloud budget only alerts. Meta: the in-app cost
+  counter. Vercel Hobby and Firebase Spark send no bill but pause or switch off at their limits. GitHub Actions minutes.
+
+**Two findings for Patryk, written into the runbook and not decided here.** Vercel's own Hobby page says the plan is for non-commercial, personal use
+only, and this is a restaurant's app. And on Spark, going over any monthly limit turns the app off until the next cycle, not just slower. Today's
+usage is far below every limit (ROADMAP's archive entry, 2026-10-09: 0.15%, 5.5%, 4 of 100). UptimeRobot's free-plan terms on commercial use
+disagree between sources, so the runbook says to read them when signing up.
+
+`CLAUDE.md` points at the runbook, and its "Firebase free plan" Gotchas row now names the daily backup and the switch-off (37,404 of 40,000
+characters). `database.rules.README.md` § Backups said the manual download was "the only one", which had been stale since `mgt-backups` began. It
+now names both. Nothing on `ROADMAP.md` covered these items, so nothing was removed.
+
+**In `mgt-backups`, on its own branch and PR** (`v18.15.0-retention-and-digest`, four commits, not pushed): backups kept 30 days instead of 90
+(the repository's own retention setting reads 90 today, measured with a read-only `gh api` call, and is Patryk's to change); the daily crash digest
+(`crash-digest.mjs` + `crash-digest.yml`, looking back 30 hours because scheduled runs start hours late; its pure half was checked on synthetic
+entries: grouping, Canary times, `::` neutralised, no email in any line); and the freshness check every day instead of every Monday, the plan's
+proposal. `RUNBOOK.md` says which of these wait on that PR.
+
+**Files:** `RUNBOOK.md` (new) · `CLAUDE.md` · `database.rules.README.md`.
+
+### The live zone check
+
+Run headless on the worktree's dev server (`:5179`, DEV Firebase), on a copy of the capture profile, with the device's zone set per run
+(Playwright `timezoneId`). Every write the page sent was dropped and recorded, so nothing reached DEV. Measured 2026-11-05, 22:16 in the Canaries.
+
+**Ten runs: five device zones at two clocks** (the real clock, and `Date` shifted from the first line so the restaurant reads 15:30). In every run
+the app's zone was Atlantic/Canary, and its date was 2026-11-05. That held in Tokyo too, where the device read 07:17 and 00:30 on the 6th. The
+now-line stood at the restaurant's minute, the walk-in form opened on that minute, and the header note read "Canary time" in Warsaw, New York and
+Tokyo but not in the Canaries or Lisbon (the same offset). The device's own clock was read in the same run, to show the zone had taken.
+
+**Auto-extend and auto-complete, with a seated party injected into the page's copy of `/bookings`** over the socket (14:30, 90 minutes, so it
+ends at 16:00 in the Canaries; never written to DEV):
+
+| Restaurant clock · device zone | Device read | Write the page attempted |
+|---|---|---|
+| 15:30 · Canaries, Warsaw, New York, Tokyo | 15:30 · 16:30 · 10:30 · 00:30 (6th) | none in any of the four. The old code extended it in Warsaw |
+| 16:30 · Canaries (the control) | 16:30 | duration 90 → 120 |
+| 16:30 · New York | 11:30 | duration 90 → 120. The old code wrote nothing |
+| 22:16 · Canaries, New York (after close) | 22:16 · 17:16 | completed, duration 450 (14:30 to the 22:00 close) in both. The old code wrote nothing in New York |
+
+The two controls show that the rig records a write when one is due, so the four empty rows mean nothing was attempted, not that the rig missed it.
+
+**Not covered here:** the installed app on the tablet, the Settings picker on a device, the server's dating of a WhatsApp message sent at 00:30
+Canary time (which needs the sandbox after the merge), and the crash trail on a second device.
+
+**`mgt-backups` landed (2026-11-05).** Patryk merged its branch as
+[pzzychowicz-blip/mgt-backups#2](https://github.com/pzzychowicz-blip/mgt-backups/pull/2), holding the four commits, and approved setting the
+repository's Actions retention to 30 days. The setting read 90 before and reads 30 after (a `gh api` read-back). `crash-digest` is registered
+and active, and its first scheduled run is 07:00 UTC on 2026-11-06. `RUNBOOK.md` no longer says these wait on that PR, and its crash-digest
+line now says 30 hours rather than 24, which is what the job reads.
+Its first run against PROD was a manual one over 720 hours, at Patryk's request
+([run 42121524651](https://github.com/pzzychowicz-blip/mgt-backups/actions/runs/42121524651), 10 seconds). It printed "No crashes in the
+last 720 hours." and passed. That shows the token exchange and the `kind`-indexed read work on PROD: a refused token, or a query PROD's rules
+have no index for, fails the run. PROD logged no crash in those 30 days. The two test crashes are on DEV.
+
+### `/code-review` (xhigh)
+
+Nine findings. Eight held up and were fixed, one commit each; one was disproved.
+
+- **A zone this device's engine does not know was written back as the seed.** `sanitizeGeneral` replaced it with the tenant's seed in state, and
+  `settings/general` is written whole, so the device's next save of any General setting overwrote the restaurant's chosen zone for every device.
+  The comment above it said the opposite. Now `storedZone` (`lib/time-zones.js`) keeps a value shaped like a zone name as stored, and `applyClock`
+  runs a device that cannot format in it on the seed. The stored value is untouched. `sanitizeGeneral` re-pinned under schema 6, still unreleased.
+- **The zone picker rebuilt 836 date formatters on every render.** `isValidTimeZone` built a new `Intl.DateTimeFormat` each call, and the picker asked
+  for all 418 zones twice per row, per render (a row hover included), and again in each keystroke's filter. Measured in Node on this Mac: 19.7 ms
+  a render and 16.6 ms a keystroke. Now the answer is cached per name (at most 1000), and the picker reads every zone's offset once per opening
+  and filters against that map (`matchesZone`'s new `offset` argument): 0 formatters, 0.9 ms an opening, 0.18 ms a keystroke. Checked live on DEV:
+  418 rows, "warsaw" and "utc+9" find what they should, and Escape closes the list and leaves Settings open. The live check also caught a name
+  clash in the first version of this fix, which the build would have refused too.
+- **An exact 50 unseen crashes read "50+".** The listener read 50 entries and called it more at 50, so it could not tell 50 from 51. It now reads
+  51, and `crashBadge` (`lib/crash-report.js`, pure, tested) caps the count at 50 and says more only when an unseen crash lies past it.
+- **The minute's clock reading is frozen.** `wallClock` hands every caller in one minute the same cached object, so a caller that wrote
+  to it would have moved "now" for the whole app until the minute turned. No caller writes to it today (all six read), and now none can.
+- **The server says when it falls back to the tenant's zone.** `readTimeZone` swallowed a failed read, and a stored zone it could not
+  use, with nothing in Vercel's logs: every draft would have been dated on the tenant's calendar with no trace of why. Both now log one
+  `[tz]` line (the read's error message, or that the value is no zone the server knows); an absent zone is the normal state and logs nothing.
+- **The lines this version wrote in `reminders.js` and `booking-logic.js` declare with `const`** (CLAUDE.md: never `var` in new code);
+  the files' older lines stay as they were. `validateReminderDraft`'s comment no longer calls its clock local.
+- **One rule says "N new crashes".** The gear, the Admin tab, Open the log and the Crashes chip each built the words by hand, four copies
+  of one plural. `newCrashesWord` / `newCrashesText` (`lib/crash-report.js`) are now the only spelling, and the gear's phrase joins the
+  count and its words with a no-break space like every other count; `tests/crash-trail.test.js` fails a hand copy.
+- **The two `ts` queries are one helper.** `readOldMessages` (the prune) and `readRecentMessages` (the parse limit) were the same query and
+  fallback written out twice, and only the prune's copy logged that it had read a thread whole. Both are `readByTs` now, and each says
+  so once per warm container under its own tag (`[wa-prune]`, `[wa-limit]`).
+- **Disproved: the webhook's two reads run one after the other on purpose.** The review flagged `api/wa-inbound.js` reading the
+  conversation (`getConversation`) and then the parse limit (`parseOverLimit`) in turn, where the two could run together. The limit takes
+  that conversation and returns at once for a muted one, so a muted conversation costs no second read; run together, every message would
+  pay for both. `tests/api-handlers.test.js` pins it ("a muted conversation costs no read"). Nothing changed.

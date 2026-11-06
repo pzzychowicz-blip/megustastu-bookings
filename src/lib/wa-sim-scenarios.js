@@ -6,19 +6,20 @@
 // full UI matrix (intents, confidence, languages, first-time vs regular, linked
 // cancel/modify, large group, append-to-existing, expired window, auto-ack).
 //
-// All date math is UTC (new Date + getUTC*/setUTC* + toISOString) to match the
-// app's "YYYY-MM-DD" convention — mixing local getDate() with UTC toISOString()
-// shifts the date a day in UTC+ zones. Dates are computed at RUN time so
-// "tomorrow"/"Saturday" are always relative to today.
+// Date math starts from the RESTAURANT's today (`todayStr`, v18.15.0; it was
+// UTC's, a day behind for the Canaries' first summer hour) and steps all-UTC
+// (`addDays`, the app's "YYYY-MM-DD" convention). Dates are computed at RUN
+// time so "tomorrow"/"Saturday" are always relative to today.
 //
 // Sample bookings are tagged `_waSim:true` (and name-prefixed "WA-SIM ") so they
 // are obvious on the timeline and reliably removable via clearWaSimBookings.
 
 import { simulateInbound } from "./wa-sim";
+import { todayStr, addDays } from "./day";
 
 // ── UTC date helpers (call at run time) ──────────────────────────────────────
-function isoPlus(days) { const d = new Date(); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); }
-function nextDow(dow) { const d = new Date(); const diff = (dow - d.getUTCDay() + 7) % 7 || 7; d.setUTCDate(d.getUTCDate() + diff); return d.toISOString().slice(0, 10); }
+function isoPlus(days) { return addDays(todayStr(), days); }
+function nextDow(dow) { const today = todayStr(); const diff = (dow - new Date(today).getUTCDay() + 7) % 7 || 7; return addDays(today, diff); }
 
 // ── Phone numbers used across scenarios (so links/regular history line up) ────
 const PH = {

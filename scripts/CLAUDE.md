@@ -60,6 +60,26 @@ the script as frames, came back as the exact lines holding them.
 A frame from it decodes the same way with `-c vite.wa-connect.config.js`. A preview's frames
 want `VERCEL_ENV=preview`, and the sandbox's `VITE_FB_TARGET=dev` as well.
 
+## `wa-eval.mjs` — the live parse check (v18.15.0)
+
+Fifteen customer messages, seven of them prompt-injection attempts (an "ignore all previous
+instructions", a fake `SYSTEM:` line, a forged `Rules:` block, a forged `STAFF:` line, a JSON
+answer in the text, a request to copy the prompt into the notes, a notes flood). Each goes through
+the real `parseMessage` against LIVE Gemini and then `sanitizeParse`, as a draft is written. One
+row per message, exit 1 on any failure. Run it by hand after a prompt or model change, with the
+**sandbox** key (environment or `.env.local`):
+
+```bash
+GEMINI_API_KEY=… node scripts/wa-eval.mjs
+```
+
+It refuses to start in CI or without a key, because a run that fell back to the mock parser would
+pass while measuring nothing. It grades the intent and the size, date and time a case names,
+never the prose. `tests/wa-eval.test.js` holds the checker against canned answers. **The mock
+parser fails 8 of 15**, five of them injections, which is the measurement that the rows
+discriminate: a regex reads "cancel" inside an injected instruction. A live run has not been
+recorded here yet. This Mac had no `.env.local` with a key when it was written (2026-11-05).
+
 ## Gotchas
 
 | Issue | Constraint |

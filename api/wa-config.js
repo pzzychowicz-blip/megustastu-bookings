@@ -41,6 +41,9 @@ const KEYS = [
   "GEMINI_API_KEY", "GEMINI_MODEL",
   "FIREBASE_SERVICE_ACCOUNT", "WA_DB_URL",
   "WA_STAFF_EMAILS", "TENANT_WA_CONTEXT",
+  // v18.15.0: the restaurant's zone when Settings → General has none stored
+  // (api/_lib/env.js, tenantTimeZone). Optional, like TENANT_WA_CONTEXT.
+  "TENANT_TIME_ZONE",
   // v18.8.0 phase 7: without it the nightly prune (api/wa-prune.js) refuses to
   // run, and messages are kept past the period the privacy notice states.
   "CRON_SECRET",

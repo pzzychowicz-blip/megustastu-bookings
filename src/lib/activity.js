@@ -40,7 +40,7 @@
 // The ONE identity rule in the app, imported rather than restated — see
 // `guestKeyOf` below for what restating it cost. `customers.js` imports only
 // `booking-logic.js`, so this is a one-way edge and no cycle.
-import { dayRangeMs } from "./day";
+import { dayRangeMs, todayStr, clockTime } from "./day";
 import { identityKey } from "./customers.js";
 // v18.2.0 phase 77: the retention labels are screen text (the Admin select, the
 // log's footnote), so their count and word are joined like every other.
@@ -653,12 +653,8 @@ function stamp(ms) {
   // first. The old test only counted LINES, so it passed over the wrong bytes.
   const n = Number(ms);
   if (!Number.isFinite(n) || n <= 0) return { date: "", time: "" };
-  const d = new Date(n);
-  const p = function (x) { return String(x).padStart(2, "0"); };
-  return {
-    date: d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()),
-    time: p(d.getHours()) + ":" + p(d.getMinutes()),
-  };
+  // v18.15.0: the restaurant's date and time, as the panel shows them.
+  return { date: todayStr(new Date(n)), time: clockTime(n) };
 }
 
 /**

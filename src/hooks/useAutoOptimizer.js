@@ -40,7 +40,7 @@
 // ISO date.
 
 import { useState, useRef, useEffect } from "react";
-import { todayStr } from "../lib/day";
+import { todayStr, nowMinutes } from "../lib/day";
 
 export function useAutoOptimizer({ nowMins, cutoffMins, autoSwitch }){
   // Defaults reproduce the pre-v15 hard-coded behaviour when the optimizer
@@ -48,8 +48,7 @@ export function useAutoOptimizer({ nowMins, cutoffMins, autoSwitch }){
   const cutoff = typeof cutoffMins === "number" ? cutoffMins : 15*60;
   const auto = autoSwitch !== false;
   const [autoOptimizer, setAutoOptimizer] = useState(function(){
-    const d=new Date();
-    return d.getHours()*60+d.getMinutes()<cutoff;
+    return nowMinutes()<cutoff;
   });
   // Auto-off at the cutoff for today's shift. Skipped entirely in manual mode.
   const autoFlippedRef=useRef(null);

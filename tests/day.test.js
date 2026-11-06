@@ -17,7 +17,8 @@
 
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import process from "node:process";
-import { todayStr, dayDiff, nowOn, addDays, stepDate, isReadableDate, dayRangeMs, weekdayShort } from "../src/lib/day.js";
+import { todayStr, dayDiff, nowOn, addDays, stepDate, isReadableDate, dayRangeMs, weekdayShort,
+  setTimeZone, timeZone, isValidTimeZone, wallClock, nowMinutes, clockTime, zoneOffsetMinutes, wallToInstant, onTimeZoneChange } from "../src/lib/day.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
 
 const REAL_TZ = process.env.TZ;
@@ -417,5 +418,136 @@ describe("dayRangeMs — a finite window, or nothing at all", () => {
       expect(Number.isFinite(r.from), String(v)).toBe(true);
       expect(Number.isFinite(r.to), String(v)).toBe(true);
     }
+  });
+});
+
+// ── v18.15.0: the RESTAURANT's clock ─────────────────────────────────────────
+// Every case below sets the restaurant's zone to Atlantic/Canary and then moves
+// the DEVICE between zones with `process.env.TZ`. The answer must not move with
+// it: that is the whole defect (a phone in Poland read the Canaries' 20:00 as
+// 21:00 and auto-extend wrote the difference into every seated party).
+describe("the restaurant's clock — the device's zone no longer matters", () => {
+  const DEVICES = ["Europe/Warsaw", "America/New_York", "UTC", "Atlantic/Canary", "Pacific/Kiritimati"];
+  function inEvery(fn) {
+    for (const tz of DEVICES) withTZ(tz, () => fn(tz));
+  }
+  function atCanary(fn) {
+    setTimeZone("Atlantic/Canary");
+    try { return fn(); } finally { setTimeZone(null); }
+  }
+
+  it("today and now are the Canaries', wherever the device is", () => {
+    atCanary(() => inEvery((tz) => {
+      // Summer, 00:30 in the Canaries: still the 30th in UTC, the 31st there.
+      const lateNight = new Date(Date.UTC(2026, 7, 30, 23, 30));
+      expect(todayStr(lateNight), tz).toBe("2026-08-31");
+      expect(nowMinutes(lateNight), tz).toBe(30);
+      // Dinner: 20:00 in the Canaries is 21:00 in Warsaw and 15:00 in New York.
+      const dinner = new Date(Date.UTC(2026, 7, 31, 19, 0));
+      expect(todayStr(dinner), tz).toBe("2026-08-31");
+      expect(nowMinutes(dinner), tz).toBe(20 * 60);
+      expect(clockTime(dinner.getTime()), tz).toBe("20:00");
+      expect(wallClock(dinner).dow, tz).toBe(1); // a Monday
+      // Winter: the Canaries are on UTC.
+      const winter = new Date(Date.UTC(2026, 0, 15, 0, 30));
+      expect(todayStr(winter), tz).toBe("2026-01-15");
+      expect(nowMinutes(winter), tz).toBe(30);
+    }));
+  });
+
+  it("follows both 2026 clock changes (29 March, 25 October, at 01:00 UTC)", () => {
+    atCanary(() => inEvery((tz) => {
+      expect(nowMinutes(new Date(Date.UTC(2026, 2, 29, 0, 59))), tz).toBe(59);       // 00:59 WET
+      expect(nowMinutes(new Date(Date.UTC(2026, 2, 29, 1, 0))), tz).toBe(2 * 60);    // 02:00 WEST
+      expect(nowMinutes(new Date(Date.UTC(2026, 9, 25, 0, 30))), tz).toBe(90);       // 01:30 WEST
+      expect(nowMinutes(new Date(Date.UTC(2026, 9, 25, 1, 30))), tz).toBe(90);       // 01:30 WET, again
+    }));
+  });
+
+  it("gives the offset in force, and wallToInstant inverts wallClock", () => {
+    atCanary(() => inEvery((tz) => {
+      expect(zoneOffsetMinutes(Date.UTC(2026, 6, 1, 12), "Atlantic/Canary"), tz).toBe(60);
+      expect(zoneOffsetMinutes(Date.UTC(2026, 0, 1, 12), "Atlantic/Canary"), tz).toBe(0);
+      expect(zoneOffsetMinutes(Date.UTC(2026, 6, 1, 12), "Europe/Warsaw"), tz).toBe(120);
+      for (const [y, m, d, h, min] of [[2026, 8, 31, 20, 0], [2026, 1, 15, 0, 30], [2026, 3, 29, 0, 0], [2026, 10, 25, 23, 59]]) {
+        const t = wallToInstant(y, m, d, h, min);
+        const c = wallClock(t);
+        expect([c.y, c.m, c.d, c.h, c.min], tz + " " + [y, m, d, h, min]).toEqual([y, m, d, h, min]);
+      }
+    }));
+  });
+
+  it("dayRangeMs is the restaurant's day, 23 and 25 hours long on the change days", () => {
+    atCanary(() => inEvery((tz) => {
+      const r = dayRangeMs("2026-09-13");
+      expect(r.from, tz).toBe(Date.UTC(2026, 8, 12, 23, 0));
+      expect(r.to - r.from + 1, tz).toBe(86400000);
+      const spring = dayRangeMs("2026-03-29");
+      expect(spring.to - spring.from + 1, tz).toBe(23 * 3600000);
+      const autumn = dayRangeMs("2026-10-25");
+      expect(autumn.to - autumn.from + 1, tz).toBe(25 * 3600000);
+      for (const v of ["", "2026-8-3", "2026/09/13", "2026-13-45", null]) expect(dayRangeMs(v), tz + " " + v).toBeNull();
+    }));
+  });
+
+  it("hands out a frozen reading, so no caller can move the minute's shared answer (the /code-review)", () => {
+    atCanary(() => {
+      const at = Date.UTC(2026, 7, 31, 19, 0);
+      const c = wallClock(at);
+      expect(Object.isFrozen(c)).toBe(true);
+      expect(() => { "use strict"; c.d = 99; }).toThrow(TypeError);
+      expect(wallClock(at).d).toBe(31);
+      expect(todayStr(new Date(at))).toBe("2026-08-31");
+    });
+  });
+
+  it("asks the engine once per name, so a list of every zone builds no formatter twice (the /code-review)", () => {
+    const Real = Intl.DateTimeFormat;
+    let built = 0;
+    Intl.DateTimeFormat = function (...a) { built++; return new Real(...a); };
+    try {
+      for (let i = 0; i < 5; i++) { isValidTimeZone("Pacific/Chatham"); isValidTimeZone("Nowhere/Never"); }
+    } finally { Intl.DateTimeFormat = Real; }
+    expect(built).toBeLessThanOrEqual(2);
+    expect(isValidTimeZone("Pacific/Chatham")).toBe(true);
+    expect(isValidTimeZone("Nowhere/Never")).toBe(false);
+  });
+
+  it("an unknown zone is refused and the device's clock is used, never a throw", () => {
+    expect(isValidTimeZone("Atlantic/Canary")).toBe(true);
+    for (const v of ["", "Mars/Olympus", "canary", null, undefined, 60]) expect(isValidTimeZone(v), String(v)).toBe(false);
+    expect(setTimeZone("Mars/Olympus")).toBeNull();
+    expect(timeZone()).toBeNull();
+    withTZ("Europe/Warsaw", () => {
+      const dinner = new Date(Date.UTC(2026, 7, 31, 19, 0));
+      expect(nowMinutes(dinner)).toBe(21 * 60); // the device's own reading, as before this version
+    });
+    expect(setTimeZone("Atlantic/Canary")).toBe("Atlantic/Canary");
+    setTimeZone(null);
+  });
+
+  it("formats an invalid instant the way the local getters did, and clockTime blanks it", () => {
+    const bad = new Date("not a date");
+    const deviceAnswer = todayStr(bad);
+    atCanary(() => {
+      expect(todayStr(bad)).toBe(deviceAnswer);
+      for (const v of [null, "", "abc", NaN]) expect(clockTime(v), String(v)).toBe("");
+    });
+  });
+});
+
+describe("onTimeZoneChange — a held reading re-reads when the zone moves", () => {
+  it("fires once per CHANGE, after the zone is in force, and unsubscribes", () => {
+    const seen = [];
+    const off = onTimeZoneChange((tz) => seen.push([tz, timeZone()]));
+    try {
+      setTimeZone("Atlantic/Canary");
+      setTimeZone("Atlantic/Canary"); // no change, no call
+      setTimeZone("Europe/Warsaw");
+      setTimeZone("Mars/Olympus");    // refused: back to the device's, a change
+    } finally { off(); setTimeZone(null); }
+    expect(seen).toEqual([["Atlantic/Canary", "Atlantic/Canary"], ["Europe/Warsaw", "Europe/Warsaw"], [null, null]]);
+    setTimeZone("Atlantic/Canary"); setTimeZone(null);
+    expect(seen).toHaveLength(3);
   });
 });

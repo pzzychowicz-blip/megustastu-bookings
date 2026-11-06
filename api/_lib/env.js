@@ -44,7 +44,25 @@
 //                            hard failure the moment the backend can send real
 //                            messages or reach a non-DEV database.
 
+import { isValidTimeZone } from "../../src/lib/day.js";
+
 const DEV_DB_URL = "https://megustastu-bookings-dev-default-rtdb.europe-west1.firebasedatabase.app";
+
+// v18.15.0: the restaurant's time zone when `settings/general.timeZone` is unset
+// or unreadable (rtdb.js, readTimeZone). It is the tenant file's
+// `profile.timeZone`, delivered the way TENANT_WA_CONTEXT delivers
+// `profile.waContext` (gemini.js, waContext, says why it arrives as a variable),
+// and set per Vercel project. The fallback is MGT's, so an unset variable
+// changes nothing here (tests/wa-time-zone.test.js holds the two equal). An
+// invalid one is refused, with a warning, rather than leaving the parse to date
+// messages in the server's own zone, which is UTC on Vercel.
+export const FALLBACK_TIME_ZONE = "Atlantic/Canary";
+export function tenantTimeZone() {
+  const v = env("TENANT_TIME_ZONE", FALLBACK_TIME_ZONE);
+  if (isValidTimeZone(v)) return v;
+  console.warn("[env] TENANT_TIME_ZONE " + JSON.stringify(v) + " is not a time zone this runtime knows; using " + FALLBACK_TIME_ZONE);
+  return FALLBACK_TIME_ZONE;
+}
 
 export function env(name, fallback) {
   const v = process.env[name];

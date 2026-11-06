@@ -29,6 +29,36 @@ export const WA_WINDOW_MS = 24 * 60 * 60 * 1000;
 //   WA_PARSE_TEXT_LEN — chars sent to the LLM prompt (token/quota guard)
 export const WA_MAX_TEXT_LEN = 4000;
 export const WA_PARSE_TEXT_LEN = 1000;
+
+// v18.15.0: at most this many AUTOMATIC drafts an hour for one number. Every
+// customer message buys one Gemini call, and nothing else bounds how many one
+// number can buy. A message over the limit is stored and shown as any other,
+// with no draft, and Re-check (a staff press) still parses it. Counted from the
+// stored messages (`parseThrottled`), so it needs no field of its own.
+export const WA_PARSES_PER_HOUR = 20;
+export const WA_PARSE_WINDOW_MS = 60 * 60 * 1000;
+
+// How many of `messages` (an array, or RTDB's keyed object) the CUSTOMER sent
+// in the hour up to `nowMs`. Every inbound message counts, parsed or not, so a
+// number that keeps sending stays over the limit until it stops for a while:
+// counting only the parsed ones would let one through every few minutes,
+// forever. A message with no numeric `ts` is not counted.
+export function recentInbound(messages, nowMs) {
+  const since = nowMs - WA_PARSE_WINDOW_MS;
+  const list = Array.isArray(messages) ? messages : (messages && typeof messages === "object" ? Object.values(messages) : []);
+  let n = 0;
+  for (const m of list) {
+    if (m && m.direction === "in" && typeof m.ts === "number" && m.ts > since) n++;
+  }
+  return n;
+}
+
+// Is the NEXT message from this number over the limit? Asked before the new
+// message is stored, so 20 earlier ones in the hour mean the 21st is not parsed,
+// and no rolling hour ever holds more than 20 automatic parses.
+export function parseThrottled(messages, nowMs) {
+  return recentInbound(messages, nowMs) >= WA_PARSES_PER_HOUR;
+}
 // Chars kept in `lastMessageSnippet` — the conversation-LIST payload, which every
 // connected device downloads on every write. The inbound path always sliced to
 // this; the outbound one wrote the whole message (CT-WA-06).
@@ -402,7 +432,7 @@ import { formatPhone as _formatPhone, matchCustomerByPhone as _matchByPhone, nor
 // re-expressed — see sanitizeParse below. Both files carry their explicit .js
 // extension because api/_lib imports this module under Node ESM.
 import { isReadableTime, countLabel } from "./booking-logic.js";
-import { isReadableDate, formatDay, localDay, stepDate } from "./day.js";
+import { isReadableDate, formatDay, localDay, stepDate, clockTime } from "./day.js";
 // v18.11.0: the occasion ids a parse may carry are a booking's tag ids, so they
 // are cleaned by the rule a booking's are (`cleanTagIds`). tags.js imports nothing.
 import { cleanTagIds, knownTagIds, unionTagIds } from "./tags.js";
@@ -505,11 +535,11 @@ export function threadItems(messages, today) {
   return out;
 }
 
-// Format a timestamp as an inline bubble caption ("14:32").
+// Format a timestamp as an inline bubble caption ("14:32"), at the restaurant
+// (v18.15.0: `clockTime`, lib/day.js).
 export function formatClockTime(ts) {
   if (!ts) return "";
-  const d = new Date(ts);
-  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  return clockTime(ts);
 }
 
 // Format remaining time on the 24h WA window → { label, expired } or null.
@@ -604,6 +634,21 @@ export function isUsableTime(v) { return typeof v === "string" && isReadableTime
 // there are none; a parse without it is left without it. Which ids the
 // restaurant HAS is asked where the list is known: `parseMessage` on the
 // server, and `draftOccasions` when a draft opens the form.
+//
+// v18.15.0: the free text is bounded too. A draft is stored on the conversation
+// row (`draftData`), which every device downloads with the inbox, and nothing
+// bounded how long a `notes` the model could write: a message asking for a
+// ten-thousand-word note would cost every tablet that download on every write
+// to the row. Each of `name`, `notes` and `ambiguity`, when the parse has the
+// key, is cut to its cap in whole characters (an emoji is never split), and a
+// value that is not a string becomes null: the response schema says STRING, and
+// an answer that ignores it is not trusted for its type either. The notes cap
+// is the most of the message the model ever reads (WA_PARSE_TEXT_LEN).
+export const WA_DRAFT_TEXT_MAX = { name: 80, notes: WA_PARSE_TEXT_LEN, ambiguity: 300 };
+function capText(v, max) {
+  if (typeof v !== "string") return null;
+  return v.length <= max ? v : Array.from(v).slice(0, max).join("");
+}
 export function sanitizeParse(parse) {
   if (!parse || typeof parse !== "object") return parse;
   const out = Object.assign({}, parse, {
@@ -611,6 +656,9 @@ export function sanitizeParse(parse) {
     date: isUsableDate(parse.date) ? parse.date : null,
     time: isUsableTime(parse.time) ? parse.time : null,
   });
+  for (const k of Object.keys(WA_DRAFT_TEXT_MAX)) {
+    if (parse[k] !== undefined) out[k] = capText(parse[k], WA_DRAFT_TEXT_MAX[k]);
+  }
   if (parse.occasions !== undefined) {
     const occ = cleanTagIds(parse.occasions);
     out.occasions = occ.length ? occ : null;

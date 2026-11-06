@@ -68,6 +68,24 @@ const fake = vi.hoisted(() => {
             return snapOf(Object.keys(out).length ? out : undefined);
           },
         }),
+        // v18.15.0 (rtdb.js, readRecentMessages): `orderByChild(k).startAt(v)`,
+        // as RTDB orders it: a number at or after `v` comes, and so does a
+        // string or an object (they sort after every number); null, a boolean
+        // and a smaller number do not.
+        startAt: (start) => ({
+          get: async () => {
+            state.queries.push({ path, orderByChild: k, startAt: start });
+            if (state.noIndex) throw new Error('Index not defined, add ".indexOn": "' + k + '", for path "/' + path + '", to the rules');
+            const node = read(path);
+            if (node == null || typeof node !== "object") return snapOf(undefined);
+            const out = {};
+            Object.keys(node).forEach((id) => {
+              const v = node[id] != null && typeof node[id] === "object" ? node[id][k] : undefined;
+              if ((typeof v === "number" && v >= start) || typeof v === "string" || (v != null && typeof v === "object")) out[id] = node[id];
+            });
+            return snapOf(Object.keys(out).length ? out : undefined);
+          },
+        }),
       }),
       set: async (v) => {
         if (state.failWrite && state.failWrite("set", path)) throw new Error("database unavailable");
@@ -120,14 +138,14 @@ import mediaHandler, { MEDIA_VIEW_MAX, servedType, sniffType, isStoredMsgKey } f
 import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "../api/wa-prune.js";
 import onboardHandler from "../api/wa-onboard.js";
 import usageHandler from "../api/wa-usage.js";
-import { removeConversationIf, sanitizeKey } from "../api/_lib/rtdb.js";
+import { removeConversationIf, sanitizeKey, readTimeZone } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { numberIsOurs, makeNumberGuard, freshResults, measuredAfter, beganAfter, chunkKeys } from "../api/_lib/coexist-core.js";
 import { readJsonBody, bearerToken } from "../api/_lib/request.js";
 import { contactPlan, contactPatch, WA_CONTACT_NAME_MAX, echoConvPatch, editedText, editPatch, revokePatch, WA_REVOKED_IN, WA_REVOKED_OUT, historyConvPatch, historyProgress, historyRequested, historyStatus, WA_IMPORT_ARCHIVE_MS, disconnectSentence } from "../src/lib/wa-coexist.js";
 import { verifySignature, sendText, sendMedia, uploadMedia } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
-import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE, replyUnarchives } from "../src/lib/whatsapp.js";
+import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX, WA_UNSUPPORTED_LINE, replyUnarchives, recentInbound, parseThrottled, WA_PARSES_PER_HOUR, WA_PARSE_WINDOW_MS } from "../src/lib/whatsapp.js";
 import { simMediaMessage } from "../src/lib/wa-mock-media.js";
 import { DEFAULT_TAG_LIST } from "../src/lib/tags.js";
 import { simHistoryValue, simEchoValue, simContent, SIM_HISTORY_RECENT, SIM_HISTORY_OLD, SIM_HISTORY_PHOTO_ID, SIM_WABA_ID, SIM_PHONE_NUMBER_ID } from "../src/lib/wa-sim-coexist.js";
@@ -152,7 +170,7 @@ beforeEach(() => {
   fake.state.noIndex = false;
   vi.stubEnv("FIREBASE_SERVICE_ACCOUNT", '{"project_id":"test"}');
   ["WA_STAFF_EMAILS", "WA_SEND_MODE", "WA_LLM_MODE", "WA_DB_URL", "WA_ALLOW_UNSIGNED", "WA_SIM_ENABLED",
-    "META_APP_SECRET", "META_WA_TOKEN", "META_PHONE_NUMBER_ID", "META_VERIFY_TOKEN", "GEMINI_API_KEY", "GEMINI_MODEL", "TENANT_WA_CONTEXT",
+    "META_APP_SECRET", "META_WA_TOKEN", "META_PHONE_NUMBER_ID", "META_VERIFY_TOKEN", "GEMINI_API_KEY", "GEMINI_MODEL", "TENANT_WA_CONTEXT", "TENANT_TIME_ZONE",
     "CRON_SECRET", "META_APP_ID", "META_ES_CONFIG_ID", "META_WABA_ID",
   ].forEach((k) => vi.stubEnv(k, ""));
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -321,10 +339,10 @@ describe("wa-recheck", () => {
     expect(parseThread).not.toHaveBeenCalled();
   });
 
-  it("hands the model the thread without the auto-ack, the pending draft, the hours and the occasion tags", async () => {
+  it("hands the model the thread without the auto-ack, the pending draft, the hours, the occasion tags and the time zone", async () => {
     const hours = { days: { 1: { open: 13, close: 22 } } };
     fake.state.tree = {
-      settings: { operatingHours: hours, tags: { v: 1, occasion: [{ id: "o-grad", label: "Graduation" }] } },
+      settings: { operatingHours: hours, tags: { v: 1, occasion: [{ id: "o-grad", label: "Graduation" }] }, general: { timeZone: "America/New_York" } },
       conversations: { [KEY]: openConv({ draftStatus: "parsed", draftData: { size: 2 } }) },
       messages: { [KEY]: thread([
         { direction: "in", text: "Hola" },
@@ -337,7 +355,7 @@ describe("wa-recheck", () => {
     await recheck({ phoneKey: KEY });
     expect(parseThread).toHaveBeenCalledWith(
       [{ direction: "in", text: "Hola" }, { direction: "out", text: "Buenas" }, { direction: "in", text: "Mesa para 4" }],
-      { hours, existingDraft: { size: 2 }, occasions: [{ id: "o-grad", label: "Graduation" }] }
+      { hours, existingDraft: { size: 2 }, occasions: [{ id: "o-grad", label: "Graduation" }], timeZone: "America/New_York" }
     );
   });
 
@@ -1015,6 +1033,187 @@ describe("applyParse", () => {
     expect(convAt(KEY).draftData.occasions).toEqual(["o-birthday"]);
     await applyParse(KEY, { intent: "new_booking", language: "es", occasions: [] }, 11);
     expect(convAt(KEY).draftData.occasions ?? null).toBe(null); // RTDB drops a null; the fake keeps it
+  });
+});
+
+// ── v18.15.0: at most 20 automatic drafts an hour for one number ────────────
+// Every customer message bought one Gemini call, with nothing bounding how many
+// one number could buy. Over the limit a message is stored and shown, with no
+// draft and no "analyzing…" flag, and Re-check still parses it.
+describe("the per-number parse limit (v18.15.0)", () => {
+  const HOUR = WA_PARSE_WINDOW_MS;
+  // `n` customer messages, the newest a minute old, one a minute apart.
+  const recent = (n, extra) => Object.fromEntries(Array.from({ length: n }, (_, i) =>
+    ["r" + i, Object.assign({ id: "r" + i, direction: "in", text: "hola " + i, ts: Date.now() - 60000 * (i + 1) }, extra)]));
+  const textMsg = (id) => inMsg({ id, type: "text", text: { body: "Mesa para 4 mañana a las 21:00" } });
+
+  it("counts the customer's messages in the last hour, and nothing else", () => {
+    const now = 10 * HOUR;
+    const msgs = [
+      { direction: "in", ts: now - 1 },
+      { direction: "in", ts: now - HOUR + 1 }, // just inside
+      { direction: "in", ts: now - HOUR }, // exactly an hour ago: outside
+      { direction: "out", ts: now - 1 }, // staff and the auto-ack do not count
+      { direction: "in", ts: String(now - 1) }, // not a number
+      { direction: "in" }, null,
+    ];
+    expect(recentInbound(msgs, now)).toBe(2);
+    expect(recentInbound({ a: msgs[0], b: msgs[1] }, now)).toBe(2); // RTDB's keyed shape
+    expect(recentInbound(null, now)).toBe(0);
+    const n = (k) => Array.from({ length: k }, () => ({ direction: "in", ts: now - 5 }));
+    expect(WA_PARSES_PER_HOUR).toBe(20);
+    expect(parseThrottled(n(19), now)).toBe(false);
+    expect(parseThrottled(n(20), now)).toBe(true);
+  });
+
+  it("the webhook parses the 20th message of the hour and stores the 21st without a draft", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    fake.state.tree = { messages: { [KEY]: recent(19) } };
+    await deliver({ messages: [textMsg("wamid.A")] });
+    expect(scheduled).toHaveLength(1);
+    await scheduled[0];
+    expect(convAt(KEY).draftData).toMatchObject({ size: 4 });
+
+    const log = vi.mocked(console.log);
+    log.mockClear();
+    await deliver({ messages: [textMsg("wamid.B")] });
+    expect(scheduled).toHaveLength(1); // nothing new scheduled
+    expect(inbound()).toHaveLength(21); // stored and shown all the same
+    expect("parsing" in convAt(KEY)).toBe(false); // no flag left waiting
+    const line = log.mock.calls.map((c) => String(c[0])).find((l) => l.includes("parse limit"));
+    expect(line).toMatch(/parse limit: 20 messages from one number in the last hour \(limit 20\)/);
+    expect(line).not.toMatch(/34600|Mesa/); // counts only: no number, no text
+  });
+
+  it("asks only for the last hour, through the ts index, and older messages do not count", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    const old = Object.fromEntries(Array.from({ length: 30 }, (_, i) => ["o" + i, { id: "o" + i, direction: "in", ts: Date.now() - HOUR - 60000 * (i + 1) }]));
+    fake.state.tree = { messages: { [KEY]: old } };
+    const before = Date.now();
+    await deliver({ messages: [textMsg("wamid.A")] });
+    expect(scheduled).toHaveLength(1);
+    const q = fake.state.queries.find((x) => x.startAt !== undefined);
+    expect(q).toMatchObject({ path: "messages/" + KEY, orderByChild: "ts" });
+    expect(q.startAt).toBeGreaterThanOrEqual(before - HOUR);
+    expect(q.startAt).toBeLessThanOrEqual(Date.now() - HOUR);
+  });
+
+  it("rules without the index: the thread is read whole, and the limit still holds", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    fake.state.tree = { messages: { [KEY]: recent(20) } };
+    fake.state.noIndex = true;
+    await deliver({ messages: [textMsg("wamid.A")] });
+    await deliver({ messages: [textMsg("wamid.B")] });
+    expect(scheduled).toEqual([]);
+    // The log says so, once per warm container (the /code-review: only the
+    // prune's copy of this read used to). This is the file's first read
+    // without the index under this tag, so the once is this test's.
+    const lines = vi.mocked(console.warn).mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[wa-limit]"));
+    expect(lines).toEqual(["[wa-limit] messages/$phoneKey has no .indexOn ts yet (publish database.rules.json); reading threads whole"]);
+  });
+
+  it("a read that fails parses, as before the limit", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    fake.state.tree = { messages: { [KEY]: recent(25) } };
+    const ref = fake.db.ref;
+    const broken = { get: async () => { throw new Error("offline"); } };
+    fake.db.ref = (p) => (p === "messages/" + KEY ? Object.assign({}, ref(p), { orderByChild: () => ({ startAt: () => broken }) }) : ref(p));
+    try {
+      await deliver({ messages: [textMsg("wamid.A")] });
+    } finally { fake.db.ref = ref; }
+    expect(scheduled).toHaveLength(1);
+    expect(vi.mocked(console.warn).mock.calls.some((c) => /parse limit unreadable/.test(String(c[0])))).toBe(true);
+  });
+
+  it("a muted conversation costs no read", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    fake.state.tree = { conversations: { [KEY]: { phoneKey: KEY, autoAckSent: true, muted: true } }, messages: { [KEY]: recent(25) } };
+    await deliver({ messages: [textMsg("wamid.A")] });
+    expect(fake.state.queries.filter((x) => x.startAt !== undefined)).toEqual([]);
+  });
+
+  it("the simulator meets the same limit", async () => {
+    fake.state.tree = { messages: { [KEY]: recent(20) } };
+    let later = null;
+    const r = await injectSimInbound({ phone: KEY, text: "Mesa para 4 personas mañana a las 21:00", name: "Sim" }, (p) => { later = p; });
+    expect(r).toMatchObject({ skipped: false, muted: false });
+    expect(later).toBeNull();
+    expect("parsing" in convAt(KEY)).toBe(false);
+    expect(msgsAt(KEY).filter((m) => m.direction === "in")).toHaveLength(21);
+  });
+
+  it("Re-check is a staff press and is not limited", async () => {
+    fake.state.tree = { conversations: { [KEY]: openConv() }, messages: { [KEY]: recent(25) } };
+    parseThread.mockResolvedValue({ intent: "question", language: "es" });
+    const res = await call(recheckHandler, { token: "staff", body: { phoneKey: KEY } });
+    expect(res.statusCode).toBe(200);
+    expect(parseThread).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── v18.15.0: the restaurant's calendar, on the server ──────────────────────
+// 23:30 UTC on Wednesday 15 July 2026 is 00:30 on Thursday the 16th in the
+// Canaries (UTC+1 all summer). The server runs in UTC, so until this version
+// "mañana" sent then was dated the 16th, the day the customer meant as today,
+// and "el jueves" was dated that same Thursday rather than the next one.
+describe("the restaurant's time zone on the server (v18.15.0)", () => {
+  const NIGHT = new Date("2026-07-15T23:30:00Z");
+  beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(NIGHT); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("readTimeZone answers the stored zone, else the tenant's, and never null", async () => {
+    const warn = vi.mocked(console.warn);
+    fake.state.tree = { settings: { general: { timeZone: "America/New_York" } } };
+    expect(await readTimeZone()).toBe("America/New_York");
+    fake.state.tree = {};
+    expect(await readTimeZone()).toBe("Atlantic/Canary");
+    // A stored zone or an absent one is the normal state: nothing in the log.
+    expect(warn).not.toHaveBeenCalled();
+    // A value the client's applyClock would not use is not used here either,
+    // and the log says so (the /code-review).
+    for (const bad of ["Mars/Olympus", 5, "", { tz: "x" }]) {
+      fake.state.tree = { settings: { general: { timeZone: bad } } };
+      warn.mockClear();
+      expect(await readTimeZone(), JSON.stringify(bad)).toBe("Atlantic/Canary");
+      expect(warn, JSON.stringify(bad)).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toMatch(/^\[tz\] .*no zone this server knows/);
+    }
+    vi.stubEnv("TENANT_TIME_ZONE", "Asia/Tokyo");
+    fake.state.tree = {};
+    expect(await readTimeZone()).toBe("Asia/Tokyo");
+  });
+
+  it("a read that fails is the tenant's zone, not UTC, and the log names the error", async () => {
+    const ref = fake.db.ref;
+    const warn = vi.mocked(console.warn);
+    fake.db.ref = (p) => (p === "settings/general/timeZone" ? { get: async () => { throw new Error("offline"); } } : ref(p));
+    try {
+      expect(await readTimeZone()).toBe("Atlantic/Canary");
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toMatch(/^\[tz\] .*could not be read \(offline\)/);
+    } finally { fake.db.ref = ref; }
+  });
+
+  it("the webhook dates \"mañana\" on the Canary calendar", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    await deliver({ messages: [inMsg({ type: "text", text: { body: "Mesa para 4 mañana a las 21:00" } })] });
+    await scheduled[0];
+    expect(convAt(KEY).draftData).toMatchObject({ size: 4, date: "2026-07-17", time: "21:00" });
+  });
+
+  it("and on the stored zone's calendar when Settings names another", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    fake.state.tree = { settings: { general: { timeZone: "America/New_York" } } };
+    await deliver({ messages: [inMsg({ type: "text", text: { body: "Mesa para 4 mañana a las 21:00" } })] });
+    await scheduled[0];
+    expect(convAt(KEY).draftData.date).toBe("2026-07-16"); // 19:30 on the 15th in New York
+  });
+
+  it("the simulator's inbound reads \"el jueves\" as next week's Thursday", async () => {
+    let later;
+    await injectSimInbound({ phone: KEY, text: "Mesa para 2 el jueves a las 21:00", name: "Sim" }, (p) => { later = p; });
+    await later;
+    expect(convAt(KEY).draftData.date).toBe("2026-07-23");
   });
 });
 

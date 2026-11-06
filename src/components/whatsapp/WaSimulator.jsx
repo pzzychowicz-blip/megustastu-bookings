@@ -17,6 +17,7 @@ import { Overlay, ModalTitle, AutoHeight, Fld, Section, Toggle, mkInp, mkSel, mk
 import { S, BTN, R, T, FW, IC } from "../../lib/constants";
 import { sortConversations } from "../../lib/whatsapp";
 import { countLabel } from "../../lib/booking-logic";
+import { todayStr } from "../../lib/day";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
 import { simulateInbound, simulateCoexist } from "../../lib/wa-sim";
 import { backendEnabled, setBackendEnabled, backendHealth, WA_BACKEND_URL } from "../../lib/wa-backend";
@@ -88,7 +89,7 @@ export function WaSimulator({ ctx, onClose }) {
   }
   const [form, setForm] = useState({
     phone: "+34600999111", language: "es", intent: "new_booking",
-    size: 2, date: new Date().toISOString().slice(0, 10), time: "20:00", confidence: "high", text: "",
+    size: 2, date: todayStr(), time: "20:00", confidence: "high", text: "",
   });
 
   // ── Reply as customer — continue an existing conversation from the customer

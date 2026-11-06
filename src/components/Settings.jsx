@@ -31,7 +31,7 @@ import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
 import { FoldRows } from "./FoldRows";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, InlineAlert, ALERT_TONES, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE, textWidth } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, InlineAlert, ALERT_TONES, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE, textWidth, CountBadge } from "./atoms";
 import { connectionLines } from "../lib/wa-coexist";
 import { useIntegrationStatus } from "../hooks/useIntegrationStatus";
 import { useWaUsage } from "../hooks/useWaUsage";
@@ -40,6 +40,7 @@ import { BTN, R, M, T, FW, H, IC, SP, APP_NAME } from "../lib/constants";
 // v18.2.0: how TabBar lays its tabs out.
 import { tabColumns } from "../lib/tab-rows";
 import { CountryPicker } from "./CountryPicker";
+import { TimeZonePicker } from "./TimeZonePicker";
 import { countryByIso, flagOf, dialLabel, MAX_PINNED } from "../lib/phone-countries";
 // v18.0.0 phase 2 /code-review: the seed itself, not a hand-typed copy of it.
 import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
@@ -47,7 +48,7 @@ import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
 // v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay
 // order) — since v18.0.0 session 7's /code-review, lib/day.js's WEEKDAY_SHORT,
 // which this line used to copy byte for byte.
-import { WEEKDAY_SHORT as RULE_WD, todayStr } from "../lib/day";
+import { WEEKDAY_SHORT as RULE_WD, todayStr, clockTime } from "../lib/day";
 import { guestsLabel, countLabel } from "../lib/booking-logic";
 
 // v18.2.0 phase 51: a standing-booking row's switch + Delete RESERVE their
@@ -76,6 +77,7 @@ import { canVibrate } from "../lib/haptics";
 import { splitExceptions, rangeLabel, specialHoursLabel } from "../lib/special-days";
 import { waAutoReplyOn, AUTO_ACK_TEXT } from "../lib/whatsapp";
 import { markArmed, armSettled } from "../lib/arm-guard";
+import { newCrashesWord } from "../lib/crash-report";
 import { CloseIcon, DownloadIcon, TrashIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
@@ -107,7 +109,10 @@ const TAB_ROW_PAD = 12;     // a tab's side padding in the natural row
 const TAB_CELL_PAD = 6;     // the same in a grid cell, where the cell sets the width
 // The labels' widths come from `textWidth` (atoms.jsx): this bar's own
 // measure until v18.2.0 phase 75 made it the app's one.
-export function TabBar({ tabs, current, onSelect }) {
+// v18.15.0: `alerts` is a count per tab id (the Admin tab's new crashes), drawn
+// on the tab's corner as `CountBadge`. Absolutely placed, so the measured label
+// widths above still decide the bar's shape.
+export function TabBar({ tabs, current, onSelect, alerts }) {
   const barRef = useRef(null);
   const [cols, setCols] = useState(0);   // 0 = one natural row
   // The labels as one string, so the effect re-measures when the SET of tabs
@@ -168,10 +173,12 @@ export function TabBar({ tabs, current, onSelect }) {
               whiteSpace: "nowrap",
               padding: "8px " + (grid ? TAB_CELL_PAD : TAB_ROW_PAD) + "px",
               borderRadius: grid ? R.inset : R.pill,
+              position: "relative",
               ...(grid ? null : { flex: "1 0 0%" })
             }}
           >
             {t.label}
+            {alerts && alerts[t.id] ? <CountBadge n={alerts[t.id].n} plus={alerts[t.id].plus} float background="var(--app-danger-solid)" srText={alerts[t.id].srText} /> : null}
           </button>
         );
       })}
@@ -256,6 +263,27 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
         onBlur={() => { if (draft !== value) onCommit(draft); }}
         onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
         style={{ ...mkInp(), width: width || 180, boxSizing: "border-box" }} />
+    </div>
+  );
+}
+
+// ── v18.15.0: where the restaurant is ────────────────────────────────────────
+// Every "now" and "today" is read in this zone (lib/day.js), so a device in
+// another zone shows and writes the restaurant's clock. It commits on the pick,
+// like the pinned countries (nothing to guard), and the picker's list is drawn
+// against this POSITIONED wrapper. The sentence under it says what moves and
+// what does not, because the answer is not obvious: bookings are wall-clock
+// times at the restaurant and keep them.
+function TimeZoneSetting({ gs, onSave }) {
+  return (
+    <div role="group" aria-labelledby="gs-tz-label">
+      <div id="gs-tz-label" style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: SP.snug }}>Time zone</div>
+      <div style={{ position: "relative", width: 320 /* @canvas wide enough for a zone and its offset in the list */, maxWidth: "100%" }}>
+        <TimeZonePicker value={gs.timeZone} onPick={(tz) => { if (tz !== gs.timeZone) onSave({ timeZone: tz }); }} />
+      </div>
+      <div style={{ fontSize: T.body, color: "var(--text-muted)", paddingTop: SP.snug }}>
+        Where the restaurant is. &ldquo;Now&rdquo;, today and the times in the log follow it on every device; bookings keep their times.
+      </div>
     </div>
   );
 }
@@ -803,12 +831,13 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
       {sw ? (
       <Collapsible
         title="Restaurant"
-        subtitle="Name, currency and the phone field's countries."
+        subtitle="Name, time zone, currency and the phone field's countries."
         summary={gs.restaurantName}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
           <GsTextField label="Restaurant name" value={gs.restaurantName} width={260} onDirty={onDirty} dirtyId="gs-name"
             onCommit={(v) => onSaveGeneralSettings({ restaurantName: v })} />
+          <TimeZoneSetting gs={gs} onSave={onSaveGeneralSettings} />
           <GsTextField label="Currency symbol" value={gs.currency} width={80} onDirty={onDirty} dirtyId="gs-currency"
             onCommit={(v) => onSaveGeneralSettings({ currency: v })} />
           <PinnedCountriesSetting gs={gs} onSave={onSaveGeneralSettings} />
@@ -1375,7 +1404,7 @@ function WaCostSection() {
   const text = { fontSize: T.body, color: "var(--text-primary)", textAlign: "left" };
   const faint = { fontSize: T.micro, color: "var(--text-muted)", textAlign: "left" };
   const updated = figures && Number.isFinite(d.at)
-    ? new Date(d.at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+    ? clockTime(d.at) // v18.15.0: the restaurant's clock
     : null;
   return (
     <Collapsible
@@ -1521,6 +1550,8 @@ export function SettingsContent({
   // v18.0.0 session 8: the activity log opens from the Admin tab, above this
   // overlay — App owns the modal, this only carries the door handle down.
   onOpenActivity,
+  // v18.15.0: the crash trail's count, on the Admin tab and its "Open the log".
+  newCrashes, moreCrashes,
   customerSeek,
   activityRetentionDays,
   onSetActivityRetention,
@@ -1685,7 +1716,7 @@ export function SettingsContent({
       modules={modules} onSetModule={onSetModule} moduleWarning={moduleWarning}
       onSetRole={onSetRole} onRemoveUser={onRemoveUser} onInvite={onInvite}
       onWithdrawInvite={onWithdrawInvite} onApplyInvite={onApplyInvite}
-      onOpenCapabilities={onOpenCapabilities} onOpenActivity={onOpenActivity} retentionDays={activityRetentionDays} onSetRetention={onSetActivityRetention}
+      onOpenCapabilities={onOpenCapabilities} onOpenActivity={onOpenActivity} newCrashes={newCrashes} moreCrashes={moreCrashes} retentionDays={activityRetentionDays} onSetRetention={onSetActivityRetention}
       waRetentionDays={waRetentionDays} onSetWaRetention={onSetWaRetention} />;
   } else if (cur === "app") {
     content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} planAvail={planAvail} onTogglePlanAvail={onTogglePlanAvail} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} largeText={largeText} onToggleLargeText={onToggleLargeText} indoorTint={indoorTint} onToggleIndoorTint={onToggleIndoorTint} vibrateOnDrag={vibrateOnDrag} onToggleVibrate={onToggleVibrate} />;
@@ -1734,6 +1765,7 @@ export function SettingsContent({
         tabs={tabs}
         current={cur}
         onSelect={selectTab}
+        alerts={newCrashes > 0 ? { admin: { n: newCrashes, plus: !!moreCrashes, srText: newCrashesWord(newCrashes, !!moreCrashes) } } : null}
       />
       {/* v15.8.0: tab body eases its height (AutoHeight) + crossfades on switch
           (key+mgt-fade-in) — the modal card follows the eased height. */}

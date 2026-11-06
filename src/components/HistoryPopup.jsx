@@ -20,7 +20,7 @@
 
 import { BTN, S, R, T, FW } from "../lib/constants";
 import { Overlay, mkBtn } from "./atoms";
-import { formatDay, formatDaysIn, localDay } from "../lib/day";
+import { formatDay, formatDaysIn, localDay, clockTime } from "../lib/day";
 
 export function HistoryPopup({ booking, onClose }) {
   // Defensive check — the parent should already guarantee this, but the
@@ -50,12 +50,12 @@ export function HistoryPopup({ booking, onClose }) {
         boxShadow: "var(--shadow-well)"
       }}>
         {reversed.length ? reversed.map((h, i) => {
-          const d = new Date(h.at);
           // v18.2.0 (C1): the day in the house shape, "Thu 24.09", where this
-          // was the one place in the app writing "24 Sept 2026". The time stays
-          // en-GB, which gives "21:30" rather than the US-style "9:30 PM".
+          // was the one place in the app writing "24 Sept 2026". The time is
+          // 24-hour, "21:30" rather than the US-style "9:30 PM", and since
+          // v18.15.0 the restaurant's (`clockTime`), not the device's.
           const dateStr = formatDay(localDay(h.at));
-          const timeStr = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+          const timeStr = clockTime(h.at);
           return (
             <div
               key={i}

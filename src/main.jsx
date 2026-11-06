@@ -11,6 +11,14 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { hasLogAuthor, logActivity } from "./hooks/useActivityLog";
 import { crashEntry, crashGate, crashView } from "./lib/crash-report";
 import { deviceLabel } from "./lib/presence-state";
+import { profile } from "./firebase";
+import { setTimeZone } from "./lib/day";
+
+// v18.15.0: the restaurant's clock from the first render. The tenant's zone is
+// the seed; `useGeneralSettings` replaces it with `settings/general.timeZone`
+// the moment that node loads. Set here, before `render`, so no component ever
+// reads "now" in the device's zone while the node is on its way.
+setTimeZone(profile.timeZone);
 
 // v18.13.0 (#28): everything uncaught leaves one `activity` entry, so a fault on a device
 // no longer depends on somebody reporting it. What the entry says, and whether it is

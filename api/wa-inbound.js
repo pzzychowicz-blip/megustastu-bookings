@@ -52,8 +52,8 @@
 import { env } from "./_lib/env.js";
 import { verifySignature } from "./_lib/meta.js";
 import { parseMessage, mockParse } from "./_lib/gemini.js";
-import { processInbound, applyParse, inboundContent } from "./_lib/inbound-core.js";
-import { updateMessageStatusByWamid, readOperatingHours, readOccasionTags, getConversation } from "./_lib/rtdb.js";
+import { processInbound, applyParse, inboundContent, parseOverLimit } from "./_lib/inbound-core.js";
+import { updateMessageStatusByWamid, readOperatingHours, readOccasionTags, readTimeZone, getConversation } from "./_lib/rtdb.js";
 import {
   makeNumberGuard, COEXIST_HANDLERS, applyMessageChange, freshResults, newMeasure, noteChange, recordBegun, reportDelivery,
 } from "./_lib/coexist-core.js";
@@ -155,7 +155,7 @@ async function handleMessagesChange(value, results, parseJobs) {
       // v18.8.0: a photo, a voice note or a document is stored with its
       // media; a caption is parsed like a text (see inboundContent).
       const content = inboundContent(m);
-      const willParse = content.parseText !== null;
+      const hasText = content.parseText !== null;
       const phone = "+" + String(m.from || "").replace(/^\+/, "");
       const ts = inboundTs(m.timestamp);
       // Read the conversation ONCE: a PENDING draft (draftStatus "parsed")
@@ -165,6 +165,10 @@ async function handleMessagesChange(value, results, parseJobs) {
       // draft context. The same conv object is handed to processInbound.
       const conv = await getConversation(normalizePhone(phone));
       const existingDraft = pendingDraftOf(conv);
+      // v18.15.0: at most WA_PARSES_PER_HOUR automatic drafts an hour for one
+      // number (inbound-core.js, parseOverLimit). Over it, the message is
+      // stored and shown with no draft, and Re-check still parses it.
+      const willParse = hasText && !(await parseOverLimit(normalizePhone(phone), conv));
       const r = await processInbound({
         phone, text: content.text, ts,
         media: content.media,
@@ -174,7 +178,7 @@ async function handleMessagesChange(value, results, parseJobs) {
         parse: null, // the LLM runs in phase B, after the response
         // Auto-ack language before the LLM has run: the mock parser's
         // regex detection is free and good enough for a two-line ack.
-        langHint: willParse ? mockParse(content.parseText).language : null,
+        langHint: hasText ? mockParse(content.parseText).language : null,
         preloadedConv: conv,
         willParse, // flag "analyzing…" only for messages we'll parse
       });
@@ -325,10 +329,11 @@ export default async function handler(req, res) {
   if (parseJobs.length > 0) {
     scheduleAfterResponse((async () => {
       // v18.11.0: and the occasion tags, read with the hours, once per payload.
-      const [hours, occasions] = await Promise.all([readOperatingHours(), readOccasionTags()]);
+      // v18.15.0: and the restaurant's time zone, the calendar "mañana" is on.
+      const [hours, occasions, timeZone] = await Promise.all([readOperatingHours(), readOccasionTags(), readTimeZone()]);
       for (const job of parseJobs) {
         try {
-          const parse = await parseMessage(job.text, { hours, existingDraft: job.existingDraft, occasions });
+          const parse = await parseMessage(job.text, { hours, existingDraft: job.existingDraft, occasions, timeZone });
           await applyParse(job.phoneKey, parse, job.ts);
         } catch (e) {
           // Parse failure = message stays draft-less (the designed failure

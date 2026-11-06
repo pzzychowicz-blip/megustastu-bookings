@@ -87,8 +87,17 @@ Three properties worth knowing before using it:
 
 ## Backups and restore (v18.1.1)
 
-The free plan has no automatic backups, so the only one is **Settings → General →
-Download backup** (capability `dataExport`), which saves `mgt-backup-<date>.json`.
+Firebase keeps no backups on the free plan. There are two kinds, and the file is the
+same in both:
+
+- **Daily and automatic**: the private repo `pzzychowicz-blip/mgt-backups` builds the
+  file with this app's own `buildBackup`, through a read-only service account, and
+  keeps it age-encrypted as an Actions artifact (`backup.yml`). `freshness.yml` fails,
+  and GitHub emails, when the newest one is over 48 hours old. Its README holds the
+  key handling and `verify-restore.mjs`. **Corrected in v18.15.0**: this section said
+  the manual download was the only backup long after that repo existed.
+- **By hand**: **Settings → General → Download backup** (capability `dataExport`),
+  which saves `mgt-backup-<date>.json`.
 
 **What the file is.** Since v18.1.1, the whole database as the server holds it, read
 in one `get()` of the root, **minus `presence` and `reminderFires`**. The reasons for

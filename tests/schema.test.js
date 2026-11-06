@@ -158,17 +158,24 @@ const PINNED = {
   // 3: v18.8.0, `settings/admin.waRetentionDays` (sanitizeAdminSettings).
   // 4: v18.10.0, `settings/operatingHours.exceptions` (sanitizeExceptions).
   // 5: v18.12.0, `settings/whatsapp.autoReply` (sanitizeWa).
-  schema: 5,
+  // 6: v18.15.0, `settings/general.timeZone` (sanitizeGeneral), and in the
+  //    same unreleased version `settings/users/$uid/prefs.crashSeenAt`
+  //    (sanitizeUserPrefs). One raise covers both: no build between them shipped.
+  //    sanitizeGeneral was re-pinned again inside the same version by its
+  //    /code-review: a zone-SHAPED value is kept as stored even when this engine
+  //    cannot format in it (storedZone), where the first cut replaced it with the
+  //    seed. Same key, same meaning, still unreleased, so no second raise.
+  schema: 6,
   prints: {
       "hooks/useBookingDefaults.js:sanitizeTiers": "8d1b9808c9",
       "hooks/useBookingDefaults.js:sanitizeBookingDefaults": "7a6d45c5c4",
       "hooks/useDayShifts.js:sanitizeShifts": "42278cbe80",
-      "hooks/useGeneralSettings.js:sanitizeGeneral": "9497dee0b6",
+      "hooks/useGeneralSettings.js:sanitizeGeneral": "b223f7387d",
       "hooks/useLayout.js:sanitizeFloorPlan": "1c43f674f3",
       "hooks/useLayout.js:sanitizeLayout": "317b68da39",
       "hooks/useOptimizerSettings.js:sanitizeOptimizer": "74794693a2",
       "hooks/useRoles.js:sanitizeAdminSettings": "42a2f8f352",
-      "hooks/useUserPrefs.js:sanitizeUserPrefs": "fb820d1b7b",
+      "hooks/useUserPrefs.js:sanitizeUserPrefs": "2fa28e308a",
       "hooks/useVoucherDefaults.js:sanitizeVoucherDefaults": "7abe4b008f",
       "hooks/useWaSettings.js:sanitizeWa": "1964c16116",
       "lib/booking-fields.js:sanitizeByTable": "1b03b3eeed",
@@ -206,7 +213,10 @@ const PINNED = {
       // It cleans what the model ANSWERS (now `occasions` too) before the server
       // writes a draft; no reader whitelists `draftData` through it. A browser
       // only update()s a conversation's status fields, so no build drops the key.
-      "lib/whatsapp.js:sanitizeParse": "7dbe9a2ce5",
+      // v18.15.0: re-pinned WITHOUT a SCHEMA raise, for the same reason: it
+      // now also caps the free text (`name`, `notes`, `ambiguity`) the server
+      // writes into a draft, and still no reader whitelists through it.
+      "lib/whatsapp.js:sanitizeParse": "9fbbe5fd1b",
       "BOOKING_FIELDS": "id,name,phone,date,time,scheduledTime,size,duration,originalDuration,preference,notes,status,tables,customDur,_manual,_locked,_conflict,preferredTables,returnOf,history,noShow,deposit,voucherCode,recurringId,recurringDate,anonymized,guestId,stayedMin,updatedAt,tags,guestTags,guestTagsAt"
   },
 };

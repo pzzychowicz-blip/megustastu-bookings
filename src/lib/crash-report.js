@@ -31,6 +31,49 @@
 // allows one entry per signature and five per page load.
 
 export const MAX_PER_LOAD = 5;
+
+// ── The admin's crash trail (v18.15.0) ──────────────────────────────────────
+// How many of `entries` (activity entries of kind `crash`) are newer than
+// `seenAt`, the newest crash this person has already seen (their prefs'
+// `crashSeenAt`; null = never looked, so every crash is new), and the newest
+// `at` among them, which is what pressing the log's Crashes chip stores.
+// Server time on both sides: an entry's `at` is a serverTimestamp, and storing
+// the newest ENTRY's time rather than this device's `Date.now()` means a device
+// whose clock is wrong can neither hide a crash nor bring one back.
+export function crashTrail(entries, seenAt) {
+  const seen = typeof seenAt === "number" && seenAt > 0 ? seenAt : 0;
+  const list = Array.isArray(entries) ? entries : (entries && typeof entries === "object" ? Object.values(entries) : []);
+  let count = 0;
+  let latest = 0;
+  for (const e of list) {
+    if (!e || e.kind !== "crash" || typeof e.at !== "number" || !Number.isFinite(e.at)) continue;
+    if (e.at > latest) latest = e.at;
+    if (e.at > seen) count++;
+  }
+  return { count, latest };
+}
+
+// What the badge says, from a listener that read at most `limit + 1` entries
+// (the v18.15.0 /code-review): the count capped at `limit`, and `more` only
+// when an unseen crash lies beyond it. Reading exactly `limit` entries could not
+// tell 50 from more than 50, so the badge said "50+" for an exact 50.
+export function crashBadge(entries, seenAt, limit) {
+  const t = crashTrail(entries, seenAt);
+  return { count: Math.min(t.count, limit), latest: t.latest, more: t.count > limit };
+}
+
+// The words a crash count is said with, ONE rule for the four places that say
+// it (the gear, the Admin tab, Open the log, the Crashes chip; the v18.15.0
+// /code-review found four hand copies). "50+" is plural, like any count past
+// one. `newCrashesWord` is what a `CountBadge`'s `srText` takes (the badge says
+// the number); `newCrashesText` is the whole phrase, "" for none, with the
+// count and its words joined by a no-break space like every count on screen.
+export function newCrashesWord(n, more) {
+  return n === 1 && !more ? "new crash" : "new crashes";
+}
+export function newCrashesText(n, more) {
+  return n > 0 ? n + (more ? "+" : "") + "\u00a0" + newCrashesWord(n, more) : "";
+}
 const MESSAGE_MAX = 300;
 // How much of a message the mask reads. Its address pattern is quadratic on a long token
 // (50 KB took 2.5 s, measured), this runs on the main thread inside an error handler, and
