@@ -20,18 +20,25 @@ const Inbox = read("components/whatsapp/InboxPanel.jsx");
 
 describe("what the ⋯ holds", () => {
   const both = { recheck: true, mute: true };
-  it("a live conversation: Re-check and Not a customer, no Delete", () => {
-    expect(conversationMenuIds({}, both)).toEqual(["recheck", "mute"]);
+  // v18.16.0 (Patryk): Archive or Restore leads, where it was the header's own button.
+  it("a live conversation: Archive, Re-check and Not a customer, no Delete", () => {
+    expect(conversationMenuIds({}, both)).toEqual(["archive", "recheck", "mute"]);
   });
-  it("an archived one adds Delete, last, so red is never the row under the thumb", () => {
-    expect(conversationMenuIds({ archived: true }, both)).toEqual(["recheck", "mute", "delete"]);
+  it("an archived one leads with Restore and adds Delete, last, so red is never the row under the thumb", () => {
+    expect(conversationMenuIds({ archived: true }, both)).toEqual(["restore", "recheck", "mute", "delete"]);
   });
   it("a conversation already muted is not offered it again", () => {
-    expect(conversationMenuIds({ archived: true, muted: true }, both)).toEqual(["recheck", "delete"]);
+    expect(conversationMenuIds({ archived: true, muted: true }, both)).toEqual(["restore", "recheck", "delete"]);
   });
-  it("a row with nothing behind it is not drawn, and the header draws no empty ⋯", () => {
-    expect(conversationMenuIds({}, { recheck: false, mute: false })).toEqual([]);
+  it("exactly one of Archive and Restore, always, so the menu is never empty", () => {
+    expect(conversationMenuIds({}, { recheck: false, mute: false })).toEqual(["archive"]);
+    expect(conversationMenuIds({ archived: true }, { recheck: false, mute: false })).toEqual(["restore", "delete"]);
     expect(View).toContain("{menuItems.length ? <ConversationMenu");
+  });
+  it("a hairline stands above the first red row, and is not a row the arrows reach", () => {
+    expect(Menu).toContain("const rule = it.danger && i > 0 && !items[i - 1].danger;");
+    expect(Menu).toContain('{rule ? <div role="separator" style={RULE} /> : null}');
+    expect(Menu).toContain(`querySelectorAll('[role="menuitem"]')`);
   });
 });
 

@@ -267,8 +267,12 @@ export const WA_PARSING_STALE_MS = 90000;
 // archived thread included, which is often why it was opened. Not a customer until
 // it has been said: Restore reads "Customer again" after that. Delete only from
 // Archived, so a live conversation is two deliberate steps from gone.
+// v18.16.0 (Patryk): Archive and Restore are rows of it too, first, so the header
+// holds the ⋯ and nothing else. Exactly one of the two, by the thread's state, and
+// always: a conversation can be archived or restored whatever else it can do.
+// Delete stays last, the row furthest from the one under the thumb.
 export function conversationMenuIds(conv, can) {
-  const ids = [];
+  const ids = [conv.archived ? "restore" : "archive"];
   if (can.recheck) ids.push("recheck");
   if (can.mute && !conv.muted) ids.push("mute");
   if (conv.archived) ids.push("delete");

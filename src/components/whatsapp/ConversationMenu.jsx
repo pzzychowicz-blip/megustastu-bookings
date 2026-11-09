@@ -4,6 +4,11 @@
 // and on an archived thread Delete did too, four buttons competing for one glance.
 // One action stays out (Archive, or Restore) and the rest are one tap further:
 // `[Archive] [⋯]`, the order he chose.
+// v18.16.0 (Patryk): Archive and Restore are rows here as well, so the header is
+// the ⋯ alone. Restore then sits in one menu with Delete, which is why a hairline
+// stands above the first red row: two groups, the one that keeps and the one
+// that destroys. It is a `role="separator"`, which the arrow keys never land on,
+// because they walk the `menuitem`s.
 //
 // It grows from the button that opened it and nothing dims, because nothing here
 // is a decision about the whole screen, which is why it is neither `PopupShell`
@@ -21,7 +26,7 @@
 // Escape. InboxPanel's own keys are on `window` in the capture phase as well, and
 // nothing here can run before them, so they stand down while a menu is in the DOM.
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { BTN, FW, H, IC, M, R, S, SP, T } from "../../lib/constants";
 import { nextMenuIndex } from "../../lib/keyboard";
 import { mkBtn, Presence } from "../atoms";
@@ -39,6 +44,10 @@ const ROW = {
   padding: "0 12px", border: "none", borderRadius: R.inset, fontSize: T.lead, fontWeight: FW.semi,
   fontFamily: "inherit", textAlign: "left", whiteSpace: "nowrap",
 };
+
+// The hairline above the first red row. Its margin is the menu's own padding, so
+// the two groups stand as far from the rule as the rows do from the menu's edge.
+const RULE = { height: 1, margin: SP.snug + "px 0", background: "var(--border-soft)" };
 
 // `items`: { id, label, icon, onPick, title, danger, inactive, turning }. `inactive`
 // is a row that is showing a state ("Checking…"), `aria-disabled` rather than
@@ -131,9 +140,11 @@ export function ConversationMenu({ items, busy = false }) {
           <div ref={menuRef} role="menu" aria-label="More actions">
             {items.map(function (it, i) {
               const Icon = it.icon;
+              const rule = it.danger && i > 0 && !items[i - 1].danger;
               return (
+                <Fragment key={it.id}>
+                {rule ? <div role="separator" style={RULE} /> : null}
                 <button /* @no-lift a row as wide as the menu: .mgt-ac-row tints it through --row-bg */
-                  key={it.id}
                   type="button"
                   role="menuitem"
                   tabIndex={-1}
@@ -147,6 +158,7 @@ export function ConversationMenu({ items, busy = false }) {
                   <span aria-hidden="true" style={{ display: "flex", ...(it.turning ? TURNING : null) }}><Icon size={IC.control} /></span>
                   {it.label}
                 </button>
+                </Fragment>
               );
             })}
           </div>

@@ -40532,3 +40532,28 @@ Nine findings. Eight held up and were fixed, one commit each; one was disproved.
   conversation (`getConversation`) and then the parse limit (`parseOverLimit`) in turn, where the two could run together. The limit takes
   that conversation and returns at once for a muted one, so a muted conversation costs no second read; run together, every message would
   pay for both. `tests/api-handlers.test.js` pins it ("a muted conversation costs no read"). Nothing changed.
+
+## v18.16.0 — the Inbox header tidied, a quiet split menu, and two Timeline gestures
+
+**Date:** 2026-11-09 · **Branch:** `feat/v18.16.0-inbox-timeline`
+
+**Why:** Patryk reviewed the Inbox and the Timeline and asked for five changes, then for the nine suggestions the plan made beside them
+(the plan, with every decision he made in five rounds of questions: `/Users/patrykzychowicz/.claude/plans/1-engineering-system-design-inbox-edits-peaceful-candle.md`).
+The Inbox header said one thing twice and kept a fold that revealed almost nothing; the split menu's two steps looked like two components; and
+the Timeline, the view used on the pass, had no direct way to start a booking at a time or to move one in time. **Behavioural change: yes**, each
+commit below. Nothing stored changes shape, so `SCHEMA` stays and no rule moves.
+
+### Commit 1 — the header's one control is the ⋯, and "Booking confirmed" leaves it
+
+- **Archive and Restore are rows of the ⋯** (`conversationMenuIds`, `lib/whatsapp.js`): exactly one of them, first, then Re-check, Not a customer and,
+  on an archived thread, Delete. This reverses the first half of v18.14.0's correction 6 (`[Archive] [⋯]`), by Patryk's decision of 2026-11-09: asked
+  whether Restore should stay a header button on an archived thread, he chose the menu for both. Archive still asks before it archives an upcoming
+  linked booking (`handleArchive`), and Delete still asks.
+- **A hairline above the first red row** (`ConversationMenu.jsx`, `RULE`), because Restore and Delete now share one menu. It is a
+  `role="separator"`; the arrow keys walk `[role="menuitem"]`, so it is never a stop.
+- **The "✓ Booking confirmed" chip is gone from the header** (`ConversationView.jsx`). The linked booking card one row below draws the booking's
+  real status (`SBadge`), and the chip was `draftStatus === "accepted"`, which stays true after that booking is cancelled. The dismissable banner in
+  the thread (DraftCard) is untouched.
+
+`tests/conversation-menu.test.js` (the ids and their order, the menu never empty, the hairline), `tests/wa-inbox-layout.test.js` (the header holds no
+button of its own; the chip is gone).

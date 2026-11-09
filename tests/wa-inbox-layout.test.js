@@ -224,16 +224,25 @@ describe("the inbox's disconnection banner (v18.9.0)", () => {
 // and they ran 40px past the screen, so the group was made to wrap. v18.14.0 (correction
 // 6, Patryk): it has two, Archive or Restore and the ⋯, which fit (Archive 235–318, ⋯
 // 324–360 at 375), so the wrapping went with the other three.
-describe("the conversation header has one action and the ⋯", () => {
+// v18.16.0 (Patryk): Archive and Restore are rows of the ⋯ as well, so the header's
+// one control is the ⋯, and the "Booking confirmed" chip beside the name is gone: the
+// linked booking's own status badge, one row down, says it.
+describe("the conversation header has the ⋯ and nothing else", () => {
   const header = View.slice(View.indexOf("const headerActionBtns"), View.indexOf("const disabled = "));
-  it("in that order, whichever the action is", () => {
-    expect(header.indexOf("<RestoreIcon")).toBeGreaterThan(-1);
-    expect(header.indexOf("<ArchiveIcon")).toBeGreaterThan(header.indexOf("<RestoreIcon"));
-    expect(header.indexOf("<ConversationMenu")).toBeGreaterThan(header.indexOf("<ArchiveIcon"));
+  it("no button of its own, whichever state the thread is in", () => {
+    expect(header).toContain("<ConversationMenu");
+    expect(header).not.toMatch(/<button|<RestoreIcon|<ArchiveIcon/);
+  });
+  it("Archive and Restore are rows of the menu, and Restore reads Customer again on a muted thread", () => {
+    expect(View).toMatch(/archive: \{ label: "Archive", icon: ArchiveIcon,/);
+    expect(View).toMatch(/restore: \{ label: conv\.muted \? "Customer again" : "Restore", icon: RestoreIcon,/);
   });
   it("the rest are not buttons of the header any more", () => {
     expect(header).not.toMatch(/Not a customer<\/button>|Delete<\/button>|Re-check/);
     expect(View).not.toMatch(/mkDangerBtn/);
+  });
+  it("the header no longer says Booking confirmed: the linked booking's badge does", () => {
+    expect(View).not.toMatch(/\bacceptedBadge\b|>Booking confirmed</);
   });
   it("sits at the header's right, unwrapped", () => {
     expect(View).toContain('<div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>');
