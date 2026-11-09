@@ -379,6 +379,9 @@ explaining why is usually the one to read.
   its words on the seven surfaces it sits on, in both themes. The header's gear and
   search went last, and are `CHROME_BTN` in `App.jsx`: their own grey disc was the
   heaviest thing beside Follow, − and +, for the two least urgent controls there.
+  **The split menu's two steps are both quiet (v18.16.0, Patryk):** step 2 was accent
+  blue from v17.5.0 and the sweep only replaced greys. Two equal choices are not a
+  primary action.
   **What he kept solid:** Following (dark) and Optimiser ON (green), beside their
   quiet idle states; Undo, solid blue; the grey title pills; Completed on a button;
   Send, the moment it can send. Going between the two is one change, in and out:

@@ -40612,3 +40612,13 @@ the spoken order now matches the drawn one.
 Laura, Marcos and Sara keep a green tick and "booking confirmed". The new inks (`--warn-text`, `--danger-text`, `--text-secondary`) are registered
 on the row's three fills in `tests/contrast.test.js` at the label bar, and all nine pass in both themes. `tests/whatsapp-describe.test.js` runs
 `linkedStatus` over every status, a deleted booking, a phone link and the legacy shape.
+
+### Commit 5 — the split menu's second step is quiet, and has a way back
+
+Step 1 (Side by side / Top and bottom) went quiet in v18.14.0's sweep of the secondary greys (`fe308718`); step 2 (the two remaining views) had been
+`S.accent` since v17.5.0, and that sweep only replaced greys. Nobody decided the difference. Both are `BTN.quiet` now (Patryk): two equal choices
+are not a primary action. Step 2 gains **Back** (`ChevronLeftIcon`, 44px), under the row so the two view buttons do not move; it refuses while the
+menu is not `live`, like every button there. No new view marks (his choice): the view switcher itself uses words.
+
+`tests/quiet-buttons.test.js` holds both. **Not yet looked at in the running app**: the session's usage limit was reached at this commit, so the
+popup's two steps and Back, in and out, are still to be checked on DEV.

@@ -68,6 +68,20 @@ describe("nothing goes round it", () => {
   });
 });
 
+// v18.16.0 (Patryk): the split menu's second step was accent blue from v17.5.0 and the
+// sweep above only replaced greys, so one popup's two steps read as two components.
+describe("the split menu's two steps", () => {
+  const menu = code("components/SplitMenu.jsx");
+  it("are quiet, both of them: two equal choices are not a primary action", () => {
+    expect(menu).not.toMatch(/S\.accent|--accent/);
+    expect((menu.match(/background: BTN\.quiet/g) || []).length).toBe(4);
+  });
+  it("step 2 has a way back to step 1, under the row so the view buttons do not move", () => {
+    expect(menu).toMatch(/onClick=\{\(\) => \{ if \(live\) \{ setStep\(1\); setDir\(null\); \} \}\}><ChevronLeftIcon size=\{IC\.inline\} \/>Back<\/button>/);
+    expect(menu.indexOf(">Back</button>")).toBeGreaterThan(menu.indexOf("{LABEL[v]}</button>"));
+  });
+});
+
 describe("the header's gear and search", () => {
   it("are quiet buttons, and the disc they wore is gone", () => {
     expect(appCode()).toMatch(/const CHROME_BTN\s*=\s*mkBtn\(\{\s*background:\s*BTN\.quiet/);
