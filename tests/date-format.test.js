@@ -237,7 +237,9 @@ describe("every date on screen goes through formatDay", () => {
   it("the WhatsApp cards, both lines of each", () => {
     // v18.11.0: one summary line (with the name and occasions) serves both shapes.
     expect((read("components/whatsapp/DraftCard.jsx").match(/\(formatDay\(d\.date\) \|\| "\? date"\)/g) || []).length).toBe(1);
-    expect((read("components/whatsapp/LinkedBookingCard.jsx").match(/\(formatDay\(booking\.date\) \|\| "\?"\)/g) || []).length).toBe(2);
+    // v18.16.0: the linked card spells its booking once (`when`), for the strip and
+    // for the phone's opened body.
+    expect((read("components/whatsapp/LinkedBookingCard.jsx").match(/\(formatDay\(booking\.date\) \|\| "\?"\)/g) || []).length).toBe(1);
   });
 
   // The one locale date left is SPOKEN — the day announcement a screen reader

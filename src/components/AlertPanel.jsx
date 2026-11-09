@@ -98,6 +98,12 @@
 //              SIBLING. See the render for why the row keeps its onClick.
 //   expanded — with onHeaderClick: the caller's open state, for the button's
 //              aria-expanded. The caller owns the state, so it passes it.
+//   wrapHeader — v18.16.0: the header WRAPS as a toggle's does, without being
+//              one. The linked-booking strip on a tablet is a fixed line whose
+//              title shares the row with two fixed-width buttons; it needs the
+//              wrap and the title's content basis (phase 46, below), and a fake
+//              `onHeaderClick` to get them would announce a disclosure that
+//              discloses nothing.
 //   children — the rows. Wrap each in <AlertRow> to get the hairline.
 
 import { ALERT_TONES } from "./atoms";
@@ -119,7 +125,9 @@ export function AlertRow({ first, style, children }) {
   );
 }
 
-export function AlertPanel({ role = "danger", tone, tint, icon: Icon, title, count, action, onHeaderClick, expanded, style, children }) {
+export function AlertPanel({ role = "danger", tone, tint, icon: Icon, title, count, action, onHeaderClick, expanded, wrapHeader = false, style, children }) {
+  // A toggle's header always wraps; a fixed one wraps when its caller says so.
+  const wraps = !!onHeaderClick || wrapHeader;
   const t = ALERT_TONES[role] || ALERT_TONES.danger;
   const ink = tone || t.tone;
   const fill = tint || t.tint;
@@ -150,7 +158,7 @@ export function AlertPanel({ role = "danger", tone, tint, icon: Icon, title, cou
         is the BUTTON, which takes this same rule; the title keeps it
         too, so it still grows to the button's width as it grew to the
         row's (the linked card's summary line fills that width). */}
-    <span style={{ fontSize: T.body, fontWeight: FW.bold, color: ink, flex: onHeaderClick ? "1 1 auto" : 1, minWidth: 0 }}>{title}</span>
+    <span style={{ fontSize: T.body, fontWeight: FW.bold, color: ink, flex: wraps ? "1 1 auto" : 1, minWidth: 0 }}>{title}</span>
     {count > 1 ? (
       <span style={{ fontSize: T.small, fontWeight: FW.bold, color: ink, opacity: 0.75, flexShrink: 0 }}>{count}</span>
     ) : null}
@@ -174,7 +182,8 @@ export function AlertPanel({ role = "danger", tone, tint, icon: Icon, title, cou
         <div onClick={onHeaderClick} style={{
           display: "flex", alignItems: "center", gap: SP.base,
           padding: "0 " + NOTIF_PAD_X + "px", marginBottom: 6,
-          ...(onHeaderClick ? { cursor: "pointer", flexWrap: "wrap" } : null)
+          ...(onHeaderClick ? { cursor: "pointer" } : null),
+          ...(wraps ? { flexWrap: "wrap" } : null)
         }}>
           {onHeaderClick ? (
             // Stripped to the row's own look: no UA padding, border, font or

@@ -111,12 +111,14 @@ describe("on a phone the conversation's two cards start as one line", () => {
     expect(intent).toContain('useCollapseState(phoneKey, "intent", !!narrow)');
   });
   it("collapsed is the title row alone: the buttons are in the body, which eases open", () => {
-    for (const card of [linked, intent]) {
-      expect(card).toContain("{narrow ? null : actionBtns}");
-      expect(card).toMatch(/\{narrow \? <AlertRow first style=\{\{ paddingBottom: 8 \}\}>\{actionBtns\}<\/AlertRow> : null\}\s*<\/Reveal>/);
-    }
-    expect(linked).toContain('<Presence tag="span" show={collapsed && !narrow} ');
-    expect(linked).toContain("{collapsed && !narrow ? summary : null}</Presence>");
+    for (const card of [linked, intent]) expect(card).toContain("{narrow ? null : actionBtns}");
+    expect(intent).toMatch(/\{narrow \? <AlertRow first style=\{\{ paddingBottom: 8 \}\}>\{actionBtns\}<\/AlertRow> : null\}\s*<\/Reveal>/);
+    // v18.16.0 (Patryk): the linked card has a body on a phone ONLY (a tablet's is a
+    // fixed strip), so its whole Reveal sits in the `narrow` branch, buttons last.
+    expect(linked).toMatch(/\{narrow \? \(\s*<Reveal show=\{!collapsed\}>/);
+    expect(linked).toMatch(/<AlertRow first style=\{\{ paddingBottom: 8 \}\}>\{actionBtns\}<\/AlertRow>\s*<\/Reveal>\s*\) : null\}/);
+    // The summary line is the tablet strip's; a phone's title row is the label and badge.
+    expect(linked).toMatch(/\{narrow \? null : <span style=\{\{[^\n]*\}\}>\{summary\}<\/span>\}/);
   });
   it("the request is a toggle on a phone even with nothing else to disclose", () => {
     expect(intent).toContain("const opens = hasBody || !!narrow;");

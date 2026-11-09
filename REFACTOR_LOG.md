@@ -40557,3 +40557,24 @@ commit below. Nothing stored changes shape, so `SCHEMA` stays and no rule moves.
 
 `tests/conversation-menu.test.js` (the ids and their order, the menu never empty, the hairline), `tests/wa-inbox-layout.test.js` (the header holds no
 button of its own; the chip is gone).
+
+### Commit 2 — the linked booking is a fixed strip on a tablet or desktop
+
+Opened, the card added one thing to its collapsed line: the table numbers. So the chevron promised more than there was (Patryk: "if there's nothing
+to reveal … there's no point to make it revealable"). The tables are on the line now (`· table 5`, `· tables 3, 4, 5`) and on a tablet or desktop
+nothing opens: no toggle button, no chevron, no body. `IntentBanner` has had the rule since v18.2.0 phase 49. **A phone keeps its fold** (his choice):
+there the summary and both buttons live in the body, which v18.4.0 measured as the thread's height.
+
+- `AlertPanel` gains `wrapHeader`: the header's wrap and the title's content basis without the toggle. The strip still shares its row with two
+  fixed-width buttons, the case `SUMMARY_MIN` was written for, and a fake `onHeaderClick` would have announced a disclosure with nothing in it.
+- The summary's `Presence` is gone. It faded the line in and out with the fold; the line is now always drawn on the strip and never on a phone.
+- One spelling of the booking (`when`) serves the strip and the phone's body, which also gained the name-less line's tables in the same words.
+
+**Measured on DEV.** At 998×507 (the tablet), pane 615px wide: the strip reads "Linked booking · Confirmed · Marcos · Sat 14.11 · 16:00 · 6 guests ·
+tables 3, 4, 5" with no `button[aria-expanded]` in it and `cursor: auto` on its header. It is 88px tall, two rows, the buttons under the line. That
+is the height the collapsed card already had at this width: with the summary cut to one letter the pane still measured 88, because the label, the
+badge and `SUMMARY_MIN` beside the two buttons do not fit 615px. At 375×812 the fold opens to 130px and closes to 44px, eased both ways, and
+`aria-expanded` follows.
+
+`tests/wa-inbox-layout.test.js`, `tests/row-slots.test.js`, `tests/short-viewport.test.js`, `tests/date-format.test.js` re-pinned to the new shape;
+`tests/a11y.test.js` still finds `expanded={!collapsed}` beside `onHeaderClick`.

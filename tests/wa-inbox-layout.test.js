@@ -178,11 +178,19 @@ describe("W5 — the phone's inbox", () => {
 describe("W-1 — a wrapping pane header never draws its actions over its title", () => {
   const Panel = read("components/AlertPanel.jsx");
   it("gives the title its content as basis when the header wraps", () => {
-    expect(Panel).toMatch(/flex: onHeaderClick \? "1 1 auto" : 1, minWidth: 0 \}\}>\{title\}<\/span>/);
-    expect(Panel, "the header wraps only when it is a toggle").toMatch(/\.\.\.\(onHeaderClick \? \{ cursor: "pointer", flexWrap: "wrap" \} : null\)/);
+    expect(Panel).toMatch(/flex: wraps \? "1 1 auto" : 1, minWidth: 0 \}\}>\{title\}<\/span>/);
+    // v18.16.0: a toggle always wraps, and a fixed header wraps when its caller asks
+    // (`wrapHeader`); only a toggle takes the pointer.
+    expect(Panel).toContain("const wraps = !!onHeaderClick || wrapHeader;");
+    expect(Panel, "the header wraps only when it is a toggle or was asked to").toMatch(/\.\.\.\(wraps \? \{ flexWrap: "wrap" \} : null\)/);
+    expect(Panel).toMatch(/\.\.\.\(onHeaderClick \? \{ cursor: "pointer" \} : null\),/);
   });
   it("is the header the linked card uses, and the intent banner whenever it has a body (phase 49)", () => {
-    expect(read("components/whatsapp/LinkedBookingCard.jsx")).toMatch(/onHeaderClick=\{toggle\}/);
+    // v18.16.0 (Patryk): the linked card is a toggle on a phone only. On a tablet it is
+    // a fixed strip that keeps the wrap, since its line still shares a row with buttons.
+    const Linked = read("components/whatsapp/LinkedBookingCard.jsx");
+    expect(Linked).toMatch(/onHeaderClick=\{narrow \? toggle : undefined\}/);
+    expect(Linked).toContain("wrapHeader={!narrow}");
     expect(read("components/whatsapp/IntentBanner.jsx")).toMatch(/onHeaderClick=\{opens \? toggle : undefined\}/);
   });
 });
