@@ -40622,3 +40622,46 @@ menu is not `live`, like every button there. No new view marks (his choice): the
 
 `tests/quiet-buttons.test.js` holds both. **Not yet looked at in the running app**: the session's usage limit was reached at this commit, so the
 popup's two steps and Back, in and out, are still to be checked on DEV.
+
+### Commit 6 — an empty cell of the Timeline starts a booking
+
+The Timeline, the view used on the pass, had no way to say "here, at this time": a phone booking mid-service meant + New, then the time, then the
+table. Now an empty quarter hour offers it. The form opens with the cell's time and **the cell's table as the PREFERRED table, the star, not a hand
+pick** (Patryk): the optimiser still seats the party, on that table when it fits, and the form's Tables row shows where before Save.
+
+- **What a cell offers is pure** (`lib/cell-offer.js`): `cellAt` finds the quarter under a pointer and `cellOffer` answers `null` or
+  `{tableId, time}`. It refuses exactly what the form's Save refuses for the time, plus a table block over the cell. To make "exactly" hold, the three
+  time checks left `draftRefusal` for `timeRefusal(date, mins)` (`lib/booking-save.js`), statement for statement, and both call it; commit 7's drag
+  will be the third caller. `tests/cell-offer.test.js` walks every quarter from an hour before opening to an hour past the grid and holds the cell to
+  `draftRefusal` both ways. The form accepts a time earlier today, so the cell does too.
+- **One marker for the grid, with its own state** (`CellMarker`, `TimelineView.jsx`). The view tells it where to be through a handle, so a pointer
+  crossing cells re-renders a leaf and never the 13 memoised rows, and there is no per-cell DOM (13 × 40 quarters would be 500 nodes). The plan had
+  the marker's style written from a ref; a leaf with state does the same job in React's own terms and keeps `Presence` for the fade.
+- **The handlers are on the grid root, not on each row** (the plan said per row). Per row, crossing from one row to the next is a leave and an
+  enter, a hide and a show, and the marker would blink between them; on the root it is a move like any other.
+- **A mouse hovers and clicks; a finger taps twice** (Patryk). The first tap selects the cell and the marker becomes a real button, cell and chip
+  together, named "New booking, table 5, 18:15"; the second tap is a plain click on it. A press anywhere else or any scroll lets it go, both heard in
+  the capture phase. Under a mouse the marker takes no pointer events, or its chip would stand between the pointer and the next cell.
+- **`cellDown`**: the click that ends a block's drag lands on the grid too (the nearest common ancestor of the press and the release), so a click
+  counts only when its press began on an empty cell.
+- **The chip is the table's own badge and the time on the hour pill** (`CellChip`), on the ruler's opaque surface. The plan allowed for a drawn
+  "table" mark and said to check Icons.jsx first; the label column's badge already is the table's mark in this view, so nothing was drawn. **This is
+  the one visual choice in this commit Patryk has not seen**; a drawn mark can replace the badge in `CellChip` alone.
+- **The per-device switch**, "Tap an empty cell to book" (`cellBook`, `mgt-tl-cellbook`, only `"0"` stored), in Settings → App beside the Timeline's
+  other switches. Decided by precedent (Larger text, Tint indoor tables), as the plan records.
+- The hint line under the grid gains "tap an empty cell to book" while the switch is on.
+
+**Measured on DEV, 2026-11-09, at 998×507.** A real pointer over table 1's row lit the 18:45 quarter (36px wide at 2.4px a minute) with the chip
+"1 · 18:45" to its right and `cursor: pointer`; a real click on table 2's 18:45 opened New booking with Time 18:45 and the Tables row reading
+"2 (auto)" with 2 starred. Over Laura's block: no marker, no pointer cursor. At 22:30, past the 21:45 last start: none. With the grid scrolled so
+20:15 sat at the right edge (cell right 975, scroller right 969), the chip stood on the left, 868.8–935. The first version read the cell's width in
+pixels at the pointer event, and during the opening zoom's ease that was 42px against a cell that settled at 36; the gap is now a percentage
+padding, which resolves against the marker's box. The chip is 66.2px for table 1 and 69.6 for table 13, 71.5 and 77.3 at Larger text, which is
+where `cellChipPx` (78 and 86, with the 4px gap) comes from. The chip's pairs on the ruler's surface: outdoor 4.72:1 Light and 4.74 Dark, indoor
+4.69 and 5.41, the time 4.83 and 6.91 (`tests/contrast.test.js`).
+
+**The two taps were driven by dispatched events, not a finger**: a touch `pointerdown` and a `click` on table 6's row selected 14:15 (the button
+then took pointer events), a touch press elsewhere and a `scroll` event each let it go, and a click on the selected marker opened the form at 14:15.
+That exercises the handlers and nothing about how it feels under a wet finger, which is Patryk's to judge on the tablet. (One reading to discard: a
+dispatched `pointerdown` on a block with no `pointerup` armed that block's 800ms drag, and the block then followed the mouse. It was the probe, and
+a reload cleared it; nothing was written.)

@@ -485,7 +485,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
 // where noted" is a statement about exactly these controls (the two marked
 // "This device only" are the exceptions it names). Left behind in General it
 // would have been a rule with nothing to govern.
-export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggleAutoTheme = () => {}, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, swEnabled = true, onToggleSw = () => {}, planGestures = true, onTogglePlanGestures = () => {}, planAvail = true, onTogglePlanAvail = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {}, largeText = false, onToggleLargeText = () => {}, indoorTint = true, onToggleIndoorTint = () => {}, vibrateOnDrag = true, onToggleVibrate = () => {} }) {
+export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggleAutoTheme = () => {}, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, swEnabled = true, onToggleSw = () => {}, planGestures = true, onTogglePlanGestures = () => {}, planAvail = true, onTogglePlanAvail = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {}, largeText = false, onToggleLargeText = () => {}, indoorTint = true, onToggleIndoorTint = () => {}, cellBook = true, onToggleCellBook = () => {}, vibrateOnDrag = true, onToggleVibrate = () => {} }) {
   const tl = tlSettings && typeof tlSettings === "object"
     ? tlSettings : { followZoom: 4, defaultZoom: 1, followLead: 30, maxZoom: 5 };
   return (
@@ -627,7 +627,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
           <div style={{ textAlign: "left", marginBottom: 10 }}>
             <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Timeline</div>
             <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
-              This device only. Text size, row tint, vibration, zoom and Follow behaviour of the timeline.
+              This device only. Text size, row tint, booking from a cell, vibration, zoom and Follow behaviour of the timeline.
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -650,6 +650,16 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
                 </div>
               </div>
               <Toggle label="Tint indoor tables" on={indoorTint} onClick={onToggleIndoorTint} />
+            </div>
+            {/* v18.16.0: per device, like its neighbours (useShellPrefs). */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)" }}>Tap an empty cell to book</div>
+                <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
+                  An empty quarter hour starts a booking at that time, with its table as the preferred one. On a touch screen the first tap shows the cell and the second opens the form.
+                </div>
+              </div>
+              <Toggle label="Tap an empty cell to book" on={cellBook} onClick={onToggleCellBook} />
             </div>
             {/* v18.14.0 (L7): per device, and hidden where the browser has no
                 vibration at all (lib/haptics.js). */}
@@ -1582,6 +1592,8 @@ export function SettingsContent({
   onToggleLargeText,
   indoorTint,
   onToggleIndoorTint,
+  cellBook,
+  onToggleCellBook,
   vibrateOnDrag,
   onToggleVibrate,
   weekHours,
@@ -1719,7 +1731,7 @@ export function SettingsContent({
       onOpenCapabilities={onOpenCapabilities} onOpenActivity={onOpenActivity} newCrashes={newCrashes} moreCrashes={moreCrashes} retentionDays={activityRetentionDays} onSetRetention={onSetActivityRetention}
       waRetentionDays={waRetentionDays} onSetWaRetention={onSetWaRetention} />;
   } else if (cur === "app") {
-    content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} planAvail={planAvail} onTogglePlanAvail={onTogglePlanAvail} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} largeText={largeText} onToggleLargeText={onToggleLargeText} indoorTint={indoorTint} onToggleIndoorTint={onToggleIndoorTint} vibrateOnDrag={vibrateOnDrag} onToggleVibrate={onToggleVibrate} />;
+    content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} planAvail={planAvail} onTogglePlanAvail={onTogglePlanAvail} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} largeText={largeText} onToggleLargeText={onToggleLargeText} indoorTint={indoorTint} onToggleIndoorTint={onToggleIndoorTint} cellBook={cellBook} onToggleCellBook={onToggleCellBook} vibrateOnDrag={vibrateOnDrag} onToggleVibrate={onToggleVibrate} />;
   } else if (cur === "general") {
     content = <GeneralTabContent can={can} appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} exceptions={exceptions} onOpenSpecialDay={onOpenSpecialDay} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} backupStatus={backupStatus} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
   } else if (cur === "layout") {

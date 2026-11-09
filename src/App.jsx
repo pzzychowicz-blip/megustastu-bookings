@@ -1479,6 +1479,7 @@ export function BookingApp({uid}){
     tlSettings,onSetTlSetting,
     largeText,onToggleLargeText,
     indoorTint,onToggleIndoorTint,
+    cellBook,onToggleCellBook,
     vibrateOnDrag,onToggleVibrate,
     split,focusedPane,setFocusedPane,applySplit,fitTimeline,
     confirmSplit,swapSides,toggleSplitDir,exitSplit,setSplitRatio,
@@ -2059,6 +2060,12 @@ export function BookingApp({uid}){
   // baseline too, and a form nobody touched is not dirty.
   function openNewWith(draft){if(refused("bookingCreate"))return false;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(draft||Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",time:newBookingTime(seedDate,today,nowMins),size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);return true;}
   function openNew(){openNewWith(null);}
+  // v18.16.0: the Timeline's empty cell (and, with a block focused, `N`). The time
+  // is the cell's and the table goes in as the PREFERRED one, the form's star, not
+  // as a hand pick (Patryk): the optimiser still seats the party, on that table
+  // when it fits, and the form's Tables row shows where before Save. Through
+  // `openNewWith`, the gated door, so `bookingCreate` is asked before the form opens.
+  function newAtCell(tableId,time){const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();return openNewWith(Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",time:time,size:generalSettings.defaultBookingSize,preferredTables:[tableId]}));}
   // v18.3.4: the draft is the field table's (`draftFromBooking`), so a field the
   // form edits cannot be left out of what it opens with — the silent wipe
   // ROADMAP #13 named, where Save writes the gap.
@@ -3511,7 +3518,7 @@ export function BookingApp({uid}){
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only the code's own change resumes; the door is read from its ref, and both doors read the form from formRef
   useEffect(function(){const door=resumeDoorRef.current;if(!door)return;resumeDoorRef.current=null;if(door==="waitlist") addFormToWaitlist();else doSave();},[form.phone]);
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,previewDrop,checkDrop,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
+  viewActionsRef.current={openNew,newAtCell,openEdit,updateStatus,doCancelBooking,dropOnTable,previewDrop,checkDrop,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -3527,6 +3534,7 @@ export function BookingApp({uid}){
       onDelete:function(id){R.current.requestDelete(id);},
       onReshuffle:function(){R.current.setConfirmReshuffle(true);},
       onNew:function(){R.current.openNew();},
+      onNewAt:function(tableId,time){R.current.newAtCell(tableId,time);},
       onToggleFinished:function(next){R.current.toggleShowFinished(next);},
       onTagFilter:function(next){R.current.changeListTags(next);},
       onSelect:function(id){R.current.setSelectedListId(id);},
@@ -3644,6 +3652,8 @@ export function BookingApp({uid}){
     largeText={largeText}
     indoorTint={indoorTint}
     turnBuffer={turnBuffer}
+    cellBook={cellBook}
+    onNewAt={VA.onNewAt}
     waitGhosts={waitGhosts}
     onBookWait={VA.onBookWait}
     hoursSig={hoursSig}
@@ -4290,6 +4300,8 @@ export function BookingApp({uid}){
             onToggleLargeText={onToggleLargeText}
             indoorTint={indoorTint}
             onToggleIndoorTint={onToggleIndoorTint}
+            cellBook={cellBook}
+            onToggleCellBook={onToggleCellBook}
             vibrateOnDrag={vibrateOnDrag}
             onToggleVibrate={onToggleVibrate}
             weekHours={weekHours}

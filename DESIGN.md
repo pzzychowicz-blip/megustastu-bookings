@@ -1879,6 +1879,33 @@ exactly like an empty one, and a drop there moved two other parties.
   words in on `--t-move`, because they replace the old ones under a stopped finger
   and that change is the news, and the tint eases as it does on any row.
 
+### The cell marker (v18.16.0)
+An empty quarter hour on the Timeline starts a booking at that time, with its table as
+the preferred one. The grid shows the offer as one marker: the quarter lit in
+`--bg-ac-hover`, the row warning's "free" blue, and a chip beside it.
+
+- **The chip is the table's badge and the time on the hour pill** (`CellChip`): each
+  drawn as it is drawn where it lives, the label column and the ruler, so the chip
+  introduces no new mark. No drawn "table" icon, by the icon set's reuse rule. The chip
+  carries the ruler's opaque surface as its own ground, because it floats over whatever
+  is beside the cell and both fills are translucent; `tests/contrast.test.js` measures
+  them on that ground.
+- **Beside the cell, never on it**, so the lit quarter stays visible, and on the left
+  of the cell where the right would run off what is on screen.
+- **A mouse hovers and clicks; a finger taps twice.** A finger has no hover, so its
+  first tap selects the cell and shows what the second will do. On the pass, with wet
+  hands, a stray touch on the grid must not open a form (Patryk). The selected marker
+  is a real button, cell and chip together, so the second tap has the row's height to
+  land on. A press anywhere else or any scroll lets it go.
+- **It follows the pointer without a transition and fades at its ends**: under a mouse
+  it is direct feedback, like a hover tint, so a move from cell to cell is instant; it
+  arrives on `mgt-appear` and leaves on `mgt-ghost-out`.
+- **One marker, outside the grid's render**: it keeps its own state and is told where
+  to be through a handle, so a pointer crossing cells never re-renders the rows.
+- Offered only on the row itself: not over a booking, a waitlist ghost or a blocked
+  span, not past the last start, not on a closed day, and not in the Unplaced row.
+  "Tap an empty cell to book" in Settings → App turns it off, per device, on by default.
+
 ### Larger text (v18.14.0)
 A switch in Settings → App for the person on the pass who struggles with small text.
 It is this device's, like zoom: it answers one screen at one distance, so a phone must

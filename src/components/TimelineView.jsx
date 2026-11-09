@@ -37,7 +37,7 @@
 //     idle — fixes the previous "Follow"/"Follow" duplicate that relied on
 //     colour alone to convey state.
 
-import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, memo, Fragment } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, useImperativeHandle, memo, Fragment } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
@@ -63,6 +63,7 @@ import { visibleRail, twoLineBlock } from "../lib/block-layout";
 import { unplacedOf, primaryGridTable, packLanes, unplacedHeight } from "../lib/unplaced";
 import { edgeVelocity, edgeStep, scrollParentY, scrollBounds, rowProbeY } from "../lib/edge-scroll";
 import { afterFrame, everyFrame, pageHidden } from "../lib/after-frame";
+import { CELL_MINS, cellAt, cellOffer } from "../lib/cell-offer";
 
 // A block moves in two ways at once and they are NOT the same kind of motion:
 // left/width is the schedule changing (geometry — M.shift), transform is the
@@ -131,6 +132,10 @@ const NAME_MIN_PX = 55;  // ~6 characters and an ellipsis
 // v18.14.0 (D1): what a two-line block spends before its second line's marks: the
 // inset, the chip, and enough over for a 3px warn border's two extra sides.
 const LINE_TWO_PX = 52;
+// v18.16.0: the cell chip (table badge + time) and the gap that holds it off its
+// cell, which is what the marker needs free beside a cell before it flips.
+// Measured on DEV: 69.6px for a two-digit table, plus the 4px gap.
+const CELL_CHIP_PX = 78;
 
 // ── v18.14.0 (H2): Larger text ───────────────────────────────────────────────
 // One geometry per text size, chosen once in TimelineView and handed down, so no
@@ -142,12 +147,14 @@ const LINE_TWO_PX = 52;
 const TL_NORMAL = {
   rowH: ROW_H, name: T.small, time: T.micro, timeLine: 12, label: T.small, note: T.micro, legend: T.small,
   ring: 18, ringStyle: null,
-  chipPx: CHIP_PX, ringPx: RING_PX, freePx: FREE_PX, nameMinPx: NAME_MIN_PX, lineTwoPx: LINE_TWO_PX, nowClear: 38
+  chipPx: CHIP_PX, ringPx: RING_PX, freePx: FREE_PX, nameMinPx: NAME_MIN_PX, lineTwoPx: LINE_TWO_PX,
+  cellChipPx: CELL_CHIP_PX, nowClear: 38
 };
 const TL_LARGE = {
   rowH: 52, name: T.lead, time: T.body, timeLine: 14, label: T.lead, note: T.small, legend: T.body,
   ring: 22, ringStyle: { width: 22, height: 22, fontSize: T.body },   /* @canvas */
-  chipPx: 49, ringPx: 28, freePx: 44, nameMinPx: 70, lineTwoPx: 58, nowClear: 44
+  chipPx: 49, ringPx: 28, freePx: 44, nameMinPx: 70, lineTwoPx: 58,
+  cellChipPx: 86 /* 77.3 measured, plus the gap */, nowClear: 44
 };
 
 // v17.9.1: the rail's flags as DATA, so "how many fit" and "which ones
@@ -1146,7 +1153,7 @@ function DropHint({ hint, sz }) {
 // `totalMins` closure is now a prop.
 function GridLines() {
   return (
-    <div style={{ position: "absolute", inset: 0 }}>
+    <div data-grid-lines="" style={{ position: "absolute", inset: 0 }}>
       {QUARTER_HOURS.map((m) => {
         const isH = isHourMark(m);
         return (
@@ -1474,6 +1481,132 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
   );
 }
 
+// ── CellChip — v18.16.0: a table and a time, said the same way everywhere ────
+// The label an empty cell wears when it offers a booking, and the one a block
+// carries while it is dragged to another time: the table's own badge (the label
+// column's, zone colour and all) and the time on the ruler's hour pill. Both are
+// the things they name, drawn as they are drawn where they live, so nothing new
+// has to be learnt. No drawn "table" mark: the badge is the table's mark in this
+// view, and Icons.jsx's rule is to reuse a mark that already means the thing.
+//
+// On the ruler's opaque surface, because the chip floats over whatever is beside
+// its cell: a neighbouring block, the indoor tint, the lit cell itself. The badge
+// is 0.8 alpha and the hour pill 0.9, so without a ground of their own their
+// contrast would be a function of the neighbour (tests/contrast.test.js measures
+// them on this surface).
+function CellChip({ tableId, time, sz }) {
+  const tone = isIn(tableId) ? TBL.ind : TBL.out;
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0,
+      padding: 2, borderRadius: R.pill, whiteSpace: "nowrap",
+      background: "var(--tl-ruler-bg)", boxShadow: "var(--shadow-flat)"
+    }}>
+      <span style={{
+        minWidth: 20, padding: "2px 4px", borderRadius: R.pill, boxSizing: "border-box",
+        textAlign: "center", fontSize: sz.time, fontWeight: FW.semi,
+        fontVariantNumeric: "tabular-nums",
+        background: tone.bg, color: tone.text, border: "1px solid " + tone.border
+      }}>{tableId}</span>
+      <span style={{ ...HOUR_PILL, fontSize: sz.time, boxShadow: "none" }}>{time}</span>
+    </span>
+  );
+}
+
+// ── CellMarker — v18.16.0: the lit quarter and its label ─────────────────────
+// ONE marker for the whole grid, and its state is its own: the view tells it
+// where to be through a handle (`show` / `hide`), so a pointer crossing cells
+// re-renders this leaf and never the grid (13 rows of blocks, memoised for
+// exactly this reason; the group hover is a DOM class for the same one). No
+// per-cell DOM either: 13 rows × 40 quarters would be 500 nodes to say "here".
+//
+// Two ways in, by what the pointer can do:
+//   • a MOUSE hovers: the marker follows it, takes no events itself
+//     (`pointerEvents: none`, or the chip would sit between the pointer and the
+//     next cell), and the click on the grid is what opens the form;
+//   • a FINGER has no hover, so its first tap SELECTS the cell (`tap`) and shows
+//     what a second tap will do; the marker is then a real button, cell and chip
+//     together, and that second tap is a plain click on it. Wet hands and a busy
+//     pass: a stray touch on the grid must not open a form (Patryk).
+//
+// A selected cell is let go by a press anywhere else and by any scroll, both
+// heard in the capture phase, because the grid's own scroller and the page's are
+// different elements and a tap on a block never reaches a listener down here.
+//
+// `tabIndex={-1}`: a keyboard has no cell under it, and `N` is its door. The
+// button stays in the accessibility tree while shown, so a screen reader on a
+// touch device finds "New booking, table 5, 18:15" after the first tap.
+function sameCell(a, b) {
+  return a.tableId === b.tableId && a.mins === b.mins && a.top === b.top && a.height === b.height
+    && a.flip === b.flip && a.tap === b.tap;
+}
+function CellMarker({ ref, sz, totalMins, onOpen }) {
+  const [cell, setCell] = useState(null);     // kept after `hide`, for the fade out
+  const [shown, setShown] = useState(false);
+  const btnRef = useRef(null);
+  useImperativeHandle(ref, () => ({
+    show(next) { setCell((c) => (c && sameCell(c, next) ? c : next)); setShown(true); },
+    hide() { setShown(false); }
+  }), []);
+  const tapLive = shown && !!cell && cell.tap;
+  useEffect(() => {
+    if (!tapLive) return undefined;
+    function away(e) { if (!(btnRef.current && btnRef.current.contains(e.target))) setShown(false); }
+    function gone() { setShown(false); }
+    window.addEventListener("pointerdown", away, true);
+    window.addEventListener("scroll", gone, true);
+    return () => {
+      window.removeEventListener("pointerdown", away, true);
+      window.removeEventListener("scroll", gone, true);
+    };
+  }, [tapLive]);
+  if (!cell) return null;
+  const leftPct = ((cell.mins - OPEN * 60) / totalMins) * 100;
+  const widthPct = (CELL_MINS / totalMins) * 100;
+  // The chip stands beside its cell, clear of it by the gap, so the lit quarter
+  // stays visible; near the right end of what is on screen it stands on the left.
+  // The cell's width is the button's own padding, as a PERCENTAGE: padding
+  // resolves against the containing block's width, which is this marker's box,
+  // the whole grid. A pixel width read at the pointer event was stale for the
+  // length of a zoom's ease (measured on DEV: 42px against a cell that settled
+  // at 36), and this one cannot be.
+  const pad = "calc(" + widthPct + "% + " + SP.tight + "px)";
+  const side = cell.flip
+    ? { right: (100 - leftPct - widthPct) + "%", paddingRight: pad }
+    : { left: leftPct + "%", paddingLeft: pad };
+  return (
+    <Presence
+      show={shown}
+      inClass="mgt-appear"
+      outClass="mgt-ghost-out"
+      style={{ position: "absolute", left: 0, right: 0, top: cell.top, height: cell.height, zIndex: 5, pointerEvents: "none" }}
+    >
+      {/* The row's own 2px rule stays the row's: the light stops above it. */}
+      <div aria-hidden="true" style={{
+        position: "absolute", top: 0, bottom: 2, left: leftPct + "%", width: widthPct + "%",
+        background: "var(--bg-ac-hover)"
+      }} />
+      <button /* @no-lift the marker IS the cell under the pointer: a lift would slide the chip off the quarter it names */
+        ref={btnRef}
+        type="button"
+        tabIndex={-1}
+        aria-hidden={shown ? undefined : true}
+        aria-label={"New booking, table " + cell.tableId + ", " + cell.time}
+        onClick={() => { setShown(false); onOpen(cell.tableId, cell.time); }}
+        style={{
+          position: "absolute", top: 0, height: "100%",
+          paddingBlock: 0, margin: 0, ...side,
+          background: "none", border: 0, font: "inherit", color: "inherit",
+          display: "flex", alignItems: "center", cursor: "pointer",
+          pointerEvents: shown && cell.tap ? "auto" : "none"
+        }}
+      >
+        <CellChip tableId={cell.tableId} time={cell.time} sz={sz} />
+      </button>
+    </Presence>
+  );
+}
+
 // v18.14.0 (H6): keeps the ruler's clipped inner over the grid's minute. Out here
 // because a function in the component body that calls it stops counting as stable
 // to the deps rule, which `centerNow` has to.
@@ -1564,6 +1697,9 @@ export const TimelineView = memo(function TimelineView({
   largeText = false,
   // v18.14.0 (correction 2): Tint indoor tables, the same kind of setting.
   indoorTint = true,
+  // v18.16.0: an empty cell starts a booking. `cellBook` is this device's switch
+  // (useShellPrefs, a scalar); `onNewAt(tableId, time)` is App's `newAtCell`.
+  cellBook = true, onNewAt = null,
 }) {
   const sz = largeText ? TL_LARGE : TL_NORMAL;
   const scrollRef = useRef(null);
@@ -1589,7 +1725,15 @@ export const TimelineView = memo(function TimelineView({
   // per row, and where it has been still since.
   const [dropChecks, setDropChecks] = useState(NO_CHECKS);
   const dropRest = useRef({ y: 0, at: 0 });
+  // v18.16.0: the cell marker's handle (CellMarker, above), and which kind of
+  // pointer pressed an empty cell, so the click that follows knows whether it is
+  // a mouse's (open) or a finger's (select). Null when the press began anywhere
+  // else: the click that ends a drag lands on the grid too.
+  const cellRef = useRef(null);
+  const cellDown = useRef(null);
   function hoverRow(table, id, home, y) {
+    // v18.16.0: a drag over the rows takes the cell marker with it.
+    if (table != null && cellRef.current) cellRef.current.hide();
     setDragHover(table);
     setDragOver(table == null || table === home ? null : id);
     if (table == null) { setDropChecks(NO_CHECKS); return; }
@@ -1705,6 +1849,69 @@ export const TimelineView = memo(function TimelineView({
     syncRuler(scrollRef.current, rulerClipRef.current);
     if (quickStatus) setQuickStatus(null);
   }
+
+  // ── v18.16.0: an empty cell starts a booking ─────────────────────────────
+  // One set of handlers on the grid, not one per row: a pointer crossing from
+  // row to row is then a move like any other, where a leave on one row and an
+  // enter on the next would be a hide and a show, and the marker would blink.
+  //
+  // The cell is offered only where the pointer is on the ROW ITSELF or on its
+  // grid lines. Everything a row holds that is somebody's (a block, a waitlist
+  // ghost, the assign handle) is the target instead and is not this; everything
+  // that is only drawn there (a blocked bar, a turnaround tail, a seated
+  // outline, a clash band, a leaving copy) takes no pointer events, so the row
+  // is still the target under it and `cellOffer` is what answers for a block.
+  const cellOn = cellBook && !!onNewAt;
+  function cellUnder(e) {
+    const t = e.target;
+    const row = t && t.closest ? t.closest("[data-row]") : null;
+    if (!row) return null;
+    const lines = t === row ? null : t.closest("[data-grid-lines]");
+    if (t !== row && !(lines && lines.parentElement === row)) return null;
+    const rect = row.getBoundingClientRect();
+    const perMin = rect.width / totalMins;
+    const mins = cellAt(e.clientX - rect.left, perMin, OPEN * 60);
+    const offer = mins == null ? null : cellOffer(row.getAttribute("data-row"), mins, { date: date, blocks: blocks });
+    if (!offer) return null;
+    // Flipped where the chip would run past what is on screen, or past the grid.
+    const sc = scrollRef.current;
+    const edge = sc ? Math.min(sc.getBoundingClientRect().right, rect.right) : rect.right;
+    const cellRight = rect.left + (mins + CELL_MINS - OPEN * 60) * perMin;
+    return {
+      tableId: offer.tableId, time: offer.time, mins: mins,
+      top: row.offsetTop, height: row.offsetHeight,
+      flip: cellRight + sz.cellChipPx > edge
+    };
+  }
+  function onCellMove(e) {
+    if (e.pointerType !== "mouse" || !cellRef.current) return;
+    // Not with a button down: that is a drag, a block's or the split divider's.
+    const c = e.buttons === 0 ? cellUnder(e) : null;
+    e.currentTarget.style.cursor = c ? "pointer" : "";
+    if (c) cellRef.current.show({ ...c, tap: false }); else cellRef.current.hide();
+  }
+  function onCellLeave(e) {
+    if (e.pointerType !== "mouse" || !cellRef.current) return;
+    e.currentTarget.style.cursor = "";
+    cellRef.current.hide();
+  }
+  function onCellDown(e) {
+    cellDown.current = (e.pointerType !== "mouse" || e.button === 0) && cellUnder(e) ? e.pointerType : null;
+  }
+  function onCellClick(e) {
+    const kind = cellDown.current;
+    cellDown.current = null;
+    if (!kind || !cellRef.current) return;
+    const c = cellUnder(e);
+    if (!c) return;
+    if (kind === "mouse") { cellRef.current.hide(); onNewAt(c.tableId, c.time); }
+    else cellRef.current.show({ ...c, tap: true });
+  }
+  // What the marker was placed against has changed: the day, the grid's width (a
+  // zoom is easing), the text size, or what is booked or blocked under it.
+  useEffect(() => {
+    if (cellRef.current) cellRef.current.hide();
+  }, [date, gridW, sz, bookings, blocks, cellOn]);
 
   const day = bookings.filter((b) => b.date === date && b.status !== "cancelled");
 
@@ -2293,6 +2500,7 @@ export const TimelineView = memo(function TimelineView({
     return (
       <div
         key={id}
+        data-row={id}
         style={{
           height: sz.rowH + "px", position: "relative",
           borderBottom: "2px solid var(--tl-row-border)",
@@ -2487,10 +2695,19 @@ export const TimelineView = memo(function TimelineView({
           prefers-reduced-motion guard zeroes it.) */}
       {/* v18.3.0 (M1): `data-flip-root` lets a dropped block find this
           container without a second ref, to seed its release position. */}
-      <div ref={flipRef} data-flip-root="" style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width " + M.shift }}>
+      <div
+        ref={flipRef}
+        data-flip-root=""
+        onPointerMove={cellOn ? onCellMove : undefined}
+        onPointerLeave={cellOn ? onCellLeave : undefined}
+        onPointerDown={cellOn ? onCellDown : undefined}
+        onClick={cellOn ? onCellClick : undefined}
+        style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width " + M.shift }}
+      >
         {unplacedGrid}
         {gridRows}
         {nowLine}
+        {cellOn ? <CellMarker ref={cellRef} sz={sz} totalMins={totalMins} onOpen={onNewAt} /> : null}
       </div>
     </div>
   );
@@ -2634,6 +2851,12 @@ export const TimelineView = memo(function TimelineView({
         <span>hold to change status</span>
         <span aria-hidden="true">·</span>
         <span>tap table label to block</span>
+        {cellOn ? (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>tap an empty cell to book</span>
+          </>
+        ) : null}
       </div>
       {quickPopup}
     </div>

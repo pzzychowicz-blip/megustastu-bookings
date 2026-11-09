@@ -808,6 +808,37 @@ describe("the drop hint on its row", () => {
   }
 });
 
+// v18.16.0: the cell chip, a table badge and an hour pill that float beside an
+// empty cell (and ride a block dragged to another time). Both fills are
+// translucent, 0.8 and 0.9, and the chip can stand over anything in the row, so it
+// carries the ruler's opaque surface as its own ground and these are measured on
+// THAT, not on BASE. Without the ground the pair would be a function of whatever
+// block the chip happened to overlap.
+describe("the cell chip on its own ground", () => {
+  for (const theme of ["light", "dark"]) {
+    const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+    const ground = parse(vars["--tl-ruler-bg"]);
+    for (const zone of ["out", "ind"]) {
+      it(`the ${zone === "out" ? "outdoor" : "indoor"} table number reads in ${theme}`, () => {
+        const badge = over(parse(`rgba(${vars[`--tbl-${zone}-rgb`]}, 0.8)`), ground);
+        const got = +ratio(parse(vars["--text-on-accent"]), badge).toFixed(2);
+        expect(got, `the chip's ${zone} badge in ${theme}: ${got}:1`).toBeGreaterThanOrEqual(NEED.label);
+      });
+    }
+    it(`the time reads in ${theme}`, () => {
+      const pill = over(parse(vars["--tl-hour-pill"]), ground);
+      const got = +ratio(parse(vars["--text-on-accent"]), pill).toFixed(2);
+      expect(got, `the chip's time in ${theme}: ${got}:1`).toBeGreaterThanOrEqual(NEED.label);
+    });
+  }
+  it("the chip is drawn on that ground, and takes its two fills from where they live", () => {
+    const chip = TIMELINE_SRC.slice(TIMELINE_SRC.indexOf("function CellChip("), TIMELINE_SRC.indexOf("function sameCell("));
+    expect(chip).toMatch(/background: "var\(--tl-ruler-bg\)"/);
+    expect(chip).toMatch(/const tone = isIn\(tableId\) \? TBL\.ind : TBL\.out;/);
+    expect(chip).toMatch(/\.\.\.HOUR_PILL/);
+  });
+});
+
 describe("registry coverage", () => {
   // The guard for the NEXT fill, not this batch. The failure mode was never a
   // wrong number someone typed — it was a token added to :root, assumed to work

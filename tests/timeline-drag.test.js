@@ -101,3 +101,62 @@ describe("the block's wiring", () => {
     expect(Timeline).toMatch(/useEffect\(\(\) => \(\) => \{\s*cancelAnimationFrame\(edgeRafRef\.current\);/);
   });
 });
+
+// ── v18.16.0: an empty cell starts a booking ─────────────────────────────────
+// What a cell offers is tests/cell-offer.test.js. This is the view's half: one
+// marker, moved from a handle, and a finger's two taps.
+describe("the cell marker", () => {
+  const marker = Timeline.slice(Timeline.indexOf("function CellMarker("), Timeline.indexOf("function syncRuler("));
+  const view = Timeline.slice(Timeline.indexOf("export const TimelineView"));
+  it("is one marker with its own state, told where to be through a handle", () => {
+    expect(view.match(/<CellMarker /g).length).toBe(1);
+    expect(marker).toMatch(/useImperativeHandle\(ref, \(\) => \(\{/);
+    // The view keeps no state for it: a pointer crossing cells must not re-render the grid.
+    expect(view).not.toMatch(/useState\([^)]*\bcell/i);
+    expect(view).toMatch(/const cellRef = useRef\(null\);/);
+  });
+  it("is a real button, named for what the tap will do", () => {
+    expect(marker).toMatch(/<button[^>]*\n\s*ref=\{btnRef\}\n\s*type="button"/);
+    expect(marker).toMatch(/aria-label=\{"New booking, table " \+ cell\.tableId \+ ", " \+ cell\.time\}/);
+    expect(marker).toMatch(/onClick=\{\(\) => \{ setShown\(false\); onOpen\(cell\.tableId, cell\.time\); \}\}/);
+  });
+  it("takes a press only once a finger has selected it; under a mouse it is out of the pointer's way", () => {
+    expect(marker).toMatch(/pointerEvents: shown && cell\.tap \? "auto" : "none"/);
+  });
+  it("a selected cell is cleared on scroll and by a press anywhere else, heard in the capture phase", () => {
+    expect(marker).toMatch(/window\.addEventListener\("pointerdown", away, true\);/);
+    expect(marker).toMatch(/window\.addEventListener\("scroll", gone, true\);/);
+    expect(marker).toMatch(/window\.removeEventListener\("pointerdown", away, true\);/);
+    expect(marker).toMatch(/window\.removeEventListener\("scroll", gone, true\);/);
+    expect(marker).toMatch(/if \(!tapLive\) return undefined;/);
+  });
+  it("leaves as it arrives", () => {
+    expect(marker).toMatch(/inClass="mgt-appear"\s+outClass="mgt-ghost-out"/);
+  });
+  it("a mouse opens on the click and a finger selects first", () => {
+    expect(view).toMatch(/if \(kind === "mouse"\) \{ cellRef\.current\.hide\(\); onNewAt\(c\.tableId, c\.time\); \}\s*else cellRef\.current\.show\(\{ \.\.\.c, tap: true \}\);/);
+  });
+  it("the click that ends a press begun anywhere else is not a cell's", () => {
+    expect(view).toMatch(/const kind = cellDown\.current;\s*cellDown\.current = null;\s*if \(!kind \|\| !cellRef\.current\) return;/);
+  });
+  it("offers only on the row itself or its grid lines, never over what a row holds", () => {
+    expect(view).toMatch(/if \(t !== row && !\(lines && lines\.parentElement === row\)\) return null;/);
+    expect(Timeline).toMatch(/<div data-grid-lines="" style=/);
+  });
+  it("a mouse with a button down is a drag, and a drag over the rows takes the marker away", () => {
+    expect(view).toMatch(/const c = e\.buttons === 0 \? cellUnder\(e\) : null;/);
+    expect(view).toMatch(/if \(table != null && cellRef\.current\) cellRef\.current\.hide\(\);/);
+  });
+  it("is let go when the day, the zoom, the text size or the bookings under it change", () => {
+    expect(view).toMatch(/if \(cellRef\.current\) cellRef\.current\.hide\(\);\s*\}, \[date, gridW, sz, bookings, blocks, cellOn\]\);/);
+  });
+  it("is off with the device's switch, handlers and marker both", () => {
+    expect(view).toMatch(/const cellOn = cellBook && !!onNewAt;/);
+    expect(view.match(/\{cellOn \? onCell(Move|Leave|Down|Click) : undefined\}/g).length).toBe(4);
+    expect(view).toMatch(/\{cellOn \? <CellMarker /);
+  });
+  it("the Unplaced row offers nothing: only table rows carry data-row", () => {
+    expect(view.match(/data-row=/g).length).toBe(1);
+    expect(view).toMatch(/data-row=\{id\}/);
+  });
+});
