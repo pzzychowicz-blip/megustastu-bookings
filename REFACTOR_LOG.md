@@ -40578,3 +40578,20 @@ badge and `SUMMARY_MIN` beside the two buttons do not fit 615px. At 375×812 the
 
 `tests/wa-inbox-layout.test.js`, `tests/row-slots.test.js`, `tests/short-viewport.test.js`, `tests/date-format.test.js` re-pinned to the new shape;
 `tests/a11y.test.js` still finds `expanded={!collapsed}` beside `onHeaderClick`.
+
+### Commit 3 — the window chip only when it matters
+
+"Window: 23h 57m left" stood in green beside every open chat's name, a chip saying all is well. `windowState(expiresAt, now)` (`lib/whatsapp.js`)
+answers `{expired, chip, nextIn}`: no chip with more than `WA_WINDOW_WARN_MS` left (4 hours, Patryk's choice over 2 and 1, so a lunchtime message is
+flagged before evening service), an amber chip inside it, a red "Window expired" after. The composer's `disabled` reads the same answer's `expired`.
+
+**The chip had no clock.** It was computed at render and an open chat nobody writes in does not re-render, which did not matter while it was always
+there. `nextIn` is the time to the next change (the start of the warning, each minute of the countdown, the expiry), and ConversationView arms one
+timeout on it, re-armed by the beat it sets: a chat with a day left holds a single timer for the whole wait, and one in its last hours re-renders
+once a minute.
+
+`tests/wa-inbox-layout.test.js` runs `windowState` on both sides of the line, at the expiry and with no window, with `now` passed in.
+
+**Measured on DEV** at 998×507, with the page's `Date.now` shifted and the chat re-opened: 22h left, no chip; shifted 20h, "Window: 2h 38m left" in
+`--warn-text` (rgb 138, 75, 10); shifted 30h, "Window expired" in `--danger-text` and the composer reading "Conversation closed". The timer itself was
+not watched across a real crossing; its arithmetic is what the tests hold.

@@ -5,7 +5,7 @@
 // is disabled when the 24h service window has expired.
 
 import { useState, useRef, useEffect } from "react";
-import { matchCustomerByPhone, regularChipLabel, conversationName, conversationMenuIds, formatWindow, intentBannerVisible, isParsing, threadItems, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
+import { matchCustomerByPhone, regularChipLabel, conversationName, conversationMenuIds, windowState, intentBannerVisible, isParsing, threadItems, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
 import { Reveal, TurnChevron, mkBtn, mkSolidBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { RecheckIcon, ArchiveIcon, DraftIcon, RestoreIcon, MuteIcon } from "./WaIcons";
@@ -87,7 +87,19 @@ export function ConversationView({
   // number there is how the name reaches MGT, so the hint says where to do it.
   const notOnPhone = !!(contactsSynced && contacts && !contacts[conv.phoneKey]);
   const [histOpen, setHistOpen] = useState(false);
-  const win = formatWindow(conv.windowExpiresAt);
+  // v18.16.0: the window's chip shows only in its last hours (`windowState`),
+  // so this view has to notice the moment it starts to, and each minute of the
+  // countdown after it. One timeout to the next change, re-armed by the beat it
+  // sets; a chat with a day left arms a single timer for the whole wait.
+  const [winBeat, setWinBeat] = useState(0);
+  const win = windowState(conv.windowExpiresAt);
+  useEffect(() => {
+    const next = windowState(conv.windowExpiresAt).nextIn;
+    if (next == null) return undefined;
+    // +50ms, so the timer lands just past the change rather than a hair before it.
+    const t = setTimeout(() => setWinBeat((n) => n + 1), next + 50);
+    return () => clearTimeout(t);
+  }, [conv.phoneKey, conv.windowExpiresAt, winBeat]);
   const threadRef = useRef(null);
   // v18.8.0: a thread is listened to only while it is open, so `messages` is
   // `undefined` until its first snapshot lands (InboxPanel), and `[]` means
@@ -291,8 +303,8 @@ export function ConversationView({
       ))}
     </AlertPanel>
   ) : null;
-  const windowEl = win
-    ? <OutlineChip tone={win.expired ? "danger" : "success"} size="small">{win.label}</OutlineChip>
+  const windowEl = win.chip
+    ? <OutlineChip tone={win.chip.tone} size="small">{win.chip.label}</OutlineChip>
     : null;
 
   // v18.14.0 (correction 6, Patryk): one action stays in the header and the rest
@@ -327,7 +339,7 @@ export function ConversationView({
       {menuItems.length ? <ConversationMenu key={conv.phoneKey} items={menuItems} busy={running} /> : null}
     </div>
   );
-  const disabled = !!(win && win.expired);
+  const disabled = win.expired;
 
   // Intent banner gating: hidden once handled, until a newer INBOUND message
   // arrives (lastInboundAt — a staff reply must not resurrect it). Shared rule

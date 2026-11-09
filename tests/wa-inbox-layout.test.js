@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { conversationName, conversationSearchNames } from "../src/lib/whatsapp.js";
+import { conversationName, conversationSearchNames, windowState, WA_WINDOW_WARN_MS } from "../src/lib/whatsapp.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
@@ -265,5 +265,40 @@ describe("the conversation header has the ⋯ and nothing else", () => {
 describe("Add to waitlist sits at the draft card's right", () => {
   it("in both shapes of the card, and inside itself", () => {
     expect(Draft).toContain('<div style={Object.assign({}, row, { marginLeft: "auto", alignSelf: "flex-end", justifyContent: "flex-end" })}>');
+  });
+});
+
+// v18.16.0 (Patryk): "Window: 23h 57m left" stood in green on every open chat. The
+// chip is drawn only in the window's last four hours, amber, and red once it has
+// closed. `now` is passed in, so nothing here reads a clock.
+describe("the window chip shows only when it matters", () => {
+  const NOW = 1_800_000_000_000;
+  const MIN = 60000, H = 3600000;
+  it("four hours is the line he chose", () => {
+    expect(WA_WINDOW_WARN_MS).toBe(4 * H);
+  });
+  it("with more than four hours left there is no chip, and the next change is the start of the warning", () => {
+    expect(windowState(NOW + 23 * H + 57 * MIN, NOW)).toEqual({ expired: false, chip: null, nextIn: 19 * H + 57 * MIN });
+    expect(windowState(NOW + 4 * H + MIN, NOW)).toEqual({ expired: false, chip: null, nextIn: MIN });
+  });
+  it("inside four hours it is amber and counts down by the minute", () => {
+    expect(windowState(NOW + 4 * H, NOW)).toEqual({ expired: false, chip: { label: "Window: 4h 0m left", tone: "warn" }, nextIn: MIN });
+    expect(windowState(NOW + 3 * H + 59 * MIN + 30000, NOW)).toEqual({ expired: false, chip: { label: "Window: 3h 59m left", tone: "warn" }, nextIn: 30000 });
+    expect(windowState(NOW + 40 * MIN + 1, NOW)).toEqual({ expired: false, chip: { label: "Window: 40m left", tone: "warn" }, nextIn: 1 });
+  });
+  it("closed is red, and nothing changes after that", () => {
+    expect(windowState(NOW, NOW)).toEqual({ expired: true, chip: { label: "Window expired", tone: "danger" }, nextIn: null });
+    expect(windowState(NOW - 5 * H, NOW)).toEqual({ expired: true, chip: { label: "Window expired", tone: "danger" }, nextIn: null });
+  });
+  it("a conversation with no window has no chip and is not closed", () => {
+    expect(windowState(undefined, NOW)).toEqual({ expired: false, chip: null, nextIn: null });
+    expect(windowState(0, NOW)).toEqual({ expired: false, chip: null, nextIn: null });
+  });
+  it("the open chat arms one timer to the next change, and re-arms on its own beat", () => {
+    expect(View).toContain("const win = windowState(conv.windowExpiresAt);");
+    expect(View).toMatch(/const next = windowState\(conv\.windowExpiresAt\)\.nextIn;\s*if \(next == null\) return undefined;/);
+    expect(View).toContain("}, [conv.phoneKey, conv.windowExpiresAt, winBeat]);");
+    expect(View).toContain("<OutlineChip tone={win.chip.tone} size=\"small\">{win.chip.label}</OutlineChip>");
+    expect(View, "the composer closes on the same answer").toContain("const disabled = win.expired;");
   });
 });

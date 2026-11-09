@@ -450,6 +450,7 @@ second number": the number never moves.
 | (row goes quiet) | **draft status `dismissed`** | Rejected by a human. |
 | "Archived" | **archived** (`conv.archived`) | Out of the inbox, still readable. Can auto-fire when the linked booking completes. |
 | "Conversation closed" | **the 24-hour window** (`WA_WINDOW_MS`, `formatWindow`) | Meta only permits a free-form reply within 24h of the customer's last message. Outside it, the composer is closed. |
+| "Window: 3h 40m left" · "Window expired" beside a chat's name | **window chip** (`windowState`, `WA_WINDOW_WARN_MS`, `lib/whatsapp.js`) | v18.16.0. Drawn only in the window's last four hours, amber and counting down by the minute, and red once it has closed. A chat with more time than that shows no chip. |
 | ✓ / ✓✓ / red + **Retry** | **send status** | `sending` → `delivered`, or `failed`. Retry re-sends. |
 
 ### The pipeline and its vocabulary

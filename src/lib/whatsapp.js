@@ -547,14 +547,40 @@ export function formatClockTime(ts) {
 }
 
 // Format remaining time on the 24h WA window → { label, expired } or null.
-export function formatWindow(expiresAt) {
+export function formatWindow(expiresAt, now = Date.now()) {
   if (!expiresAt) return null;
-  const diff = expiresAt - Date.now();
+  const diff = expiresAt - now;
   if (diff <= 0) return { label: "Window expired", expired: true };
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
   if (h >= 1) return { label: "Window: " + h + "h " + m + "m left", expired: false };
   return { label: "Window: " + m + "m left", expired: false };
+}
+
+// ── The window chip, only when it matters (v18.16.0, Patryk) ─────────────────
+// The header showed "Window: 23h 57m left" in green on every open chat: a third
+// chip saying all is well. It is drawn now only inside the last WA_WINDOW_WARN_MS
+// (his choice of 4 hours, so a lunchtime message is flagged before evening
+// service), in amber, and in red once the window has closed.
+//
+//   windowState(expiresAt, now) → { expired, chip, nextIn }
+//     expired  the composer's question, unchanged: may a free-text reply be sent
+//     chip     null · { label, tone: "warn" | "danger" }
+//     nextIn   ms until this answer changes, or null when it never will: the
+//              start of the warning, then each minute of its countdown, then the
+//              expiry. ConversationView arms ONE timeout on it, because nothing
+//              else re-renders an open chat that nobody writes in, and a chip
+//              that only appears with the next message is a chip that is late.
+export const WA_WINDOW_WARN_MS = 4 * 3600000;
+export function windowState(expiresAt, now = Date.now()) {
+  const f = formatWindow(expiresAt, now);
+  if (!f) return { expired: false, chip: null, nextIn: null };
+  if (f.expired) return { expired: true, chip: { label: f.label, tone: "danger" }, nextIn: null };
+  const diff = expiresAt - now;
+  if (diff > WA_WINDOW_WARN_MS) return { expired: false, chip: null, nextIn: diff - WA_WINDOW_WARN_MS };
+  // The label counts whole minutes down, so it is next wrong when the remainder
+  // crosses a minute. `|| 60000`: exactly on a boundary, the next one is a minute off.
+  return { expired: false, chip: { label: f.label, tone: "warn" }, nextIn: diff % 60000 || 60000 };
 }
 
 // ── What the LLM said vs what this app can use (v18.0.0 phase 6, CT-WA-01) ───
