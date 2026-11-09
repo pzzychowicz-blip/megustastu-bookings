@@ -473,6 +473,19 @@ const FILLS = [
   { fill: "--wa-row-bg", alpha: null, ink: "--success-text", role: "label", what: "conversation row: Draft:" },
   { fill: "--wa-row-bg-hover", alpha: null, ink: "--success-text", role: "label", what: "conversation row (hover): Draft:" },
   { fill: "--wa-row-active-bg", alpha: null, ink: "--success-text", role: "label", what: "conversation row (selected): Draft:" },
+  // v18.16.0: the linked booking's status mark on a row (ConversationRow's
+  // STATUS_INK). A mark, held to the label bar anyway: it is 14px and it is the
+  // only thing on the row that says the booking was cancelled. `--success-text`
+  // is the three entries above.
+  { fill: "--wa-row-bg", alpha: null, ink: "--warn-text", role: "label", what: "conversation row: booking pending mark" },
+  { fill: "--wa-row-bg-hover", alpha: null, ink: "--warn-text", role: "label", what: "conversation row (hover): booking pending mark" },
+  { fill: "--wa-row-active-bg", alpha: null, ink: "--warn-text", role: "label", what: "conversation row (selected): booking pending mark" },
+  { fill: "--wa-row-bg", alpha: null, ink: "--danger-text", role: "label", what: "conversation row: booking cancelled mark" },
+  { fill: "--wa-row-bg-hover", alpha: null, ink: "--danger-text", role: "label", what: "conversation row (hover): booking cancelled mark" },
+  { fill: "--wa-row-active-bg", alpha: null, ink: "--danger-text", role: "label", what: "conversation row (selected): booking cancelled mark" },
+  { fill: "--wa-row-bg", alpha: null, ink: "--text-secondary", role: "label", what: "conversation row: booking completed mark" },
+  { fill: "--wa-row-bg-hover", alpha: null, ink: "--text-secondary", role: "label", what: "conversation row (hover): booking completed mark" },
+  { fill: "--wa-row-active-bg", alpha: null, ink: "--text-secondary", role: "label", what: "conversation row (selected): booking completed mark" },
   { fill: "--wa-list-bg", alpha: null, ink: "--text-primary", role: "label", what: "conversation-list pane" },
   // v18.9.0: the thread's day separators ("Today", "Sun 06.09") stand on the
   // thread's own surface, which is this token, with no fill of their own.

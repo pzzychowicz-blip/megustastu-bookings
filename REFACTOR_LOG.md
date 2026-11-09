@@ -40595,3 +40595,20 @@ once a minute.
 **Measured on DEV** at 998×507, with the page's `Date.now` shifted and the chat re-opened: 22h left, no chip; shifted 20h, "Window: 2h 38m left" in
 `--warn-text` (rgb 138, 75, 10); shifted 30h, "Window expired" in `--danger-text` and the composer reading "Conversation closed". The timer itself was
 not watched across a real crossing; its arithmetic is what the tests hold.
+
+### Commit 4 — the conversation list's mark is the booking's status, as it stands
+
+A finding from reading commit 1's chip, reproduced before anything was changed. **On DEV, 2026-11-09:** Adam's linked booking cancelled from its own
+card; his row in the list went on showing the green tick titled "Booking confirmed", beside a card reading Cancelled, and said "booking confirmed"
+to a screen reader. Both read `draftStatus === "accepted"`, which records that a draft was once accepted and never moves again.
+
+`linkedStatus(conv, bookings)` (`lib/whatsapp.js`) is the linked booking's status now: read by the row (the mark is `StatusIcon`, the app's one
+status → mark source, in `STATUS_INK`) and by `describeConversation` ("booking cancelled"), so the drawn and the spoken cannot differ. A booking that
+has been deleted leaves no mark. A conversation linked by phone, with no accepted draft, is marked too, since its card is shown. An accepted draft
+with no booking id (the shape from before conversations stored one) keeps the "confirmed" it had. A draft waiting still takes the mark's place, and
+the spoken order now matches the drawn one.
+
+**After, on DEV:** Adam's row draws a red × titled "Booking cancelled" (`--danger-text`, rgb 153, 27, 27) and its label says "booking cancelled";
+Laura, Marcos and Sara keep a green tick and "booking confirmed". The new inks (`--warn-text`, `--danger-text`, `--text-secondary`) are registered
+on the row's three fills in `tests/contrast.test.js` at the label bar, and all nine pass in both themes. `tests/whatsapp-describe.test.js` runs
+`linkedStatus` over every status, a deleted booking, a phone link and the legacy shape.

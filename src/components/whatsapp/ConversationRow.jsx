@@ -7,12 +7,26 @@
 // shows it.
 
 import { useRef, useEffect } from "react";
-import { conversationName, formatRelativeTime, isParsing, describeConversation } from "../../lib/whatsapp";
+import { conversationName, formatRelativeTime, isParsing, describeConversation, linkedStatus } from "../../lib/whatsapp";
 import { R, T, FW, IC } from "../../lib/constants";
 import { OutlineChip } from "../atoms";
 import { WarnIcon, PencilIcon, DraftIcon, ArchiveIcon, MuteIcon } from "./WaIcons";
-import { CheckIcon } from "../Icons";
+import { StatusIcon } from "../Icons";
 import { useReplyDraft } from "../../hooks/useReplyDraft";
+
+// v18.16.0: the ink of the linked booking's status mark. The mark's SHAPE is
+// `StatusIcon`'s, the one status → mark source, so the status never rests on
+// colour alone; the ink sorts the row at a glance: green for a booking that
+// stands, amber for one still to confirm, red for a cancelled one, the row's
+// quiet ink for one that is over. Each is registered on the row's three fills
+// in tests/contrast.test.js.
+const STATUS_INK = {
+  pending: "var(--warn-text)",
+  confirmed: "var(--success-text)",
+  seated: "var(--success-text)",
+  completed: "var(--text-secondary)",
+  cancelled: "var(--danger-text)",
+};
 
 export function ConversationRow({ conv, active, onClick, bookings, contacts, flipId, selectMode, checked, roving = false, departing = false, draftOwner }) {
   // v18.2.0 (the design critique, W4): an unknown sender is named by the
@@ -23,7 +37,9 @@ export function ConversationRow({ conv, active, onClick, bookings, contacts, fli
   // v18.9.0: the name is `conversationName`'s — the phone's contact first.
   const { title: displayName, phoneLine } = conversationName(conv, bookings, contacts);
   const hasDraft = conv.draftStatus === "parsed" && conv.draftData;
-  const hasAccepted = conv.draftStatus === "accepted";
+  // v18.16.0: the linked booking's status NOW (`linkedStatus`), where this was
+  // "a draft was once accepted", which stays true after the booking is cancelled.
+  const linked = linkedStatus(conv, bookings);
   const intent = (conv.draftData && conv.draftData.intent) || null;
   // Not on the OPEN conversation: its box is right there, and the row would
   // change with every key. One line, so a draft's line breaks read as spaces.
@@ -42,7 +58,7 @@ export function ConversationRow({ conv, active, onClick, bookings, contacts, fli
   else if (intent === "cancel") tagEl = <span title="Cancellation request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--danger-text)", fontWeight: FW.semi, display: "inline-flex", alignItems: "center" }}><WarnIcon size={IC.inline} /></span>;
   else if (intent === "modify") tagEl = <span title="Modification request" style={{ fontSize: T.body, marginLeft: 6, color: "var(--warn-text)", fontWeight: FW.semi, display: "inline-flex", alignItems: "center" }}><PencilIcon size={IC.inline} /></span>;
   else if (hasDraft) tagEl = <span title="Draft booking parsed" style={{ marginLeft: 6, color: "var(--text-secondary)", display: "inline-flex", alignItems: "center" }}><DraftIcon size={IC.inline} /></span>;
-  else if (hasAccepted) tagEl = <span title="Booking confirmed" style={{ marginLeft: 6, color: "var(--success-text)", display: "inline-flex", alignItems: "center" }}><CheckIcon size={IC.inline} /></span>;
+  else if (linked && STATUS_INK[linked]) tagEl = <span title={"Booking " + linked} style={{ marginLeft: 6, color: STATUS_INK[linked], display: "inline-flex", alignItems: "center" }}><StatusIcon status={linked} size={IC.inline} /></span>;
 
   const archivedDimming = conv.archived ? 0.65 : 1;
   // In select mode the "active" highlight gives way to the checked highlight so

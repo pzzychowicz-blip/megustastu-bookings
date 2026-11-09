@@ -903,6 +903,29 @@ export function sortConversations(conversations, archivedView) {
 // drift. State that belongs to the LIST rather than to the conversation —
 // select mode, checked — stays at the call site, exactly as the booking card's
 // clash and late clauses do.
+// ── linkedStatus: what the booking a conversation is linked to IS, now ────────
+// v18.16.0. The list's mark and the row's spoken label both said "booking
+// confirmed" from `draftStatus === "accepted"`, which records that a draft was
+// once accepted and never moves again. Reproduced on DEV on 2026-11-09: a
+// linked booking cancelled from its own card, and its row went on showing the
+// green tick titled "Booking confirmed" beside a card reading Cancelled.
+//
+//   → the linked booking's status, when the conversation names one that exists
+//   → null when it names one that is gone (deleted): there is nothing to mark
+//   → "confirmed" for an accepted draft with NO booking id, the shape written
+//     before conversations stored one, so those rows keep the mark they had
+//
+// Read by ConversationRow (the mark) and `describeConversation` (the words), so
+// what is drawn and what is spoken are one answer.
+export function linkedStatus(conv, bookings) {
+  if (!conv) return null;
+  if (conv.acceptedBookingId) {
+    const b = (bookings || []).find(function (x) { return x.id === conv.acceptedBookingId; });
+    return b && b.status ? b.status : null;
+  }
+  return conv.draftStatus === "accepted" ? "confirmed" : null;
+}
+
 export function describeConversation(conv, opts) {
   if (!conv) return "";
   const parts = [];
@@ -928,8 +951,14 @@ export function describeConversation(conv, opts) {
   if (isParsing(conv)) parts.push("reading the message");
   else if (intent === "cancel") parts.push("requesting to cancel");
   else if (intent === "modify") parts.push("requesting changes");
-  else if (conv.draftStatus === "accepted") parts.push("booking confirmed");
+  // v18.16.0: the row's own order, a draft waiting before the booking already
+  // made, and the booking's status as it stands (`linkedStatus`), where this said
+  // "booking confirmed" for any accepted draft, a cancelled booking's included.
   else if (conv.draftStatus === "parsed" && conv.draftData) parts.push("draft booking");
+  else {
+    const status = linkedStatus(conv, (opts && opts.bookings) || []);
+    if (status) parts.push("booking " + status);
+  }
   const when = formatRelativeTime(conv.lastMessageAt);
   if (when) parts.push(when);
   // Last: the snippet is what the row is ABOUT, and it is spoken in full — the

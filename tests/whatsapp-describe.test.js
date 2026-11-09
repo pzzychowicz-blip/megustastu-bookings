@@ -9,7 +9,7 @@
 // nothing on screen moves.
 
 import { describe, it, expect } from "vitest";
-import { describeConversation, formatPhone } from "../src/lib/whatsapp.js";
+import { describeConversation, formatPhone, linkedStatus } from "../src/lib/whatsapp.js";
 
 const CONV = {
   phoneKey: "34622334455",
@@ -93,5 +93,42 @@ describe("describeConversation", () => {
     expect(describeConversation({ phoneKey: "34600000000" }, {})).toBe("34600000000");
     // No opts at all — the row renders before `bookings` has loaded.
     expect(describeConversation(CONV)).toContain("+34 622334455");
+  });
+});
+
+// v18.16.0. Reproduced on DEV on 2026-11-09: a linked booking cancelled from its own
+// card, and the row still drew a green tick titled "Booking confirmed" and said so
+// aloud, because both read `draftStatus === "accepted"`, which never moves again.
+describe("a linked booking is described by its status now, not by the draft that made it", () => {
+  const linked = { ...CONV, draftStatus: "accepted", acceptedBookingId: "bk1" };
+  const at = (status) => [{ id: "bk1", name: "Tom Richards", phone: "34622334455", date: "2026-07-19", time: "20:30", size: 3, status }];
+  it("the status of the booking it names", () => {
+    for (const status of ["pending", "confirmed", "seated", "completed", "cancelled"]) {
+      expect(linkedStatus(linked, at(status))).toBe(status);
+      expect(describeConversation(linked, { bookings: at(status) })).toContain("booking " + status);
+    }
+  });
+  it("a cancelled booking is no longer spoken as confirmed", () => {
+    expect(describeConversation(linked, { bookings: at("cancelled") })).not.toContain("booking confirmed");
+  });
+  it("a booking that is gone leaves nothing to mark or say", () => {
+    expect(linkedStatus(linked, [])).toBe(null);
+    // The fixture's snippet says "our booking", so the clause is matched whole.
+    expect(describeConversation(linked, { bookings: [] })).not.toMatch(/, booking (pending|confirmed|seated|completed|cancelled),/);
+  });
+  it("a conversation linked by phone, with no accepted draft, is marked too", () => {
+    expect(linkedStatus({ ...CONV, acceptedBookingId: "bk1" }, at("seated"))).toBe("seated");
+  });
+  it("an accepted draft from before conversations stored a booking id keeps its mark", () => {
+    expect(linkedStatus({ ...CONV, draftStatus: "accepted" }, [])).toBe("confirmed");
+  });
+  it("nothing linked, nothing said", () => {
+    expect(linkedStatus(CONV, at("confirmed"))).toBe(null);
+    expect(linkedStatus(null, [])).toBe(null);
+  });
+  it("a new draft waiting speaks before the booking already made, as the row draws it", () => {
+    const s = describeConversation({ ...linked, draftStatus: "parsed", draftData: { intent: "new_booking" } }, { bookings: at("confirmed") });
+    expect(s).toContain("draft booking");
+    expect(s).not.toContain("booking confirmed");
   });
 });

@@ -446,7 +446,8 @@ second number": the number never moves.
 | The Needs-action tab's contents | **needs action** | A live draft or an unhandled intent — something is waiting on a human. |
 | "Reading the message…" | **parsing** (`isParsing`, `parsingAt`) | The model has the message. Goes stale after `WA_PARSING_STALE_MS` (90s) so a dropped job can't hang the row forever. |
 | "Draft booking parsed" | **draft status `parsed`** (`draftStatus`) | Extracted, awaiting a human. |
-| "Booking confirmed" | **draft status `accepted`** | Accepted into a real booking. |
+| "Booking confirmed" (the banner in the thread) | **draft status `accepted`** | Accepted into a real booking. It records that the draft was accepted and does not change afterwards. |
+| The small status mark after a name in the conversation list | **linked booking mark** (`linkedStatus`, `lib/whatsapp.js`; `STATUS_INK`, `ConversationRow.jsx`) | v18.16.0. The status of the booking the conversation is linked to, as it stands now, drawn with `StatusIcon`: green for confirmed or seated, amber for pending, red for cancelled, quiet for completed. Nothing when that booking has been deleted. It was a green tick for any accepted draft, a cancelled booking's included. A request or a draft waiting takes its place. |
 | (row goes quiet) | **draft status `dismissed`** | Rejected by a human. |
 | "Archived" | **archived** (`conv.archived`) | Out of the inbox, still readable. Can auto-fire when the linked booking completes. |
 | "Conversation closed" | **the 24-hour window** (`WA_WINDOW_MS`, `formatWindow`) | Meta only permits a free-form reply within 24h of the customer's last message. Outside it, the composer is closed. |
