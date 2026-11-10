@@ -685,13 +685,25 @@ export function formatWindow(expiresAt, now = Date.now()) {
 //              expiry. ConversationView arms ONE timeout on it, because nothing
 //              else re-renders an open chat that nobody writes in, and a chip
 //              that only appears with the next message is a chip that is late.
+//              Never more than WA_WINDOW_RECHECK_MAX_MS (/code-review): a timer
+//              keeps its delay as a 32-bit integer, so one past 2^31-1 ms (24.8
+//              days) wraps, and a wrapped negative fires at once. Measured in
+//              the Browser pane: `setTimeout(fn, 2 ** 31 + 1000)` ran after 0 ms.
+//              The view's timer re-arms on its own beat, so a stamp that far
+//              ahead would re-render the open chat every few milliseconds
+//              (read from the code; the wrap is what was measured). A real
+//              window is a day long; the stamps that are not are the unclamped
+//              ones api/wa-inbound.js records (the year 5138), and whatever
+//              the next bad one turns out to be. Capped, such a chat is asked
+//              about again in 24 days, and the answer is the same.
 export const WA_WINDOW_WARN_MS = 4 * 3600000;
+export const WA_WINDOW_RECHECK_MAX_MS = 24 * 86400000;
 export function windowState(expiresAt, now = Date.now()) {
   const f = formatWindow(expiresAt, now);
   if (!f) return { expired: false, chip: null, nextIn: null };
   if (f.expired) return { expired: true, chip: { label: f.label, tone: "danger" }, nextIn: null };
   const diff = expiresAt - now;
-  if (diff > WA_WINDOW_WARN_MS) return { expired: false, chip: null, nextIn: diff - WA_WINDOW_WARN_MS };
+  if (diff > WA_WINDOW_WARN_MS) return { expired: false, chip: null, nextIn: Math.min(diff - WA_WINDOW_WARN_MS, WA_WINDOW_RECHECK_MAX_MS) };
   // The label counts whole minutes down, so it is next wrong when the remainder
   // crosses a minute. `|| 60000`: exactly on a boundary, the next one is a minute off.
   return { expired: false, chip: { label: f.label, tone: "warn" }, nextIn: diff % 60000 || 60000 };

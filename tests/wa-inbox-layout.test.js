@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { conversationName, conversationSearchNames, windowState, WA_WINDOW_WARN_MS } from "../src/lib/whatsapp.js";
+import { conversationName, conversationSearchNames, windowState, WA_WINDOW_WARN_MS, WA_WINDOW_RECHECK_MAX_MS } from "../src/lib/whatsapp.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
@@ -280,6 +280,22 @@ describe("the window chip shows only when it matters", () => {
   it("with more than four hours left there is no chip, and the next change is the start of the warning", () => {
     expect(windowState(NOW + 23 * H + 57 * MIN, NOW)).toEqual({ expired: false, chip: null, nextIn: 19 * H + 57 * MIN });
     expect(windowState(NOW + 4 * H + MIN, NOW)).toEqual({ expired: false, chip: null, nextIn: MIN });
+  });
+  // v18.16.0 (/code-review): a timer's delay is a 32-bit integer. Past 2^31-1 ms it
+  // wraps, and a wrapped negative fires at once (measured in the Browser pane:
+  // `setTimeout(fn, 2 ** 31 + 1000)` ran after 0 ms), so the view's self-re-arming
+  // timer spun on a stamp weeks ahead. A real window is a day long; this is for the
+  // stamp that is not.
+  it("the wait it hands the view's timer is one a timer can hold, with room for the view's own 50ms", () => {
+    expect(WA_WINDOW_RECHECK_MAX_MS + 50).toBeLessThan(2 ** 31 - 1);
+    for (const days of [25, 30, 49, 400, 365 * 3112]) {
+      const s = windowState(NOW + days * 24 * H, NOW);
+      expect(s, days + " days").toEqual({ expired: false, chip: null, nextIn: WA_WINDOW_RECHECK_MAX_MS });
+    }
+    expect(windowState(Infinity, NOW).nextIn).toBe(WA_WINDOW_RECHECK_MAX_MS);
+    // …and a real window's wait is untouched
+    expect(windowState(NOW + 24 * H, NOW).nextIn).toBe(20 * H);
+    expect(View).toMatch(/setTimeout\(\(\) => setWinBeat\(\(n\) => n \+ 1\), next \+ 50\);/);
   });
   it("inside four hours it is amber and counts down by the minute", () => {
     expect(windowState(NOW + 4 * H, NOW)).toEqual({ expired: false, chip: { label: "Window: 4h 0m left", tone: "warn" }, nextIn: MIN });

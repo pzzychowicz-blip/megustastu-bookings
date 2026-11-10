@@ -40869,3 +40869,9 @@ cannot reach the time drag's "is seated" refusal (`isActive` leaves it out), the
   marker still read "table 1, 13:15" over a pointer standing on 14:15. Any shown marker now goes on a scroll (its own effect, keyed on `shown`;
   the press-away listener stays the selected marker's). After the fix, on DEV: hidden by the scroll, and the next move lights "table 1, 14:15".
   The two-tap flow was run again: the first tap selects, a press elsewhere clears, the second tap opens the form at the cell's time.
+- **The window chip's timer could be handed a wait it cannot hold.** `windowState` returned the time to the next change uncapped, and the open
+  chat arms `setTimeout` with it and re-arms on its own beat. A timer keeps its delay as a 32-bit integer: measured in the Browser pane,
+  `setTimeout(fn, 2 ** 31 + 1000)` ran after 0 ms and `2 ** 31 - 1` did not run. So a `windowExpiresAt` more than about 25 days ahead would
+  re-render the open chat every few milliseconds for as long as it stayed open (read from the code, not reproduced: it needs such a stamp in
+  the database). A real window is a day long; the stamps that are not are the unclamped ones `api/wa-inbound.js` records, and the next bad
+  one. The wait is capped at `WA_WINDOW_RECHECK_MAX_MS` (24 days), which no real window reaches.
