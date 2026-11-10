@@ -40927,4 +40927,9 @@ He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the 
   `tests/drop-plan.test.js`, which caught it landing on 1+2 instead of 11 the first time this was written. So it is held for that one pass
   and handed back with its own flags (`ownLock`), an absent flag left absent because an `undefined` property makes the write throw. Two
   new cases there; the two that said "it is locked" now say it is not.
+- **The mark's " · Archived" opens sideways.** Checking the redesign's motion on DEV (Patryk asked for missing transitions): the menu enters
+  (`mgt-pop-in`) and leaves (`mgt-pop-out`), and the list crossfades on a switch (`mgt-fade-in`), but the mark's label was swapped in one
+  frame: a ResizeObserver read the button 108.8 → 180px at once, so the search box beside it jumped 71px. It is a `Reveal horizontal` now,
+  as the count beside it is (v18.14.0, correction 27): measured after a reload, 109 → 116 → 122 → 127 → 133 → 143 … 180 opening and 180 →
+  174 → 167 … 142 … 109 closing, the words held until closed, and the button's name back to "WhatsApp" afterwards.
 

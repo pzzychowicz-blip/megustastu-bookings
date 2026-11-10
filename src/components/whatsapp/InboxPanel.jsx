@@ -548,7 +548,14 @@ export function InboxPanel({
       triggerStyle={mkSolidBtn("var(--wa-green)", MARK_BTN)}
       trigger={
         <>
-          {tab === "archived" ? "WhatsApp · Archived" : "WhatsApp"}
+          WhatsApp
+          {/* Which list is open, opening sideways like the count beside it: swapped
+              in one frame, the label grew 109 → 180px and the search box beside it
+              jumped 71px (measured on DEV). `pre`, so the leading space is kept;
+              Reveal unmounts it once closed, so the name is "WhatsApp" again. */}
+          <Reveal horizontal show={tab === "archived"}>
+            {tab === "archived" ? <span style={{ whiteSpace: "pre" }}> · Archived</span> : null}
+          </Reveal>
           {/* v18.14.0 (correction 27)'s rule, carried from the tab: the count opens
               sideways, so the controls beside the mark slide rather than jump. */}
           <Reveal horizontal show={unreadCount > 0}>
