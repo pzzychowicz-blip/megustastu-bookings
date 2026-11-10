@@ -33,6 +33,8 @@ import { WA_SANDBOX } from "./waSandbox";
 //                            page (v18.8.0 follow-up): a phone that opened the
 //                            dev server at the Mac's LAN address reaches the
 //                            harness there, where "localhost" meant the phone
+//                            (the harness listens on the Mac alone unless it
+//                            was started with `npm run wa:backend -- --host`)
 //   · deployed sandbox     → same-origin ("") so /api/* hits the Vercel functions
 // The host is read INSIDE the DEV branch, so a production build folds the
 // whole expression to "" and carries no `location` read (/code-review).
