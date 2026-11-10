@@ -40879,3 +40879,9 @@ cannot reach the time drag's "is seated" refusal (`isActive` leaves it out), the
   lines below it, with two fields changed. Both are `newDraft(over)` now (`App.jsx`): `openNewWith`'s default is `newDraft()` and the cell's
   is `newDraft({time, preferredTables})`. Run on DEV after the change: + New opened the form at 13:00 (it was 12:30 at the restaurant, before
   opening, which is `newBookingTime`'s answer), and a click on table 2 at 15:00 opened it at 15:00 with "Tables 2 (auto)" and an empty phone.
+- **Deferred to `ROADMAP.md`: a chat with no 24-hour window has a live reply box.** The same missing stamp, on the composer: `disabled =
+  win.expired` is false without one, and both send endpoints answer 410. The behaviour is older than this branch, which rewrote the line and
+  kept it. What that composer should say is a decision about coexistence chats, so nothing was built.
+- **Deferred to `ROADMAP.md`: a reply drafted into an archived chat.** `movedReplyPlan` stops for a muted guest and not for an archived
+  conversation (run in Node), so the pill says "reply drafted" and the inbox's list shows nothing. Whether the pill names the place, the chat
+  comes back, or it stays as it is, is Patryk's to choose.
