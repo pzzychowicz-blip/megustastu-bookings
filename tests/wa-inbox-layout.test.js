@@ -51,8 +51,8 @@ describe("W1 — the draft bar never hides what it asks you to accept", () => {
 // pencil, and "Insert template" with the document.
 describe("W2 — two jobs, two names, two marks", () => {
   it("the header's button edits the templates, under the edit pencil", () => {
-    // Since W3 it also SAYS so, which is where its name now comes from.
-    expect(Inbox).toMatch(/title="Edit templates \(T\)"[^>]*><EditIcon size=\{IC\.inline\} \/>Edit templates<\/button>/);
+    // v18.16.0 (follow-up): a row of the WHATSAPP mark's menu, word and pencil.
+    expect(Inbox).toContain('{ id: "templates", label: "Edit templates", icon: EditIcon, rule: !onOpenSim, title: "Edit templates (T)",');
     expect(Inbox).not.toMatch(/title="Templates"/);
   });
 
@@ -80,8 +80,10 @@ describe("W3 — the words are on the buttons, not in a tooltip", () => {
   });
 
   it("the header's Edit templates and Simulator carry their words", () => {
-    expect(Inbox).toMatch(/<FlaskIcon size=\{IC\.inline\} \/>Simulator<\/button>/);
-    expect(Inbox).toMatch(/const HEAD_TEXT_BTN = \{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H\.chrome, fontSize: T\.small, flexShrink: 0, lineHeight: 1 \};/);
+    // v18.16.0 (follow-up): rows of the WHATSAPP mark's menu, which draws a row's
+    // icon before its word (ConversationMenu).
+    expect(Inbox).toContain('{ id: "sim", label: "Simulator", icon: FlaskIcon, rule: true, title: "WhatsApp simulator (X)", onPick: onOpenSim }');
+    expect(Inbox).not.toContain("HEAD_TEXT_BTN");
   });
 });
 
@@ -150,9 +152,10 @@ describe("a conversation on a short screen", () => {
 });
 
 describe("W5 — the phone's inbox", () => {
-  it("keeps Close in the top corner, with the text buttons on a line of their own", () => {
-    expect(Inbox).toMatch(/<div style=\{\{ display: "flex", gap: 6, marginLeft: "auto", order: twoPane \? 0 : 2, flexBasis: twoPane \? "auto" : "100%" \}\}>/);
-    expect(Inbox).toMatch(/order: twoPane \? 0 : 1, marginLeft: twoPane \? 0 : "auto" \}\)\}><CloseIcon size=\{IC\.chrome\} \/><\/button>/);
+  it("keeps Close in the top corner", () => {
+    // v18.16.0 (follow-up): the text buttons went into the mark's menu, so there is
+    // no second line to keep Close off.
+    expect(Inbox).toMatch(/marginLeft: "auto" \}\)\}><CloseIcon size=\{IC\.chrome\} \/><\/button>/);
   });
 
   it("hides the LIST's toolbar while a conversation replaces the list", () => {

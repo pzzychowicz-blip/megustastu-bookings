@@ -36,9 +36,10 @@ describe("what the ⋯ holds", () => {
     expect(View).toContain("{menuItems.length ? <ConversationMenu");
   });
   it("a hairline stands above the first red row, and is not a row the arrows reach", () => {
-    expect(Menu).toContain("const rule = it.danger && i > 0 && !items[i - 1].danger;");
+    // v18.16.0 (follow-up): or above a row that asks for one (`rule`), the inbox mark's Simulator.
+    expect(Menu).toContain("const rule = i > 0 && (it.rule || (it.danger && !items[i - 1].danger));");
     expect(Menu).toContain('{rule ? <div role="separator" style={RULE} /> : null}');
-    expect(Menu).toContain(`querySelectorAll('[role="menuitem"]')`);
+    expect(Menu).toContain(`querySelectorAll('[role="menuitem"], [role="menuitemradio"]')`);
   });
 });
 
@@ -72,7 +73,9 @@ describe("it is a menu, and says so", () => {
   it("the button announces what it opens", () => {
     expect(Menu).toContain('aria-haspopup="menu"');
     expect(Menu).toContain("aria-expanded={open}");
-    expect(Menu).toContain('aria-label="More actions"');
+    // The ⋯ has no words, so it carries the label; a trigger with words is named by them.
+    expect(Menu).toContain('label = "More actions"');
+    expect(Menu).toContain("aria-label={trigger ? undefined : label}");
   });
   it("the rows are menuitems Tab leaves rather than walks", () => {
     expect(Menu).toContain('role="menu"');
@@ -115,7 +118,8 @@ describe("how it moves", () => {
   it("from the corner under the ⋯, in and out, with nothing behind it dimmed", () => {
     expect(Menu).toContain('inClass="mgt-pop-in"');
     expect(Menu).toContain('outClass="mgt-pop-out"');
-    expect(Menu).toContain('transformOrigin: "top right"');
+    expect(Menu).toContain('transformOrigin: align === "left" ? "top left" : "top right"');
+    expect(Menu).toContain('align = "right"');
     expect(Menu).not.toMatch(/PopupShell|scrim/i);
   });
   it("a leaving row takes no tap", () => {
@@ -128,3 +132,32 @@ describe("how it moves", () => {
     expect(View).toContain("busy={running}");
   });
 });
+
+// v18.16.0 (follow-up, Patryk): the inbox's WHATSAPP mark opens this menu too.
+describe("one menu, two triggers: the ⋯ and the inbox's mark", () => {
+  const Inbox = read("components/whatsapp/InboxPanel.jsx");
+  it("a trigger of its own is drawn in place of the ⋯, in its own style", () => {
+    expect(Menu).toContain("{trigger ? trigger : (");
+    expect(Menu).toContain("style={trigger ? triggerStyle : mkBtn(");
+  });
+  it("from the left edge, it grows from its left corner", () => {
+    expect(Menu).toContain('...(align === "left" ? { left: 0 } : { right: 0 })');
+  });
+  it("a choice of one is menuitemradio rows, the tick in the icon's slot", () => {
+    expect(Menu).toContain('const radio = typeof it.checked === "boolean";');
+    expect(Menu).toContain('role={radio ? "menuitemradio" : "menuitem"}');
+    expect(Menu).toContain("aria-checked={radio ? it.checked : undefined}");
+    expect(Menu).toContain("{it.checked ? <CheckIcon size={IC.control} /> : null}");
+  });
+  it("a row's count follows its words", () => {
+    expect(Menu).toContain("{it.badge ? <RowBadge n={it.badge} fill={it.badgeFill} /> : null}");
+  });
+  it("the inbox's mark is that menu, opening from the left, holding the tabs, the simulator and the templates", () => {
+    expect(Inbox).toContain('<ConversationMenu\n      items={markItems}\n      label="WhatsApp menu"\n      align="left"');
+    expect(Inbox).toContain('{ id: "inbox", label: "Inbox", checked: tab === "inbox", badge: unreadCount, badgeFill: "var(--wa-unread-dot)"');
+    expect(Inbox).toContain('{ id: "archived", label: "Archived", checked: tab === "archived", badge: archivedCount,');
+    expect(Inbox).toContain('...(onOpenSim ? [{ id: "sim", label: "Simulator", icon: FlaskIcon, rule: true,');
+    expect(Inbox).toContain('{ id: "templates", label: "Edit templates", icon: EditIcon, rule: !onOpenSim,');
+  });
+});
+

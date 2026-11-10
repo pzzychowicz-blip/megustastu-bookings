@@ -48,10 +48,12 @@ describe("the duration Reset", () => {
 });
 
 // Correction 27: nothing can reserve a count that is usually absent, so it eases.
-describe("the inbox's tab count", () => {
+// v18.16.0 (follow-up): the tabs are rows of the WHATSAPP mark's menu now, and
+// the unread count rides on the mark, which keeps the tab's rule.
+describe("the inbox's unread count, on the WhatsApp mark", () => {
   it("opens sideways with its gap inside it", () => {
     const inbox = read("whatsapp/InboxPanel.jsx");
-    expect(inbox).toMatch(/<Reveal horizontal show=\{badge != null && badge > 0\}>/);
-    expect(inbox).toMatch(/style=\{\{ marginLeft: 6, fontSize: T\.micro/);
+    expect(inbox).toMatch(/<Reveal horizontal show=\{unreadCount > 0\}>/);
+    expect(inbox).toMatch(/const MARK_COUNT = \{ marginLeft: 6, fontSize: T\.micro/);
   });
 });

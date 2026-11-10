@@ -40905,3 +40905,12 @@ He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the 
   the Inbox, and so does one an earlier draft gives way to. This is the hook's first database write for a moved reply: the chat's place,
   through the guarded `patchConversation` (`conversations` is an Admin-SDK node, so no CAS; root `CLAUDE.md`). Ten new cases in
   `tests/wa-moved-reply.test.js`; its pin that the hook wrote nothing now names the one write it makes.
+- **The WHATSAPP mark is the inbox's menu.** The title bar held the mark, the Inbox / Archived tabs, Simulator and Edit templates, and on a
+  phone the last two took a line of their own. Patryk: the mark becomes a button and the four go into its menu, as in the conversation's ⋯.
+  It IS that menu: `ConversationMenu` gained an optional `trigger` (the button's content, which names it), `triggerStyle`, `label` and
+  `align="left"`, and rows that are a choice of one (`checked` → `menuitemradio`, a tick in the icon slot), carry a count (`badge`) or ask for
+  a hairline (`rule`); the ⋯ passes none and is unchanged. The mark stays the green pill at the bar's control height, reads "WHATSAPP ·
+  ARCHIVED" while Archived is open and carries the Inbox unread count with the tab's sideways reveal (his choice of the three). Its words
+  are `textTransform: uppercase` over "WhatsApp", so its accessible name is a word and not eight letters. ←/→, X and T are unchanged, and the
+  inbox's keys stand down while the menu is open by the existing `[role="menu"]` check. `HEAD_TEXT_BTN` and `tabBtn` are gone.
+

@@ -136,6 +136,9 @@ describe("the inbox keeps its name while its title bar is folded", () => {
     expect(title).toBeGreaterThan(-1);
     expect(title).toBeLessThan(Inbox.indexOf("<Reveal show={!kbFold} inert={kbFold}"));
     expect(Inbox.match(/<h2/g)).toHaveLength(1);
-    expect(Inbox).toMatch(/<span aria-hidden="true" style=\{\{[^}]*\}\}>WHATSAPP<\/span>/);
+    // v18.16.0 (follow-up): the wordmark is a BUTTON now (the menu's trigger), named
+    // by its words and drawn in capitals by CSS, so a reader says "WhatsApp".
+    expect(Inbox).toContain('{tab === "archived" ? "WhatsApp · Archived" : "WhatsApp"}');
+    expect(Inbox).toMatch(/const MARK_BTN = \{[^}]*textTransform: "uppercase"/);
   });
 });

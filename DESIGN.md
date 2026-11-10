@@ -639,6 +639,8 @@ explaining why is usually the one to read.
   restaurant's tablets never hover. The inbox's Re-check, Edit templates and
   Simulator were icon-only; each now carries its word beside the mark (the
   shape Archive already had), and the title stays as the longer description.
+  Since the v18.16.0 follow-up the last two are rows of the WHATSAPP mark's
+  menu, word and mark as a menu row draws them.
   A bare ✕ for Close and a bare ⋯ for More are the exceptions: everybody reads
   them, and Re-check keeps its word on the ⋯ menu's row (v18.14.0).
 - **A day is written ONE way: "Thu 24.09" (v18.2.0, C1).** Weekday, day and
