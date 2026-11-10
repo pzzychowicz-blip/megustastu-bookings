@@ -1937,6 +1937,13 @@ hand can feel: the arm, the lift, the row warning, the Undo.
   where the finger left it; a refusal eases it home and says why in the refusal toast.
 - **The Undo pill is compact** (Patryk): `Marcos Vidal · 19:00 → 19:30`, then
   ` · moved Ana Ruiz` when the write re-seated somebody. A table drop keeps its sentence.
+- **What a move did besides the move is a clause on its pill, never a toast over it**
+  (Patryk, 2026-11-10): ` · reply drafted` when the new time was put in a WhatsApp
+  guest's reply box, ` · guest's WhatsApp window is closed` when it could not be. The
+  booking form's edit says it the same way, on "Booking updated", added when the write
+  lands (`noteUndo`). It was first a toast: the toast slot ranks above the pill, so it
+  hid Undo for 3.5 of its 10 seconds. The toast is kept only for a landing that finds
+  its pill gone.
 - **Near the left or right edge the grid scrolls under the block**, the table drag's
   edge scroll on the other axis, with the ruler kept in step in the same frame. It
   stops at the grid's own end.

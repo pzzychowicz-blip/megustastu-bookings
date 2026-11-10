@@ -40535,7 +40535,7 @@ Nine findings. Eight held up and were fixed, one commit each; one was disproved.
 
 ## v18.16.0 — the Inbox header tidied, a quiet split menu, and two Timeline gestures
 
-**Date:** 2026-11-09 · **Branch:** `feat/v18.16.0-inbox-timeline`
+**Date:** 2026-11-09 to 2026-11-10 · **Branch:** `feat/v18.16.0-inbox-timeline`
 
 **Why:** Patryk reviewed the Inbox and the Timeline and asked for five changes, then for the nine suggestions the plan made beside them
 (the plan, with every decision he made in five rounds of questions: `/Users/patrykzychowicz/.claude/plans/1-engineering-system-design-inbox-edits-peaceful-candle.md`).
@@ -40812,3 +40812,9 @@ the focused element, which is what the window listener receives from a real key;
 **Tests**: `tests/cell-offer.test.js` (`nextFreeAfter`: the end, off-quarter ends, the buffer, a seated party running over, a block, the last
 start, a closed day, agreement with `cellOffer` over a day of ends; App's `openNewAfter`; the block's `data-tbl`), `tests/keyboard.test.js`
 (`focusedBlockOf`), `tests/shortcuts.test.js` (the row's precedence in each view and behind a modal; the hook's `env`).
+
+### Commit 10 — the docs sweep
+
+`DESIGN.md`'s time-drag section gains the rule commit 8 settled: what a move did besides the move is a clause on its Undo pill, never a toast
+over it. The entry's date covers both days. `ROADMAP.md` listed nothing these commits resolve, and nothing was added to it. The root
+`CLAUDE.md` did not change (37,125 characters).
