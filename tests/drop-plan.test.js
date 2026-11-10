@@ -487,14 +487,17 @@ describe("planRetime: a block dragged to another time", () => {
     expect(retime(list, "far", "19:30")).toBeNull();
   });
 
-  it("a free slot: the time and the scheduled time move, the tables and the length stay, and it is locked", () => {
+  it("a free slot: the time and the scheduled time move, the tables and the length stay, and nothing is pinned", () => {
     const list = [dur("a", "19:00", 2, ["3", "4"], { scheduledTime: "19:00", notes: "window" }), dur("b", "19:00", 2, ["5"])];
     const plan = retime(list, "a", "18:30");
     expect(plan).toMatchObject({ retime: true, lead: "A · 19:00 → 18:30", done: "A · 19:00 → 18:30" });
     expect(plan.moved).toBeUndefined();
     const out = plan.transform(list);
     expect(byId(out, "a")).toMatchObject({ time: "18:30", scheduledTime: "18:30", tables: ["3", "4"], duration: 90,
-      notes: "window", _manual: true, _locked: true, _conflict: false });
+      notes: "window", _conflict: false });
+    // v18.16.0 (follow-up, Patryk): a sideways drag chose a time, not a table, so it
+    // pins nothing, and a flag the booking never had is ABSENT, never undefined.
+    expect("_locked" in byId(out, "a") || "_manual" in byId(out, "a")).toBe(false);
     expect(byId(out, "a").history).toEqual([{ action: "time 19:00→18:30 (drag)", by: "u@x" }]);
     expect(byId(out, "b")).toBe(list[1]);          // nobody else is touched
   });
@@ -535,11 +538,29 @@ describe("planRetime: a block dragged to another time", () => {
     expect(plan.moved.map((b) => b.id)).toEqual(["b"]);
     const out = plan.transform(list);
     expect(out).toEqual(plan.post);
-    expect(byId(out, "a")).toMatchObject({ time: "20:00", tables: ["3"], _locked: true });
+    // It lands on its own tables, held for the pass, and comes out with the lock it had: none.
+    expect(byId(out, "a")).toMatchObject({ time: "20:00", tables: ["3"] });
+    expect("_locked" in byId(out, "a") || "_manual" in byId(out, "a")).toBe(false);
     expect(byId(out, "b")).toMatchObject({ time: "20:30", _locked: false, _manual: false });
     expect(byId(out, "b").tables).not.toContain("3");
     expect(byId(out, "b").tables.length).toBeGreaterThan(0);
     expect(verifyClean(out, D, [])).toBe(true);
+  });
+
+  // v18.16.0 (follow-up, Patryk): the drag adds no pin, and takes none away.
+  it("a booking somebody placed by hand keeps its pin, on a free slot and through a displacement", () => {
+    const pinned = { _manual: true, _locked: true };
+    const free = [dur("a", "19:00", 2, ["3"], pinned)];
+    expect(byId(retime(free, "a", "18:00").transform(free), "a")).toMatchObject({ time: "18:00", tables: ["3"], ...pinned });
+    const busy = [dur("a", "19:00", 2, ["3"], pinned), dur("b", "20:30", 2, ["3"])];
+    expect(byId(retime(busy, "a", "20:00").transform(busy), "a")).toMatchObject({ time: "20:00", tables: ["3"], ...pinned });
+  });
+  it("an unlocked booking stays unlocked, whatever the flags said", () => {
+    const off = { _manual: false, _locked: false };
+    const list = [dur("a", "19:00", 2, ["3"], off), dur("b", "20:30", 2, ["3"])];
+    expect(byId(retime(list, "a", "20:00").transform(list), "a")).toMatchObject({ tables: ["3"], ...off });
+    const lib = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "lib", "drop-plan.js"), "utf8")).join("\n");
+    expect(lib).toContain("const retimed=function(b){return Object.assign({},b,{time:to,scheduledTime:to,_conflict:false,history:");
   });
 
   it("never swaps: two parties trading times is not what a sideways drag asks for", () => {

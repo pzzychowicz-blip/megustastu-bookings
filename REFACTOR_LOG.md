@@ -40919,4 +40919,12 @@ He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the 
   separate row is gone; on a phone with a chat open the filters leave with the list, as since W5, and the row is the mark and ✕. A phone has
   no width for "Needs action" beside the mark, so below two panes it is its dot alone in a 36px round button named "Needs action" (his choice
   over keeping two rows on phones). `shortScreen` keeps the panel's size and the hidden number.
+- **A time drag pins nothing.** `planRetime` made the re-timed booking `_manual` + `_locked`, like a table drop, so an optimiser-placed
+  booking dragged to a new time was the optimiser's no more. Patryk: a drag along the row chose a time, not a table. The booking keeps the
+  lock it had (a hand-placed one, a walk-in included, stays pinned; his choice over unpinning those too), and still lands on its own tables
+  with anyone in the way moved, as before (his choice over re-placing it like the form's time edit, or taking any free table). Through a
+  displacement the pass would re-seat an unlocked booking with the others: measured by the generated-days test in
+  `tests/drop-plan.test.js`, which caught it landing on 1+2 instead of 11 the first time this was written. So it is held for that one pass
+  and handed back with its own flags (`ownLock`), an absent flag left absent because an `undefined` property makes the write throw. Two
+  new cases there; the two that said "it is locked" now say it is not.
 

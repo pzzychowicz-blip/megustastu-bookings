@@ -55,7 +55,8 @@
 //   planRetime(ctx)    → null | {refuse} | {transform, done, lead, retime, moved?, post?}
 //   retimePreview(ctx) / retimeCheck(ctx) → what the row says, `dropPreview`'s shape
 //
-// What differs, and only this: the candidate is the booking's own table set (one
+// What differs, and only this (and, since the follow-up, that a sideways drag pins
+// nothing, `planRetime`): the candidate is the booking's own table set (one
 // candidate, no ranking); there is no swap (two parties trading TIMES is not what
 // a sideways drag asks for); only a confirmed or pending booking moves (a seated
 // party's time is when it sat down); and the new start answers to the form's own
@@ -249,8 +250,23 @@ export function retimeCheck(ctx){return withKitchen(ctx,rowHint(ctx,true));}
 // ── planRetime (v18.16.0) ────────────────────────────────────────────────────
 // The dragged booking takes the new start and keeps its tables, its length and
 // everything else. `scheduledTime` follows, as it does for a time typed in the
-// form: this is a reschedule, not the seated shift. It becomes `_manual` +
-// `_locked`, like every drop: somebody put it there by hand.
+// form: this is a reschedule, not the seated shift.
+//   v18.16.0 (follow-up, Patryk): a time drag does NOT pin the booking to its
+// table. It was made `_manual` + `_locked` like every drop, and a table drop
+// still is (somebody chose the TABLE); a sideways drag chose a time, so the
+// booking keeps whatever lock it had: an optimiser-placed booking stays the
+// optimiser's to move, and one somebody placed by hand (a drop, Assign, a
+// walk-in, which must stay locked) stays placed. It still LANDS on its own tables
+// (his choice over re-placing it like the form's time edit): the displacement's
+// pass would re-seat an unlocked booking along with the others, so the booking is
+// held for that one pass and handed back with the lock it had (`ownLock`).
+// A drop's own flags, exactly as they were: an absent flag stays absent, because
+// an `undefined` property makes the Firebase write throw (root CLAUDE.md).
+function ownLock(b,was){
+  const out=Object.assign({},b);
+  ["_manual","_locked"].forEach(function(k){if(was&&k in was) out[k]=was[k]; else delete out[k];});
+  return out;
+}
 export function planRetime(ctx){
   const id=ctx.id,bookings=ctx.bookings,viewDate=ctx.viewDate;
   const tableBlocks=ctx.tableBlocks,autoOptimizer=ctx.autoOptimizer,user=ctx.user;
@@ -259,7 +275,7 @@ export function planRetime(ctx){
   if(!site||site.refuse) return site;
   const src=site.src,occ=site.occ,from=src.time,to=ctx.time;
   const label=retimeLabel(src.name,from,to);
-  const retimed=function(b){return Object.assign({},b,{time:to,scheduledTime:to,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("time "+from+"→"+to+" (drag)",user)])});};
+  const retimed=function(b){return Object.assign({},b,{time:to,scheduledTime:to,_conflict:false,history:(b.history||[]).concat([histEntry("time "+from+"→"+to+" (drag)",user)])});};
   // Nobody in the way → only this booking changes.
   if(occ.length===0){
     return {retime:true,lead:label,done:label,transform:function(prev){return prev.map(function(b){return b.id===id?retimed(b):b;});}};
@@ -271,8 +287,9 @@ export function planRetime(ctx){
   // if the trial leaves none of them without a table or in a conflict.
   const taken=occ.map(function(b){return {id:b.id,tables:site.cur};});
   const transform=function(list){
-    const updated=list.map(function(b){return b.id===id?retimed(b):releaseSwapped(b,taken);});
-    return bookingsAfterAction(updated,viewDate,tableBlocks,null,false,autoOptimizer);
+    const was=list.find(function(b){return b.id===id;});
+    const updated=list.map(function(b){return b.id===id?Object.assign(retimed(b),{_manual:true,_locked:true}):releaseSwapped(b,taken);});
+    return bookingsAfterAction(updated,viewDate,tableBlocks,null,false,autoOptimizer).map(function(b){return b.id===id?ownLock(b,was):b;});
   };
   const trial=transform(bookings);
   const stranded=occ.find(function(o){const t=trial.find(function(x){return x.id===o.id;});return !t||(t.tables||[]).length===0||t._conflict;});
