@@ -18,6 +18,14 @@ describe("a control that changes width keeps its widest", () => {
     expect(zoom).toMatch(/const FOLLOW_W = 76;/);
     expect(zoom).toMatch(/minHeight: 36, minWidth: FOLLOW_W,/);
   });
+  // v18.16.0 (follow-up, Patryk): the zoom reset shows its level, "1.5x" or "2x", and
+  // its box keeps the widest one, so a − or + press does not move the + beside it.
+  it("the zoom level keeps \"2.5x\"'s width, in even digits", () => {
+    const zoom = read("TimelineZoomControls.jsx");
+    expect(zoom).toContain('const LEVEL = { display: "inline-block", minWidth: "4ch", textAlign: "center", fontVariantNumeric: "tabular-nums", whiteSpace: "pre" };');
+    expect(zoom).toContain("<span style={LEVEL}>{zoomLevel(zoom)}</span>");
+    expect(zoom).toMatch(/<Reveal horizontal show=\{zoom !== 1\}>\s*\{zoom !== 1 \? <span style=\{\{ whiteSpace: "pre" \}\}> · Whole day<\/span> : null\}/);
+  });
   it("a template's buttons reserve the armed width, and grow leftwards inside it", () => {
     const editor = read("whatsapp/TemplatesEditor.jsx");
     expect(editor).toMatch(/const ARMED_W = 138;/);

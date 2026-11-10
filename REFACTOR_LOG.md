@@ -40932,4 +40932,9 @@ He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the 
   frame: a ResizeObserver read the button 108.8 → 180px at once, so the search box beside it jumped 71px. It is a `Reveal horizontal` now,
   as the count beside it is (v18.14.0, correction 27): measured after a reload, 109 → 116 → 122 → 127 → 133 → 143 … 180 opening and 180 →
   174 → 167 … 142 … 109 closing, the words held until closed, and the button's name back to "WhatsApp" afterwards.
+- **The zoom reset shows the zoom level.** It read "Whole day" while zoomed and "1x" at rest, so how far in the Timeline was showed nowhere.
+  Patryk: the level as well, as "2x · Whole day" (his choice over "Whole day (2x)" and the level alone). The level is always drawn and
+  changes in place on each − / + press; " · Whole day" opens and closes sideways as the word did. The level sits in a 4ch box in tabular
+  digits, the widest level's ("2.5x"), so a press that turns "1.5x" into "2x" does not pull the + from under the thumb (correction 26's
+  reason for Follow's fixed width). The name leads with the same words, "2x · Whole day (reset zoom)" (`tests/a11y.test.js`).
 

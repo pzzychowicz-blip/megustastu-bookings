@@ -160,7 +160,7 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | Dimmed, semi-transparent block | **waitlist ghost** (`WaitGhost`, `waitGhosts`) | A waiting party a table would fit. Tap to book. Dashed at 0.4 when it needs a re-optimise. |
 | Faint tail after a block | **turnaround tail** | The `TURN_BUFFER` minutes the table stays unavailable. |
 | Vertical line that moves | **now-line** | Current time. |
-| "Whole day" / "1x" between − and + | **zoom reset** (`TimelineZoomControls`) | v18.14.0. "Whole day" while zoomed, because a press brings the whole day back. "1x" when it is already showing. |
+| "2x · Whole day" / "1x" between − and + | **zoom reset** (`TimelineZoomControls`, `zoomLevel`) | v18.14.0. "Whole day" while zoomed, because a press brings the whole day back. "1x" when it is already showing. Since the v18.16.0 follow-up the level is always on it ("1.5x · Whole day"), in a box as wide as "2.5x" so − and + stay put. |
 | "13:00" labels across the top | **hour pill** (`--tl-hour-pill`, `hourLabel()`) | The grid header. Same pill the block's start-time chip uses. |
 | The strip of hours that stays at the top while the rows scroll under it | **sticky ruler** (`ruler`, `syncRuler`, `TimelineView.jsx`) | v18.14.0. Sticks to whatever scrolls, so it holds with Lock navigation on or off and in split view. Carries the hour pills and the now-pill, and follows the grid sideways. |
 | "Follow" / "Following" button | **follow** (`followNow`) | Auto-scrolls and zooms to the current time. Today only. |

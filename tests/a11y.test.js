@@ -1633,8 +1633,8 @@ describe("the booking form's steppers and the timeline zoom work from the keyboa
   it("the zoom buttons are named, and the reset button's name LEADS with its text", () => {
     expect(count(Zoom, /aria-label="Zoom out"/g)).toBe(1);
     expect(count(Zoom, /aria-label="Zoom in"/g)).toBe(1);
-    // Label in Name: the visible "1x" (or "2x → 1x") comes first.
-    has(Zoom, "TimelineZoomControls", /aria-label=\{\(zoom !== 1 \? "Whole day" : "1x"\) \+ " \(reset zoom\)"\}/,
+    // Label in Name: the visible "1x" (or "2x · Whole day", v18.16.0 follow-up) comes first.
+    has(Zoom, "TimelineZoomControls", /aria-label=\{zoomLevel\(zoom\) \+ \(zoom !== 1 \? " · Whole day" : ""\) \+ " \(reset zoom\)"\}/,
       "the reset button shows text, so its accessible name must start with that text");
   });
 });

@@ -13,6 +13,14 @@ import { mkBtn, Reveal } from "./atoms";
 // buttons beside it 17px, under the thumb that was about to use them.
 const FOLLOW_W = 76;
 
+// v18.16.0 (follow-up, Patryk): the reset button shows the zoom it would reset, "2x"
+// or "2x · Whole day". Steps are halves, so the level is "1x", "1.5x" … "5x".
+function zoomLevel(zoom) { return zoom + "x"; }
+// Its box is as wide as the widest level ("2.5x") in even-width digits, so a − or +
+// press that changes "1.5x" to "2x" does not pull the + beside it from under the
+// thumb pressing it: correction 26's reason for Follow's fixed width.
+const LEVEL = { display: "inline-block", minWidth: "4ch", textAlign: "center", fontVariantNumeric: "tabular-nums", whiteSpace: "pre" };
+
 export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, followNow, setFollowNow, isToday }) {
   // Follow-now button: today only. Phase C1 — label flips between "Following"
   // and "Follow" so screen-readers and quick visual scans get the state from
@@ -61,7 +69,10 @@ export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, follo
       >
         −
       </button>
-      {/* v18.14.0 (L4): "Whole day" while zoomed, because that is what a press does.
+      {/* v18.16.0 (follow-up, Patryk): the level is always on it, with "· Whole day"
+          after it while zoomed, so the button says both how far in the day is and
+          what a press does. The level changes in place; the words open sideways.
+          v18.14.0 (L4): "Whole day" while zoomed, because that is what a press does.
           "1.5x → 1x" was the arithmetic of it, in the one place staff reach for
           when they have lost the evening off the side of the screen. At 1x the
           day is already whole, so it says the zoom instead.
@@ -70,7 +81,7 @@ export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, follo
           start-time-chip pattern) and the button's width eases. */}
       <button
         onClick={() => { setZoom(1); setFollowNow(false); }}
-        aria-label={(zoom !== 1 ? "Whole day" : "1x") + " (reset zoom)"}
+        aria-label={zoomLevel(zoom) + (zoom !== 1 ? " · Whole day" : "") + " (reset zoom)"}
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 36, padding: "4px 10px", fontSize: T.small, background: BTN.quiet, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
       >
@@ -78,11 +89,9 @@ export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, follo
             caches its last truthy children for the exit ease; an always-mounted
             span would overwrite that cache with empty text and the collapse would
             animate a blank box (the text snapping away instead of easing out). */}
+        <span style={LEVEL}>{zoomLevel(zoom)}</span>
         <Reveal horizontal show={zoom !== 1}>
-          {zoom !== 1 ? <span style={{ whiteSpace: "pre" }}>Whole day</span> : null}
-        </Reveal>
-        <Reveal horizontal show={zoom === 1}>
-          {zoom === 1 ? <span style={{ whiteSpace: "pre" }}>1x</span> : null}
+          {zoom !== 1 ? <span style={{ whiteSpace: "pre" }}> · Whole day</span> : null}
         </Reveal>
       </button>
       <button
