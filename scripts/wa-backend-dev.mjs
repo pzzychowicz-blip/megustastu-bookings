@@ -134,7 +134,12 @@ function readBody(req) {
 // follow-up: the iPhone and the tablet). Private ranges only. It decides two
 // things: which origin may READ an answer (cors), and which may ASK at all
 // (originRefused). What can reach the port is `--host`'s question, not this.
-const DEV_ORIGIN_RE = /^http:\/\/(localhost|127\.0\.0\.1|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}):\d+$/;
+// ONE list of the names this machine answers to, read by both patterns: the
+// loopback's three spellings (the harness binds ::1 too) and the private ranges.
+const DEV_HOST = "(localhost|127\\.0\\.0\\.1|\\[::1\\]|10(\\.\\d{1,3}){3}|192\\.168(\\.\\d{1,3}){2}|172\\.(1[6-9]|2\\d|3[01])(\\.\\d{1,3}){2})";
+const DEV_ORIGIN_RE = new RegExp("^http://" + DEV_HOST + ":\\d+$");
+// The Host header of a request really meant for this harness.
+const DEV_HOST_RE = new RegExp("^" + DEV_HOST + "(:\\d+)?$");
 
 function cors(req, res) {
   const origin = req.headers.origin || "";
@@ -145,21 +150,34 @@ function cors(req, res) {
   }
 }
 
-// A browser names the page it is asking from, on every cross-origin request
-// and on every POST. CORS alone only hides the ANSWER: a page on any site could
+// A browser names the page it is asking from on every POST and on every
+// cross-origin fetch. CORS alone only hides the ANSWER: a page on any site could
 // still POST a "simple" request here and the write would land. So a request
-// that names an origin other than the dev app's is not handled at all. No
-// Origin header is curl or Meta, which no page can imitate.
+// that names an origin other than the dev app's is not handled at all.
+//
+// **A GET can arrive with no Origin** (an <img>, a link, a same-origin fetch),
+// so this guards the routes that act, which are all POST. A GET route here
+// must stay harmless to ask for, or carry its own gate (wa-prune's secret).
+//
+// The Host header closes the other way in (/code-review): a page whose own
+// name is re-pointed at 127.0.0.1 (DNS rebinding) asks "same-origin", with no
+// Origin on a GET, but its Host is still that name, never one of this
+// machine's. curl sends this machine's. A tunnel (ngrok) sends ITS public
+// name and is refused until it rewrites the Host (`--host-header=rewrite`).
 function originRefused(req) {
   const origin = req.headers.origin;
-  return !!origin && !DEV_ORIGIN_RE.test(origin);
+  if (origin && !DEV_ORIGIN_RE.test(origin)) return "origin not allowed";
+  const host = req.headers.host;
+  if (host && !DEV_HOST_RE.test(host)) return "host not allowed";
+  return null;
 }
 
 async function handle(req, res) {
-  if (originRefused(req)) {
+  const refused = originRefused(req);
+  if (refused) {
     res.statusCode = 403;
     res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ error: "origin not allowed" }));
+    res.end(JSON.stringify({ error: refused }));
     return;
   }
   cors(req, res);
