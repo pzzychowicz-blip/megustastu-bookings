@@ -40858,6 +40858,14 @@ cannot reach the time drag's "is seated" refusal (`isActive` leaves it out), the
   19:30. Reproduced in Node. An Undo of the same move already took the draft away; a hand-made return did not. `movedSlot` now carries the
   slot the booking left (`from`), and `movedReplyPlan` keeps the slot the guest last heard on each draft: while this session's draft is
   still in the box unsent that is where the booking stood before the first of them, and a move that lands back on it answers `withdraw`
-  (the hook empties the box, forgets the draft and says nothing, as Undo does). A draft that was sent told the guest, so the move back is
+  (the hook empties the box, forgets the draft and says nothing, as Undo does). Checked live on DEV through the form, on a booking linked to
+  an open chat: 17:30 → 18:00 put "…a las 18:00" in the box and "· reply drafted" on the pill; 18:00 → 17:30 emptied the box and the pill
+  carried no clause. A draft that was sent told the guest, so the move back is
   drafted as a move; one somebody edited is left alone. **A departure for Patryk to overrule:** the withdrawal is silent, like Undo's. A
   clause on the pill ("reply draft removed") is the alternative.
+- **A hovered cell marker named the wrong cell after a wheel scroll.** The marker listened for scroll only once a finger had selected it. Under
+  a mouse, a wheel or trackpad scroll carried the lit cell away while the pointer stood still, and Chrome sends no pointermove after a scroll,
+  so the chip went on naming a cell the click would not book (`cellUnder` reads the click point). Measured on DEV: after 120px of scroll the
+  marker still read "table 1, 13:15" over a pointer standing on 14:15. Any shown marker now goes on a scroll (its own effect, keyed on `shown`;
+  the press-away listener stays the selected marker's). After the fix, on DEV: hidden by the scroll, and the next move lights "table 1, 14:15".
+  The two-tap flow was run again: the first tap selects, a press elsewhere clears, the second tap opens the form at the cell's time.

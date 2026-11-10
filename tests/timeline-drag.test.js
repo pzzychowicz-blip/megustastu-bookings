@@ -123,12 +123,14 @@ describe("the cell marker", () => {
   it("takes a press only once a finger has selected it; under a mouse it is out of the pointer's way", () => {
     expect(marker).toMatch(/pointerEvents: shown && cell\.tap \? "auto" : "none"/);
   });
-  it("a selected cell is cleared on scroll and by a press anywhere else, heard in the capture phase", () => {
-    expect(marker).toMatch(/window\.addEventListener\("pointerdown", away, true\);/);
-    expect(marker).toMatch(/window\.addEventListener\("scroll", gone, true\);/);
-    expect(marker).toMatch(/window\.removeEventListener\("pointerdown", away, true\);/);
-    expect(marker).toMatch(/window\.removeEventListener\("scroll", gone, true\);/);
-    expect(marker).toMatch(/if \(!tapLive\) return undefined;/);
+  it("a selected cell is cleared by a press anywhere else, heard in the capture phase", () => {
+    expect(marker).toMatch(/if \(!tapLive\) return undefined;\s+function away\(e\) \{[^\n]*\}\s+window\.addEventListener\("pointerdown", away, true\);\s+return \(\) => \{ window\.removeEventListener\("pointerdown", away, true\); \};\s+\}, \[tapLive\]\);/);
+  });
+  // v18.16.0 (/code-review): the scroll listener ran in tap mode only, so a wheel
+  // scroll left a hovered marker lit on a cell the mouse was no longer over
+  // (measured on DEV: 120px of scroll, the chip still said 13:15 over 14:15).
+  it("any shown marker is cleared on scroll, a hovered one included", () => {
+    expect(marker).toMatch(/if \(!shown\) return undefined;\s+function gone\(\) \{ setShown\(false\); \}\s+window\.addEventListener\("scroll", gone, true\);\s+return \(\) => \{ window\.removeEventListener\("scroll", gone, true\); \};\s+\}, \[shown\]\);/);
   });
   it("leaves as it arrives", () => {
     expect(marker).toMatch(/inClass="mgt-appear"\s+outClass="mgt-ghost-out"/);

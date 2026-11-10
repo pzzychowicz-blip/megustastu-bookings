@@ -1676,6 +1676,12 @@ function CellChip({ tableId, time, sz }) {
 // A selected cell is let go by a press anywhere else and by any scroll, both
 // heard in the capture phase, because the grid's own scroller and the page's are
 // different elements and a tap on a block never reaches a listener down here.
+// A scroll lets a HOVERED one go too (/code-review): the marker lives in the
+// grid, so a wheel or trackpad scroll carried the lit cell away from a mouse
+// that had not moved, and Chrome sends no pointermove after a scroll to bring
+// it back. Measured on DEV: 120px of scroll and the chip still read "1 · 13:15"
+// over a pointer standing on 14:15, which is what a click would have booked.
+// The next move of the mouse lights the cell it is really over.
 //
 // `tabIndex={-1}`: a keyboard has no cell under it, and `N` is its door. The
 // button stays in the accessibility tree while shown, so a screen reader on a
@@ -1696,14 +1702,15 @@ function CellMarker({ ref, sz, totalMins, onOpen }) {
   useEffect(() => {
     if (!tapLive) return undefined;
     function away(e) { if (!(btnRef.current && btnRef.current.contains(e.target))) setShown(false); }
-    function gone() { setShown(false); }
     window.addEventListener("pointerdown", away, true);
-    window.addEventListener("scroll", gone, true);
-    return () => {
-      window.removeEventListener("pointerdown", away, true);
-      window.removeEventListener("scroll", gone, true);
-    };
+    return () => { window.removeEventListener("pointerdown", away, true); };
   }, [tapLive]);
+  useEffect(() => {
+    if (!shown) return undefined;
+    function gone() { setShown(false); }
+    window.addEventListener("scroll", gone, true);
+    return () => { window.removeEventListener("scroll", gone, true); };
+  }, [shown]);
   if (!cell) return null;
   const leftPct = ((cell.mins - OPEN * 60) / totalMins) * 100;
   const widthPct = (CELL_MINS / totalMins) * 100;

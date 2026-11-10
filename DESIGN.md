@@ -1896,7 +1896,9 @@ the preferred one. The grid shows the offer as one marker: the quarter lit in
   first tap selects the cell and shows what the second will do. On the pass, with wet
   hands, a stray touch on the grid must not open a form (Patryk). The selected marker
   is a real button, cell and chip together, so the second tap has the row's height to
-  land on. A press anywhere else or any scroll lets it go.
+  land on. A press anywhere else or any scroll lets it go. A scroll lets a hovered
+  marker go as well: the grid moves under a mouse that has not, and the chip must
+  never name a cell a click would not book.
 - **It follows the pointer without a transition and fades at its ends**: under a mouse
   it is direct feedback, like a hover tint, so a move from cell to cell is instant; it
   arrives on `mgt-appear` and leaves on `mgt-ghost-out`.
