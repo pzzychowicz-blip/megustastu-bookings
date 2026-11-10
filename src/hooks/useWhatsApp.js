@@ -596,6 +596,10 @@ export function useWhatsApp({
   // refused write must not leave "we've moved your booking" in a reply box. What
   // to do is `movedReplyPlan` (lib/whatsapp.js); this holds the refs and the store.
   // → "drafted" | "closed" | null
+  // `to` is `movedSlot`'s answer, which carries the slot the booking left
+  // (`to.from`): a move back to where the guest already knows the booking to be
+  // takes this session's unsent draft away, as an Undo of the move does, and
+  // says nothing (`withdraw`).
   //
   // `bookingsRef`: the callback runs after the server answers, from a closure of
   // the render that dispatched the write, whose `bookings` is the list BEFORE it.
@@ -609,12 +613,17 @@ export function useWhatsApp({
   const movedDraftsRef = useRef({});
   function draftMovedReply(bookingId, to) {
     const plan = movedReplyPlan({
-      on: on, conversations: conversationsRef.current, bookingId: bookingId, to: to,
+      on: on, conversations: conversationsRef.current, bookingId: bookingId, to: to, from: to && to.from,
       booking: bookingsRef.current.find(function (b) { return b.id === bookingId; }),
       textOf: function (key) { return draftTextOf(uid, key); },
       mine: movedDraftsRef.current[bookingId], now: Date.now(),
     });
     if (!plan || plan === "closed") return plan;
+    if (plan.withdraw) {
+      setReplyDraft(uid, plan.phoneKey, "");
+      delete movedDraftsRef.current[bookingId];
+      return null;
+    }
     setReplyDraft(uid, plan.phoneKey, plan.text);
     movedDraftsRef.current[bookingId] = plan;
     return "drafted";

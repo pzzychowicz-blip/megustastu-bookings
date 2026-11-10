@@ -40853,3 +40853,11 @@ cannot reach the time drag's "is seated" refusal (`isActive` leaves it out), the
   (`linkBookingByPhone`), so a time drag drafted the reply and the pill said "reply drafted", and `api/wa-send.js` answers 410 for it. Reproduced
   in Node with the pure function. It now asks the server's question, `windowOpen` (`lib/whatsapp.js`: no stamp is no window), and says
   "guest's WhatsApp window is closed". The test holds both send endpoints to the same words.
+- **A booking moved and then moved back by hand left a draft announcing a move that never was.** 19:00 → 19:30 drafted "now at 19:30"; a
+  second drag back to 19:00 replaced it with "it is now … at 19:00" and the pill said "reply drafted", for a guest who had never heard of
+  19:30. Reproduced in Node. An Undo of the same move already took the draft away; a hand-made return did not. `movedSlot` now carries the
+  slot the booking left (`from`), and `movedReplyPlan` keeps the slot the guest last heard on each draft: while this session's draft is
+  still in the box unsent that is where the booking stood before the first of them, and a move that lands back on it answers `withdraw`
+  (the hook empties the box, forgets the draft and says nothing, as Undo does). A draft that was sent told the guest, so the move back is
+  drafted as a move; one somebody edited is left alone. **A departure for Patryk to overrule:** the withdrawal is silent, like Undo's. A
+  clause on the pill ("reply draft removed") is the alternative.

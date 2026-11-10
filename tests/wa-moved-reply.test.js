@@ -34,10 +34,13 @@ describe("movedReply: the text, in the guest's language", () => {
 
 describe("movedSlot: did the write change when the guest should come", () => {
   const b = (o) => Object.assign({ id: "b1", date: "2026-10-16", time: "19:00", scheduledTime: "19:00", status: "confirmed" }, o);
-  it("a new time, a new date, or both", () => {
-    expect(movedSlot(b(), b({ time: "19:30", scheduledTime: "19:30" }))).toEqual({ date: "2026-10-16", time: "19:30" });
-    expect(movedSlot(b(), b({ date: "2026-10-17" }))).toEqual({ date: "2026-10-17", time: "19:00" });
-    expect(movedSlot(b(), b({ date: "2026-10-17", time: "20:00" }))).toEqual({ date: "2026-10-17", time: "20:00" });
+  // `from` is the slot the booking left (v18.16.0, /code-review), which is how
+  // `movedReplyPlan` tells a move from a move taken back.
+  const was = { date: "2026-10-16", time: "19:00" };
+  it("a new time, a new date, or both, with the slot it left", () => {
+    expect(movedSlot(b(), b({ time: "19:30", scheduledTime: "19:30" }))).toEqual({ date: "2026-10-16", time: "19:30", from: was });
+    expect(movedSlot(b(), b({ date: "2026-10-17" }))).toEqual({ date: "2026-10-17", time: "19:00", from: was });
+    expect(movedSlot(b(), b({ date: "2026-10-17", time: "20:00" }))).toEqual({ date: "2026-10-17", time: "20:00", from: was });
   });
   it("nothing when neither moved, whatever else the write changed", () => {
     expect(movedSlot(b(), b({ size: 6, tables: ["4"], notes: "window" }))).toBeNull();
@@ -53,7 +56,8 @@ describe("movedSlot: did the write change when the guest should come", () => {
     const seated = b({ status: "seated", time: "18:50", scheduledTime: "19:00" });
     expect(movedSlot(seated, b({ time: "19:00" }))).toBeNull();
     // …and one that types a new time in the same save is.
-    expect(movedSlot(seated, b({ time: "19:30" }))).toEqual({ date: "2026-10-16", time: "19:30" });
+    // …and it left the time the guest was given, not the minute the party sat down.
+    expect(movedSlot(seated, b({ time: "19:30" }))).toEqual({ date: "2026-10-16", time: "19:30", from: was });
   });
   it("a booking with no readable scheduled time falls back to its time", () => {
     expect(movedSlot(b({ scheduledTime: undefined }), b({ time: "19:00" }))).toBeNull();
@@ -76,7 +80,9 @@ describe("movedReplyPlan: the answers", () => {
   }, o));
   it("drafts the text in the linked conversation's box", () => {
     // …and says what it names and what it replaced, which Undo asks about.
-    expect(ask()).toEqual({ phoneKey: "34600111222", text: movedReply("en", to), to, prev: null });
+    expect(ask()).toEqual({ phoneKey: "34600111222", text: movedReply("en", to), to, from: null, prev: null });
+    // …and where the booking stood before it, when the caller says (`movedSlot`'s `from`).
+    expect(ask({ from: { date: "2026-10-16", time: "19:00" } }).from).toEqual({ date: "2026-10-16", time: "19:00" });
     expect(ask({ conversations: [conv({ language: "es" })] }).text).toBe(movedReply("es", to));
   });
   it("1 · the module off does nothing at all, and is asked first", () => {
@@ -101,10 +107,10 @@ describe("movedReplyPlan: the answers", () => {
   it("…but text this session drafted for the same booking, unchanged, is replaced by the newer time", () => {
     const at1915 = { date: "2026-10-16", time: "19:15" };
     const first = movedReply("en", at1915);
-    const mine = { phoneKey: "34600111222", text: first, to: at1915, prev: null };
+    const mine = { phoneKey: "34600111222", text: first, to: at1915, from: null, prev: null };
     expect(ask({ textOf: () => first, mine })).toEqual({
-      phoneKey: "34600111222", text: movedReply("en", to), to,
-      prev: { phoneKey: "34600111222", text: first, to: at1915, prev: null },
+      phoneKey: "34600111222", text: movedReply("en", to), to, from: null,
+      prev: { phoneKey: "34600111222", text: first, to: at1915, from: null, prev: null },
     });
     // one step back is kept, never a chain
     const third = ask({ textOf: () => movedReply("en", to), mine: ask({ textOf: () => first, mine }), to: { date: "2026-10-16", time: "20:00" }, booking: { id: "b1", date: "2026-10-16", time: "20:00" } });
@@ -113,6 +119,52 @@ describe("movedReplyPlan: the answers", () => {
     expect(ask({ textOf: () => first + " See you then!", mine })).toBeNull();
     // ours, but in another conversation's box
     expect(ask({ textOf: () => first, mine: { phoneKey: "other", text: first, to: at1915, prev: null } })).toBeNull();
+  });
+  // v18.16.0 (/code-review). Reproduced in Node before the fix: 19:00 → 19:30 →
+  // 19:00 by two drags left "it is now … at 19:00" in the box and "reply drafted"
+  // on the pill, for a guest who had never heard of 19:30.
+  describe("a move taken back by hand takes its unsent draft with it, as Undo does", () => {
+    const at = (time) => ({ date: "2026-10-16", time });
+    const bk = (time) => ({ id: "b1", date: "2026-10-16", time });
+    // 19:00 → 19:30, drafted and still in the box
+    const first = ask({ from: at("19:00") });
+    it("back to where the guest knows it to be: the box is emptied, nothing is drafted", () => {
+      expect(first.from).toEqual(at("19:00"));
+      expect(ask({ to: at("19:00"), from: at("19:30"), booking: bk("19:00"), textOf: () => first.text, mine: first }))
+        .toEqual({ phoneKey: "34600111222", withdraw: true });
+    });
+    it("…through any number of moves: what the guest last heard is carried from draft to draft", () => {
+      const second = ask({ to: at("20:00"), from: at("19:30"), booking: bk("20:00"), textOf: () => first.text, mine: first });
+      expect(second.from, "not 19:30, which the guest never heard").toEqual(at("19:00"));
+      expect(second.prev.from).toEqual(at("19:00"));
+      expect(ask({ to: at("19:00"), from: at("20:00"), booking: bk("19:00"), textOf: () => second.text, mine: second }))
+        .toEqual({ phoneKey: "34600111222", withdraw: true });
+    });
+    it("a closed window does not keep it: a draft nobody should send goes either way", () => {
+      const shut = [conv({ windowExpiresAt: NOW - 1 })];
+      expect(ask({ conversations: shut, to: at("19:00"), from: at("19:30"), booking: bk("19:00"), textOf: () => first.text, mine: first }))
+        .toEqual({ phoneKey: "34600111222", withdraw: true });
+    });
+    it("a draft that was SENT told the guest 19:30, so the move back is a move, and is drafted", () => {
+      const back = ask({ to: at("19:00"), from: at("19:30"), booking: bk("19:00"), textOf: () => "", mine: first });
+      expect(back.text).toBe(movedReply("en", at("19:00")));
+      expect(back.from).toEqual(at("19:30"));
+      expect(back.prev).toBeNull();
+    });
+    it("one somebody has edited is theirs, and is left as it is", () => {
+      expect(ask({ to: at("19:00"), from: at("19:30"), booking: bk("19:00"), textOf: () => first.text + " See you!", mine: first })).toBeNull();
+    });
+    it("a caller that does not say where the booking was takes nothing back", () => {
+      const blind = ask();
+      expect(ask({ to: at("19:00"), booking: bk("19:00"), textOf: () => blind.text, mine: blind }).text).toBe(movedReply("en", at("19:00")));
+    });
+    it("an Undo's restored draft knows it too: 19:00 → 19:30 → 20:00, Undo, then back to 19:00 by hand", () => {
+      const second = ask({ to: at("20:00"), from: at("19:30"), booking: bk("20:00"), textOf: () => first.text, mine: first });
+      const undone = movedReplyUndo(second, second.text, { id: "b1", date: "2026-10-16", time: "19:30", scheduledTime: "19:30", status: "confirmed" });
+      expect(undone.mine.from).toEqual(at("19:00"));
+      expect(ask({ to: at("19:00"), from: at("19:30"), booking: bk("19:00"), textOf: () => undone.text, mine: undone.mine }))
+        .toEqual({ phoneKey: "34600111222", withdraw: true });
+    });
   });
   it("5 · an expired 24-hour window is said, not drafted", () => {
     expect(ask({ conversations: [conv({ windowExpiresAt: NOW - 1 })] })).toBe("closed");
@@ -199,14 +251,17 @@ describe("the hook: refs and the store, nothing decided", () => {
   const undo = HOOK.slice(HOOK.indexOf("function undoMovedReply("), HOOK.indexOf("function handleArchive("));
   it("hands the plan the module switch, the live conversations and what the booking says now", () => {
     expect(draft).toContain("const plan = movedReplyPlan({");
-    expect(draft).toContain("on: on, conversations: conversationsRef.current, bookingId: bookingId, to: to,");
+    expect(draft).toContain("on: on, conversations: conversationsRef.current, bookingId: bookingId, to: to, from: to && to.from,");
     expect(draft).toContain("booking: bookingsRef.current.find(function (b) { return b.id === bookingId; }),");
     expect(draft).toContain("textOf: function (key) { return draftTextOf(uid, key); },");
     expect(draft).toContain("mine: movedDraftsRef.current[bookingId], now: Date.now(),");
     expect(HOOK).toMatch(/const bookingsRef = useRef\(bookings\);\s+useEffect\(function \(\) \{ bookingsRef\.current = bookings; \}, \[bookings\]\);/);
   });
   it("writes only a plan with a text, to this device's draft store, and remembers it", () => {
-    expect(draft).toMatch(/if \(!plan \|\| plan === "closed"\) return plan;\s+setReplyDraft\(uid, plan\.phoneKey, plan\.text\);\s+movedDraftsRef\.current\[bookingId\] = plan;\s+return "drafted";/);
+    expect(draft).toMatch(/if \(!plan \|\| plan === "closed"\) return plan;[\s\S]*?\s+setReplyDraft\(uid, plan\.phoneKey, plan\.text\);\s+movedDraftsRef\.current\[bookingId\] = plan;\s+return "drafted";/);
+  });
+  it("a withdrawn draft: the box emptied, the draft forgotten, and nothing said", () => {
+    expect(draft).toMatch(/if \(plan\.withdraw\) \{\s+setReplyDraft\(uid, plan\.phoneKey, ""\);\s+delete movedDraftsRef\.current\[bookingId\];\s+return null;\s+\}/);
   });
   it("nothing here reaches the database or sends anything", () => {
     expect(draft + undo).not.toMatch(/patchConversation|appendMessage|handleSendReply|sendViaBackend|update\(|set\(/);

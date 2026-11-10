@@ -693,7 +693,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
-          "wa.draftMovedReply("b1", {"date":"2026-10-14","time":"19:00"})",
+          "wa.draftMovedReply("b1", {"date":"2026-10-14","time":"19:00","from":{"date":"2026-10-14","time":"20:00"}})",
         ],
         "guard": "dispatched",
         "writes": [
@@ -724,7 +724,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-15")",
-          "wa.draftMovedReply("b1", {"date":"2026-10-15","time":"20:00"})",
+          "wa.draftMovedReply("b1", {"date":"2026-10-15","time":"20:00","from":{"date":"2026-10-14","time":"20:00"}})",
         ],
         "guard": "dispatched",
         "writes": [
@@ -747,7 +747,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
     const b1 = bk("b1", { tables: ["1"] });
     const out = runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { date: NEXT }), movedReply: "drafted" });
     expect(out.calls.slice(-2)).toEqual([
-      'wa.draftMovedReply("b1", {"date":"2026-10-15","time":"20:00"})',
+      'wa.draftMovedReply("b1", {"date":"2026-10-15","time":"20:00","from":{"date":"2026-10-14","time":"20:00"}})',
       'noteUndo("pill", "reply drafted")',
     ]);
   });
@@ -1286,7 +1286,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
-          "wa.draftMovedReply("b1", {"date":"2026-10-07","time":"21:00"})",
+          "wa.draftMovedReply("b1", {"date":"2026-10-07","time":"21:00","from":{"date":"2026-10-07","time":"20:30"}})",
         ],
         "guard": "dispatched",
         "writes": [
@@ -1318,7 +1318,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
           "armUndo(["b1","b2"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
-          "wa.draftMovedReply("b1", {"date":"2026-10-07","time":"21:00"})",
+          "wa.draftMovedReply("b1", {"date":"2026-10-07","time":"21:00","from":{"date":"2026-10-07","time":"20:30"}})",
         ],
         "guard": "dispatched",
         "writes": [
@@ -1771,7 +1771,7 @@ describe("Save — seating, completing and walking back (today)", () => {
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
-          "wa.draftMovedReply("b1", {"date":"2026-10-07","time":"20:00"})",
+          "wa.draftMovedReply("b1", {"date":"2026-10-07","time":"20:00","from":{"date":"2026-10-07","time":"19:00"}})",
         ],
         "guard": "dispatched",
         "writes": [
@@ -1839,7 +1839,7 @@ describe("Save — tables somebody chose by hand", () => {
           "armUndo(["b1","b2"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
-          "wa.draftMovedReply("b1", {"date":"2026-10-14","time":"20:30"})",
+          "wa.draftMovedReply("b1", {"date":"2026-10-14","time":"20:30","from":{"date":"2026-10-14","time":"20:00"}})",
         ],
         "guard": "dispatched",
         "writes": [
@@ -1899,7 +1899,7 @@ describe("Save — tables somebody chose by hand", () => {
           "armUndo(["b1","b2"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
-          "wa.draftMovedReply("b1", {"date":"2026-10-07","time":"20:30"})",
+          "wa.draftMovedReply("b1", {"date":"2026-10-07","time":"20:30","from":{"date":"2026-10-07","time":"20:00"}})",
         ],
         "guard": "dispatched",
         "writes": [

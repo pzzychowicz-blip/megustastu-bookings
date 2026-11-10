@@ -431,10 +431,12 @@ export function movedReply(lang, o) {
     : "We've moved your booking: it is now on " + day + " at " + o.time + ". If that doesn't suit you, please let us know.";
 }
 
-// Did this write change WHEN the guest should come? → null | {date, time}.
+// Did this write change WHEN the guest should come? → null | {date, time, from}.
 // Only for a booking that is still to happen (confirmed or pending): a seated
 // party's time is being corrected, not moved, and a finished booking's is a
 // record. `before` and `after` are the booking as it stood and as it was written.
+// `from` is the slot it left, `{date, time}`, which `movedReplyPlan` needs to
+// tell a move from a move taken back.
 //
 // The time compared is the one the GUEST was given: `scheduledTime`, where the
 // booking has one. A seated party's `time` is when it sat down, so walking a
@@ -446,11 +448,13 @@ export function movedSlot(before, after) {
   if (!before || !after) return null;
   if (after.status !== "confirmed" && after.status !== "pending") return null;
   if (before.date === after.date && givenTime(before) === after.time) return null;
-  return { date: after.date, time: after.time };
+  return { date: after.date, time: after.time, from: { date: before.date, time: givenTime(before) } };
 }
+function sameSlot(a, b) { return !!a && !!b && a.date === b.date && a.time === b.time; }
 
-// What to do about it → null | "closed" | {phoneKey, text, to, prev}. The hook
-// (`draftMovedReply`) holds the refs and the store; the answers are here.
+// What to do about it → null | "closed" | {phoneKey, withdraw} |
+// {phoneKey, text, to, from, prev}. The hook (`draftMovedReply`) holds the refs
+// and the store; the answers are here.
 //   null      nothing to draft: the module is off (asked FIRST, so an off module
 //             does nothing at all), no conversation is linked to this booking,
 //             the guest is muted, the booking no longer says this time (an Undo
@@ -459,12 +463,25 @@ export function movedSlot(before, after) {
 //   "closed"  the 24-hour window is not open (`windowOpen`: it has expired, or
 //             the guest never opened one), so a free-text reply cannot be sent:
 //             the caller says so rather than drafting what cannot go out
+//   {withdraw} empty `phoneKey`'s box and forget the draft: the booking is back
+//             where the guest already knows it to be (below)
 //   {…}       put `text` in `phoneKey`'s box, and remember the whole answer
 // `mine` is what THIS session last drafted for the booking (the answer it was
 // given then): text still in the box unchanged is ours, and a second move
 // replaces it rather than leaving a reply that names the time before last.
 // `to` is the time the text names and `prev` the draft of ours it replaced
 // (null when the box was empty), which is what Undo needs: `movedReplyUndo`.
+//
+// v18.16.0 (/code-review): `from` is the slot the guest last HEARD, `{date,
+// time}` or null when the caller did not say (`o.from`, `movedSlot`'s). While
+// our draft sits unsent the guest has heard nothing, so it is the slot the
+// booking stood in before the first of those drafts, carried from draft to
+// draft; once the box is empty (sent, or cleared by hand) it is where this move
+// began. A move that lands back on it is a move taken back by hand: 19:00 →
+// 19:30 → 19:00 wrote "it is now at 19:00" to a guest who had never heard of
+// 19:30 (reproduced in Node), where an Undo of the same move takes the draft
+// away. So does this, before the window is asked about: a draft nobody should
+// send goes whether or not it could be sent.
 export function movedReplyPlan(o) {
   if (!o || o.on !== true || !o.to) return null;
   const conv = (o.conversations || []).find(function (c) { return c && c.acceptedBookingId === o.bookingId; });
@@ -472,10 +489,13 @@ export function movedReplyPlan(o) {
   const b = o.booking;
   if (!b || b.date !== o.to.date || b.time !== o.to.time) return null;
   const held = o.textOf(conv.phoneKey);
-  if (held && !(o.mine && o.mine.phoneKey === conv.phoneKey && o.mine.text === held)) return null;
+  const ours = !!held && !!o.mine && o.mine.phoneKey === conv.phoneKey && o.mine.text === held;
+  if (held && !ours) return null;
+  const from = (ours ? o.mine.from : o.from) || null;
+  if (ours && sameSlot(from, o.to)) return { phoneKey: conv.phoneKey, withdraw: true };
   if (!windowOpen(conv.windowExpiresAt, o.now)) return "closed";
-  const prev = held ? { phoneKey: o.mine.phoneKey, text: o.mine.text, to: o.mine.to, prev: null } : null;
-  return { phoneKey: conv.phoneKey, text: movedReply(conv.language, o.to), to: { date: o.to.date, time: o.to.time }, prev: prev };
+  const prev = ours ? { phoneKey: o.mine.phoneKey, text: o.mine.text, to: o.mine.to, from: from, prev: null } : null;
+  return { phoneKey: conv.phoneKey, text: movedReply(conv.language, o.to), to: { date: o.to.date, time: o.to.time }, from: from, prev: prev };
 }
 
 // What an Undo does to that draft → null (nothing changes) | {mine, text?}:
