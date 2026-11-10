@@ -350,3 +350,15 @@ describe("the reply box is closed whenever the server would refuse the send", ()
     expect(windowOpen(NOW + 1, NOW)).toBe(true);
   });
 });
+
+// v18.16.0 (follow-up, Patryk): measured on DEV, Open booking from an archived chat
+// and a save that brought the chat back reopened the inbox on Archived with nothing
+// selected, the draft one tab away. An open chat that leaves Archived is followed.
+describe("an open chat that comes out of Archived is followed to the Inbox", () => {
+  it("switches the list and keeps the chat open, and only in that direction", () => {
+    expect(Inbox).toContain('if (tab === "archived" && !c.archived) { setTab("inbox"); setSelected(new Set()); return; }');
+    expect(Inbox).toContain("if (!inCurrentTab) setActiveKey(null);");
+    expect(Inbox.indexOf('if (tab === "archived" && !c.archived)')).toBeLessThan(Inbox.indexOf("if (!inCurrentTab) setActiveKey(null);"));
+  });
+});
+

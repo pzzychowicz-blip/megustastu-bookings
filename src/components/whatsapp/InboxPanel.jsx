@@ -473,10 +473,17 @@ export function InboxPanel({
   // v18.3.2: `activeKey` is listed too. Every door that selects picks from the
   // current tab, so a new selection passes and nothing runs differently; the
   // list now names everything the check reads.
+  // v18.16.0 (follow-up, Patryk): except the way OUT of Archived. An open chat
+  // that comes back to the Inbox is followed there, still open: a moved booking's
+  // reply drafted into it (measured on DEV: after Open booking and a save, the
+  // inbox came back on Archived with nothing selected and the draft one tab
+  // away), a reply sent from it, a Restore. Into Archived it is still dropped,
+  // since the Inbox is where work waits.
   useEffect(() => {
     if (!activeKey) return;
     const c = conversations.find((x) => x.phoneKey === activeKey);
     if (!c) { setActiveKey(null); return; }
+    if (tab === "archived" && !c.archived) { setTab("inbox"); setSelected(new Set()); return; }
     const inCurrentTab = tab === "archived" ? c.archived : !c.archived;
     if (!inCurrentTab) setActiveKey(null);
   }, [conversations, tab, activeKey]);

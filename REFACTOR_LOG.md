@@ -40947,4 +40947,8 @@ He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the 
   reply drafted, chat back in Inbox", the row "Draft: Hemos cambiado su reserva …"), went back to Archived when the time was moved back by
   hand, and went back again on Undo of a second move. The time drag itself cannot be run in the pane (a drag inside one frame never lifts the
   block), so it rests on `tests/drop-plan.test.js`.
+- **An open chat that comes out of Archived is followed to the Inbox.** Found in those checks: "Open booking" from an archived chat, then a
+  save that brought the chat back, reopened the inbox on Archived (the chat was still archived when it reopened) and the tab-leave effect then
+  dropped the selection, leaving the draft one tab away. The effect now switches to the Inbox and keeps the chat open when the open chat
+  leaves Archived (Patryk), whatever brought it out: the moved reply, a reply sent from it, a Restore. Into Archived it is still dropped.
 
