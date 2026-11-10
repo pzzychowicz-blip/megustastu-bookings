@@ -40728,3 +40728,60 @@ rather than staying in the component, so they can be tested.
 **Not measured, and for the tablet and the iPhone after merge**: the 800ms hold followed by a sideways move under a finger (whether the browser
 gives the move to the drag or to its own horizontal scroll), the pulse on each step, and the edge scroll under a finger. Every drag above was a
 mouse's or a dispatched event's, and a synthetic touch arms nothing here (`mgt-measurement-traps`).
+
+### Commit 8 — a WhatsApp guest's new time is drafted in their chat
+
+Moving a party's time is half the job when the booking came through WhatsApp: somebody then has to remember to open the chat and say so. Now the
+new time is written into that conversation's reply box, in the guest's language, and waits there as a reply draft for a person to read and send.
+Nothing is sent by the app and nothing is stored in the database (reply drafts are this device's, `lib/wa-reply-drafts.js`).
+
+- **The decisions are pure** (`lib/whatsapp.js`, on the Node chain): `movedReply(lang, {date, time})`, EN and ES beside `availabilityReply`, with
+  its `spokenDay` and its language rule; `movedSlot(before, after)`, whether a write changed when the guest should come; `movedReplyPlan(o)`, what to
+  do about it; `movedReplyUndo(mine, held, restored)`, what an Undo does to it; `movedReplyWords(result)`, how it is said.
+- **The plan's five answers**, in the order they are asked: the module off (first, so an off module does nothing at all), no conversation whose
+  `acceptedBookingId` is this booking, a muted guest, a reply box that already holds text this session did not put there, and the 24-hour window
+  expired, which answers `"closed"`: said, not drafted. A sixth was added while building: the booking no longer says this time, because an Undo
+  landed before the write did.
+- **`movedSlot` compares the time the guest was GIVEN** (`scheduledTime` where the booking has one), and counts confirmed and pending only. A
+  seated party's `time` is when it sat down, so walking one back to confirmed puts the booked start back in `time`; comparing `time` alone would
+  have told that guest their booking had moved to the time it always had. `tests/save-path.test.js`'s un-seat cases found it.
+- **Only where a write has landed**, never at a dispatch: `saveMove`'s `onLanded` for a time drag (`plan.retime`), and an `onLanded` on
+  `doSaveEdit`'s report for the form, present only when the edit moved the date or the time. A held or refused save drafts nothing. The hook
+  (`draftMovedReply`) reads the booking from a ref, because the callback closes over the render that dispatched the write.
+- **How it is said**: on the Undo pill, " · reply drafted" or " · guest's WhatsApp window is closed". A time drag's pill is armed at the landing,
+  so the clause is part of its sentence. The form's edit arms its pill at the dispatch, so `armUndo` now returns its pill (its timer) and
+  `noteUndo(pill, clause)` adds to it while it is still the one on screen; a landing that finds the pill gone (a held save arms none) says it in
+  the toast slot instead.
+- **Undo** (`undoLastAction` → `wa.undoMovedReply(id, snapshot)`) takes the draft back only while it is still the text put there.
+
+**Two departures from the plan's text.**
+- *The form's words are on its pill, not in a toast* (Patryk, 2026-11-10, asked). The plan said the toast slot. Built that way and measured on
+  DEV, the toast covered the edit's Undo pill for 3.5 of its 10 seconds, because the toast slot ranks a `dragMsg` above the pill.
+- *Undo asks what the booking was put back to, not which Undo it was* (for Patryk to overrule). The plan said "`undoMovedReply(bookingId)` clears
+  the draft only while it still equals that text". Two defects in that, both reproduced on DEV on 2026-11-10 before anything was changed:
+  (1) the pill is one slot for every action on a booking, so a note edited and undone AFTER a move emptied the reply box while the booking stayed
+  moved, and that guest would never have been told; (2) 17:00 → 17:30 → 18:00 and one Undo left the party at 17:30 with an empty box, the 17:30
+  draft having been replaced by the 18:00 one. Now the draft stays while the booking still says the time it names, and the draft of ours it had
+  replaced comes back when the booking is back at that time (one step is kept, never a chain).
+
+**Measured on DEV, 2026-11-10, at 998×507, on Marcos's linked booking for 14.11 (Spanish) and Sara's for 02.11 (window expired).**
+- The form, 17:00 → 17:30: the box read "Hemos cambiado su reserva: ahora es el sábado 14 de noviembre a las 17:30. Si no le va bien, díganoslo,
+  por favor.", the conversation's row showed "Draft: Hemos cambiado…", and the pill read "Booking updated · tables re-optimised · reply drafted"
+  with Undo, the clause 14ms after the pill. Undo put 17:30 back and emptied the box.
+- A real pointer drag (the pane's) 17:30 → 18:00: "Marcos · 17:30 → 18:00 · reply drafted", the box at 18:00; Undo put both back.
+- A second move replaced the first's draft (17:30 → 18:00), and its Undo left the booking at 17:30 with the 17:30 draft back.
+- A note edited and undone after a move: the booking and its draft both stayed.
+- "Un momento, lo miro" typed in the real composer, then a move and its Undo: the words were there after both, and nothing was said.
+- Sara's date moved through the form: "The guest's WhatsApp window is closed, so no reply was drafted." and no draft. (That run was the toast
+  build; the pill's version of the sentence is run in `tests/save-path.test.js`.)
+- The module switched off in Settings → Admin, then a move: no draft, the pill "Booking updated · tables re-optimised" and nothing else.
+- **An instrument note**: a draft written straight into `localStorage` with a dispatched `storage` event was NOT seen by the store while the inbox
+  was closed (the store listens for `storage` only while something subscribes, and reads its cache otherwise), so the first "somebody's own text"
+  run overwrote it and read as a bug. Typed into the composer, the same case passed. Same family as `mgt-measurement-traps`.
+
+**Not measured**: a second TAB on the same device typing a draft while this tab's inbox is closed is the instrument note's case for real, and a
+move here would then write over it. One installed app per device is how the restaurant runs it; nothing was changed for it.
+
+**Tests**: `tests/wa-moved-reply.test.js` (new: the two texts, `movedSlot`, the plan's answers, `movedReplyUndo`, the hook's and App's wiring,
+`noteUndo`), `tests/save-path.test.js` (the landing's five outcomes, run), `tests/drop-plan.test.js` (`saveMove`'s landing),
+`tests/retry-report.test.js` (the edit's report).

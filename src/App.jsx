@@ -106,6 +106,9 @@ import { StatusToasts } from "./components/StatusToasts";
 import { RefusalToast } from "./components/RefusalToast";
 import { toastBox } from "./lib/toast-box";
 import { planDrop, dropPreview, dropCheck, planRetime, retimePreview, retimeCheck } from "./lib/drop-plan";
+// v18.16.0: a moved booking's new time is drafted for a WhatsApp guest
+// (`saveMove`, `doSaveEdit`). The hook already brings this module into the entry.
+import { movedSlot, movedReplyWords } from "./lib/whatsapp";
 import { planAssign, planReassign, swapSlot, liveSwap } from "./lib/manual-assign";
 import { planStatus, planCancel, completeCleared, seatClashSnap } from "./lib/status-change";
 import { appBannerSections } from "./components/AppBanners";
@@ -1285,6 +1288,8 @@ export function BookingApp({uid}){
   const { tagList, saveTagList, tagError, clearTagError } = useTagSettings();
   const wa = useWhatsApp({
     enabled: whatsappOn,
+    // v18.16.0: whose reply drafts a moved booking's new time is written into.
+    uid: uid,
     bookings, setWriteWarning, waSettings, tagList,
     // v18.4.9: the hook drops an accepted draft's source when the form closes.
     formOpen: showForm,
@@ -2206,14 +2211,28 @@ export function BookingApp({uid}){
     // for a not-yet-persisted write — matches quick-action honesty).
     // v18.4.6: and if a replay finds the booking deleted on another device,
     // the banner says so (`plan.replayRefusal`); the form is closed by then.
-    const ok=saveBookings(plan.next,false,{subject:editId,replayRefusal:plan.replayRefusal});
+    // v18.16.0: an edit that changes WHEN a WhatsApp guest should come drafts the
+    // new time in their chat, when the write has landed and not before (a held
+    // or refused save must not leave "we've moved your booking" in a reply box).
+    // It is said on this edit's own Undo pill (`noteUndo`), as a time drag says
+    // it on its pill. First built as a toast, which covered the pill for 3.5 of
+    // its 10 seconds (measured on DEV, 2026-11-10; Patryk chose the pill). The
+    // toast is what is left for a landing that finds the pill gone: a held save
+    // arms none, and a slow one can outlast it.
+    const id=editId;
+    const moved=movedSlot(bookings.find(function(b){return b.id===id;}),plan.fin.find(function(b){return b.id===id;}));
+    let pill=null;
+    const ok=saveBookings(plan.next,false,Object.assign({subject:id,replayRefusal:plan.replayRefusal},moved?{onLanded:function(){
+      const said=draftMoved(id,moved);
+      if(said&&!noteUndo(pill,said.pill)) flashDragMsg(said.toast,said.good);
+    }}:null));
     // WhatsApp sandbox: if this edit came from a modify request's "Apply
     // changes", auto-mark that request handled — but only on a real save.
     wa.completeModifyApply(editId, ok);
     if(plan.flash&&ok) flash(plan.flash.kind,plan.flash.note);
     // v17.4.0: form edits are undoable — the pre-edit `orig` is the snapshot
     // (undo swaps it back in wholesale, incl. tables/status/duration).
-    if(ok&&plan.changed) armUndo(undoDelta(bookings,plan.fin),editId,"edit",false);
+    if(ok&&plan.changed) pill=armUndo(undoDelta(bookings,plan.fin),editId,"edit",false);
     // v17.16.0: armed only HERE — after the write is dispatched, on the
     // line that closes the form. Every early return above leaves the form
     // open with an error and the guard READY, so Save still works.
@@ -2482,12 +2501,20 @@ export function BookingApp({uid}){
   // appear long after anyone was looking.
   // v18.14.2: a `plan` with a `lead` has its sentence finished here, from what the
   // write moved (`landedSentence`), where a whole-day re-seat can be seen.
+  // v18.16.0: a time drag whose guest came through WhatsApp drafts the new time
+  // in their chat, here, where the write is known to have landed, and the pill
+  // says so (" · reply drafted", or that the guest's window is closed). A landing
+  // too late for the pill still drafts, and says it in the toast slot instead.
+  function draftMoved(id,slot){return slot?movedReplyWords(wa.draftMovedReply(id,slot)):null;}
   function saveMove(transform,id,kind,sentence,quiet,plan){
     const move=withUndoDelta(transform,undoDelta);
     return saveBookings(move.transform,false,Object.assign(id==null?{}:goneReport(id),{onLanded:function(){
       const delta=move.delta();
       if(!delta.length){if(quiet)quiet();return;}
-      if(move.age()<=(generalSettings.undoSecs||10)*1000) armUndo(delta,id,kind,false,landedSentence(plan,sentence,delta,move.post(),id));
+      const byId=function(b){return b.id===id;};
+      const said=plan&&plan.retime?draftMoved(id,movedSlot(delta.find(byId),move.post().find(byId))):null;
+      if(move.age()<=(generalSettings.undoSecs||10)*1000) armUndo(delta,id,kind,false,landedSentence(plan,sentence,delta,move.post(),id)+(said?" · "+said.pill:""));
+      else if(said) flashDragMsg(said.toast,said.good);
     }}));
   }
   // v18.4.5 (#17): WHAT a drop does is `planDrop` (lib/drop-plan.js), which
@@ -2995,6 +3022,18 @@ export function BookingApp({uid}){
     // nothing to add.
     setUndoInfo({snapshots:snapshots,primaryId:primaryId,kind:kind,noShow:!!noShow,note:label?"":note,label:label||""});
     undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},(generalSettings.undoSecs||10)*1000);
+    return undoTimerRef.current;
+  }
+  // v18.16.0: a clause added to a pill that is already up, for something learned
+  // after it was armed (the form's edit arms at the dispatch and hears at the
+  // landing that its guest's reply was drafted). `pill` is what `armUndo`
+  // returned, its timer, which is this pill's for exactly as long as it is the
+  // one on screen: another arm replaces it, and the Undo and the timeout clear
+  // it. → whether it was said, so the caller can say it some other way.
+  function noteUndo(pill,clause){
+    if(!pill||undoTimerRef.current!==pill) return false;
+    setUndoInfo(function(u){return u?Object.assign({},u,u.label?{label:u.label+" · "+clause}:{note:u.note?u.note+" · "+clause:clause}):u;});
+    return true;
   }
   // v18.5.1 (#17): WHAT is restored is `planUndo` (lib/delete-undo.js), verbatim
   // and never through bookingsAfterAction (src/CLAUDE.md's one exception).
@@ -3006,6 +3045,11 @@ export function BookingApp({uid}){
       if(undoTimerRef.current){clearTimeout(undoTimerRef.current);undoTimerRef.current=null;}
       setUndoInfo(null);
       setViewDate(plan.date);
+      // v18.16.0: the reply a move drafted in its guest's WhatsApp chat goes
+      // with the move, unless somebody has since made it their own. The hook is
+      // told what the booking was put back to, because this Undo may be of a
+      // note or a table drop made after the move, which leaves the draft alone.
+      wa.undoMovedReply(undoInfo.primaryId,undoInfo.snapshots.find(function(s){return s.id===undoInfo.primaryId;}));
     }
   }
   // v18.4.7 (#17): WHAT the picker's Save writes is `planAssign`

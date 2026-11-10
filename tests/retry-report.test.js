@@ -204,7 +204,10 @@ describe("the form's edit carries it", () => {
 describe("every single-booking write in App hands saveBookings the report", () => {
   const calls = APP.match(/saveBookings\(/g) || [];
   const WITH = [
-    ["the form's edit", "saveBookings(plan.next,false,{subject:editId,replayRefusal:plan.replayRefusal})"],
+    // v18.16.0: the report gains an `onLanded` when the edit moved the guest's
+    // time (a WhatsApp guest's reply is drafted there); `id` is `editId`, read
+    // once above the call.
+    ["the form's edit", "saveBookings(plan.next,false,Object.assign({subject:id,replayRefusal:plan.replayRefusal},moved?{onLanded:"],
     // v18.5.1 (#17): reassign hands over `planReassign`'s transform too, told
     // apart by the error it clears on the next line.
     ["reassign", /saveBookings\(plan\.transform,false,goneReport\(id\)\);\s+setError\(""\);/],

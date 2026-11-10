@@ -321,7 +321,12 @@ describe("BookingApp's saveMove", () => {
     expect(fn).toMatch(/onLanded:function\(\)\{/);
     const landed = fn.slice(fn.indexOf("onLanded"));
     expect(landed).toContain("const delta=move.delta();");
-    expect(landed).toContain("armUndo(delta,id,kind,false,landedSentence(plan,sentence,delta,move.post(),id));");
+    // v18.16.0: a re-timed WhatsApp guest's reply is drafted here too, at the
+    // landing, and the pill gains its clause. Nothing else about the arming moved.
+    expect(landed).toContain('armUndo(delta,id,kind,false,landedSentence(plan,sentence,delta,move.post(),id)+(said?" · "+said.pill:""));');
+    expect(landed).toContain("const said=plan&&plan.retime?draftMoved(id,movedSlot(delta.find(byId),move.post().find(byId))):null;");
+    expect(landed, "a landing too late for the pill still says it").toContain("else if(said) flashDragMsg(said.toast,said.good);");
+    expect(fn.slice(0, fn.indexOf("onLanded")), "nothing is drafted at the dispatch").not.toMatch(/draftMoved|draftMovedReply/);
     expect(fn.slice(0, fn.indexOf("onLanded")), "nothing is armed at the dispatch").not.toContain("armUndo(");
   });
   it("a write that moved nobody still answers the press, and a late landing offers nothing", () => {

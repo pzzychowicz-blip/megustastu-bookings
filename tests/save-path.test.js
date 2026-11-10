@@ -62,6 +62,7 @@ import * as recurringLib from "../src/lib/recurring.js";
 import * as drafts from "../src/lib/drafts.js";
 import * as statusChange from "../src/lib/status-change.js";
 import * as phoneCountries from "../src/lib/phone-countries.js";
+import * as waLib from "../src/lib/whatsapp.js";
 import { appCode } from "./app-source.js";
 
 // ── The lib modules the lifted code may bind, by basename ───────────────────
@@ -80,6 +81,8 @@ const LIB = {
   "recurring": recurringLib,
   "drafts": drafts,
   "status-change": statusChange,
+  // v18.16.0: `movedSlot` / `movedReplyWords`, the edit's "did the guest's time move".
+  "whatsapp": waLib,
 };
 
 const read = (rel) => stripComments(readFileSync(new URL("../" + rel, import.meta.url), "utf8")).join("\n");
@@ -97,6 +100,8 @@ const importScope = (src, lifted) => scopeOf(LIB, src, lifted, {});
 const APP_SAVE_NAMES = [
   "withClearedSeats", "undoDelta",
   "planEdit", "planNew",
+  // v18.16.0: the edit's landing drafts a moved WhatsApp guest's new time.
+  "draftMoved",
   "doSaveEdit", "doSaveNew", "doSave", "openEdit",
   "planRefused", "save",
 ];
@@ -282,7 +287,11 @@ function appEnv(opts) {
     setErrorField: rec("setErrorField"),
     saveBookings: saver(h, opts.mirror || bookings, opts.dispatchOk !== false),
     flash: rec("flash"),
-    armUndo: (snaps, ...rest) => { h.calls.push(["armUndo", (snaps || []).map((x) => x.id)].concat(rest)); },
+    flashDragMsg: rec("flashDragMsg"),
+    // v18.16.0: `armUndo` hands back its pill, and `noteUndo` says whether that
+    // pill was still up to take a clause (`opts.pillGone`: it was not).
+    armUndo: (snaps, ...rest) => { h.calls.push(["armUndo", (snaps || []).map((x) => x.id)].concat(rest)); return "pill"; },
+    noteUndo: (pill, clause) => { h.calls.push(["noteUndo", pill, clause]); return !!pill && !opts.pillGone; },
     setShowForm: rec("setShowForm"),
     setViewDate: rec("setViewDate"),
     setSeatNote: rec("setSeatNote"),
@@ -292,6 +301,9 @@ function appEnv(opts) {
     releaseWaitlistEntry: rec("releaseWaitlistEntry"),
     wa: {
       completeModifyApply: rec("wa.completeModifyApply"),
+      // v18.16.0: the hook's answer is the scenario's (`opts.movedReply`:
+      // "drafted" · "closed" · absent, which is null, nothing linked).
+      draftMovedReply: (...args) => { h.calls.push(["wa.draftMovedReply"].concat(args)); return opts.movedReply || null; },
       takeDraftSource: () => opts.draftSource || null,
       completeDraftAccept: rec("wa.completeDraftAccept"),
       linkBookingByPhone: rec("wa.linkBookingByPhone"),
@@ -675,12 +687,13 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>", {"report":["replayRefusal"]})",
+          "saveBookings("<fn>", {"report":["onLanded","replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
+          "wa.draftMovedReply("b1", {"date":"2026-10-14","time":"19:00"})",
         ],
         "guard": "dispatched",
         "writes": [
@@ -705,12 +718,13 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>", {"report":["replayRefusal"]})",
+          "saveBookings("<fn>", {"report":["onLanded","replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-15")",
+          "wa.draftMovedReply("b1", {"date":"2026-10-15","time":"20:00"})",
         ],
         "guard": "dispatched",
         "writes": [
@@ -726,6 +740,42 @@ describe("Save — an edit on a day the optimiser owns", () => {
         ],
       }
     `);
+  });
+  // v18.16.0: what the landing does with the hook's answer. The date change
+  // above is the null case (nothing linked): the hook is asked and nothing is said.
+  it("a moved WhatsApp guest: the landing says the reply is drafted, on the edit's own Undo pill", () => {
+    const b1 = bk("b1", { tables: ["1"] });
+    const out = runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { date: NEXT }), movedReply: "drafted" });
+    expect(out.calls.slice(-2)).toEqual([
+      'wa.draftMovedReply("b1", {"date":"2026-10-15","time":"20:00"})',
+      'noteUndo("pill", "reply drafted")',
+    ]);
+  });
+  it("…and a closed window the same way, having drafted nothing", () => {
+    const b1 = bk("b1", { tables: ["1"] });
+    const out = runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { date: NEXT }), movedReply: "closed" });
+    expect(out.calls[out.calls.length - 1]).toBe('noteUndo("pill", "guest\'s WhatsApp window is closed")');
+  });
+  it("a landing that finds the pill gone says it in the toast slot instead", () => {
+    const b1 = bk("b1", { tables: ["1"] });
+    const drafted = runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { date: NEXT }), movedReply: "drafted", pillGone: true });
+    expect(drafted.calls.slice(-2)).toEqual([
+      'noteUndo("pill", "reply drafted")',
+      'flashDragMsg("The new time is drafted in the guest\'s WhatsApp chat.", true)',
+    ]);
+    const closed = runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { date: NEXT }), movedReply: "closed", pillGone: true });
+    expect(closed.calls[closed.calls.length - 1]).toBe('flashDragMsg("The guest\'s WhatsApp window is closed, so no reply was drafted.", false)');
+  });
+  it("a held save drafts nothing: the hook is not asked until the write lands", () => {
+    const b1 = bk("b1", { tables: ["1"] });
+    const out = runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { date: NEXT }), movedReply: "drafted", dispatchOk: false });
+    expect(out.calls.join("\n")).not.toMatch(/draftMovedReply|flashDragMsg|noteUndo/);
+  });
+  it("an edit that leaves the date and the time alone carries no landing at all", () => {
+    const b1 = bk("b1", { tables: ["1"] });
+    const out = runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { size: 3 }), movedReply: "drafted" });
+    expect(out.calls).toContain('saveBookings("<fn>", {"report":["replayRefusal"]})');
+    expect(out.calls.join("\n")).not.toMatch(/draftMovedReply|flashDragMsg/);
   });
   it("a preference change", () => {
     const b1 = bk("b1", { tables: ["1"] });
@@ -1082,7 +1132,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>", {"report":["replayRefusal"]})",
+          "saveBookings("<fn>", {"report":["onLanded","replayRefusal"]})",
           "wa.completeModifyApply("b1", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
@@ -1230,12 +1280,13 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>", {"report":["replayRefusal"]})",
+          "saveBookings("<fn>", {"report":["onLanded","replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
+          "wa.draftMovedReply("b1", {"date":"2026-10-07","time":"21:00"})",
         ],
         "guard": "dispatched",
         "writes": [
@@ -1261,12 +1312,13 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>", {"report":["replayRefusal"]})",
+          "saveBookings("<fn>", {"report":["onLanded","replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1","b2"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
+          "wa.draftMovedReply("b1", {"date":"2026-10-07","time":"21:00"})",
         ],
         "guard": "dispatched",
         "writes": [
@@ -1713,12 +1765,13 @@ describe("Save — seating, completing and walking back (today)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>", {"report":["replayRefusal"]})",
+          "saveBookings("<fn>", {"report":["onLanded","replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
+          "wa.draftMovedReply("b1", {"date":"2026-10-07","time":"20:00"})",
         ],
         "guard": "dispatched",
         "writes": [
@@ -1780,12 +1833,13 @@ describe("Save — tables somebody chose by hand", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>", {"report":["replayRefusal"]})",
+          "saveBookings("<fn>", {"report":["onLanded","replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1","b2"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
+          "wa.draftMovedReply("b1", {"date":"2026-10-14","time":"20:30"})",
         ],
         "guard": "dispatched",
         "writes": [
@@ -1839,12 +1893,13 @@ describe("Save — tables somebody chose by hand", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>", {"report":["replayRefusal"]})",
+          "saveBookings("<fn>", {"report":["onLanded","replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1","b2"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
+          "wa.draftMovedReply("b1", {"date":"2026-10-07","time":"20:30"})",
         ],
         "guard": "dispatched",
         "writes": [

@@ -416,6 +416,99 @@ export function availabilityReply(lang, o) {
   return s;
 }
 
+// ── v18.16.0: a moved booking's new time, drafted for its guest ──────────────
+// When staff move the time of a booking that came through WhatsApp (a drag on
+// the Timeline, or the form), the guest has to be told, and until now that was
+// somebody remembering to open the chat. The reply is written here and put in
+// that chat's reply box: a DRAFT on this device (lib/wa-reply-drafts.js), read
+// and sent by a person, never sent by the app and never stored in the database.
+// The same register and the same language rule as `availabilityReply` above.
+export function movedReply(lang, o) {
+  const es = (lang || "es") === "es";
+  const day = spokenDay(o.date, es ? "es" : "en");
+  return es
+    ? "Hemos cambiado su reserva: ahora es el " + day + " a las " + o.time + ". Si no le va bien, díganoslo, por favor."
+    : "We've moved your booking: it is now on " + day + " at " + o.time + ". If that doesn't suit you, please let us know.";
+}
+
+// Did this write change WHEN the guest should come? → null | {date, time}.
+// Only for a booking that is still to happen (confirmed or pending): a seated
+// party's time is being corrected, not moved, and a finished booking's is a
+// record. `before` and `after` are the booking as it stood and as it was written.
+//
+// The time compared is the one the GUEST was given: `scheduledTime`, where the
+// booking has one. A seated party's `time` is when it sat down, so walking a
+// booking back from seated puts its booked start back in `time`, and comparing
+// `time` alone would tell that guest their booking had moved to the time it
+// always had (tests/save-path.test.js's un-seat cases found it).
+function givenTime(b) { return isUsableTime(b.scheduledTime) ? b.scheduledTime : b.time; }
+export function movedSlot(before, after) {
+  if (!before || !after) return null;
+  if (after.status !== "confirmed" && after.status !== "pending") return null;
+  if (before.date === after.date && givenTime(before) === after.time) return null;
+  return { date: after.date, time: after.time };
+}
+
+// What to do about it → null | "closed" | {phoneKey, text, to, prev}. The hook
+// (`draftMovedReply`) holds the refs and the store; the answers are here.
+//   null      nothing to draft: the module is off (asked FIRST, so an off module
+//             does nothing at all), no conversation is linked to this booking,
+//             the guest is muted, the booking no longer says this time (an Undo
+//             landed before the write did), or the reply box already holds text
+//             that is somebody's own
+//   "closed"  the 24-hour window has expired, so a free-text reply cannot be
+//             sent: the caller says so rather than drafting what cannot go out
+//   {…}       put `text` in `phoneKey`'s box, and remember the whole answer
+// `mine` is what THIS session last drafted for the booking (the answer it was
+// given then): text still in the box unchanged is ours, and a second move
+// replaces it rather than leaving a reply that names the time before last.
+// `to` is the time the text names and `prev` the draft of ours it replaced
+// (null when the box was empty), which is what Undo needs: `movedReplyUndo`.
+export function movedReplyPlan(o) {
+  if (!o || o.on !== true || !o.to) return null;
+  const conv = (o.conversations || []).find(function (c) { return c && c.acceptedBookingId === o.bookingId; });
+  if (!conv || conv.muted) return null;
+  const b = o.booking;
+  if (!b || b.date !== o.to.date || b.time !== o.to.time) return null;
+  const held = o.textOf(conv.phoneKey);
+  if (held && !(o.mine && o.mine.phoneKey === conv.phoneKey && o.mine.text === held)) return null;
+  if (windowState(conv.windowExpiresAt, o.now).expired) return "closed";
+  const prev = held ? { phoneKey: o.mine.phoneKey, text: o.mine.text, to: o.mine.to, prev: null } : null;
+  return { phoneKey: conv.phoneKey, text: movedReply(conv.language, o.to), to: { date: o.to.date, time: o.to.time }, prev: prev };
+}
+
+// What an Undo does to that draft → null (nothing changes) | {mine, text?}:
+// what to remember now, and what to put in the box (absent = leave the box).
+// `restored` is the booking as the Undo put it back.
+//   The Undo pill is one slot for every action on a booking, so the Undo that
+// arrives here may be of a note, a status or a table drop made AFTER the move.
+// Measured on DEV, 2026-11-10: a note edited and undone after a move emptied
+// the reply box while the booking stayed moved, so the guest would never have
+// been told. So the question is whether the booking still says the time the
+// draft names. If it does, the move stands and so does its draft.
+//   If it does not, the draft goes, but only while it is still the text put
+// there (one somebody has edited is theirs now), and the draft of ours it had
+// replaced comes back when the booking is back at THAT time: 19:00 → 19:30 →
+// 20:00 and one Undo leaves the party at 19:30, which the guest has still not
+// heard about.
+export function movedReplyUndo(mine, held, restored) {
+  if (!mine || !mine.to || !restored) return null;
+  const names = function (d) { return !!(d && d.to) && d.to.date === restored.date && d.to.time === givenTime(restored); };
+  if (names(mine)) return null;
+  if (held !== mine.text) return { mine: null };
+  const prev = names(mine.prev) ? mine.prev : null;
+  return { mine: prev, text: prev ? prev.text : "" };
+}
+
+// How the app says which of the two happened: a clause for the Undo pill (the
+// time drag's, and the form edit's own) and a sentence for the toast slot, for
+// a landing that finds its pill gone.
+export function movedReplyWords(result) {
+  if (result === "drafted") return { pill: "reply drafted", toast: "The new time is drafted in the guest's WhatsApp chat.", good: true };
+  if (result === "closed") return { pill: "guest's WhatsApp window is closed", toast: "The guest's WhatsApp window is closed, so no reply was drafted.", good: false };
+  return null;
+}
+
 // Phone-identity primitives — complementarity contract (applied at the v16.0.0
 // prod sync): `src/lib/customers.js` is now the ONE home of normalizePhone /
 // formatPhone / matchCustomerByPhone (ported verbatim from here; its

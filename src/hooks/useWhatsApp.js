@@ -41,13 +41,13 @@ import { EMPTY_FORM } from "../lib/constants";
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
-import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch, contactDeletePatch, replyUnarchives, modifyChanges } from "../lib/whatsapp";
+import { normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet, conversationDeletePatch, contactDeletePatch, replyUnarchives, modifyChanges, movedReplyPlan, movedReplyUndo } from "../lib/whatsapp";
 import { sendsViaServer, sendViaBackend, sendMediaViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
 import { WA_SANDBOX } from "../lib/waSandbox";
 import { draftPrefill } from "../lib/draft-check";
-import { keepReplyDraftsFor } from "../lib/wa-reply-drafts";
+import { keepReplyDraftsFor, draftTextOf, setReplyDraft } from "../lib/wa-reply-drafts";
 
 // A key `ref()` can take as ONE path segment. A conversation's key comes out of
 // a row's body (see conversationKeysRef), and `ref()` throws on . # $ [ ] and
@@ -59,6 +59,9 @@ function isPathKey(k) {
 export function useWhatsApp({
   // v18.0.0 phase 5: `settings/admin.modules.whatsapp.enabled`, via App.
   enabled,
+  // v18.16.0: the signed-in account, whose reply drafts this device keeps
+  // (`draftMovedReply` writes one; the inbox reads them as `draftOwner`).
+  uid,
   bookings,
   setWriteWarning,
   // v18.4.9: whether the booking form is open (see the draftSourceRef effect).
@@ -587,6 +590,46 @@ export function useWhatsApp({
     if (intentBannerVisible(conv)) handleMarkIntentHandled(conv.phoneKey); // same gate the banner renders with
   }
 
+  // ── v18.16.0: a moved booking's new time, drafted in its guest's chat ───────
+  // Called where a re-time is KNOWN to have landed (App's `saveMove` for a time
+  // drag, `doSaveEdit`'s `onLanded` for the form), never at a dispatch: a held or
+  // refused write must not leave "we've moved your booking" in a reply box. What
+  // to do is `movedReplyPlan` (lib/whatsapp.js); this holds the refs and the store.
+  // → "drafted" | "closed" | null
+  //
+  // `bookingsRef`: the callback runs after the server answers, from a closure of
+  // the render that dispatched the write, whose `bookings` is the list BEFORE it.
+  // The plan asks what the booking says NOW, so an Undo that lands first drafts
+  // nothing.
+  const bookingsRef = useRef(bookings);
+  useEffect(function () { bookingsRef.current = bookings; }, [bookings]);
+  // bookingId → the plan's answer ({phoneKey, text, to, prev}): what this session
+  // put in a box, so Undo can take back exactly that and a second move can
+  // replace it. A ref: nothing renders it.
+  const movedDraftsRef = useRef({});
+  function draftMovedReply(bookingId, to) {
+    const plan = movedReplyPlan({
+      on: on, conversations: conversationsRef.current, bookingId: bookingId, to: to,
+      booking: bookingsRef.current.find(function (b) { return b.id === bookingId; }),
+      textOf: function (key) { return draftTextOf(uid, key); },
+      mine: movedDraftsRef.current[bookingId], now: Date.now(),
+    });
+    if (!plan || plan === "closed") return plan;
+    setReplyDraft(uid, plan.phoneKey, plan.text);
+    movedDraftsRef.current[bookingId] = plan;
+    return "drafted";
+  }
+  // An Undo on that booking, with the booking as it was put back. Whether the
+  // draft goes, stays or gives way to the one before it is `movedReplyUndo`
+  // (lib/whatsapp.js): an Undo of something else leaves the move's draft alone.
+  function undoMovedReply(bookingId, restored) {
+    const mine = movedDraftsRef.current[bookingId];
+    const back = movedReplyUndo(mine, mine ? draftTextOf(uid, mine.phoneKey) : "", restored);
+    if (!back) return;
+    if (back.mine) movedDraftsRef.current[bookingId] = back.mine; else delete movedDraftsRef.current[bookingId];
+    if (typeof back.text === "string") setReplyDraft(uid, mine.phoneKey, back.text);
+  }
+
   // ── Archive / unarchive / delete ────────────────────────────────────────────
   function handleArchive(phoneKey) {
     const conv = conversations.find((c) => c.phoneKey === phoneKey);
@@ -898,6 +941,8 @@ export function useWhatsApp({
     sendMedia: sendsViaServer() ? handleSendMedia : null,
     handleAcceptDraft, handleDismissDraft, handleMarkRead,
     handleDismissAcceptedBadge, handleMarkIntentHandled, autoHandleCancelIntent,
+    // v18.16.0: a moved booking's new time, drafted in its guest's chat
+    draftMovedReply, undoMovedReply,
     recheckConversation,
     handleArchive, doArchive, handleUnarchive, handleMute,
     handleDeleteConversation, doDeleteConversation,
