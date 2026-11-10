@@ -40937,4 +40937,14 @@ He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the 
   changes in place on each − / + press; " · Whole day" opens and closes sideways as the word did. The level sits in a 4ch box in tabular
   digits, the widest level's ("2.5x"), so a press that turns "1.5x" into "2x" does not pull the + from under the thumb (correction 26's
   reason for Follow's fixed width). The name leads with the same words, "2x · Whole day (reset zoom)" (`tests/a11y.test.js`).
+- **On a phone, Archived is the archive mark on the WhatsApp button.** The live checks at 375px measured the search box at 96px on the Inbox
+  list and 26px with Archived open, because "WHATSAPP · ARCHIVED" took the mark from 109 to 180px. Below two panes it now shows the archive
+  icon after "WHATSAPP" (Patryk's choice over "ARCHIVED ▾" and over a search icon), still revealed sideways, with " · Archived" kept in the
+  button's name as hidden text. Tablet and desktop keep the words.
+- **Checked live on DEV** (Browser pane, frames driven where a reading rode them): the WhatsApp menu enters and leaves; the zoom reset reads
+  "2x · Whole day" and its name leads with the same words, holds 119.4px and keeps + at x=1215 from 2x to 4x and back, and eases 119 → 51px to
+  "1x" and back; an archived chat linked to Marcos's Sat 14.11 booking came back to the Inbox when the form moved it 17:30 → 18:00 (pill "…
+  reply drafted, chat back in Inbox", the row "Draft: Hemos cambiado su reserva …"), went back to Archived when the time was moved back by
+  hand, and went back again on Undo of a second move. The time drag itself cannot be run in the pane (a drag inside one frame never lifts the
+  block), so it rests on `tests/drop-plan.test.js`.
 

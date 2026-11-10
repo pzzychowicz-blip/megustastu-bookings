@@ -553,8 +553,14 @@ export function InboxPanel({
               in one frame, the label grew 109 → 180px and the search box beside it
               jumped 71px (measured on DEV). `pre`, so the leading space is kept;
               Reveal unmounts it once closed, so the name is "WhatsApp" again. */}
+          {/* Below two panes the words leave a phone's search box 26px (measured at
+              375px: the mark 109 → 180px), so there it is the archive mark, and the
+              words stay in the name (Patryk, v18.16.0 follow-up). */}
           <Reveal horizontal show={tab === "archived"}>
-            {tab === "archived" ? <span style={{ whiteSpace: "pre" }}> · Archived</span> : null}
+            {tab === "archived" ? (twoPane
+              ? <span style={{ whiteSpace: "pre" }}> · Archived</span>
+              : <span style={{ display: "inline-flex", alignItems: "center", marginLeft: SP.tight }}><span aria-hidden="true" style={{ display: "flex" }}><ArchiveIcon size={IC.inline} /></span><span className="mgt-sr-only"> · Archived</span></span>
+            ) : null}
           </Reveal>
           {/* v18.14.0 (correction 27)'s rule, carried from the tab: the count opens
               sideways, so the controls beside the mark slide rather than jump. */}
