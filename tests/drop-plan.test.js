@@ -10,11 +10,11 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { planDrop, dropPreview, dropCheck } from "../src/lib/drop-plan.js";
+import { planDrop, dropPreview, dropCheck, planRetime, retimePreview, retimeCheck } from "../src/lib/drop-plan.js";
 import { releaseSwapped } from "../src/lib/booking-save.js";
-import { movedNames } from "../src/lib/delete-undo.js";
-import { ALL_TABLES } from "../src/lib/constants.js";
-import { comboCapBest } from "../src/lib/booking-logic.js";
+import { movedNames, planUndo, landedSentence, retimeLabel, retimeSentence } from "../src/lib/delete-undo.js";
+import { ALL_TABLES, KITCHEN_TABLE_LIMIT, hoursFor } from "../src/lib/constants.js";
+import { comboCapBest, undoSnapshots, lastStartMins, toTime, toMins, verifyClean } from "../src/lib/booking-logic.js";
 import { todayStr, addDays } from "../src/lib/day.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { appCode } from "./app-source.js";
@@ -377,8 +377,11 @@ describe("BookingApp's saveMove", () => {
 describe("TimelineView asks once per row", () => {
   const View = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "TimelineView.jsx"), "utf8")).join("\n");
 
-  it("derives the hint from the row and the booking alone, not from a pointer frame", () => {
-    expect(View).toMatch(/const dropHint = useMemo\(\(\) => \([\s\S]*?onDropPreview\(dragOver, dragHover\)[\s\S]*?\), \[dragHover, dragOver, onDropPreview\]\);/);
+  // v18.16.0: a time drag adds the time it has reached, a third plain value, and
+  // asks the re-time's question for it. Still nothing from a pointer frame.
+  it("derives the hint from the row, the booking and the time alone, not from a pointer frame", () => {
+    expect(View).toMatch(/const dropHint = useMemo\(\(\) => \{[\s\S]*?onRetimePreview\(dragOver, dragTime\)[\s\S]*?onDropPreview\(dragOver, dragHover\)[\s\S]*?\}, \[dragHover, dragOver, dragTime, onDropPreview, onRetimePreview\]\);/);
+    expect(View).toContain("if (dragTime != null) return onRetimePreview ? onRetimePreview(dragOver, dragTime) : null;");
   });
   it("keeps hover in two plain values, because a block reports every frame", () => {
     expect(View).toContain("setDragHover(table);");
@@ -396,12 +399,17 @@ describe("TimelineView asks once per row", () => {
   // v18.14.0 (correction 17, Patryk): a drag that stalls is worse than a row that is
   // wrong for a moment, so these are the conditions on the one heavy call in a drag.
   it("asks the real plan only for a guess, once per row, and only of a still finger", () => {
-    expect(View).toContain('const unsureRow = dropHint && dropHint.unsure ? dragOver + "|" + dragHover : null;');
-    expect(View).toContain("if (!unsureRow || dropChecks[unsureRow] || !onDropCheck) return undefined;");
+    // v18.16.0: a time drag's answer is per TIME on the one row, and its check is
+    // the re-time's; one call site still serves both.
+    expect(View).toContain('const unsureRow = dropHint && dropHint.unsure ? dragOver + "|" + dragHover + (dragTime != null ? "|" + dragTime : "") : null;');
+    expect(View).toContain("const ask = dragTime != null ? onRetimeCheck : onDropCheck;");
+    expect(View).toContain("if (!unsureRow || dropChecks[unsureRow] || !ask) return undefined;");
+    expect(View).toContain("const sure = ask(dragOver, dragTime != null ? dragTime : dragHover);");
     expect(View, "still, not merely on the row").toMatch(/const left = dropRest\.current\.at \+ DROP_REST_MS - performance\.now\(\);\s+if \(left > 0\) \{ timer = setTimeout\(check, left\); return; \}/);
     expect(View, "a finger leaving the row cancels it").toContain("return () => clearTimeout(timer);");
     expect(View, "the end of a drag forgets every answer").toContain("if (table == null) { setDropChecks(NO_CHECKS); return; }");
-    expect((View.match(/onDropCheck\(/g) || []).length, "one caller").toBe(1);
+    expect((View.match(/\bask\(/g) || []).length, "one caller").toBe(1);
+    expect((View.match(/onDropCheck\(|onRetimeCheck\(/g) || []).length, "and nobody goes round it").toBe(0);
   });
   it("a check that agrees changes nothing on the row, and one that does not fades in", () => {
     expect(View).toContain("const said = sure.text === dropHint.text ? dropHint : { ...sure, corrects: true };");
@@ -446,5 +454,229 @@ describe("planDrop: what a displaced party is left with", () => {
     // and what the optimiser was handed for `b` is the picker's release
     expect(releaseSwapped(list[1], [{ id: "b", tables: ["4"] }])).toStrictEqual(
       Object.assign({}, list[1], { tables: ["5"], _locked: false, _manual: false }));
+  });
+});
+
+// ── v18.16.0: the same drag, sideways ────────────────────────────────────────
+// A block dragged along its row takes a new start and keeps its tables. One per
+// outcome, each asserting what is WRITTEN and what is said, then the contract
+// over generated days: what the row says is what the release does.
+describe("planRetime: a block dragged to another time", () => {
+  const dur = (id, time, size, tables, extra) => bk(id, time, size, tables, Object.assign({ duration: 90 }, extra || {}));
+  const ctxOf = (list, id, time, more) => Object.assign({
+    id, targetId: null, time, liveBookings: list, bookings: list, viewDate: D, nowMins: 600, today: TODAY,
+    tableBlocks: [], autoOptimizer: true, user: "u@x", stamp,
+  }, more || {});
+  const retime = (list, id, time, more) => planRetime(ctxOf(list, id, time, more));
+  // Today with the Optimiser off: nothing re-seats a displaced party.
+  const OFF = { viewDate: TODAY, autoOptimizer: false };
+  const today = (list) => list.map((b) => Object.assign({}, b, { date: TODAY }));
+
+  it("answers null for a release on the minute it began, and for a booking that does not move", () => {
+    const list = [dur("a", "19:00", 2, ["3"]), dur("gone", "19:00", 2, ["4"], { status: "cancelled" }),
+      dur("done", "19:00", 2, ["5"], { status: "completed" }), dur("far", "19:00", 2, ["8"], { date: addDays(D, 1) })];
+    expect(retime(list, "a", "19:00")).toBeNull();
+    expect(retime(list, "nobody", "19:30")).toBeNull();
+    expect(retime(list, "gone", "19:30")).toBeNull();
+    expect(retime(list, "done", "19:30")).toBeNull();
+    expect(retime(list, "far", "19:30")).toBeNull();
+  });
+
+  it("a free slot: the time and the scheduled time move, the tables and the length stay, and it is locked", () => {
+    const list = [dur("a", "19:00", 2, ["3", "4"], { scheduledTime: "19:00", notes: "window" }), dur("b", "19:00", 2, ["5"])];
+    const plan = retime(list, "a", "18:30");
+    expect(plan).toMatchObject({ retime: true, lead: "A · 19:00 → 18:30", done: "A · 19:00 → 18:30" });
+    expect(plan.moved).toBeUndefined();
+    const out = plan.transform(list);
+    expect(byId(out, "a")).toMatchObject({ time: "18:30", scheduledTime: "18:30", tables: ["3", "4"], duration: 90,
+      notes: "window", _manual: true, _locked: true, _conflict: false });
+    expect(byId(out, "a").history).toEqual([{ action: "time 19:00→18:30 (drag)", by: "u@x" }]);
+    expect(byId(out, "b")).toBe(list[1]);          // nobody else is touched
+  });
+
+  it("a pending booking moves like a confirmed one, and stays pending", () => {
+    const list = [dur("a", "19:00", 2, ["3"], { status: "pending" })];
+    expect(byId(retime(list, "a", "20:00").transform(list), "a")).toMatchObject({ time: "20:00", status: "pending" });
+  });
+
+  it("a seated party's time is when it sat down: refused, by name", () => {
+    const list = [dur("a", "19:00", 2, ["3"], { status: "seated", name: "Marcos Vidal" })];
+    expect(retime(list, "a", "19:30")).toEqual({ refuse: "Marcos is seated — the time is when the party sat down." });
+  });
+
+  it("a booking with no table has no row to keep", () => {
+    expect(retime([dur("a", "19:00", 2, [])], "a", "19:30")).toEqual({ refuse: "Give A a table first — then the time can be dragged." });
+  });
+
+  it("the new start answers to the form's hours, in the form's words", () => {
+    const list = [dur("a", "19:00", 2, ["3"])];
+    const h = hoursFor(D);
+    expect(retime(list, "a", toTime(lastStartMins(h.close)))).toHaveProperty("transform");
+    expect(retime(list, "a", toTime(lastStartMins(h.close) + 15)).refuse).toMatch(/^The last start on \w+s is /);
+    expect(retime(list, "a", toTime(h.open * 60 - 15)).refuse).toMatch(/^Bookings on this day are accepted between /);
+  });
+
+  it("a block over any of its tables in the new window refuses, and names the table", () => {
+    const list = [dur("a", "19:00", 2, ["3", "4"])];
+    const blocks = [{ id: "x", tableId: "4", date: D, from: "17:00", to: "18:30" }];
+    expect(retime(list, "a", "18:00", { tableBlocks: blocks })).toEqual({ refuse: "Table 4 is blocked then." });
+    expect(retime(list, "a", "18:30", { tableBlocks: blocks })).toHaveProperty("transform");   // starts as the block ends
+  });
+
+  it("somebody in the way is moved, as a table drop moves them, and the trial is the write", () => {
+    const list = [dur("a", "19:00", 2, ["3"]), dur("b", "20:30", 2, ["3"], { _manual: true, _locked: true })];
+    const plan = retime(list, "a", "20:00");
+    expect(plan.refuse).toBeUndefined();
+    expect(plan.moved.map((b) => b.id)).toEqual(["b"]);
+    const out = plan.transform(list);
+    expect(out).toEqual(plan.post);
+    expect(byId(out, "a")).toMatchObject({ time: "20:00", tables: ["3"], _locked: true });
+    expect(byId(out, "b")).toMatchObject({ time: "20:30", _locked: false, _manual: false });
+    expect(byId(out, "b").tables).not.toContain("3");
+    expect(byId(out, "b").tables.length).toBeGreaterThan(0);
+    expect(verifyClean(out, D, [])).toBe(true);
+  });
+
+  it("never swaps: two parties trading times is not what a sideways drag asks for", () => {
+    // On a table drop this pair is a swap. Here `b` keeps its time and gets another table.
+    const list = [dur("a", "19:00", 2, ["3"]), dur("b", "20:30", 2, ["3"])];
+    const plan = retime(list, "a", "20:30");
+    expect(byId(plan.transform(list), "b").time).toBe("20:30");
+    expect(retimePreview(ctxOf(list, "a", "20:30")).text).not.toMatch(/^Swaps/);
+  });
+
+  it("a seated party in the way refuses, by name, and the row says so in red", () => {
+    const list = [dur("a", "19:00", 2, ["3"]), dur("b", "20:30", 2, ["3"], { status: "seated", name: "Ana Ruiz" })];
+    expect(retime(list, "a", "20:00")).toEqual({ refuse: "Ana is seated on 3 then — can't move them." });
+    expect(retimePreview(ctxOf(list, "a", "20:00"))).toEqual({ tone: "danger", text: "Ana is seated here" });
+  });
+
+  it("with the Optimiser off nothing re-seats the other party, so it refuses and names who", () => {
+    const list = today([dur("a", "19:00", 2, ["3"]), dur("b", "20:30", 2, ["3"], { name: "Ana Ruiz" })]);
+    expect(retime(list, "a", "20:00", OFF)).toEqual({ refuse: "Table 3 is taken then by Ana — nowhere to move them." });
+    const two = today([dur("a", "19:00", 4, ["3", "4"]), dur("b", "20:30", 2, ["4"], { name: "Ana Ruiz" })]);
+    expect(retime(two, "a", "20:00", OFF).refuse).toBe("Tables 3+4 are taken then by Ana — nowhere to move them.");
+    // and the row is exact there: red before the release
+    expect(retimePreview(ctxOf(list, "a", "20:00", OFF))).toEqual({ tone: "danger", text: "Can't move Ana" });
+  });
+
+  it("the row: nothing on its own minute, plain when free, a guess with the Optimiser on, then the real plan", () => {
+    const list = [dur("a", "19:00", 2, ["3"]), dur("b", "20:30", 2, ["3"], { name: "Ana Ruiz" })];
+    expect(retimePreview(ctxOf(list, "a", "19:00"))).toBeNull();
+    expect(retimePreview(ctxOf(list, "a", "18:30"))).toEqual({ tone: "free" });
+    expect(retimePreview(ctxOf(list, "a", "20:00"))).toEqual({ tone: "warn", text: "Moves Ana", unsure: true });
+    expect(retimeCheck(ctxOf(list, "a", "20:00"))).toEqual({ tone: "warn", text: "Moves Ana" });
+  });
+
+  it("a kitchen at its limit is said in amber and refuses nothing (Patryk)", () => {
+    const list = [dur("a", "19:00", 2, ["3"])];
+    for (let i = 0; i < KITCHEN_TABLE_LIMIT - 1; i++) list.push(dur("k" + i, "20:00", 2, [String(5 + i)]));
+    expect(retimePreview(ctxOf(list, "a", "20:00"))).toEqual({ tone: "warn", text: "Kitchen busy at 20:00" });
+    expect(retime(list, "a", "20:00")).toHaveProperty("transform");
+    // one fewer start and it has nothing to say
+    expect(retimePreview(ctxOf(list.slice(0, -1), "a", "20:00"))).toEqual({ tone: "free" });
+    // it joins an amber answer and never a red one
+    const busy = list.concat([dur("b", "20:30", 2, ["3"], { name: "Ana Ruiz" })]);
+    // (the Optimiser re-seats the day, so the names after Ana are its own)
+    expect(retimeCheck(ctxOf(busy, "a", "20:00")).text).toMatch(/^Moves Ana\b.* · Kitchen busy at 20:00$/);
+    const red = list.concat([dur("b", "20:30", 2, ["3"], { status: "seated", name: "Ana Ruiz" })]);
+    expect(retimePreview(ctxOf(red, "a", "20:00"))).toEqual({ tone: "danger", text: "Ana is seated here" });
+  });
+
+  it("Undo puts the time back, and every party the write moved", () => {
+    const list = [dur("a", "19:00", 2, ["3"], { scheduledTime: "19:00" }), dur("b", "20:30", 2, ["3"], { _manual: true, _locked: true }), dur("c", "13:00", 2, ["9"])];
+    const plan = retime(list, "a", "20:00");
+    const post = plan.transform(list);
+    const snaps = undoSnapshots(list, post);
+    expect(snaps.map((b) => b.id)).toContain("a");
+    expect(snaps.map((b) => b.id)).toContain("b");
+    const back = planUndo({ info: { snapshots: snaps, primaryId: "a", kind: "move" }, getUser: () => "u@x", nowMins: 600, stamp }).transform(post);
+    expect(byId(back, "a")).toMatchObject({ time: "19:00", scheduledTime: "19:00", tables: ["3"] });
+    expect(byId(back, "a").history).toEqual([{ action: "move undone", by: "u@x" }]);
+    expect(byId(back, "b")).toEqual(list[1]);
+    expect(byId(back, "c")).toEqual(byId(list, "c"));
+  });
+
+  it("the pill is compact: the name, the two times, then who else moved", () => {
+    expect(retimeLabel("Marcos", "19:00", "19:30")).toBe("Marcos · 19:00 → 19:30");
+    expect(retimeSentence("Marcos · 19:00 → 19:30", [])).toBe("Marcos · 19:00 → 19:30");
+    expect(retimeSentence("L", ["Ana"])).toBe("L · moved Ana");
+    expect(retimeSentence("L", ["Ana", "Luis"])).toBe("L · moved Ana, Luis");
+    expect(retimeSentence("L", ["Ana", "Luis", "Eva", "Joan"])).toBe("L · moved Ana and 3 others");
+    // finished at the landing from what really changed tables, like a drop's
+    const list = [dur("a", "19:00", 2, ["3"]), dur("b", "20:30", 2, ["3"], { name: "Ana Ruiz" })];
+    const plan = retime(list, "a", "20:00");
+    const post = plan.transform(list);
+    const said = landedSentence(plan, plan.done, undoSnapshots(list, post), post, "a");
+    expect(said.startsWith("A · 19:00 → 20:00 · moved Ana Ruiz")).toBe(true);
+    const free = retime(list, "a", "18:30");
+    const freePost = free.transform(list);
+    expect(landedSentence(free, free.done, undoSnapshots(list, freePost), freePost, "a")).toBe("A · 19:00 → 18:30");
+  });
+
+  // The contract, on generated days. The seed is fixed, so a failure reproduces.
+  it("what the row says is what the release does, at every quarter of generated days", () => {
+    const ids = ALL_TABLES.map((t) => t.id);
+    let x = 104729;
+    const r = () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; };
+    const pick = (a) => a[Math.floor(r() * a.length)];
+    const hits = { same: 0, free: 0, moves: 0, red: 0, checked: 0, kitchen: 0, landed: 0 };
+    for (let day = 0; day < 120; day++) {
+      const off = day % 2 === 1;
+      const more = off ? OFF : { autoOptimizer: true };
+      const list = Array.from({ length: 2 + Math.floor(r() * 12) }, (_, i) => Object.assign(bk("b" + i,
+        String(13 + Math.floor(r() * 8)).padStart(2, "0") + ":" + pick(["00", "15", "30", "45"]),
+        1 + Math.floor(r() * 6), r() < 0.1 ? [] : [pick(ids)],
+        { name: "Name" + i + " Sur", status: pick(["confirmed", "confirmed", "confirmed", "pending", "seated", "completed"]), duration: 90 + Math.floor(r() * 4) * 15 }), off ? { date: TODAY } : null));
+      for (let d = 0; d < 6; d++) {
+        const id = pick(list).id;
+        const time = String(12 + Math.floor(r() * 11)).padStart(2, "0") + ":" + pick(["00", "15", "30", "45"]);
+        const c = ctxOf(list, id, time, more);
+        const plan = planRetime(c), hint = retimePreview(c);
+        expect(hint === null, id + " " + time).toBe(plan === null);
+        if (!hint) { hits.same++; continue; }
+        const sure = retimeCheck(c);
+        expect(sure.tone === "danger", "the check and the release").toBe(!!plan.refuse);
+        expect(sure).not.toHaveProperty("unsure");
+        if (/Kitchen busy/.test(sure.text || "")) { hits.kitchen++; expect(sure.tone).toBe("warn"); }
+        if (hint.unsure) hits.checked++; else expect(sure).toEqual(hint);
+        if (hint.tone === "danger") { hits.red++; expect(plan.refuse).toBeTruthy(); }
+        if (hint.tone === "free") { hits.free++; expect(plan.moved).toBeUndefined(); }
+        if (/^Moves/.test(sure.text || "")) hits.moves++;
+        if (plan.refuse) continue;
+        // What lands: this booking at the new time on the tables it had, for the
+        // length it had, and nobody the plan moved left without a table.
+        hits.landed++;
+        const src = byId(list, id), out = plan.transform(list), now = byId(out, id);
+        expect(now.time).toBe(time);
+        expect(now.tables).toEqual(src.tables);
+        expect(now.duration).toBe(src.duration);
+        for (const o of plan.moved || []) {
+          const after = byId(out, o.id);
+          expect(after.tables.length, o.id).toBeGreaterThan(0);
+          expect(after._conflict, o.id).toBeFalsy();
+          expect(toMins(after.time)).toBe(toMins(o.time));
+        }
+      }
+    }
+    for (const [k, n] of Object.entries(hits)) expect(n, k + " was never reached").toBeGreaterThan(0);
+  });
+});
+
+describe("BookingApp's retimeBooking", () => {
+  const APP = appCode();
+  it("is the gate, the plan and the two side effects, like the drop beside it", () => {
+    const fn = APP.slice(APP.indexOf("function retimeBooking("), APP.indexOf("function previewRetime("));
+    expect(fn).toContain('if(refused("bookingEdit"))return;');
+    expect(fn).toContain("const plan=planRetime(Object.assign(dropCtx(id,null),{time:time}));");
+    expect(fn).toContain("if(plan.refuse){flashDragMsg(plan.refuse);return;}");
+    expect(fn).toContain('saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);},plan);');
+    expect((fn.match(/saveBookings\(/g) || []).length, "no write of its own").toBe(0);
+  });
+  it("the row's two questions take the same capability and stable wrappers", () => {
+    expect(APP).toMatch(/function previewRetime\(id,time\)\{\s+if\(!can\("bookingEdit"\)\) return null;\s+return retimePreview\(Object\.assign\(dropCtx\(id,null\),\{time:time\}\)\);/);
+    expect(APP).toMatch(/function checkRetime\(id,time\)\{\s+if\(!can\("bookingEdit"\)\) return null;\s+return retimeCheck\(Object\.assign\(dropCtx\(id,null\),\{time:time\}\)\);/);
+    expect(APP).toContain("onRetime:function(id,time){return R.current.retimeBooking(id,time);},");
+    expect(APP).toMatch(/onRetime=\{VA\.onRetime\}\s+onRetimePreview=\{VA\.onRetimePreview\}\s+onRetimeCheck=\{VA\.onRetimeCheck\}/);
   });
 });

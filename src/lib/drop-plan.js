@@ -45,14 +45,32 @@
 // The dragged booking becomes _manual+_locked so the optimizer never undoes
 // a hand-placed drag. Refusals surface via the dragMsg floating toast;
 // success messages are gated on the saveBookings `ok` boolean (v15.4.0).
-import { ALL_TABLES } from "./constants.js";
+//
+// ── v18.16.0: the same drag, sideways — a new TIME ───────────────────────────
+// A block dragged along its own row keeps its tables and takes a new start.
+// `ctx.time` is what makes a drop a re-time, and it goes through the SAME site,
+// preview and displacement walk, so the two drags cannot disagree about who is in
+// the way or what happens to them:
+//
+//   planRetime(ctx)    → null | {refuse} | {transform, done, lead, retime, moved?, post?}
+//   retimePreview(ctx) / retimeCheck(ctx) → what the row says, `dropPreview`'s shape
+//
+// What differs, and only this: the candidate is the booking's own table set (one
+// candidate, no ranking); there is no swap (two parties trading TIMES is not what
+// a sideways drag asks for); only a confirmed or pending booking moves (a seated
+// party's time is when it sat down); and the new start answers to the form's own
+// hour rules (`timeRefusal`). Decisions Patryk made on 2026-11-09: a busy slot
+// moves the others like a table drop does, and a kitchen at its limit is an amber
+// warning in the row, never a refusal.
+import { ALL_TABLES, KITCHEN_TABLE_LIMIT } from "./constants.js";
 import {
   isActive, toMins, occupancyEnd, getBlockSlots, getBusy, overlaps,
   rankCombosContaining, comboExistsFor, comboCapBest, canAssign,
   bookingsAfterAction, optimizerActiveFor, histEntry as defaultHistEntry,
+  getKitchenLoad, plannedDuration,
 } from "./booking-logic.js";
-import { releaseSwapped } from "./booking-save.js";
-import { moveSentence, movedNames } from "./delete-undo.js";
+import { releaseSwapped, timeRefusal } from "./booking-save.js";
+import { moveSentence, movedNames, retimeLabel } from "./delete-undo.js";
 
 // ── dropSite: what stands at the target ──────────────────────────────────────
 // v18.14.0 (H5): the first half of `planDrop`, moved up here unchanged, so the
@@ -67,13 +85,26 @@ function dropSite(ctx){
   const src=liveBookings.find(function(b){return b.id===id;});
   if(!src||src.date!==viewDate||!isActive(src)) return null;
   const cur=src.tables||[];
-  if(cur.length===1&&cur[0]===targetId) return null; // dropped back on its own row
+  const retime=ctx.time!=null;
+  if(retime?ctx.time===src.time:(cur.length===1&&cur[0]===targetId)) return null; // released where it began
   const size=src.size||2;
-  const s=toMins(src.time);
-  const e=Math.max(occupancyEnd(src,nowMins,today),s+1);
+  if(retime){
+    // v18.16.0: who may be re-timed, and to when, before anything about tables.
+    if(src.status!=="confirmed"&&src.status!=="pending") return {refuse:firstName(src.name)+" is seated — the time is when the party sat down."};
+    if(cur.length===0) return {refuse:"Give "+firstName(src.name)+" a table first — then the time can be dragged."};
+    const late=timeRefusal(src.date,toMins(ctx.time));
+    if(late) return {refuse:late.message};
+  }
+  // A re-time keeps the booking's LENGTH: the new window is as long as the old
+  // one, turnaround included, starting at the new minute.
+  const s=retime?toMins(ctx.time):toMins(src.time);
+  const e=Math.max(retime?s+(occupancyEnd(src,nowMins,today)-toMins(src.time)):occupancyEnd(src,nowMins,today),s+1);
   const blockSlots=getBlockSlots(tableBlocks,src.date);
   const busyBlocked=getBusy(blockSlots,s,e);
-  if(busyBlocked.has(targetId)) return {refuse:"Table "+targetId+" is blocked then."};
+  if(retime){
+    const shut=cur.filter(function(t){return busyBlocked.has(t);});
+    if(shut.length) return {refuse:"Table "+shut.join("+")+" is blocked then."};
+  }else if(busyBlocked.has(targetId)) return {refuse:"Table "+targetId+" is blocked then."};
   // Day's other active bookings (completed = free, the v16.0.0 rule) + the
   // tables held by SEATED parties over the span — those are immovable.
   const dayActive=liveBookings.filter(function(b){return b.date===src.date&&b.id!==id&&isActive(b)&&b.status!=="completed";});
@@ -84,6 +115,11 @@ function dropSite(ctx){
   //    Patryk-confirmed): the single table if it seats the party, else every
   //    VALID_COMBO containing the target that does — ranked exactly like
   //    findBest ranks combos (rankCombosContaining), NOT by raw capacity.
+  // v18.16.0: a re-time has one candidate, the tables the booking already holds.
+  if(retime){
+    const occOfCur=function(set){return dayActive.filter(function(b){return isOver(b)&&(b.tables||[]).some(function(t){return set.includes(t);});});};
+    return {src:src,cur:cur,size:size,s:s,e:e,blockSlots:blockSlots,dayActive:dayActive,candSets:[cur.slice()],occOf:occOfCur,desired:cur.slice(),occ:occOfCur(cur),retime:true};
+  }
   const cap1=(ALL_TABLES.find(function(t){return t.id===targetId;})||{}).capacity||0;
   // v17.0.0 review fix #1: cap the candidate walk. Step 4 runs a full
   // bookingsAfterAction TRIAL per candidate (optimise can be 70–500ms when a
@@ -177,10 +213,10 @@ function rowHint(ctx,trial){
   if(occ.length===0) return {tone:"free"};
   const seated=occ.find(function(b){return b.status==="seated";});
   if(seated) return {tone:"danger",text:firstName(seated.name)+" is seated here"};
-  const swap=swapOf(site,ctx.nowMins,ctx.today);
+  const swap=site.retime?null:swapOf(site,ctx.nowMins,ctx.today);
   if(swap) return {tone:"warn",text:"Swaps with "+swap.other.name};
   if(!trial) return {tone:"warn",text:"Moves "+namesOf(occ),unsure:true};
-  const plan=planDrop(ctx);
+  const plan=site.retime?planRetime(ctx):planDrop(ctx);
   if(plan.refuse) return {tone:"danger",text:"Can't move "+namesOf(occ)};
   // v18.14.2: everyone the plan's own trial re-seats, not only who was in the way:
   // the row said "Moves Reilly" over a drop that moved eight. It costs no pass, the
@@ -189,6 +225,60 @@ function rowHint(ctx,trial){
 }
 export function dropPreview(ctx){return rowHint(ctx,!optimizerActiveFor(ctx.viewDate,ctx.autoOptimizer));}
 export function dropCheck(ctx){return rowHint(ctx,true);}
+
+// ── retimePreview / retimeCheck (v18.16.0) ───────────────────────────────────
+// `rowHint` with a time, plus the kitchen. A start that would bring the kitchen to
+// its limit is said in amber and the release still goes through (Patryk): the
+// test is the form's own (`kitchenAsk`: the other bookings starting within a
+// quarter of an hour, plus this one, against `KITCHEN_TABLE_LIMIT`). It is added
+// to a free or an amber answer and never to a red one, which is refused anyway.
+function kitchenBusyAt(ctx){
+  const src=ctx.liveBookings.find(function(b){return b.id===ctx.id;});
+  if(!src) return false;
+  const load=getKitchenLoad(ctx.bookings,src.date,ctx.time,plannedDuration(src),ctx.id);
+  return load.starts+1>=KITCHEN_TABLE_LIMIT;
+}
+function withKitchen(ctx,hint){
+  if(!hint||hint.tone==="danger"||!kitchenBusyAt(ctx)) return hint;
+  const busy="Kitchen busy at "+ctx.time;
+  return Object.assign({},hint,{tone:"warn",text:hint.text?hint.text+" · "+busy:busy});
+}
+export function retimePreview(ctx){return withKitchen(ctx,rowHint(ctx,!optimizerActiveFor(ctx.viewDate,ctx.autoOptimizer)));}
+export function retimeCheck(ctx){return withKitchen(ctx,rowHint(ctx,true));}
+
+// ── planRetime (v18.16.0) ────────────────────────────────────────────────────
+// The dragged booking takes the new start and keeps its tables, its length and
+// everything else. `scheduledTime` follows, as it does for a time typed in the
+// form: this is a reschedule, not the seated shift. It becomes `_manual` +
+// `_locked`, like every drop: somebody put it there by hand.
+export function planRetime(ctx){
+  const id=ctx.id,bookings=ctx.bookings,viewDate=ctx.viewDate;
+  const tableBlocks=ctx.tableBlocks,autoOptimizer=ctx.autoOptimizer,user=ctx.user;
+  const histEntry=ctx.stamp||defaultHistEntry;
+  const site=dropSite(ctx);
+  if(!site||site.refuse) return site;
+  const src=site.src,occ=site.occ,from=src.time,to=ctx.time;
+  const label=retimeLabel(src.name,from,to);
+  const retimed=function(b){return Object.assign({},b,{time:to,scheduledTime:to,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("time "+from+"→"+to+" (drag)",user)])});};
+  // Nobody in the way → only this booking changes.
+  if(occ.length===0){
+    return {retime:true,lead:label,done:label,transform:function(prev){return prev.map(function(b){return b.id===id?retimed(b):b;});}};
+  }
+  const seatedOcc=occ.find(function(b){return b.status==="seated";});
+  if(seatedOcc) return {refuse:firstName(seatedOcc.name)+" is seated on "+site.cur.join("+")+" then — can't move them."};
+  // Somebody is: the drop's displacement, on the one candidate. The occupants give
+  // up these tables and are unlocked, the pass re-seats them, and it commits only
+  // if the trial leaves none of them without a table or in a conflict.
+  const taken=occ.map(function(b){return {id:b.id,tables:site.cur};});
+  const transform=function(list){
+    const updated=list.map(function(b){return b.id===id?retimed(b):releaseSwapped(b,taken);});
+    return bookingsAfterAction(updated,viewDate,tableBlocks,null,false,autoOptimizer);
+  };
+  const trial=transform(bookings);
+  const stranded=occ.find(function(o){const t=trial.find(function(x){return x.id===o.id;});return !t||(t.tables||[]).length===0||t._conflict;});
+  if(stranded) return {refuse:(site.cur.length===1?"Table "+site.cur[0]+" is":"Tables "+site.cur.join("+")+" are")+" taken then by "+namesOf(occ)+" — nowhere to move them."};
+  return {retime:true,lead:label,done:label,transform:transform,moved:occ,post:trial};
+}
 
 export function planDrop(ctx){
   const id=ctx.id,targetId=ctx.targetId,bookings=ctx.bookings;

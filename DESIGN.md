@@ -1906,6 +1906,43 @@ the preferred one. The grid shows the offer as one marker: the quarter lit in
   span, not past the last start, not on a closed day, and not in the Unplaced row.
   "Tap an empty cell to book" in Settings → App turns it off, per device, on by default.
 
+### The time drag (v18.16.0)
+A block dragged sideways along its row takes another time and keeps its tables. The
+table drag is the same gesture going the other way, and the two share everything a
+hand can feel: the arm, the lift, the row warning, the Undo.
+
+- **One direction per drag** (Patryk). The first 6px decide whether this is a table
+  drag or a time drag, the larger travel wins, and it stays that until the release. A
+  diagonal hand cannot change a party's table while it is moving their time. A tie
+  goes to the table drag, the older gesture.
+- **It moves by the quarter, and glides between quarters.** A table drag follows the
+  finger pixel for pixel (transition `none`); a time drag has only 40 places to be,
+  so the block steps and each step eases on `M.tap`. Less than half a quarter of
+  travel is no move, so a block that is picked up and put down has not changed.
+- **A pulse on every step** (`pulse`, "Vibrate on drag"), and one more when a new
+  time lands. Under a finger the chip is easy to cover; the hand counts the quarters.
+- **The block carries the cell marker's chip**: its table's badge and the time it
+  would get, at the block's leading edge, which is the start the chip names. It is a
+  sibling of the block, opaque on the ruler's surface, because the block itself is
+  drawn at 0.85 while lifted and clips its content. It arrives on `mgt-appear` and
+  leaves on `mgt-ghost-out`, and after the release it fades where it stood while the
+  block lands under it or eases home.
+- **The row says what the release will do**, in the row warning's three tones and its
+  pill, once per quarter: free, "Moves Ana" (checked against the real plan when the
+  finger rests), or red with the reason. Two things only a time drag says: the form's
+  own sentence for a start outside the day's hours, and "Kitchen busy at 20:00" in
+  amber, which warns and refuses nothing (Patryk).
+- **The release**: the lift comes down on `TL_SETTLE`. A landed time moves the block's
+  `left` while its offset eases to zero on the same curve and duration, so it stays
+  where the finger left it; a refusal eases it home and says why in the refusal toast.
+- **The Undo pill is compact** (Patryk): `Marcos Vidal · 19:00 → 19:30`, then
+  ` · moved Ana Ruiz` when the write re-seated somebody. A table drop keeps its sentence.
+- **Near the left or right edge the grid scrolls under the block**, the table drag's
+  edge scroll on the other axis, with the ruler kept in step in the same frame. It
+  stops at the grid's own end.
+- Not for a seated party (its time is when it sat down), not from the Unplaced row
+  (no table to keep), and not for a finished booking.
+
 ### Larger text (v18.14.0)
 A switch in Settings → App for the person on the pass who struggles with small text.
 It is this device's, like zoom: it answers one screen at one distance, so a phone must

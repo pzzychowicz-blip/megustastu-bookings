@@ -211,7 +211,9 @@ describe("every single-booking write in App hands saveBookings the report", () =
     // v18.14.0 (H5): a drop, the picker's Save and Reshuffle write through
     // `saveMove`, which carries the report for the two with a subject.
     ["a move", "saveBookings(move.transform,false,Object.assign(id==null?{}:goneReport(id),{onLanded:"],
-    ["the timeline drop", 'saveMove(plan.transform,id,"move",plan.done,'],
+    ["the timeline drop", /function dropOnTable\(id,targetId\)\{[\s\S]{0,400}?saveMove\(plan\.transform,id,"move",plan\.done,/],
+    // v18.16.0: the same block dragged to another time, through the same door.
+    ["the timeline re-time", /function retimeBooking\(id,time\)\{[\s\S]{0,400}?saveMove\(plan\.transform,id,"move",plan\.done,/],
     // v18.5.0 (#17): the status tap and the cancel both hand over a plan's
     // transform, so each is told apart by the line beside the call.
     ["a status change", /saveBookings\(plan\.transform,false,goneReport\(id\)\);\s+if\(ok&&plan\.flashes\)/],

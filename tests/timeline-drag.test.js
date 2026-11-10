@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { EDGE_BAND, EDGE_MAX_SPEED, edgeVelocity, edgeStep, rowProbeY } from "../src/lib/edge-scroll.js";
+import { EDGE_BAND, EDGE_MAX_SPEED, edgeVelocity, edgeStep, rowProbeY, scrollBoundsX } from "../src/lib/edge-scroll.js";
 
 const Timeline = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "TimelineView.jsx"), "utf8")).join("\n");
 
@@ -158,5 +158,91 @@ describe("the cell marker", () => {
   it("the Unplaced row offers nothing: only table rows carry data-row", () => {
     expect(view.match(/data-row=/g).length).toBe(1);
     expect(view).toMatch(/data-row=\{id\}/);
+  });
+});
+
+// ── v18.16.0: the same block dragged sideways ────────────────────────────────
+// What a re-time does is tests/drop-plan.test.js; the axis and the quarter are
+// tests/cell-offer.test.js. This is the block's wiring: one axis per drag, the
+// teardown before the dispatch, and the sideways edge scroll.
+describe("the time drag", () => {
+  const block = Timeline.slice(Timeline.indexOf("function TimelineBlock("), Timeline.indexOf("function DropHint("));
+  it("only a block on a table row has it, and only where App handed a handler", () => {
+    expect(block).toContain("const canRetime = !!onRetime && homeTable != null;");
+    expect((Timeline.match(/onRetime=\{onRetime\} setDragTime=\{hoverTime\} syncGridScroll=\{syncGridScroll\}/g) || []).length).toBe(1);
+    // the Unplaced row's blocks carry no table, and are not handed it either
+    const unplaced = Timeline.slice(Timeline.indexOf("homeTable={null}"));
+    expect(unplaced.slice(0, unplaced.indexOf("/>"))).not.toMatch(/onRetime/);
+  });
+  it("the axis is chosen once, by the pure rule, and never re-chosen", () => {
+    expect(block).toContain("d.axis = dragAxis(d.lastX - d.x0, d.lastY - d.y0, canRetime);");
+    expect(block).toContain("if (!d.axis) chooseAxis(d);");
+    expect((block.match(/chooseAxis\(/g) || []).length, "the declaration and one call").toBe(2);
+    expect(block, "a mouse drag begins on the same rule").toContain('if (e.pointerType === "mouse" && dragAxis(e.clientX - d.x0, e.clientY - d.y0, canRetime)) beginDrag(e.currentTarget, d.pid);');
+    expect(block, "a block with one direction follows from the arm").toContain('if (!canRetime) d.axis = "y";');
+  });
+  it("a frame follows one axis only", () => {
+    expect(block).toMatch(/if \(dd\.axis === "x"\) \{ stepX\(dd\); return; \}\s+if \(dd\.axis !== "y"\) return;\s+setDragDy\(dragDyOf\(dd\)\);/);
+  });
+  it("the start is the pure snap, at the row's live width, with the scroll since the choice", () => {
+    expect(block).toContain("const px = d.lastX - d.x0 + (d.scx ? d.scx.scrollLeft - d.sx0 : 0);");
+    expect(block).toContain("return draggedStart(toMins(b.time), px, d.ppm, OPEN * 60, GRID_CLOSE * 60);");
+    expect(block).toContain("d.ppm = d.el.parentElement.getBoundingClientRect().width / totalMins;");
+  });
+  it("re-renders once per quarter, not per frame, and asks the row once per time", () => {
+    expect(block).toMatch(/if \(d\.step !== mins\) \{\s+pulse\(\);\s+d\.step = mins;\s+setDragX\(\{ mins: mins, px: \(mins - start\) \* d\.ppm, live: true \}\);\s+\}/);
+    expect(block).toContain("if (setDragTime) setDragTime(homeTable, b.id, mins === start ? null : toTime(mins), d.lastX);");
+    expect(Timeline).toContain("setDragTime(time);");
+    expect(Timeline, "a table drag clears it").toMatch(/setDragOver\(table == null \|\| table === home \? null : id\);\s+setDragTime\(null\);/);
+  });
+  it("tears down first and dispatches last, and only for a time that changed", () => {
+    const end = block.slice(block.indexOf("function endDrag("), block.indexOf("const handlers = leaving"));
+    const clear = end.indexOf("setDragX((x) => (x && x.live ? { ...x, live: false } : x));");
+    const send = end.indexOf("onRetime(b.id, toTime(newStart));");
+    expect(clear).toBeGreaterThan(-1);
+    expect(send).toBeGreaterThan(clear);
+    expect(end.indexOf("if (setDragHover) setDragHover(null);")).toBeLessThan(send);
+    expect(end).toMatch(/if \(newStart != null && newStart !== toMins\(b\.time\)\) \{\s+pulse\(\);\s+try \{ onRetime\(b\.id, toTime\(newStart\)\); \}\s+catch/);
+    expect(end, "a time drag never drops on a row").toContain("const target = d && d.active && commit && !timeDrag ? tableAtY(e.clientY) : null;");
+    expect(end, "a cancelled drag sends nothing").toContain("const newStart = timeDrag && d.active && commit ? dragStartOf(d) : null;");
+  });
+  it("the lift is one state for both drags, and a time drag glides between quarters", () => {
+    expect(block).toContain("const tx = dragX && dragX.live ? dragX : null;");
+    expect(block).toContain("const lifted = dragDy != null || !!tx;");
+    expect(block).toContain('transform: tx ? "translateX(" + tx.px + "px)" : "translateY(" + dragDy + "px)"');
+    expect(block).toContain('transition: tx ? "transform " + M.tap : lifted ? "none" : settling ? TL_SETTLE : TL_MOVE');
+  });
+  it("carries the cell marker's chip, in and out, placed by the minute", () => {
+    expect(block).toMatch(/<Presence\s+show=\{!!tx\}\s+inClass="mgt-appear"\s+outClass="mgt-ghost-out"/);
+    expect(block).toContain("left: dragX ? pct(dragX.mins) : left, zIndex: 30,");
+    expect(block).toContain("<CellChip tableId={homeTable} time={toTime(dragX.mins)} sz={sz} />");
+  });
+  it("the page is held by a listener that is there before the touch starts", () => {
+    expect(block).toMatch(/function hold\(ev\) \{ if \(dragRef\.current && dragRef\.current\.active && ev\.cancelable\) ev\.preventDefault\(\); \}\s+el\.addEventListener\("touchmove", hold, \{ passive: false \}\);/);
+    expect(block).not.toMatch(/preventScrollRef/);
+  });
+  it("the edge scroll serves both axes from one loop, and tells the ruler in the frame", () => {
+    expect(block).toContain("const box = !sc ? null : horiz ? scrollBoundsX(sc) : scrollBounds(sc);");
+    expect(block).toContain("const v = !box ? 0 : horiz ? edgeVelocity(d.lastX, box.left, box.right) : edgeVelocity(d.lastY, box.top, box.bottom);");
+    expect(block).toMatch(/if \(horiz\) \{\s+if \(syncGridScroll\) syncGridScroll\(\);\s+stepX\(d\);\s+\}/);
+    expect(block, "a still finger in the band has chosen the table drag").toContain('if (!d.axis) d.axis = "y";');
+    // A block hanging past the grid's end widens the scroller, so the loop stops
+    // at the end the grid had at rest, not at whatever the scroller says now.
+    expect(block).toContain("d.sxMax = d.scx ? d.scx.scrollWidth - d.scx.clientWidth : 0;");
+    expect(block).toContain("if (horiz) sc.scrollLeft = Math.min(before + next.step, d.sxMax); else sc.scrollTop = before + next.step;");
+  });
+  it("scrollBoundsX: the scroller's sides, clamped to the window", () => {
+    const win = globalThis.window;
+    globalThis.window = { innerWidth: 998 };
+    try {
+      const sc = (left, right) => ({ getBoundingClientRect: () => ({ left, right }) });
+      expect(scrollBoundsX(sc(120, 900))).toEqual({ left: 120, right: 900 });
+      expect(scrollBoundsX(sc(-40, 1400))).toEqual({ left: 0, right: 998 });
+      // the same band maths as the vertical one
+      const b = scrollBoundsX(sc(120, 900));
+      expect(edgeVelocity(500, b.left, b.right)).toBe(0);
+      expect(edgeVelocity(b.left + EDGE_BAND / 2, b.left, b.right)).toBeCloseTo(-EDGE_MAX_SPEED / 2);
+      expect(edgeVelocity(b.right, b.left, b.right)).toBeCloseTo(EDGE_MAX_SPEED);
+    } finally { if (win === undefined) delete globalThis.window; else globalThis.window = win; }
   });
 });

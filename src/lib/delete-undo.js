@@ -127,7 +127,18 @@ export function moveSentence(lead,names){
 }
 // A plan with no `lead` (a swap, a free table, a reshuffle) already says all of it.
 export function landedSentence(plan,sentence,delta,post,id){
+  if(plan&&plan.retime) return retimeSentence(plan.lead,movedNames(delta,post,id,plan.moved));
   return plan&&plan.lead?moveSentence(plan.lead,movedNames(delta,post,id,plan.moved)):sentence;
+}
+// v18.16.0: a time drag's pill is compact (Patryk): "Marcos · 19:00 → 19:30", with
+// Undo beside it. A table drop keeps its sentence. Who else the write moved follows
+// in the same shape, two names at most and then a count, from what really changed
+// tables, exactly as `moveSentence` counts them.
+export function retimeLabel(name,from,to){return name+" · "+from+" → "+to;}
+export function retimeSentence(lead,names){
+  if(!names.length) return lead;
+  if(names.length<=2) return lead+" · moved "+names.join(", ");
+  return lead+" · moved "+names[0]+" and "+(names.length-1)+" others";
 }
 
 // ── planUndo ─────────────────────────────────────────────────────────────────

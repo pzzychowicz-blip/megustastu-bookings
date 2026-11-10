@@ -71,10 +71,15 @@ describe("the pulse", () => {
 
 describe("where it is wired", () => {
   const View = code("components/TimelineView.jsx");
-  it("pulses at the arm, and at a real drop only", () => {
-    expect((View.match(/\bpulse\(\);/g) || []).length).toBe(2);
+  // v18.16.0: a time drag adds two, and only two: each quarter the block steps
+  // to (a hand under a finger cannot see the chip), and a release that changes
+  // the time. A release on the minute it began says nothing, like a drop home.
+  it("pulses at the arm, at a real drop, at each quarter of a time drag and at its landing, and nowhere else", () => {
+    expect((View.match(/\bpulse\(\);/g) || []).length).toBe(4);
     expect(View).toMatch(/setDragDy\(0\);\s+pulse\(\);/);
     expect(View).toMatch(/if \(target && target !== homeTable\) \{\s+pulse\(\);/);
+    expect(View).toMatch(/if \(d\.step !== mins\) \{\s+pulse\(\);\s+d\.step = mins;/);
+    expect(View).toMatch(/if \(newStart != null && newStart !== toMins\(b\.time\)\) \{\s+pulse\(\);/);
   });
   it("the switch is per device, never an account pref, and hidden with no vibration", () => {
     const hook = code("hooks/useShellPrefs.js");

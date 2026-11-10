@@ -61,9 +61,9 @@ import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail, twoLineBlock } from "../lib/block-layout";
 import { unplacedOf, primaryGridTable, packLanes, unplacedHeight } from "../lib/unplaced";
-import { edgeVelocity, edgeStep, scrollParentY, scrollBounds, rowProbeY } from "../lib/edge-scroll";
+import { edgeVelocity, edgeStep, scrollParentY, scrollBounds, scrollBoundsX, rowProbeY } from "../lib/edge-scroll";
 import { afterFrame, everyFrame, pageHidden } from "../lib/after-frame";
-import { CELL_MINS, cellAt, cellOffer } from "../lib/cell-offer";
+import { CELL_MINS, cellAt, cellOffer, dragAxis, draggedStart } from "../lib/cell-offer";
 
 // A block moves in two ways at once and they are NOT the same kind of motion:
 // left/width is the schedule changing (geometry — M.shift), transform is the
@@ -257,7 +257,7 @@ function BlockFlag({ title, children }) {
 // the waitlist ghost's exit, and INERT: WaitGhost's `leaving` branch, property
 // for property. `arriving` puts a booking new to the day on the ghost's entrance.
 // TimelineView's useEnterLeave decides both; see there.
-function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, clash = null, late = null, noShows = 0, tags = "", showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null, seedFlip = null, handOffQuick = null, leaving = false, arriving = false, focusFallbackRef = null, sz = TL_NORMAL }) {
+function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, clash = null, late = null, noShows = 0, tags = "", showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null, seedFlip = null, handOffQuick = null, leaving = false, arriving = false, focusFallbackRef = null, sz = TL_NORMAL, onRetime = null, setDragTime = null, syncGridScroll = null }) {
   const d = liveBarDur(b, nowMins, today);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
@@ -501,12 +501,27 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // Touch: the 400ms long-press opens quick-status as before; KEEP HOLDING to
   // ~800ms (unmoved) and the popup is dismissed and the block lifts at once,
   // then follows the finger. Dropping on a row calls onDropOnTable(bookingId, tableId); App
-  // decides move vs swap. Vertical offset lives in local state (translateY);
-  // the horizontal position (time) never changes.
-  const dragRef = useRef(null);            // {y0, pid, el, active, lastY}
+  // decides move vs swap. Vertical offset lives in local state (translateY).
+  //
+  // v18.16.0: and SIDEWAYS, to another time. One direction per drag (Patryk): the
+  // first 6px decide whether this is a table drag or a time drag, and it stays
+  // that for its whole life, so a diagonal hand cannot change a party's table
+  // while it is moving their time. A time drag steps by the quarter, the block
+  // carries the candidate time (`CellChip`), and the release calls
+  // `onRetime(bookingId, time)`; App's `planRetime` decides what that does. Not
+  // from the Unplaced row (`homeTable` null): a booking with no row has no table
+  // to keep, and the row warning has no row to be drawn on.
+  const dragRef = useRef(null);            // {y0, x0, pid, el, active, lastY, lastX, axis}
   const [dragDy, setDragDy] = useState(null);
+  // The time drag's offset: `{mins, px, live}`, the snapped start and how far
+  // that is from where the block stands. Set only when the STEP changes, so a
+  // finger moving inside one quarter re-renders nothing. Kept after the release
+  // with `live: false`, because the chip fades out showing the time it had.
+  const [dragX, setDragX] = useState(null);
+  const tx = dragX && dragX.live ? dragX : null;
+  const lifted = dragDy != null || !!tx;
+  const canRetime = !!onRetime && homeTable != null;
   const dragHoldTimer = useRef(null);      // touch: the 800ms drag-mode timer
-  const preventScrollRef = useRef(null);   // native non-passive touchmove blocker
   const dragRafRef = useRef(0);            // v17.0.0 review fix #4: coalesce moves to one render/frame
   // v18.3.1 (A5): the edge-scroll loop — its frame, and the last frame's
   // timestamp (0 = not running), for a time-based speed on any refresh rate.
@@ -523,6 +538,26 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     if (dragRef.current && dragRef.current.active && setDragHover) setDragHover(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, at unmount: `hoverRow` is new each render and only calls setters, and watching it would tear a live drag down
   }, []);
+  // The armed drag's hold on the page: a native, NON-PASSIVE touchmove listener
+  // that cancels the move while a drag is live (React attaches touchmove
+  // passively at the root, where `preventDefault` does nothing).
+  // v18.16.0: on the block from MOUNT, where it was added at the 800ms arm. For
+  // the vertical drag the difference never showed: `touch-action: pan-x` already
+  // keeps the browser off a vertical move. A sideways move is exactly what
+  // `pan-x` hands to the browser, so there the listener is the only thing in the
+  // way, and a browser decides at `touchstart` whether a touch's moves wait for
+  // a handler's answer. One added mid-touch can be told about moves it is no
+  // longer allowed to cancel. Outside a live drag it does nothing, so a swipe
+  // that starts on a block still scrolls the timeline. NOT MEASURED ON A DEVICE:
+  // a synthetic touch arms nothing here (mgt-measurement-traps), so the hold and
+  // the sideways drag under a finger are for the tablet and the iPhone to settle.
+  useEffect(() => {
+    const el = elRef.current;
+    if (!el || leaving) return undefined;
+    function hold(ev) { if (dragRef.current && dragRef.current.active && ev.cancelable) ev.preventDefault(); }
+    el.addEventListener("touchmove", hold, { passive: false });
+    return () => { el.removeEventListener("touchmove", hold); };
+  }, [leaving]);
   // v18.3.0 (M4): non-zero for exitHold("shift") after a released drag, while
   // the block travels home on TL_SETTLE (see there). A COUNT of releases, not a
   // boolean, so each release restarts the hold, and the hold is timed from the
@@ -552,24 +587,84 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // the drag and its hover row with the scroll, and stops at the scroll's end
   // or when the finger leaves the band. `tableAtY` reads live row geometry,
   // so the drop needs nothing: the row under the finger is the row it lands on.
+  // v18.16.0: the same loop serves a time drag, on the other axis: the grid's own
+  // scroller and its left and right edges (`scrollBoundsX`). It writes
+  // `scrollLeft`, so it tells the view in the same frame (`syncGridScroll`: the
+  // ruler and App's remembered position; the scroll event lands a frame late),
+  // and the block's offset grows by what it scrolled (`dragStartOf`).
   function edgeFrame(ts) {
     edgeRafRef.current = 0;
     const d = dragRef.current;
-    const box = d && d.active && d.sc ? scrollBounds(d.sc) : null;
-    const v = box ? edgeVelocity(d.lastY, box.top, box.bottom) : 0;
+    const horiz = !!d && d.axis === "x";
+    const sc = d && d.active ? (horiz ? d.scx : d.sc) : null;
+    const box = !sc ? null : horiz ? scrollBoundsX(sc) : scrollBounds(sc);
+    const v = !box ? 0 : horiz ? edgeVelocity(d.lastX, box.left, box.right) : edgeVelocity(d.lastY, box.top, box.bottom);
     if (!v) { edgeLastRef.current = 0; return; }
     const dt = edgeLastRef.current ? Math.min(ts - edgeLastRef.current, 50) : 16;
     edgeLastRef.current = ts;
     const next = edgeStep(d.carry || 0, v, dt);
     d.carry = next.carry;
     if (next.step) {
-      const before = d.sc.scrollTop;
-      d.sc.scrollTop = before + next.step;
-      if (d.sc.scrollTop === before) { edgeLastRef.current = 0; d.carry = 0; return; }   // at the end
-      setDragDy(dragDyOf(d));
-      if (setDragHover) setDragHover(tableAtY(d.lastY), b.id, homeTable, d.lastY);
+      const before = horiz ? sc.scrollLeft : sc.scrollTop;
+      if (horiz) sc.scrollLeft = Math.min(before + next.step, d.sxMax); else sc.scrollTop = before + next.step;
+      if ((horiz ? sc.scrollLeft : sc.scrollTop) === before) { edgeLastRef.current = 0; d.carry = 0; return; }   // at the end
+      if (horiz) {
+        if (syncGridScroll) syncGridScroll();
+        stepX(d);
+      } else {
+        // A finger armed in the top or bottom band and held still has chosen:
+        // the rows are moving under it, so this is a table drag from here on.
+        if (!d.axis) d.axis = "y";
+        setDragDy(dragDyOf(d));
+        if (setDragHover) setDragHover(tableAtY(d.lastY), b.id, homeTable, d.lastY);
+      }
     }
     edgeRafRef.current = requestAnimationFrame(edgeFrame);
+  }
+  // ── v18.16.0: the time drag ───────────────────────────────────────────────
+  // The start the finger has reached, on the quarter (`draggedStart`,
+  // lib/cell-offer.js). Travel is the finger's plus what the grid has scrolled
+  // since the axis was chosen, in minutes at the row's LIVE width (`ppm`, read
+  // then: `pxPerMin` is the grid's lower bound).
+  function dragStartOf(d) {
+    const px = d.lastX - d.x0 + (d.scx ? d.scx.scrollLeft - d.sx0 : 0);
+    return draggedStart(toMins(b.time), px, d.ppm, OPEN * 60, GRID_CLOSE * 60);
+  }
+  // One step of it: the block's offset, a pulse when the quarter changes, and the
+  // row's warning for that time (the view asks once per time, not per frame).
+  function stepX(d) {
+    const start = toMins(b.time);
+    const mins = dragStartOf(d);
+    if (d.step !== mins) {
+      pulse();
+      d.step = mins;
+      setDragX({ mins: mins, px: (mins - start) * d.ppm, live: true });
+    }
+    if (setDragTime) setDragTime(homeTable, b.id, mins === start ? null : toTime(mins), d.lastX);
+  }
+  // Which way this drag goes, once, from its first 6px. Sideways only where a
+  // time drag exists; anything else is the table drag it always was.
+  function chooseAxis(d) {
+    d.axis = dragAxis(d.lastX - d.x0, d.lastY - d.y0, canRetime);
+    if (d.axis !== "x") return;
+    d.scx = d.el.closest(".mgt-tl-scroll");
+    d.sx0 = d.scx ? d.scx.scrollLeft : 0;
+    // How far the grid scrolls AT REST, read before the block moves. A block
+    // dragged past the grid's last hour hangs over its end and widens the
+    // scroller by that much, so an edge scroll that asked the scroller for its
+    // end chased its own block into empty space (measured on DEV: 172px past
+    // the grid's end at 22:45). The edge scroll stops here instead.
+    d.sxMax = d.scx ? d.scx.scrollWidth - d.scx.clientWidth : 0;
+    d.ppm = d.el.parentElement.getBoundingClientRect().width / totalMins;
+    d.step = toMins(b.time);
+    d.carry = 0;
+    // The lift moves from the table drag's state to this one's in one commit,
+    // so the block is never down for a frame between them.
+    setDragDy(null);
+    setDragX({ mins: d.step, px: 0, live: true });
+    // A booking on several tables: this cell follows the finger and the others
+    // show they belong to it, as on a hover, and move when the time lands.
+    setGroupHover(true);
   }
   function kickEdge() {
     if (!edgeRafRef.current) edgeRafRef.current = requestAnimationFrame(edgeFrame);
@@ -583,6 +678,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     const d = dragRef.current || {};
     Object.assign(d, { active: true, sc, s0: sc ? sc.scrollTop : 0, carry: 0 });
     if (d.lastY == null) d.lastY = d.y0;
+    if (d.lastX == null) d.lastX = d.x0;
     dragRef.current = d;
     didLong.current = true;                // suppress the click→edit on release
     // Capturing on the block itself is safe (the PlanView gotcha was capturing
@@ -607,7 +703,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     didLong.current = false;
     if (!onDropOnTable || !tableAtY) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    dragRef.current = { y0: e.clientY, pid: e.pointerId, el: e.currentTarget, active: false };
+    dragRef.current = { y0: e.clientY, x0: e.clientX, pid: e.pointerId, el: e.currentTarget, active: false, axis: null };
     if (e.pointerType !== "mouse") {
       clearTimeout(dragHoldTimer.current);
       dragHoldTimer.current = setTimeout(() => {
@@ -617,6 +713,10 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         // (/code-review: TimelineView's hand-off), not over the lifted block.
         if (handOffQuick) handOffQuick(); else setQuickStatus(null);
         beginDrag(d.el, d.pid);
+        // v18.16.0: a block with no time drag has one direction, and follows the
+        // finger from its first pixel as it always did. One that has both waits
+        // for 6px to say which (`chooseAxis`), lifted and still.
+        if (!canRetime) d.axis = "y";
         // v18.3.0 (A4): the lift at ARM time, so a still finger sees the drag
         // take over from the vanished card. The lift keyed on `dragDy`, which
         // only the first MOVE set, so for a finger holding still the card
@@ -626,11 +726,8 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         // phase 4 settle lowers it again.
         setDragDy(0);
         pulse();                           // v18.14.0 (L7): the finger is on the block, so tell the hand
-        // React 17+ roots attach touchmove passively — a native non-passive
-        // listener is the only way to stop the page scrolling mid-drag.
-        const prevent = (ev) => { ev.preventDefault(); };
-        d.el.addEventListener("touchmove", prevent, { passive: false });
-        preventScrollRef.current = { el: d.el, fn: prevent };
+        // The page is held still by the block's own non-passive touchmove
+        // listener (the effect above), which acts from this moment: `active`.
         kickEdge();                        // v18.3.1 (A5): armed while already in the band
       }, 800);
     }
@@ -639,7 +736,9 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     const d = dragRef.current;
     if (!d) return;
     if (!d.active) {
-      if (e.pointerType === "mouse" && Math.abs(e.clientY - d.y0) > 6) beginDrag(e.currentTarget, d.pid);
+      // v18.16.0: 6px either way starts a mouse drag where a time drag exists;
+      // elsewhere only a vertical 6px does, as before.
+      if (e.pointerType === "mouse" && dragAxis(e.clientX - d.x0, e.clientY - d.y0, canRetime)) beginDrag(e.currentTarget, d.pid);
       else return;
     }
     // v17.0.0 review fix #4: coalesce the render+hover work to one rAF/frame —
@@ -647,12 +746,18 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     // each one setState-d. (A drag only runs while the tab is visible, so the
     // "rAF never fires when hidden" trap doesn't apply here.)
     d.lastY = e.clientY;
+    d.lastX = e.clientX;
+    if (!d.axis) chooseAxis(d);
     kickEdge();                            // v18.3.1 (A5): a no-op outside the band
     if (dragRafRef.current) return;
     dragRafRef.current = requestAnimationFrame(function () {
       dragRafRef.current = 0;
       const dd = dragRef.current;
       if (!dd || !dd.active) return;
+      // No axis yet: an armed finger that has not travelled 6px. The block is
+      // lifted and waits to be told which way.
+      if (dd.axis === "x") { stepX(dd); return; }
+      if (dd.axis !== "y") return;
       setDragDy(dragDyOf(dd));
       if (setDragHover) setDragHover(tableAtY(dd.lastY), b.id, homeTable, dd.lastY);
     });
@@ -662,10 +767,6 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     if (dragRafRef.current) { cancelAnimationFrame(dragRafRef.current); dragRafRef.current = 0; }
     if (edgeRafRef.current) { cancelAnimationFrame(edgeRafRef.current); edgeRafRef.current = 0; }
     edgeLastRef.current = 0;
-    if (preventScrollRef.current) {
-      preventScrollRef.current.el.removeEventListener("touchmove", preventScrollRef.current.fn);
-      preventScrollRef.current = null;
-    }
     const d = dragRef.current;
     dragRef.current = null;
     // v17.16.12: TEAR DOWN FIRST, DISPATCH LAST — and the order is the fix.
@@ -680,8 +781,15 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     // makes the block's resting state independent of whether the drop succeeds.
     // The target is READ before the clear (it measures live row geometry, which
     // the pending setState has not touched yet) and USED after it.
-    const target = d && d.active && commit ? tableAtY(e.clientY) : null;
+    const timeDrag = !!d && d.axis === "x";
+    const target = d && d.active && commit && !timeDrag ? tableAtY(e.clientY) : null;
+    // v18.16.0: a time drag's answer, read before the clear for the same reason:
+    // the start the finger reached, at the release point itself.
+    if (timeDrag && commit && Number.isFinite(e.clientX)) d.lastX = e.clientX;
+    const newStart = timeDrag && d.active && commit ? dragStartOf(d) : null;
     setDragDy(null);
+    setDragX((x) => (x && x.live ? { ...x, live: false } : x));
+    if (timeDrag) setGroupHover(false);
     if (setDragHover) setDragHover(null);
     // v18.3.0 (M4): a block that stays mounted (a same-row release, a refused
     // drop, a swap that keeps one of its tables) glides home on TL_SETTLE.
@@ -705,6 +813,13 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       // setStates are in. The console line is what makes it findable.
       try { onDropOnTable(b.id, target); }
       catch (err) { console.error("[drag] drop on " + target + " failed", err); }
+    }
+    // v18.16.0: the time drag's dispatch, last and swallowed for the same reason.
+    // A release on the minute it began is no change and asks nothing.
+    if (newStart != null && newStart !== toMins(b.time)) {
+      pulse();
+      try { onRetime(b.id, toTime(newStart)); }
+      catch (err) { console.error("[drag] re-time to " + toTime(newStart) + " failed", err); }
     }
   }
 
@@ -858,6 +973,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   };
 
   return (
+    <>
     <div
       ref={elRef}
       // v18.3.0 (O1): a leaving copy takes the ghost's exit (on --ease-in, Plan
@@ -882,7 +998,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         // because the values currently differ.
         color: BLOCK_INK[b.status] || BLOCK_INK.confirmed,
         display: "flex", alignItems: "center", boxSizing: "border-box",
-        cursor: dragDy != null ? "grabbing" : "pointer",
+        cursor: lifted ? "grabbing" : "pointer",
         // v18.3.0 (O1): the other half of "inert while leaving", as on the
         // ghost — a press aimed at the grid behind a fading block reaches it.
         pointerEvents: leaving ? "none" : undefined,
@@ -901,21 +1017,23 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         // the old /* @fixed-fill */ marker is gone with the white-inset literal
         // it was blessing. The DRAG shadow stays a literal: a block lifted under
         // a finger is a one-off depth, not a member of the scale.
-        boxShadow: dragDy != null ? "0 10px 24px rgba(0,0,0,0.3)" /* @shadow */ : "var(--shadow-btn-solid)",
+        boxShadow: lifted ? "0 10px 24px rgba(0,0,0,0.3)" /* @shadow */ : "var(--shadow-btn-solid)",
         // v17.0.0: while dragging, the inline transform/zIndex/opacity lift the
         // block and follow the pointer (inline transform beats the hover class).
-        ...(dragDy != null ? { transform: "translateY(" + dragDy + "px)", zIndex: 30, opacity: 0.85 } : null),
+        ...(lifted ? { transform: tx ? "translateX(" + tx.px + "px)" : "translateY(" + dragDy + "px)", zIndex: 30, opacity: 0.85 } : null),
         // v18.3.0 (M4): and it stays above the grid until it LANDS. z-index cannot
         // fade, and dropped on the release frame it slid the travelling block
         // under every later row (measured: a refused drop from i1 passed under the
         // rows below 5A and under the booking's own 5B cell for most of its trip).
-        ...(dragDy == null && settling ? { zIndex: 30 } : null),
+        ...(!lifted && settling ? { zIndex: 30 } : null),
         // v15.8.0: reposition eases (seated-shift / reshuffle). v15.8.1: `transform`
         // re-added so the .mgt-hover-scale lift eases again — the inline transition had
         // been overriding the class's `transform 120ms`, making the hover scale instant.
         // The seated ghost outline mirrors this exact transition so the two lift together.
         // v18.3.0 (M4): TL_SETTLE for a moment after a released drag.
-        transition: dragDy != null ? "none" : settling ? TL_SETTLE : TL_MOVE
+        // v18.16.0: a time drag moves in quarter steps, so each step glides on
+        // M.tap where a table drag, which follows the finger, has none.
+        transition: tx ? "transform " + M.tap : lifted ? "none" : settling ? TL_SETTLE : TL_MOVE
       }}
     >
       {animOverlay}
@@ -1101,6 +1219,28 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         <AssignIcon size={IC.control} />
       </button>
     </div>
+    {/* v18.16.0: the time this drag would give the booking, with its table: the
+        cell marker's chip, standing at the block's leading edge, which is the
+        start it names. A SIBLING of the block, not a child: the block clips its
+        content and is drawn at 0.85 while lifted, and this has to be read at a
+        glance over whatever is behind it. Placed by the minute rather than by
+        the block's offset, so after the release it fades where it stood while
+        the block's own `left` moves under it (or eases home, on a refusal).
+        Below the row's warning (31), which matters more than the time when the
+        two meet at the left of the view. */}
+    <Presence
+      show={!!tx}
+      inClass="mgt-appear"
+      outClass="mgt-ghost-out"
+      style={{
+        position: "absolute", top: 0, bottom: 2, left: dragX ? pct(dragX.mins) : left, zIndex: 30,
+        paddingLeft: SP.tight, display: "flex", alignItems: "center", pointerEvents: "none",
+        transition: "left " + M.tap
+      }}
+    >
+      {dragX ? <span aria-hidden="true" style={{ display: "flex" }}><CellChip tableId={homeTable} time={toTime(dragX.mins)} sz={sz} /></span> : null}
+    </Presence>
+    </>
   );
 }
 
@@ -1700,6 +1840,10 @@ export const TimelineView = memo(function TimelineView({
   // v18.16.0: an empty cell starts a booking. `cellBook` is this device's switch
   // (useShellPrefs, a scalar); `onNewAt(tableId, time)` is App's `newAtCell`.
   cellBook = true, onNewAt = null,
+  // v18.16.0: a block dragged sideways takes another time. `onRetime(id, time)`
+  // is App's `retimeBooking`; the other two are what the row says first, as
+  // `onDropPreview` / `onDropCheck` are for a drop on another table.
+  onRetime = null, onRetimePreview = null, onRetimeCheck = null,
 }) {
   const sz = largeText ? TL_LARGE : TL_NORMAL;
   const scrollRef = useRef(null);
@@ -1725,6 +1869,10 @@ export const TimelineView = memo(function TimelineView({
   // per row, and where it has been still since.
   const [dropChecks, setDropChecks] = useState(NO_CHECKS);
   const dropRest = useRef({ y: 0, at: 0 });
+  // v18.16.0: the time a sideways drag has reached ("19:30"), null in a table
+  // drag and while the block stands on its own minute. A third plain value, for
+  // the reason the other two are: it changes once a quarter, not once a frame.
+  const [dragTime, setDragTime] = useState(null);
   // v18.16.0: the cell marker's handle (CellMarker, above), and which kind of
   // pointer pressed an empty cell, so the click that follows knows whether it is
   // a mouse's (open) or a finger's (select). Null when the press began anywhere
@@ -1736,36 +1884,55 @@ export const TimelineView = memo(function TimelineView({
     if (table != null && cellRef.current) cellRef.current.hide();
     setDragHover(table);
     setDragOver(table == null || table === home ? null : id);
+    setDragTime(null);
     if (table == null) { setDropChecks(NO_CHECKS); return; }
     if (Math.abs(y - dropRest.current.y) > DROP_REST_SLOP) dropRest.current = { y: y, at: performance.now() };
   }
+  // v18.16.0: the same report from a time drag. The row is the block's own, which
+  // `hoverRow` treats as no target, so this has its own door: the row lights and
+  // says what the release would do at `time`. Null is the block back on its own
+  // minute, where a release changes nothing. `x` is where the finger is, for the
+  // same "has it stopped" clock the table drag keeps on `y` (one drag has one
+  // axis, so the two never share it at once).
+  function hoverTime(home, id, time, x) {
+    if (cellRef.current) cellRef.current.hide();
+    setDragHover(time == null ? null : home);
+    setDragOver(time == null ? null : id);
+    setDragTime(time);
+    if (time == null) { setDropChecks(NO_CHECKS); return; }
+    if (Math.abs(x - dropRest.current.y) > DROP_REST_SLOP) dropRest.current = { y: x, at: performance.now() };
+  }
   // Asked once per row, not per pointer frame: it changes with the row, and with
   // nothing else, for as long as the finger stays on one.
-  const dropHint = useMemo(() => (
-    dragHover != null && dragOver != null && onDropPreview ? onDropPreview(dragOver, dragHover) : null
-  ), [dragHover, dragOver, onDropPreview]);
+  // v18.16.0: and once per quarter in a time drag, which asks the other question.
+  const dropHint = useMemo(() => {
+    if (dragHover == null || dragOver == null) return null;
+    if (dragTime != null) return onRetimePreview ? onRetimePreview(dragOver, dragTime) : null;
+    return onDropPreview ? onDropPreview(dragOver, dragHover) : null;
+  }, [dragHover, dragOver, dragTime, onDropPreview, onRetimePreview]);
   // v18.14.0 (correction 17, Patryk): with the Optimiser on, "Moves …" is a guess, and
   // the real answer is too heavy for a drag (`dropPreview`'s header has the numbers).
   // So the row asks once the finger has stopped: amber at once, then the plan once
   // per row per drag. Stopped means still, not merely on the row, because a slow drag
   // across rows spends longer than `DROP_REST_MS` on each, and this is the one call
   // here that can hold a frame. A check that agrees leaves the row exactly as it was.
-  const unsureRow = dropHint && dropHint.unsure ? dragOver + "|" + dragHover : null;
+  const unsureRow = dropHint && dropHint.unsure ? dragOver + "|" + dragHover + (dragTime != null ? "|" + dragTime : "") : null;
   const rowHint = (unsureRow && dropChecks[unsureRow]) || dropHint;
   useEffect(() => {
-    if (!unsureRow || dropChecks[unsureRow] || !onDropCheck) return undefined;
+    const ask = dragTime != null ? onRetimeCheck : onDropCheck;
+    if (!unsureRow || dropChecks[unsureRow] || !ask) return undefined;
     let timer = 0;
     function check() {
       const left = dropRest.current.at + DROP_REST_MS - performance.now();
       if (left > 0) { timer = setTimeout(check, left); return; }
-      const sure = onDropCheck(dragOver, dragHover);
+      const sure = ask(dragOver, dragTime != null ? dragTime : dragHover);
       if (!sure) return;
       const said = sure.text === dropHint.text ? dropHint : { ...sure, corrects: true };
       setDropChecks((c) => ({ ...c, [unsureRow]: said }));
     }
     timer = setTimeout(check, DROP_REST_MS);
     return () => clearTimeout(timer);
-  }, [unsureRow, dropChecks, dropHint, dragOver, dragHover, onDropCheck]);
+  }, [unsureRow, dropChecks, dropHint, dragOver, dragHover, dragTime, onDropCheck, onRetimeCheck]);
   const isToday = date === today;
   const totalMins = (GRID_CLOSE - OPEN) * 60;
   const gridW = Math.max(320, totalMins * zoom * 1.2);
@@ -1842,11 +2009,18 @@ export const TimelineView = memo(function TimelineView({
     // App's ref, the same object every render, so listing it costs nothing.
   }, [followNow, isToday, nowMins, gridW, followLeadMins, totalMins, scrollPosRef]);
 
-  function onGridScroll() {
+  // What a move of the grid's scroller owes the rest of the view: App's
+  // remembered position and the ruler. v18.16.0: its own function, because a time
+  // drag's edge scroll writes `scrollLeft` from a frame loop and calls this in the
+  // same frame; the scroll event would bring the ruler along one frame late.
+  function syncGridScroll() {
     if (scrollRef.current && scrollPosRef) {
       scrollPosRef.current = scrollRef.current.scrollLeft;
     }
     syncRuler(scrollRef.current, rulerClipRef.current);
+  }
+  function onGridScroll() {
+    syncGridScroll();
     if (quickStatus) setQuickStatus(null);
   }
 
@@ -2488,7 +2662,7 @@ export const TimelineView = memo(function TimelineView({
       <Fragment key={b.id}>
         {tail}
         {ghost}
-        <TimelineBlock sz={sz} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={hoverRow} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />
+        <TimelineBlock sz={sz} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={hoverRow} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} onRetime={onRetime} setDragTime={hoverTime} syncGridScroll={syncGridScroll} />
       </Fragment>
     );
   }

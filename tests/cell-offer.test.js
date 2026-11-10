@@ -11,7 +11,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { appCode } from "./app-source.js";
-import { CELL_MINS, cellAt, cellOffer } from "../src/lib/cell-offer.js";
+import { CELL_MINS, DRAG_SLOP, cellAt, cellOffer, dragAxis, draggedStart } from "../src/lib/cell-offer.js";
 import { draftRefusal, timeRefusal } from "../src/lib/booking-save.js";
 import { toTime, lastStartMins } from "../src/lib/booking-logic.js";
 import { setWeekHours, setHourExceptions, DEFAULT_WEEK_HOURS, hoursFor } from "../src/lib/constants.js";
@@ -149,5 +149,72 @@ describe("it is this device's switch, on by default", () => {
     expect(settings).toMatch(/<Toggle label="Tap an empty cell to book" on=\{cellBook\} onClick=\{onToggleCellBook\} \/>/);
     expect(settings.indexOf('label="Tap an empty cell to book"')).toBeGreaterThan(settings.indexOf(">Timeline<"));
     expect(appCode()).toMatch(/cellBook=\{cellBook\}\s+onNewAt=\{VA\.onNewAt\}/);
+  });
+});
+
+// ── v18.16.0: a block dragged sideways ───────────────────────────────────────
+// The gesture cannot be run here (a drag spans frames). Its two decisions can.
+describe("dragAxis: one direction per drag", () => {
+  it("has not decided inside the slop, on either axis", () => {
+    expect(DRAG_SLOP).toBe(6);
+    expect(dragAxis(0, 0, true)).toBeNull();
+    expect(dragAxis(6, 6, true)).toBeNull();
+    expect(dragAxis(-6, 3, true)).toBeNull();
+  });
+  it("the larger travel wins, either way along it", () => {
+    expect(dragAxis(7, 2, true)).toBe("x");
+    expect(dragAxis(-30, 12, true)).toBe("x");
+    expect(dragAxis(2, 7, true)).toBe("y");
+    expect(dragAxis(12, -30, true)).toBe("y");
+  });
+  it("a tie is the table drag, the older gesture", () => {
+    expect(dragAxis(9, 9, true)).toBe("y");
+    expect(dragAxis(-9, 9, true)).toBe("y");
+  });
+  it("a block that cannot be re-timed only ever drags to a table, on vertical travel alone", () => {
+    expect(dragAxis(40, 0, false)).toBeNull();        // a sideways wobble is still a click
+    expect(dragAxis(40, 6, false)).toBeNull();
+    expect(dragAxis(40, 7, false)).toBe("y");
+    expect(dragAxis(0, -7, false)).toBe("y");
+  });
+});
+
+describe("draggedStart: the quarter a dragged block has reached", () => {
+  const OPEN = 13 * 60, END = 23 * 60;      // the grid: 13:00 to 23:00
+  const at = (start, px) => draggedStart(start, px, 2.4, OPEN, END);   // 36px a quarter
+  it("less than half a quarter of travel is no move", () => {
+    expect(at(19 * 60, 0)).toBe(19 * 60);
+    expect(at(19 * 60, 17.9)).toBe(19 * 60);
+    expect(at(19 * 60, -17.9)).toBe(19 * 60);
+  });
+  it("then it steps by the quarter, both ways", () => {
+    expect(at(19 * 60, 18)).toBe(19 * 60 + 15);
+    expect(at(19 * 60, 53.9)).toBe(19 * 60 + 15);
+    expect(at(19 * 60, 54)).toBe(19 * 60 + 30);
+    expect(at(19 * 60, -18.1)).toBe(19 * 60 - 15);
+    expect(at(19 * 60, -36 * 4)).toBe(18 * 60);
+  });
+  it("does not depend on the zoom", () => {
+    for (const perMin of [1.2, 2.4, 4.8, 12]) {
+      expect(draggedStart(19 * 60, perMin * 45, perMin, OPEN, END)).toBe(19 * 60 + 45);
+    }
+  });
+  it("a booking standing off the quarter keeps its minute until it is dragged, then lands on one", () => {
+    const start = 19 * 60 + 10;
+    expect(at(start, 10)).toBe(start);
+    expect(at(start, 0)).toBe(start);
+    expect(at(start, 24)).toBe(19 * 60 + 15);        // 19:20 raw, the nearest quarter
+    expect(at(start, -24)).toBe(19 * 60);
+  });
+  it("is held inside the grid", () => {
+    expect(at(13 * 60 + 30, -500)).toBe(OPEN);
+    expect(at(21 * 60, 5000)).toBe(END - 15);
+  });
+  it("a start past the grid's last cell does not move without travel", () => {
+    expect(at(END - 5, 0)).toBe(END - 5);
+  });
+  it("answers the start itself for a width it cannot read", () => {
+    expect(draggedStart(19 * 60, 100, 0, OPEN, END)).toBe(19 * 60);
+    expect(draggedStart(19 * 60, NaN, 2.4, OPEN, END)).toBe(19 * 60);
   });
 });

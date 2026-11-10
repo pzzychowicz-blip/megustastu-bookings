@@ -40665,3 +40665,66 @@ then took pointer events), a touch press elsewhere and a `scroll` event each let
 That exercises the handlers and nothing about how it feels under a wet finger, which is Patryk's to judge on the tablet. (One reading to discard: a
 dispatched `pointerdown` on a block with no `pointerup` armed that block's 800ms drag, and the block then followed the mouse. It was the probe, and
 a reload cleared it; nothing was written.)
+
+### Commit 7 — a block dragged sideways takes another time, and Undo puts it back
+
+A party that rings to say they will be half an hour late meant opening the form, changing the time and saving. Now the block that is already
+dragged to another table can be dragged along its own row. It keeps its tables and its length, takes the new start, and is locked like any drop.
+
+- **One direction per drag** (Patryk). The first 6px choose, the larger travel wins, and the drag stays that until the release, so a diagonal hand
+  cannot change a party's table while it is moving their time. `dragAxis` (`lib/cell-offer.js`) is the rule: a tie goes to the table drag, and a
+  block that cannot be re-timed counts vertical travel only, so the Unplaced row's blocks behave exactly as they did. A finger armed in the top or
+  bottom band and held still becomes a table drag when the rows start moving under it, which is v18.3.1's behaviour kept.
+- **The plan is the drop's plan with a time in it** (`planRetime`, `lib/drop-plan.js`). It goes through the same `dropSite`, so the two drags
+  cannot disagree about who is in the way. One candidate, the booking's own tables; no swap (two parties trading times is not what a sideways
+  drag asks for); confirmed and pending only (a seated party's time is when it sat down); the new start answers to `timeRefusal`, the form's own
+  rule and now its third caller; a block over any of its tables refuses. Somebody in the way is released and re-seated by the same pass a drop
+  uses, and the write commits only if the trial leaves none of them without a table (Patryk: like a table drop). With the Optimiser off nothing
+  re-seats anybody, so it refuses and names who.
+- **The kitchen warns and refuses nothing** (Patryk). `retimePreview` / `retimeCheck` are `rowHint` plus `kitchenAsk`'s own test, said in amber
+  as "Kitchen busy at 20:00", added to a free or an amber answer and never to a red one.
+- **Undo is `saveMove`'s, unchanged.** `retimeBooking` hands the transform over with kind `"move"`, so the Undo is armed on landing and restores
+  the time, `scheduledTime` and every party the write re-seated. The pill is compact (Patryk): `Marcos Vidal · 15:30 → 16:30 · moved Luis Prado`
+  (`retimeLabel`, `retimeSentence`; `landedSentence` takes that branch for a plan with `retime`). It asks `bookingEdit`, where a drop asks
+  `bookingAssign`: a new time is an edit, which is what the form asks for the same change.
+- **In the block**: `dragX` (`{mins, px, live}`) is set once per quarter, not per frame; the block steps and each step glides on `M.tap`; `pulse()`
+  on each step and when a new time lands. `lifted` is one flag for both drags. The view hears once per time (`hoverTime` → `dragTime`, a third
+  plain value beside `dragHover` and `dragOver`), and the row warning asks `onRetimePreview` and, for a settled finger, `onRetimeCheck`.
+- **The chip** is the cell marker's `CellChip`, a sibling of the block at its leading edge, placed by the minute and not by the block's offset,
+  so after the release it fades where it stood while the block lands under it or eases home.
+- **The touch hold on the page moved from the 800ms arm to mount.** The old listener was added when the drag armed, which was enough while
+  `touch-action: pan-x` kept the browser off a vertical move. A sideways move is exactly what `pan-x` gives the browser, and a listener added
+  mid-touch can be too late to cancel it. It is now on the block from mount and acts only while a drag is live, so a swipe that starts on a block
+  still scrolls the timeline. `preventScrollRef` is gone.
+- **The edge scroll serves both axes from one loop** (`scrollBoundsX`, `lib/edge-scroll.js`), and tells the ruler in the same frame
+  (`syncGridScroll`, which `onGridScroll` now calls too).
+
+**Three departures from the plan's text, for Patryk to overrule.** The chip stands INSIDE the block's leading edge, over its own time and the
+start of the name, where the plan said only that the block carries it: outside the edge it would be cut off at the left of the view. The pill
+uses the full name, as a drop's sentence does, where the plan's example read "Marcos". The snap and the axis rule went to `lib/cell-offer.js`
+rather than staying in the component, so they can be tested.
+
+**Measured on DEV, 2026-11-10, at 998×507, on three bookings made through the cell marker for 11.11.**
+- A real pointer drag (the pane's, 273 → 346px on Marcos's block): the booking went 15:00 → 15:30 on table 3, the pill read
+  "Marcos Vidal · 15:00 → 15:30" with Undo, and the block showed the lock. Undo put 15:30 → 16:00 back to 15:30 in a second run.
+- A held drag, driven by dispatched pointer events so it could be looked at: `translateX(72px)`, opacity 0.85, z 30, the lift shadow, the chip
+  "3 · 16:00" at the block's left + 4px (384.5 against 380.5) and centred on the row, the row lit `--bg-ac-hover`. A second move 30px down did
+  not change the axis.
+- Onto Luis's time on the same table: the row turned amber with "Moves Luis", and the release moved Luis to table 1 and read
+  "Marcos Vidal · 15:30 → 16:30 · moved Luis Prado". Undo put both back.
+- Held at the right edge: the grid scrolled (218.5 → 574), the ruler's clip had the same `scrollLeft`, and the block's offset grew with it. Past
+  22:00 the row turned red with "Bookings on this day are accepted between 13:00 and 22:00."; the release raised that sentence as the refusal
+  toast and wrote nothing. **A defect found here and fixed**: the block hanging past the grid's last hour widened the scroller, and the loop
+  followed it 172px into empty space (scrollLeft 746 against a resting end of 574). The loop now stops at the end the grid had when the axis was
+  chosen (`sxMax`); re-measured, it stopped at 574 while the scroller reported 674.
+- `pointercancel` mid-drag wrote nothing and raised nothing.
+- A drag that began 3px across and 10px down stayed a table drag after 100px sideways (`translateY`, no chip), dropped on row 5 as
+  "Luis Prado moved to 5." and undid.
+- A plain click on a block still opened Edit booking.
+- The landing: sampled on each frame after a release 72px from home, the block's left edge read 227px before the release and 227 at 45, 72 and
+  73ms after it, while `left` had already moved to the new time and the transform was mid-ease (54.8px). So the block stays where the hand left
+  it. Three samples only, because the pane then drew one frame a second.
+
+**Not measured, and for the tablet and the iPhone after merge**: the 800ms hold followed by a sideways move under a finger (whether the browser
+gives the move to the drag or to its own horizontal scroll), the pulse on each step, and the edge scroll under a finger. Every drag above was a
+mouse's or a dispatched event's, and a synthetic touch arms nothing here (`mgt-measurement-traps`).
