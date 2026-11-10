@@ -40875,3 +40875,7 @@ cannot reach the time drag's "is seated" refusal (`isActive` leaves it out), the
   re-render the open chat every few milliseconds for as long as it stayed open (read from the code, not reproduced: it needs such a stamp in
   the database). A real window is a day long; the stamps that are not are the unclamped ones `api/wa-inbound.js` records, and the next bad
   one. The wait is capped at `WA_WINDOW_RECHECK_MAX_MS` (24 days), which no real window reaches.
+- **What a new booking starts with is spelled once.** `newAtCell` repeated `openNewWith`'s seed-date rule and its default draft literal six
+  lines below it, with two fields changed. Both are `newDraft(over)` now (`App.jsx`): `openNewWith`'s default is `newDraft()` and the cell's
+  is `newDraft({time, preferredTables})`. Run on DEV after the change: + New opened the form at 13:00 (it was 12:30 at the restaurant, before
+  opening, which is `newBookingTime`'s answer), and a click on table 2 at 15:00 opened it at 15:00 with "Tables 2 (auto)" and an empty phone.

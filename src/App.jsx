@@ -2064,14 +2064,21 @@ export function BookingApp({uid}){
   // would be handed the click event as the draft.
   // v18.14.0 (M5): the time is in the draft `openForm` is given, so it is the
   // baseline too, and a form nobody touched is not dirty.
-  function openNewWith(draft){if(refused("bookingCreate"))return false;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(draft||Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",time:newBookingTime(seedDate,today,nowMins),size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);return true;}
+  // v18.16.0 (/code-review): what a new booking starts with, spelled once. The
+  // Timeline's cell (`newAtCell`) wrote the seed-date rule and this literal out a
+  // second time, six lines below, with two fields changed; a default added to one
+  // and missed in the other would give a booking begun from a cell a different
+  // start from one begun with + New, and nothing would fail. `over` is what a
+  // door knows better.
+  function newDraft(over){const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();return Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",time:newBookingTime(seedDate,today,nowMins),size:generalSettings.defaultBookingSize},over);}
+  function openNewWith(draft){if(refused("bookingCreate"))return false;pendingWaitlistRef.current=null;openForm(draft||newDraft());setEditId(null);setError("");setSwapAffected(null);setShowForm(true);return true;}
   function openNew(){openNewWith(null);}
   // v18.16.0: the Timeline's empty cell (and, with a block focused, `N`). The time
   // is the cell's and the table goes in as the PREFERRED one, the form's star, not
   // as a hand pick (Patryk): the optimiser still seats the party, on that table
   // when it fits, and the form's Tables row shows where before Save. Through
   // `openNewWith`, the gated door, so `bookingCreate` is asked before the form opens.
-  function newAtCell(tableId,time){const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();return openNewWith(Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",time:time,size:generalSettings.defaultBookingSize,preferredTables:[tableId]}));}
+  function newAtCell(tableId,time){return openNewWith(newDraft({time:time,preferredTables:[tableId]}));}
   // v18.16.0: `N` with a Timeline block focused: a new booking on that block's
   // table, right after that booking (`nextFreeAfter`, lib/cell-offer.js), through
   // the cell's door. When the day has no such time left it is the plain N.

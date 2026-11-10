@@ -118,9 +118,15 @@ describe("timeRefusal: one rule for the form, the cell and the drag", () => {
 
 describe("the form opens with the cell's time and its table preferred, not picked", () => {
   const app = appCode();
-  const door = app.slice(app.indexOf("function newAtCell("), app.indexOf("function newAtCell(") + 400);
-  it("goes through the gated door, on the form's own empty draft", () => {
-    expect(door).toMatch(/return openNewWith\(Object\.assign\(\{\},EMPTY_FORM,\{/);
+  const door = app.slice(app.indexOf("function newAtCell("), app.indexOf("function openNewAfter("));
+  const draft = app.slice(app.indexOf("function newDraft("), app.indexOf("function openNewWith("));
+  // v18.16.0 (/code-review): one spelling of what a new booking starts with. The
+  // cell wrote the seed-date rule and the literal out a second time.
+  it("goes through the gated door, on the draft + New itself starts with", () => {
+    expect(door).toContain("function newAtCell(tableId,time){return openNewWith(newDraft({time:time,preferredTables:[tableId]}));}");
+    expect(draft).toContain("return Object.assign({},EMPTY_FORM,{date:seedDate,phone:\"\",time:newBookingTime(seedDate,today,nowMins),size:generalSettings.defaultBookingSize},over);");
+    expect(app).toContain("openForm(draft||newDraft());");
+    expect((app.match(/Object\.assign\(\{\},EMPTY_FORM,\{date:seedDate/g) || []).length, "the literal, once").toBe(1);
   });
   it("sets the time and the preferred table, and never a hand pick", () => {
     expect(door).toMatch(/time:time,/);
