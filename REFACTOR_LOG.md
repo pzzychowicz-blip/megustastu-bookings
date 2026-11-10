@@ -40558,6 +40558,13 @@ commit below. Nothing stored changes shape, so `SCHEMA` stays and no rule moves.
 `tests/conversation-menu.test.js` (the ids and their order, the menu never empty, the hairline), `tests/wa-inbox-layout.test.js` (the header holds no
 button of its own; the chip is gone).
 
+**Measured on DEV, 2026-11-10, at 998×507, both themes** (this commit had no live check recorded). The header's only button is "More actions".
+On Marcos's thread the menu is Archive · Re-check · Not a customer; Archive raised "Archive conversation? This conversation is linked to a
+booking on Sat 14.11 at 17:30…" and Back left it in the Inbox. On an archived thread (Laura) it is Restore · Re-check · Not a customer, a 1px
+hairline (`rgba(255,255,255,0.1)` Dark, `rgba(210,218,230,0.8)` Light), then Delete in the danger ink. Delete raised "Delete conversation?" and
+Back kept the thread; Restore from the menu emptied Archived and put the thread in the Inbox; Archive from the menu on that thread, which has no
+upcoming booking, archived it at once.
+
 ### Commit 2 — the linked booking is a fixed strip on a tablet or desktop
 
 Opened, the card added one thing to its collapsed line: the table numbers. So the chevron promised more than there was (Patryk: "if there's nothing
@@ -40620,8 +40627,22 @@ Step 1 (Side by side / Top and bottom) went quiet in v18.14.0's sweep of the sec
 are not a primary action. Step 2 gains **Back** (`ChevronLeftIcon`, 44px), under the row so the two view buttons do not move; it refuses while the
 menu is not `live`, like every button there. No new view marks (his choice): the view switcher itself uses words.
 
-`tests/quiet-buttons.test.js` holds both. **Not yet looked at in the running app**: the session's usage limit was reached at this commit, so the
-popup's two steps and Back, in and out, are still to be checked on DEV.
+`tests/quiet-buttons.test.js` holds both.
+
+**Measured on DEV, 2026-11-10, at 998×507, both themes** (the commit's own session reached its usage limit before it could look). Opened from
+List by a dispatched `contextmenu` and a `pointerup` to arm it (`mgt-measurement-traps`: a synthetic hold opens nothing).
+- Every button of both steps has one fill and one ink: `rgba(118,118,128,0.24)` under `rgb(199,199,204)` in Dark, `rgba(255,255,255,0.5)` under
+  `rgb(74,85,104)` in Light. Back is 73×44.
+- Side by side → "Which view goes alongside?", Timeline refused at this width (disabled, opacity 0.45, the same fill) with the narrow-screen
+  sentence under it. Back → "How should it split?" again, both directions live. Top and bottom → Timeline allowed and no sentence.
+- Top and bottom, then Plan: the menu closed and the split was List over Plan (`{a:"list", b:"plan", dir:"h", ratio:0.5}`).
+- In and out: the card took `mgt-card-in` to open; on Escape it took `mgt-card-out` and its opacity read 1.00, 0.96, 0.83, 0.55, 0.08 over 264ms
+  before it left the DOM.
+- **"The two view buttons do not move" is true of the card, not of the screen.** Back is under the row, so nothing above it shifted inside the
+  card; but the card is centred and step 2 is now taller by Back, so on screen step 2's row sits 34px above step 1's (253 → 219, no refusal
+  shown). A second tap where "Top and bottom" was lands on the lower 10px of the view row, on Back, or on nothing; before this commit it landed
+  squarely on a view button. Not changed.
+
 
 ### Commit 6 — an empty cell of the Timeline starts a booking
 
