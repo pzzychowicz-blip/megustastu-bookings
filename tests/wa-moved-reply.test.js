@@ -166,6 +166,51 @@ describe("movedReplyPlan: the answers", () => {
         .toEqual({ phoneKey: "34600111222", withdraw: true });
     });
   });
+  // v18.16.0 (follow-up, Patryk): a draft in an archived chat brings the chat
+  // back to the Inbox, as a sent reply does, and remembers where it stood in
+  // Archived so the draft's withdrawal can put it back there.
+  describe("an archived chat comes back with the draft, and goes back without it", () => {
+    const AT = NOW - 86400000;
+    const archived = conv({ archived: true, archivedAt: AT });
+    const at = (time) => ({ date: "2026-10-16", time });
+    const bk = (time) => ({ id: "b1", date: "2026-10-16", time });
+    it("the draft says to bring it back, and where it was", () => {
+      const plan = ask({ conversations: [archived] });
+      expect(plan).toEqual({ phoneKey: "34600111222", text: movedReply("en", to), to, from: null, prev: null, bringBack: true, broughtBack: { archivedAt: AT } });
+    });
+    it("a chat archived with no archivedAt still comes back, and goes back at the time of its going", () => {
+      expect(ask({ conversations: [conv({ archived: true })] }).broughtBack).toEqual({ archivedAt: null });
+    });
+    it("a chat in the Inbox: neither key, the answer as before", () => {
+      const plan = ask();
+      expect("bringBack" in plan || "broughtBack" in plan).toBe(false);
+    });
+    it("a muted chat is never brought back: no draft at all", () => {
+      expect(ask({ conversations: [conv({ archived: true, archivedAt: AT, muted: true })] })).toBeNull();
+    });
+    it("a closed window drafts nothing, so brings nothing back", () => {
+      expect(ask({ conversations: [conv({ archived: true, archivedAt: AT, windowExpiresAt: NOW - 1 })] })).toBe("closed");
+    });
+    it("a second move finds the chat in the Inbox and carries the memory, not a second bring-back", () => {
+      const first = ask({ conversations: [archived], to: at("19:15"), from: at("19:00"), booking: bk("19:15") });
+      const inbox = conv({ archived: false, archivedAt: null });
+      const second = ask({ conversations: [inbox], to: at("19:45"), from: at("19:15"), booking: bk("19:45"), textOf: () => first.text, mine: first });
+      expect(second.bringBack).toBeUndefined();
+      expect(second.broughtBack).toEqual({ archivedAt: AT });
+      expect(second.prev.broughtBack).toEqual({ archivedAt: AT });
+    });
+    it("moved back by hand: the draft is withdrawn and the chat goes back", () => {
+      const first = ask({ conversations: [archived], to: at("19:30"), from: at("19:00"), booking: bk("19:30") });
+      const inbox = conv({ archived: false, archivedAt: null });
+      expect(ask({ conversations: [inbox], to: at("19:00"), from: at("19:30"), booking: bk("19:00"), textOf: () => first.text, mine: first }))
+        .toEqual({ phoneKey: "34600111222", withdraw: true, rearchive: { archivedAt: AT } });
+    });
+    it("a withdrawal of a draft that brought nothing back says nothing about Archived", () => {
+      const first = ask({ to: at("19:30"), from: at("19:00"), booking: bk("19:30") });
+      expect(ask({ to: at("19:00"), from: at("19:30"), booking: bk("19:00"), textOf: () => first.text, mine: first }))
+        .toEqual({ phoneKey: "34600111222", withdraw: true });
+    });
+  });
   it("5 · an expired 24-hour window is said, not drafted", () => {
     expect(ask({ conversations: [conv({ windowExpiresAt: NOW - 1 })] })).toBe("closed");
     expect(ask({ conversations: [conv({ windowExpiresAt: NOW })] })).toBe("closed");
@@ -229,6 +274,20 @@ describe("movedReplyUndo: what an Undo on that booking does to the draft", () =>
     // put back to seated at 19:25 on a 19:30 booking: the draft's time still stands
     expect(movedReplyUndo(mine, mine.text, bk({ status: "seated", time: "19:25", scheduledTime: "19:30" }))).toBeNull();
   });
+  // v18.16.0 (follow-up, Patryk): the chat a draft brought back goes back with it.
+  it("the move undone: a chat the draft brought out of Archived goes back to where it was", () => {
+    const back = { archivedAt: 1_700_000_000_000 };
+    const mine = Object.assign(draft("19:30"), { broughtBack: back });
+    expect(movedReplyUndo(mine, mine.text, bk())).toEqual({ mine: null, text: "", rearchive: back });
+  });
+  it("…but not when somebody edited or sent the draft, nor when an earlier draft comes back into the box", () => {
+    const back = { archivedAt: 1_700_000_000_000 };
+    const mine = Object.assign(draft("19:30"), { broughtBack: back });
+    expect(movedReplyUndo(mine, mine.text + " See you!", bk())).toEqual({ mine: null });
+    const first = Object.assign(draft("19:30"), { broughtBack: back });
+    const second = Object.assign(draft("20:00", first), { broughtBack: back });
+    expect(movedReplyUndo(second, second.text, bk({ time: "19:30", scheduledTime: "19:30" }))).toEqual({ mine: first, text: first.text });
+  });
   it("nothing drafted, or nothing known about the booking, changes nothing", () => {
     expect(movedReplyUndo(undefined, "", bk())).toBeNull();
     expect(movedReplyUndo(draft("19:30"), movedReply("en", at("19:30")), undefined)).toBeNull();
@@ -239,6 +298,7 @@ describe("movedReplyWords: how the app says it", () => {
   it("a clause for the pill and a sentence for the toast slot", () => {
     expect(movedReplyWords("drafted")).toEqual({ pill: "reply drafted", toast: "The new time is drafted in the guest's WhatsApp chat.", good: true });
     expect(movedReplyWords("closed")).toEqual({ pill: "guest's WhatsApp window is closed", toast: "The guest's WhatsApp window is closed, so no reply was drafted.", good: false });
+    expect(movedReplyWords("drafted-back")).toEqual({ pill: "reply drafted, chat back in Inbox", toast: "The new time is drafted in the guest's WhatsApp chat, which is back in the Inbox.", good: true });
   });
   it("nothing to say when nothing happened", () => {
     expect(movedReplyWords(null)).toBeNull();
@@ -258,13 +318,20 @@ describe("the hook: refs and the store, nothing decided", () => {
     expect(HOOK).toMatch(/const bookingsRef = useRef\(bookings\);\s+useEffect\(function \(\) \{ bookingsRef\.current = bookings; \}, \[bookings\]\);/);
   });
   it("writes only a plan with a text, to this device's draft store, and remembers it", () => {
-    expect(draft).toMatch(/if \(!plan \|\| plan === "closed"\) return plan;[\s\S]*?\s+setReplyDraft\(uid, plan\.phoneKey, plan\.text\);\s+movedDraftsRef\.current\[bookingId\] = plan;\s+return "drafted";/);
+    expect(draft).toMatch(/if \(!plan \|\| plan === "closed"\) return plan;[\s\S]*?\s+setReplyDraft\(uid, plan\.phoneKey, plan\.text\);\s+movedDraftsRef\.current\[bookingId\] = plan;/);
+    expect(draft).toMatch(/movedDraftsRef\.current\[bookingId\] = plan;[\s\S]*?return "drafted";\s+\}/);
   });
-  it("a withdrawn draft: the box emptied, the draft forgotten, and nothing said", () => {
-    expect(draft).toMatch(/if \(plan\.withdraw\) \{\s+setReplyDraft\(uid, plan\.phoneKey, ""\);\s+delete movedDraftsRef\.current\[bookingId\];\s+return null;\s+\}/);
+  it("a withdrawn draft: the box emptied, the draft forgotten, the chat put back if it brought it, and nothing said", () => {
+    expect(draft).toMatch(/if \(plan\.withdraw\) \{\s+setReplyDraft\(uid, plan\.phoneKey, ""\);\s+delete movedDraftsRef\.current\[bookingId\];\s+rearchiveMoved\(plan\.phoneKey, plan\.rearchive\);\s+return null;\s+\}/);
   });
-  it("nothing here reaches the database or sends anything", () => {
-    expect(draft + undo).not.toMatch(/patchConversation|appendMessage|handleSendReply|sendViaBackend|update\(|set\(/);
+  // v18.16.0 (follow-up, Patryk): the one write is the chat's place, Inbox or
+  // Archived, through the hook's guarded patchConversation. Nothing is sent.
+  it("its only database write is the chat's place, and nothing is sent", () => {
+    expect(draft + undo).not.toMatch(/appendMessage|handleSendReply|sendViaBackend|update\(|set\(/);
+    expect(draft).toMatch(/if \(plan\.bringBack\) \{\s+patchConversation\(plan\.phoneKey, \{ archived: false, archivedAt: null \}\);\s+return "drafted-back";\s+\}/);
+    expect(draft).toContain("if (!conv || conv.archived) return;");
+    expect(draft).toContain("patchConversation(phoneKey, { archived: true, archivedAt: back.archivedAt || Date.now() });");
+    expect(undo).toContain("rearchiveMoved(mine.phoneKey, back.rearchive);");
   });
   it("Undo asks the plan what to do, with what the box holds and what the booking was put back to", () => {
     expect(undo).toContain("function undoMovedReply(bookingId, restored) {");

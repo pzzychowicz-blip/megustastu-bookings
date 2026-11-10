@@ -69,12 +69,6 @@ session and keeping it in sync.
   Vercel's logs, which a Hobby project keeps for an hour. If the rehearsal passes, the
   restaurant's number, with the Business app's greeting message turned off.
 
-- **A moved booking's reply is drafted into an archived chat without saying where.**
-  `movedReplyPlan` stops for a muted guest and not for an archived conversation, so the draft
-  waits under Archived while the pill says "reply drafted" and the inbox's list shows no
-  "Draft:" row (run in Node, v18.16.0's `/code-review`). Patryk to choose: the pill names
-  the place, the chat comes back to the inbox, or it stays as it is.
-
 The entries marked `#N` come from the tech-debt scans of **2026-09-23** (and its
 `/code-review`) and **2026-10-30**. `#N` is the item's number in its register, and the
 reports have the evidence for each: in `megustastu-bookings context/`,

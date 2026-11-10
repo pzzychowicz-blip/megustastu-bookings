@@ -452,8 +452,8 @@ export function movedSlot(before, after) {
 }
 function sameSlot(a, b) { return !!a && !!b && a.date === b.date && a.time === b.time; }
 
-// What to do about it → null | "closed" | {phoneKey, withdraw} |
-// {phoneKey, text, to, from, prev}. The hook (`draftMovedReply`) holds the refs
+// What to do about it → null | "closed" | {phoneKey, withdraw, rearchive?} |
+// {phoneKey, text, to, from, prev, bringBack?, broughtBack?}. The hook (`draftMovedReply`) holds the refs
 // and the store; the answers are here.
 //   null      nothing to draft: the module is off (asked FIRST, so an off module
 //             does nothing at all), no conversation is linked to this booking,
@@ -482,6 +482,20 @@ function sameSlot(a, b) { return !!a && !!b && a.date === b.date && a.time === b
 // 19:30 (reproduced in Node), where an Undo of the same move takes the draft
 // away. So does this, before the window is asked about: a draft nobody should
 // send goes whether or not it could be sent.
+//
+// v18.16.0 (follow-up, Patryk): a draft in an ARCHIVED chat waited under
+// Archived, where nobody looks, while the pill said "reply drafted". The chat
+// now comes back to the Inbox, by the rule a sent reply follows
+// (`replyUnarchives`, so never a muted one, which stops above anyway), and the
+// answer says so:
+//   bringBack   true: take this chat out of Archived now
+//   broughtBack {archivedAt}: a draft of this chain brought it back, and this is
+//               where it stood in Archived. Carried from draft to draft (the
+//               second move finds the chat already in the Inbox), and asked by
+//               whatever takes the draft away again: a withdraw answers
+//               `rearchive` with it, and so does `movedReplyUndo`, so the chat
+//               goes back where it was, at its old place in the list. Both keys
+//               are absent when they do not apply.
 export function movedReplyPlan(o) {
   if (!o || o.on !== true || !o.to) return null;
   const conv = (o.conversations || []).find(function (c) { return c && c.acceptedBookingId === o.bookingId; });
@@ -492,10 +506,19 @@ export function movedReplyPlan(o) {
   const ours = !!held && !!o.mine && o.mine.phoneKey === conv.phoneKey && o.mine.text === held;
   if (held && !ours) return null;
   const from = (ours ? o.mine.from : o.from) || null;
-  if (ours && sameSlot(from, o.to)) return { phoneKey: conv.phoneKey, withdraw: true };
+  const carried = ours && o.mine.broughtBack ? o.mine.broughtBack : null;
+  if (ours && sameSlot(from, o.to)) return withBack({ phoneKey: conv.phoneKey, withdraw: true }, "rearchive", carried);
   if (!windowOpen(conv.windowExpiresAt, o.now)) return "closed";
-  const prev = ours ? { phoneKey: o.mine.phoneKey, text: o.mine.text, to: o.mine.to, from: from, prev: null } : null;
-  return { phoneKey: conv.phoneKey, text: movedReply(conv.language, o.to), to: { date: o.to.date, time: o.to.time }, from: from, prev: prev };
+  const prev = ours ? withBack({ phoneKey: o.mine.phoneKey, text: o.mine.text, to: o.mine.to, from: from, prev: null }, "broughtBack", o.mine.broughtBack) : null;
+  const out = { phoneKey: conv.phoneKey, text: movedReply(conv.language, o.to), to: { date: o.to.date, time: o.to.time }, from: from, prev: prev };
+  if (replyUnarchives(conv)) return Object.assign(out, { bringBack: true, broughtBack: { archivedAt: Number(conv.archivedAt) || null } });
+  return withBack(out, "broughtBack", carried);
+}
+// `obj` with `key: back` when there is one, else as it is: an absent key, so an
+// answer about a chat that was never archived reads exactly as it did before.
+function withBack(obj, key, back) {
+  if (back) obj[key] = back;
+  return obj;
 }
 
 // What an Undo does to that draft → null (nothing changes) | {mine, text?}:
@@ -512,13 +535,18 @@ export function movedReplyPlan(o) {
 // replaced comes back when the booking is back at THAT time: 19:00 → 19:30 →
 // 20:00 and one Undo leaves the party at 19:30, which the guest has still not
 // heard about.
+//   v18.16.0 (follow-up, Patryk): when the draft goes and nothing replaces it,
+// a chat the draft brought out of Archived goes back (`rearchive`, the plan's
+// `broughtBack`). A draft somebody edited or sent is theirs, and so is the chat:
+// it stays in the Inbox. One an earlier draft gives way to keeps it there too,
+// since that draft still waits in it.
 export function movedReplyUndo(mine, held, restored) {
   if (!mine || !mine.to || !restored) return null;
   const names = function (d) { return !!(d && d.to) && d.to.date === restored.date && d.to.time === givenTime(restored); };
   if (names(mine)) return null;
   if (held !== mine.text) return { mine: null };
   const prev = names(mine.prev) ? mine.prev : null;
-  return { mine: prev, text: prev ? prev.text : "" };
+  return withBack({ mine: prev, text: prev ? prev.text : "" }, "rearchive", prev ? null : mine.broughtBack);
 }
 
 // How the app says which of the two happened: a clause for the Undo pill (the
@@ -526,6 +554,8 @@ export function movedReplyUndo(mine, held, restored) {
 // a landing that finds its pill gone.
 export function movedReplyWords(result) {
   if (result === "drafted") return { pill: "reply drafted", toast: "The new time is drafted in the guest's WhatsApp chat.", good: true };
+  // v18.16.0 (follow-up): the draft brought an archived chat back to the Inbox.
+  if (result === "drafted-back") return { pill: "reply drafted, chat back in Inbox", toast: "The new time is drafted in the guest's WhatsApp chat, which is back in the Inbox.", good: true };
   if (result === "closed") return { pill: "guest's WhatsApp window is closed", toast: "The guest's WhatsApp window is closed, so no reply was drafted.", good: false };
   return null;
 }

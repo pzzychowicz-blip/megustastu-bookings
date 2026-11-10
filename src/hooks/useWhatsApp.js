@@ -595,7 +595,7 @@ export function useWhatsApp({
   // drag, `doSaveEdit`'s `onLanded` for the form), never at a dispatch: a held or
   // refused write must not leave "we've moved your booking" in a reply box. What
   // to do is `movedReplyPlan` (lib/whatsapp.js); this holds the refs and the store.
-  // → "drafted" | "closed" | null
+  // → "drafted" | "drafted-back" | "closed" | null
   // `to` is `movedSlot`'s answer, which carries the slot the booking left
   // (`to.from`): a move back to where the guest already knows the booking to be
   // takes this session's unsent draft away, as an Undo of the move does, and
@@ -622,11 +622,27 @@ export function useWhatsApp({
     if (plan.withdraw) {
       setReplyDraft(uid, plan.phoneKey, "");
       delete movedDraftsRef.current[bookingId];
+      rearchiveMoved(plan.phoneKey, plan.rearchive);
       return null;
     }
     setReplyDraft(uid, plan.phoneKey, plan.text);
     movedDraftsRef.current[bookingId] = plan;
+    // v18.16.0 (follow-up, Patryk): a draft in an archived chat brings the chat
+    // back to the Inbox, as a sent reply does (`bringBack`, movedReplyPlan).
+    if (plan.bringBack) {
+      patchConversation(plan.phoneKey, { archived: false, archivedAt: null });
+      return "drafted-back";
+    }
     return "drafted";
+  }
+  // …and when that draft is taken away again, the chat goes back to Archived, at
+  // the place it had there (`back.archivedAt`), unless it is there already:
+  // somebody archived it since, and their archivedAt stands.
+  function rearchiveMoved(phoneKey, back) {
+    if (!back) return;
+    const conv = conversationsRef.current.find(function (c) { return c.phoneKey === phoneKey; });
+    if (!conv || conv.archived) return;
+    patchConversation(phoneKey, { archived: true, archivedAt: back.archivedAt || Date.now() });
   }
   // An Undo on that booking, with the booking as it was put back. Whether the
   // draft goes, stays or gives way to the one before it is `movedReplyUndo`
@@ -637,6 +653,7 @@ export function useWhatsApp({
     if (!back) return;
     if (back.mine) movedDraftsRef.current[bookingId] = back.mine; else delete movedDraftsRef.current[bookingId];
     if (typeof back.text === "string") setReplyDraft(uid, mine.phoneKey, back.text);
+    rearchiveMoved(mine.phoneKey, back.rearchive);
   }
 
   // ── Archive / unarchive / delete ────────────────────────────────────────────

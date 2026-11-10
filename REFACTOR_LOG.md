@@ -40896,3 +40896,12 @@ He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the 
   "Conversation closed", one the guest never opened says "The guest hasn't written yet, so a reply can't be sent" (his wording, chosen over
   "Conversation closed" for both and over pointing at the Business app, which was not checked). The chip is unchanged: no window, no chip.
   `tests/wa-inbox-layout.test.js` pins the question, both sentences and `windowOpen`'s edges.
+- **A moved booking's reply drafted into an archived chat brings the chat back.** `movedReplyPlan` stopped for a muted guest and not for an
+  archived conversation, so the draft waited under Archived while the pill said "reply drafted". Of the three ways out (the pill names the
+  place, the chat comes back, nothing), Patryk chose the chat coming back, by the rule a sent reply follows (`replyUnarchives`), with the pill
+  saying " · reply drafted, chat back in Inbox", and chose that the draft's Undo sends it back. The plan answers `bringBack` and remembers
+  `broughtBack: {archivedAt}` from draft to draft; a withdraw (a move back by hand) and `movedReplyUndo` answer `rearchive` with it, and the
+  hook puts the chat back at its old place in Archived unless somebody archived it since. A draft somebody edited or sent keeps the chat in
+  the Inbox, and so does one an earlier draft gives way to. This is the hook's first database write for a moved reply: the chat's place,
+  through the guarded `patchConversation` (`conversations` is an Admin-SDK node, so no CAS; root `CLAUDE.md`). Ten new cases in
+  `tests/wa-moved-reply.test.js`; its pin that the hook wrote nothing now names the one write it makes.
