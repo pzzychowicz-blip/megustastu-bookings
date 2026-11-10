@@ -27,7 +27,12 @@
 //   draggedStart(start, px, pxPerMin, openMins, endMins) → the start it has reached
 //
 // What the release then does with that start is `planRetime` (lib/drop-plan.js).
-import { toTime, getBlockSlots, getBusy } from "./booking-logic.js";
+//
+// Commit 9 added the keyboard's way to the same form: `N` with a Timeline block
+// focused.
+//
+//   nextFreeAfter(booking, tableId, ctx) → null | { tableId, time }
+import { toTime, getBlockSlots, getBusy, occupancyEnd } from "./booking-logic.js";
 import { timeRefusal } from "./booking-save.js";
 
 export const CELL_MINS = 15;
@@ -46,6 +51,31 @@ export function cellOffer(tableId, mins, ctx) {
   const blocked = getBusy(getBlockSlots(ctx.blocks || [], ctx.date), mins, mins + CELL_MINS);
   if (blocked.has(tableId)) return null;
   return { tableId: tableId, time: toTime(mins) };
+}
+
+// ── `N` on a focused block ───────────────────────────────────────────────────
+// A keyboard has no cell under it, so its door to "here, at this time" is the
+// booking it is standing on: a new booking on that table, right after that one
+// (Patryk, 2026-11-09). "After" is when the table comes free: `occupancyEnd`,
+// which adds the turnaround buffer and, for a seated party running over, is
+// now. From there the first quarter `cellOffer` answers for, so it refuses what
+// a cell refuses (the day's hours, the last start, a block on the table) and
+// nothing about fit: the table is a preference, as it is from a cell, and
+// another party already on it is the optimiser's and the Tables row's to
+// answer. null when the day has no such quarter left; the caller then opens
+// the plain form.
+//
+// ctx: { date, blocks, nowMins, today }
+export function nextFreeAfter(booking, tableId, ctx) {
+  if (!booking || !tableId || !ctx || !ctx.date) return null;
+  const end = occupancyEnd(booking, ctx.nowMins, ctx.today);
+  if (!Number.isFinite(end)) return null;
+  // No booking may start after midnight (src/CLAUDE.md, Operating hours).
+  for (let m = Math.ceil(end / CELL_MINS) * CELL_MINS; m < 24 * 60; m += CELL_MINS) {
+    const offer = cellOffer(tableId, m, ctx);
+    if (offer) return offer;
+  }
+  return null;
 }
 
 // ── The time drag ────────────────────────────────────────────────────────────

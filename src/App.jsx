@@ -106,6 +106,7 @@ import { StatusToasts } from "./components/StatusToasts";
 import { RefusalToast } from "./components/RefusalToast";
 import { toastBox } from "./lib/toast-box";
 import { planDrop, dropPreview, dropCheck, planRetime, retimePreview, retimeCheck } from "./lib/drop-plan";
+import { nextFreeAfter } from "./lib/cell-offer";
 // v18.16.0: a moved booking's new time is drafted for a WhatsApp guest
 // (`saveMove`, `doSaveEdit`). The hook already brings this module into the entry.
 import { movedSlot, movedReplyWords } from "./lib/whatsapp";
@@ -2071,6 +2072,13 @@ export function BookingApp({uid}){
   // when it fits, and the form's Tables row shows where before Save. Through
   // `openNewWith`, the gated door, so `bookingCreate` is asked before the form opens.
   function newAtCell(tableId,time){const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();return openNewWith(Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",time:time,size:generalSettings.defaultBookingSize,preferredTables:[tableId]}));}
+  // v18.16.0: `N` with a Timeline block focused: a new booking on that block's
+  // table, right after that booking (`nextFreeAfter`, lib/cell-offer.js), through
+  // the cell's door. When the day has no such time left it is the plain N.
+  function openNewAfter(id,tableId){
+    const at=nextFreeAfter(bookings.find(function(b){return b.id===id;}),tableId,{date:viewDate,blocks:tableBlocks,nowMins:nowMins,today:todayStr()});
+    if(at) newAtCell(at.tableId,at.time); else openNew();
+  }
   // v18.3.4: the draft is the field table's (`draftFromBooking`), so a field the
   // form edits cannot be left out of what it opens with — the silent wipe
   // ROADMAP #13 named, where Save writes the gap.
@@ -2699,7 +2707,7 @@ export function BookingApp({uid}){
     openEdit:openEdit,updateStatus:updateStatus,
     // v14.4.0: N → new reminder while the Settings Reminders tab is open.
     openNewReminder:openNewReminder,
-    openNew:openNew,openWalkin:openWalkin,
+    openNew:openNew,openNewAfter:openNewAfter,openWalkin:openWalkin,
     // v14.6.0: Summary panel toggle (the g shortcut).
     setSummaryOpen:setSummaryOpen,
     setShowWeek:setShowWeek,

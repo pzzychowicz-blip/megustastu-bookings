@@ -211,6 +211,11 @@ export const SHORTCUT_LAYERS = [
     { keys: ["d"], caps: ["D"], label: "Jump to today", run: (K, ev, env) => hit((K2) => K2.goToDate(env.today)) },
     { keys: ["ArrowLeft"], caps: ["←"], label: "Previous / next day", run: () => hit((K) => K.goToDate(stepDate(K.viewDate, -1))) },
     { keys: ["ArrowRight"], caps: ["→"], label: "Previous / next day", run: () => hit((K) => K.goToDate(stepDate(K.viewDate, 1))) },
+    // v18.16.0: with a Timeline block focused, N books on that table right after
+    // that booking (`K.openNewAfter`, which opens the plain form when the day has
+    // no such time left). Above the plain N, which is what the key is everywhere
+    // else. `env.focusedBlock` is the hook's reading of the DOM.
+    { keys: ["n"], caps: ["N"], label: "New booking after the focused one (Timeline)", when: (K, ev, env) => K.view === "timeline" && !!env.focusedBlock, run: (K, ev, env) => hit((K2) => K2.openNewAfter(env.focusedBlock.id, env.focusedBlock.tableId)) },
     { keys: ["n"], caps: ["N"], label: "New booking", run: () => hit((K) => K.openNew()) },
     { keys: ["w"], caps: ["W"], label: "Walk-in", run: () => hit((K) => K.openWalkin()) },
     { keys: [SUMMARY_KEY], caps: ["S"], label: "Toggle Summary panel", run: () => hit((K) => K.setSummaryOpen((o) => !o)) },

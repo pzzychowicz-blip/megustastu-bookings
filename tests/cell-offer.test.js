@@ -11,16 +11,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { appCode } from "./app-source.js";
-import { CELL_MINS, DRAG_SLOP, cellAt, cellOffer, dragAxis, draggedStart } from "../src/lib/cell-offer.js";
+import { CELL_MINS, DRAG_SLOP, cellAt, cellOffer, dragAxis, draggedStart, nextFreeAfter } from "../src/lib/cell-offer.js";
 import { draftRefusal, timeRefusal } from "../src/lib/booking-save.js";
 import { toTime, lastStartMins } from "../src/lib/booking-logic.js";
-import { setWeekHours, setHourExceptions, DEFAULT_WEEK_HOURS, hoursFor } from "../src/lib/constants.js";
+import { setWeekHours, setHourExceptions, setTurnBuffer, DEFAULT_WEEK_HOURS, hoursFor } from "../src/lib/constants.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const code = (p) => stripComments(readFileSync(join(ROOT, p), "utf8")).join("\n");
 
 const D = "2026-11-09";   // a Monday
-afterEach(() => { setWeekHours(DEFAULT_WEEK_HOURS); setHourExceptions(null); });
+afterEach(() => { setWeekHours(DEFAULT_WEEK_HOURS); setHourExceptions(null); setTurnBuffer(null); });
 
 describe("cellAt: the quarter under a pointer", () => {
   const OPEN = 13 * 60;
@@ -154,6 +154,72 @@ describe("it is this device's switch, on by default", () => {
 
 // ── v18.16.0: a block dragged sideways ───────────────────────────────────────
 // The gesture cannot be run here (a drag spans frames). Its two decisions can.
+// ── Commit 9: `N` with a Timeline block focused ──────────────────────────────
+describe("nextFreeAfter: a new booking on that table, right after that booking", () => {
+  const bk = (o) => Object.assign({ id: "b1", date: D, time: "19:00", duration: 90, status: "confirmed", tables: ["5"] }, o);
+  const ctx = (o) => Object.assign({ date: D, blocks: [], nowMins: 12 * 60, today: "2026-11-01" }, o);
+  it("is the booking's end, on its table", () => {
+    expect(nextFreeAfter(bk(), "5", ctx())).toEqual({ tableId: "5", time: "20:30" });
+    // the row that was focused, for a party on several tables
+    expect(nextFreeAfter(bk({ tables: ["3", "4", "5"] }), "4", ctx())).toEqual({ tableId: "4", time: "20:30" });
+  });
+  it("an end off the quarter is the next quarter", () => {
+    expect(nextFreeAfter(bk({ time: "19:10" }), "5", ctx()).time).toBe("20:45");
+    expect(nextFreeAfter(bk({ duration: 61 }), "5", ctx()).time).toBe("20:15");
+  });
+  it("waits out the turnaround buffer, which is when the table is free", () => {
+    setTurnBuffer({ turnaroundEnabled: true, turnaroundMin: 15 });
+    expect(nextFreeAfter(bk(), "5", ctx()).time).toBe("20:45");
+  });
+  it("a seated party running over frees its table now, not at its booked end", () => {
+    const seated = bk({ status: "seated", time: "13:00", duration: 60 });
+    expect(nextFreeAfter(seated, "5", ctx({ today: D, nowMins: 15 * 60 + 7 })).time).toBe("15:15");
+    // …and on another day its booked end stands
+    expect(nextFreeAfter(seated, "5", ctx()).time).toBe("14:00");
+  });
+  it("skips a block on that table, as a cell under one offers nothing", () => {
+    const blocks = [{ id: "bl", tableId: "5", date: D, from: "20:30", to: "21:15" }];
+    expect(nextFreeAfter(bk(), "5", ctx({ blocks })).time).toBe("21:15");
+    expect(nextFreeAfter(bk(), "6", ctx({ blocks })).time).toBe("20:30");
+  });
+  it("offers only what a cell offers: nothing past the last start, nothing on a closed day", () => {
+    const last = lastStartMins(hoursFor(D).close);
+    expect(nextFreeAfter(bk({ time: toTime(last - 90) }), "5", ctx()).time).toBe(toTime(last));
+    expect(nextFreeAfter(bk({ time: toTime(last - 75) }), "5", ctx())).toBeNull();
+    setWeekHours(Object.assign({}, DEFAULT_WEEK_HOURS, { 1: { closed: true, open: 13, close: 22 } }));
+    expect(nextFreeAfter(bk(), "5", ctx())).toBeNull();
+  });
+  it("answers what cellOffer answers for that minute, over a whole day of ends", () => {
+    const h = hoursFor(D);
+    for (let m = h.open * 60; m < h.close * 60; m += 15) {
+      const got = nextFreeAfter(bk({ time: toTime(m), duration: 60 }), "5", ctx());
+      const want = cellOffer("5", m + 60, ctx());
+      if (want) expect(got, toTime(m)).toEqual(want); else expect(got, toTime(m)).toBeNull();
+    }
+  });
+  it("answers nothing without a booking, a table, a date, or a time it can read", () => {
+    expect(nextFreeAfter(undefined, "5", ctx())).toBeNull();
+    expect(nextFreeAfter(bk(), "", ctx())).toBeNull();
+    expect(nextFreeAfter(bk(), "5", null)).toBeNull();
+    expect(nextFreeAfter(bk({ time: "soon" }), "5", ctx())).toBeNull();
+  });
+});
+
+describe("N on a focused block opens the cell's door, or the plain form", () => {
+  const app = appCode();
+  const fn = app.slice(app.indexOf("function openNewAfter("), app.indexOf("function openNewAfter(") + 420);
+  it("asks nextFreeAfter about the viewed day, with the clock the Timeline draws by", () => {
+    expect(fn).toContain("const at=nextFreeAfter(bookings.find(function(b){return b.id===id;}),tableId,{date:viewDate,blocks:tableBlocks,nowMins:nowMins,today:todayStr()});");
+  });
+  it("goes through newAtCell, so the table is preferred and the door is the gated one; no time left is the plain N", () => {
+    expect(fn).toContain("if(at) newAtCell(at.tableId,at.time); else openNew();");
+  });
+  it("the block says which row it stands on, and an Unplaced block says none", () => {
+    const view = code("components/TimelineView.jsx");
+    expect(view).toContain("data-tbl={leaving || homeTable == null ? undefined : homeTable}");
+  });
+});
+
 describe("dragAxis: one direction per drag", () => {
   it("has not decided inside the slop, on either axis", () => {
     expect(DRAG_SLOP).toBe(6);

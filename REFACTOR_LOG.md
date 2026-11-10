@@ -40785,3 +40785,30 @@ move here would then write over it. One installed app per device is how the rest
 **Tests**: `tests/wa-moved-reply.test.js` (new: the two texts, `movedSlot`, the plan's answers, `movedReplyUndo`, the hook's and App's wiring,
 `noteUndo`), `tests/save-path.test.js` (the landing's five outcomes, run), `tests/drop-plan.test.js` (`saveMove`'s landing),
 `tests/retry-report.test.js` (the edit's report).
+
+### Commit 9 — `N` on a focused Timeline block books after it
+
+The cell marker is a pointer's door: a keyboard has no cell under it. Its door is the booking it is standing on. With a Timeline block focused,
+`N` opens the new-booking form on that block's table, at the time that table comes free (Patryk: "New booking on that table, right after that
+booking").
+
+- **`nextFreeAfter(booking, tableId, ctx)`** (`lib/cell-offer.js`) → `{tableId, time}` or null: the first quarter at or after `occupancyEnd`
+  that `cellOffer` answers for. `occupancyEnd`, not `time + duration`, so the turnaround buffer is waited out and a seated party running over
+  frees its table now. It refuses what a cell refuses and nothing about fit: another party already on that table is the optimiser's and the
+  Tables row's to answer, because the table goes in as the preferred one, as it does from a cell.
+- **The block says which row it stands on**: `data-tbl` on `TimelineBlock`'s outer element, beside `data-bk`; absent in the Unplaced row and on a
+  leaving copy. `focusedBlockOf(el)` (`lib/keyboard.js`) reads both off the key event's target, and the hook hands it to the table as
+  `env.focusedBlock`, the way it hands over the visible tabs, so `resolveShortcut` still touches no DOM.
+- **The row** sits above the plain `N` in the global layer (`when`: the Timeline is the active view and a block has focus), calls
+  `K.openNewAfter(id, tableId)`, and is printed on the Shortcuts tab as "New booking after the focused one (Timeline)".
+- **App's `openNewAfter`** asks `nextFreeAfter` about the viewed day and goes through `newAtCell`, so the door is the gated one
+  (`bookingCreate`) and the table is preferred, never hand-picked. A null answer (no quarter left that day) is the plain `openNew()`.
+
+**Measured on DEV, 2026-11-10, at 998×507.** Marcos's booking for 14.11 stands on rows 3, 4 and 5 (`data-tbl` "3", "4", "5"), 17:30 for 120
+minutes. With the row-4 block focused, a dispatched `n` keydown opened New booking for Sat 14.11 at 19:30 with Tables "4 (auto)" and the
+preferred button reading 4. With nothing focused the same key opened it at 13:00 with no preferred table. The key was a dispatched event on
+the focused element, which is what the window listener receives from a real key; a real keyboard was not used.
+
+**Tests**: `tests/cell-offer.test.js` (`nextFreeAfter`: the end, off-quarter ends, the buffer, a seated party running over, a block, the last
+start, a closed day, agreement with `cellOffer` over a day of ends; App's `openNewAfter`; the block's `data-tbl`), `tests/keyboard.test.js`
+(`focusedBlockOf`), `tests/shortcuts.test.js` (the row's precedence in each view and behind a modal; the hook's `env`).

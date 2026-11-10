@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { activatesItself, isTyping, stepPress, raisesKeyboard } from "../src/lib/keyboard.js";
+import { activatesItself, isTyping, stepPress, raisesKeyboard, focusedBlockOf } from "../src/lib/keyboard.js";
 
 function el(tagName, attrs = {}) {
   return {
@@ -92,5 +92,23 @@ describe("raisesKeyboard — a field somebody types text into", () => {
     expect(raisesKeyboard(f("SELECT"))).toBe(false);
     expect(raisesKeyboard(f("BUTTON"))).toBe(false);
     expect(raisesKeyboard(null)).toBe(false);
+  });
+});
+
+// v18.16.0: `N` with a Timeline block focused books after that booking.
+describe("focusedBlockOf — the Timeline block under the keyboard's focus", () => {
+  const block = (attrs) => ({ getAttribute: (n) => (n in attrs ? attrs[n] : null) });
+  const inside = (blk) => ({ closest: (sel) => (sel === "[data-bk][data-tbl]" ? blk : null) });
+  it("reads the booking and its row off the block the focus is inside", () => {
+    expect(focusedBlockOf(inside(block({ "data-bk": "b1", "data-tbl": "5" })))).toEqual({ id: "b1", tableId: "5" });
+  });
+  it("is nothing outside a block, and nothing for a block with no row (the Unplaced row)", () => {
+    expect(focusedBlockOf(inside(null))).toBeNull();
+    expect(focusedBlockOf(inside(block({ "data-bk": "b1", "data-tbl": "" })))).toBeNull();
+  });
+  it("survives a target that is not an element", () => {
+    expect(focusedBlockOf(null)).toBeNull();
+    expect(focusedBlockOf({})).toBeNull();
+    expect(focusedBlockOf(globalThis)).toBeNull();
   });
 });

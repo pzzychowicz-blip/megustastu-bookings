@@ -97,3 +97,17 @@ export function stepPress(apply) {
     onClick: function (e) { if (e.detail === 0) apply(); },
   };
 }
+
+// v18.16.0: the Timeline block that has the keyboard's focus, for `N` ("a new
+// booking after this one"). → null | { id, tableId }. The block's outer element
+// carries `data-bk` (its booking) and `data-tbl` (its row); focus sits on the
+// `role="button"` inside it, so this looks up from the event's target. A block
+// in the Unplaced row has no `data-tbl` and answers null: it has no table to
+// book after. Read by the hook and handed to the table as `env.focusedBlock`,
+// like the visible tabs: the table itself never touches the DOM.
+export function focusedBlockOf(el) {
+  const blk = el && typeof el.closest === "function" ? el.closest("[data-bk][data-tbl]") : null;
+  if (!blk) return null;
+  const id = blk.getAttribute("data-bk"), tableId = blk.getAttribute("data-tbl");
+  return id && tableId ? { id: id, tableId: tableId } : null;
+}

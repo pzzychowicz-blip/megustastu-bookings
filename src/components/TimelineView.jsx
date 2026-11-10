@@ -982,6 +982,10 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       // lift off for good (index.css, mgt-appear).
       className={leaving ? "mgt-blk mgt-ghost-out" : "mgt-hover-scale mgt-blk" + (arriving ? " mgt-appear" : "")}
       data-flip-id={flipId || undefined}
+      // v18.16.0: the row this block stands on, for `N` ("a new booking after
+      // this one", lib/keyboard.js `focusedBlockOf`). Absent in the Unplaced
+      // row, which has no table to book after, and on a leaving copy.
+      data-tbl={leaving || homeTable == null ? undefined : homeTable}
       // Not on a leaving copy: setGroupHover lifts every [data-bk] of an id.
       data-bk={leaving ? undefined : b.id}
       aria-hidden={leaving ? true : undefined}

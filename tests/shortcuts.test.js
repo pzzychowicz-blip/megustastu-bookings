@@ -258,6 +258,20 @@ describe("global keys", () => {
     expect(press(WEEK_KEY).calls).toEqual([["setShowWeek", true]]);
     expect(press(SUMMARY_KEY, { view: "plan" }).calls[0][0]).toBe("setSummaryOpen");
   });
+  // v18.16.0: with a Timeline block focused, N books after that booking.
+  it("N is a new booking, and with a Timeline block focused it is one after that booking", () => {
+    const focusedBlock = { id: "b7", tableId: "5" };
+    expect(press("n").calls).toEqual([["openNew"]]);
+    expect(press("n", null, { env: { focusedBlock } }).calls).toEqual([["openNewAfter", "b7", "5"]]);
+    expect(press("N", null, { env: { focusedBlock } }).calls).toEqual([["openNewAfter", "b7", "5"]]);
+    // a block has focus only in the Timeline; anywhere else the key is the plain one
+    expect(press("n", { view: "list" }, { env: { focusedBlock } }).calls).toEqual([["openNew"]]);
+    expect(press("n", { view: "plan" }, { env: { focusedBlock } }).calls).toEqual([["openNew"]]);
+    expect(press("n", null, { env: { focusedBlock: null } }).calls).toEqual([["openNew"]]);
+  });
+  it("…and never through a modal, like the plain N", () => {
+    expect(press("n", { anyModal: true, topModalId: "week" }, { env: { focusedBlock: { id: "b7", tableId: "5" } } }).calls).toEqual([]);
+  });
   it("←/→ step the viewed day, and an unreadable day steps from today", () => {
     expect(press("ArrowLeft", { viewDate: "2026-03-29" }).calls).toEqual([["goToDate", "2026-03-28"]]);
     expect(press("ArrowRight", { viewDate: "2026-03-29" }).calls).toEqual([["goToDate", "2026-03-30"]]);
@@ -317,6 +331,9 @@ describe("the hook carries the decision out and decides nothing itself", () => {
     expect(hook).toContain("today:todayStr()");
     expect(hook).toMatch(/settingsTabs:function\(\)\{return visibleTabs\(K\.can,K\.hasModule\)/);
     expect(hook).toContain("if(typing) return;");
+  });
+  it("…and the Timeline block under the focus, read off the event's target", () => {
+    expect(hook).toContain("focusedBlock:focusedBlockOf(e.target)");
   });
 });
 
