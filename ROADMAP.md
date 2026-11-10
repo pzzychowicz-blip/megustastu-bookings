@@ -69,15 +69,6 @@ session and keeping it in sync.
   Vercel's logs, which a Hobby project keeps for an hour. If the rehearsal passes, the
   restaurant's number, with the Business app's greeting message turned off.
 
-- **A chat with no 24-hour window has a live reply box.** A conversation with no
-  `windowExpiresAt` (a coexistence chat holding only the restaurant's own messages or
-  imported history; `tests/api-handlers.test.js` pins the missing stamp) keeps its composer
-  enabled, because `windowState().expired` is false without a stamp, while `api/wa-send.js`
-  and `api/wa-media.js` answer 410 for it. Read in the code and run in Node
-  (`windowState(undefined)`); not sent live. To decide before go-live: what that composer
-  says. The moved reply already asks the server's question (`windowOpen`). From v18.16.0's
-  `/code-review`.
-
 - **A moved booking's reply is drafted into an archived chat without saying where.**
   `movedReplyPlan` stops for a muted guest and not for an archived conversation, so the draft
   waits under Archived while the pill says "reply drafted" and the inbox's list shows no

@@ -2,7 +2,7 @@
 // The reply box at the bottom of a conversation: a horizontally-scrolling row of
 // quick-reply template chips (with an EN/ES toggle defaulting to the detected
 // conversation language) above a textarea + Send. Disabled when the 24h service
-// window has expired. Enter sends; Shift+Enter inserts a newline.
+// window is not open. Enter sends; Shift+Enter inserts a newline.
 //
 // v18.8.0: **Attach** (the paperclip) sends a photo or a PDF, with whatever is
 // typed as its caption, as ONE message. The picked file shows as a chip above
@@ -27,6 +27,12 @@ import { fileSizeLabel, WA_CAPTION_MAX } from "../../lib/whatsapp";
 import { attachKind, attachRefusal, shrinkPhoto } from "../../lib/wa-attach";
 import { draftTextOf, setReplyDraft } from "../../lib/wa-reply-drafts";
 import { useReplyDraft } from "../../hooks/useReplyDraft";
+
+// v18.16.0 (follow-up, Patryk): what a closed box says when the guest never
+// opened a window (`noWindow`, ConversationView): no message from them yet, so
+// WhatsApp takes no free-text reply. A window that opened and expired keeps
+// "Conversation closed".
+const NO_WINDOW_PLACEHOLDER = "The guest hasn't written yet, so a reply can't be sent";
 
 // TemplateChips — private to the composer. Tapping a chip inserts its text.
 // scrollLang (compact mode): the language switch joins the chips inside ONE
@@ -133,7 +139,7 @@ function AttachChip({ att, busy, onRemove }) {
   );
 }
 
-export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMedia, threadKey, draftOwner, ref }) {
+export function ReplyComposer({ onSend, disabled, noWindow = false, templates, convLang, onSendMedia, threadKey, draftOwner, ref }) {
   // The text is kept PER THREAD, like the attachment below: this component is
   // not remounted when the conversation changes, so one string followed you to
   // the next customer, and since v18.8.0 that string can be a photo's caption.
@@ -366,7 +372,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
           // keyboard to press them on — on a touch screen it spent two lines of
           // a phone's composer on keys the on-screen keyboard does not have.
           // index.css's own touch query (`hover: none`, `pointer: coarse`).
-          placeholder={disabled ? "Conversation closed" : att ? "Add a caption (optional)" : preparing ? "Preparing the photo…" : (TOUCH ? "Type a reply…" : "Type a reply... (Enter to send, Shift+Enter for new line)")}
+          placeholder={disabled ? (noWindow ? NO_WINDOW_PLACEHOLDER : "Conversation closed") : att ? "Add a caption (optional)" : preparing ? "Preparing the photo…" : (TOUCH ? "Type a reply…" : "Type a reply... (Enter to send, Shift+Enter for new line)")}
           disabled={disabled}
           rows={2}
           // NOT a pill, deliberately — R.inset instead (v17.7.0 sweep).

@@ -2,10 +2,10 @@
 // Right pane: header (name + WA badge + Regular chip + window state + archive/
 // restore/delete), an optional LinkedBookingCard, an optional IntentBanner, the
 // scrolling message thread, the DraftCard, and the ReplyComposer. The composer
-// is disabled when the 24h service window has expired.
+// is disabled when the 24h service window is not open: expired, or never opened.
 
 import { useState, useRef, useEffect } from "react";
-import { matchCustomerByPhone, regularChipLabel, conversationName, conversationMenuIds, windowState, intentBannerVisible, isParsing, threadItems, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
+import { matchCustomerByPhone, regularChipLabel, conversationName, conversationMenuIds, windowState, windowOpen, intentBannerVisible, isParsing, threadItems, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
 import { Reveal, TurnChevron, mkBtn, mkSolidBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { RecheckIcon, ArchiveIcon, DraftIcon, RestoreIcon, MuteIcon } from "./WaIcons";
@@ -339,7 +339,14 @@ export function ConversationView({
       {menuItems.length ? <ConversationMenu key={conv.phoneKey} items={menuItems} busy={running} /> : null}
     </div>
   );
-  const disabled = win.expired;
+  // v18.16.0 (follow-up, Patryk): the composer asks the SERVER's question
+  // (`windowOpen`), not the chip's. `win.expired` is false for a chat with no
+  // window at all (a coexistence chat holding only the restaurant's messages, or
+  // imported history), whose box stayed live while api/wa-send.js and
+  // api/wa-media.js answered 410. `noWindow` picks the box's sentence: such a
+  // guest has not written, which is a different thing from a window that closed.
+  const disabled = !windowOpen(conv.windowExpiresAt);
+  const noWindow = !Number(conv.windowExpiresAt);
 
   // Intent banner gating: hidden once handled, until a newer INBOUND message
   // arrives (lastInboundAt — a staff reply must not resurrect it). Shared rule
@@ -470,7 +477,7 @@ export function ConversationView({
           />
         </div>
       </Reveal>
-      <ReplyComposer ref={composerRef} draftOwner={draftOwner} onSend={onSend} onSendMedia={onSendMedia} threadKey={conv.phoneKey} disabled={disabled} templates={templates} convLang={conv.language} />
+      <ReplyComposer ref={composerRef} draftOwner={draftOwner} onSend={onSend} onSendMedia={onSendMedia} threadKey={conv.phoneKey} disabled={disabled} noWindow={noWindow} templates={templates} convLang={conv.language} />
     </div>
   );
 }

@@ -40885,3 +40885,14 @@ cannot reach the time drag's "is seated" refusal (`isActive` leaves it out), the
 - **Deferred to `ROADMAP.md`: a reply drafted into an archived chat.** `movedReplyPlan` stops for a muted guest and not for an archived
   conversation (run in Node), so the pill says "reply drafted" and the inbox's list shows nothing. Whether the pill names the place, the chat
   comes back, or it stays as it is, is Patryk's to choose.
+
+### Follow-up (Patryk, 2026-11-10) — the two deferred findings, and the inbox's title row
+
+He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the inbox's second row back. Four commits, one change each.
+
+- **A chat with no 24-hour window has a closed reply box.** `ConversationView` closed the composer on `windowState().expired`, the chip's
+  question, which is false for a conversation with no `windowExpiresAt`; both send endpoints answer 410 for it. It now asks the server's
+  question, `windowOpen` (the one `movedReplyPlan` already asks), and tells the two closed cases apart: a chat whose window expired keeps
+  "Conversation closed", one the guest never opened says "The guest hasn't written yet, so a reply can't be sent" (his wording, chosen over
+  "Conversation closed" for both and over pointing at the Business app, which was not checked). The chip is unchanged: no window, no chip.
+  `tests/wa-inbox-layout.test.js` pins the question, both sentences and `windowOpen`'s edges.

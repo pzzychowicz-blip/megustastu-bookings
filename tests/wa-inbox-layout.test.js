@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { conversationName, conversationSearchNames, windowState, WA_WINDOW_WARN_MS, WA_WINDOW_RECHECK_MAX_MS } from "../src/lib/whatsapp.js";
+import { conversationName, conversationSearchNames, windowState, windowOpen, WA_WINDOW_WARN_MS, WA_WINDOW_RECHECK_MAX_MS } from "../src/lib/whatsapp.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
@@ -306,7 +306,7 @@ describe("the window chip shows only when it matters", () => {
     expect(windowState(NOW, NOW)).toEqual({ expired: true, chip: { label: "Window expired", tone: "danger" }, nextIn: null });
     expect(windowState(NOW - 5 * H, NOW)).toEqual({ expired: true, chip: { label: "Window expired", tone: "danger" }, nextIn: null });
   });
-  it("a conversation with no window has no chip and is not closed", () => {
+  it("a conversation with no window has no chip", () => {
     expect(windowState(undefined, NOW)).toEqual({ expired: false, chip: null, nextIn: null });
     expect(windowState(0, NOW)).toEqual({ expired: false, chip: null, nextIn: null });
   });
@@ -315,6 +315,26 @@ describe("the window chip shows only when it matters", () => {
     expect(View).toMatch(/const next = windowState\(conv\.windowExpiresAt\)\.nextIn;\s*if \(next == null\) return undefined;/);
     expect(View).toContain("}, [conv.phoneKey, conv.windowExpiresAt, winBeat]);");
     expect(View).toContain("<OutlineChip tone={win.chip.tone} size=\"small\">{win.chip.label}</OutlineChip>");
-    expect(View, "the composer closes on the same answer").toContain("const disabled = win.expired;");
+  });
+});
+
+// v18.16.0 (follow-up, Patryk): the reply box closes on the SERVER's question.
+// `windowState().expired` is false for a chat with no window at all, whose box
+// stayed live while api/wa-send.js and api/wa-media.js answered 410 for it.
+describe("the reply box is closed whenever the server would refuse the send", () => {
+  it("it asks windowOpen, the server's question, and says which of the two it is", () => {
+    expect(View).toContain("const disabled = !windowOpen(conv.windowExpiresAt);");
+    expect(View).toContain("const noWindow = !Number(conv.windowExpiresAt);");
+    expect(View).toContain("disabled={disabled} noWindow={noWindow}");
+    expect(Composer).toContain('const NO_WINDOW_PLACEHOLDER = "The guest hasn\'t written yet, so a reply can\'t be sent";');
+    expect(Composer).toContain('placeholder={disabled ? (noWindow ? NO_WINDOW_PLACEHOLDER : "Conversation closed") :');
+  });
+  it("windowOpen is closed for no window, a past one and now; open only for a future one", () => {
+    const NOW = 1_800_000_000_000, H = 3600000;
+    expect(windowOpen(undefined, NOW)).toBe(false);
+    expect(windowOpen(0, NOW)).toBe(false);
+    expect(windowOpen(NOW, NOW)).toBe(false);
+    expect(windowOpen(NOW - H, NOW)).toBe(false);
+    expect(windowOpen(NOW + 1, NOW)).toBe(true);
   });
 });
