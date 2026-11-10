@@ -40839,3 +40839,17 @@ start, a closed day, agreement with `cellOffer` over a day of ends; App's `openN
 `DESIGN.md`'s time-drag section gains the rule commit 8 settled: what a move did besides the move is a clause on its Undo pill, never a toast
 over it. The entry's date covers both days. `ROADMAP.md` listed nothing these commits resolve, and nothing was added to it. The root
 `CLAUDE.md` did not change (37,125 characters).
+
+### `/code-review` (xhigh)
+
+Seven findings. Five held up and were fixed, one commit each; two hold up and are decisions about what the app should do, so they went to
+`ROADMAP.md` and nothing was built. Three things the review suspected were checked and withdrawn before they were reported: a completed booking
+cannot reach the time drag's "is seated" refusal (`isActive` leaves it out), the kitchen warning is the form's own test (`kitchenAsk`:
+`starts + 1 >= KITCHEN_TABLE_LIMIT`), and a re-time onto a free slot changes one booking exactly as a drop onto a free table does.
+
+- **A moved booking's reply was drafted for a chat the server will not send to.** `movedReplyPlan` asked the composer's question
+  (`windowState().expired`), which is false for a conversation with no `windowExpiresAt`: a coexistence chat holding only the restaurant's own
+  messages or imported history (`tests/api-handlers.test.js` pins the missing stamp). A booking made by hand for that number links to it
+  (`linkBookingByPhone`), so a time drag drafted the reply and the pill said "reply drafted", and `api/wa-send.js` answers 410 for it. Reproduced
+  in Node with the pure function. It now asks the server's question, `windowOpen` (`lib/whatsapp.js`: no stamp is no window), and says
+  "guest's WhatsApp window is closed". The test holds both send endpoints to the same words.

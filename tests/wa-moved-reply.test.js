@@ -11,7 +11,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { appCode } from "./app-source.js";
-import { movedReply, movedSlot, movedReplyPlan, movedReplyUndo, movedReplyWords, WA_WINDOW_MS } from "../src/lib/whatsapp.js";
+import { movedReply, movedSlot, movedReplyPlan, movedReplyUndo, movedReplyWords, windowOpen, WA_WINDOW_MS } from "../src/lib/whatsapp.js";
 
 const read = (p) => stripComments(readFileSync(new URL(p, import.meta.url), "utf8")).join("\n");
 const HOOK = read("../src/hooks/useWhatsApp.js");
@@ -124,8 +124,24 @@ describe("movedReplyPlan: the answers", () => {
     expect(ask({ booking: { id: "b1", date: "2026-10-15", time: "19:30" } })).toBeNull();
     expect(ask({ booking: undefined })).toBeNull();
   });
-  it("uses the composer's own question for the window", () => {
-    expect(read("../src/lib/whatsapp.js")).toContain('if (windowState(conv.windowExpiresAt, o.now).expired) return "closed";');
+  // v18.16.0 (/code-review): a coexistence chat that holds only the restaurant's
+  // own messages, or imported history, has no stamp at all (tests/api-handlers.test.js
+  // pins that), and both send endpoints refuse it. The composer's question
+  // (`windowState().expired`) says false there, so the plan drafted and the pill
+  // said "reply drafted" for a reply the server would answer 410.
+  it("…and so is a chat the guest never opened a window in: no stamp is no window", () => {
+    for (const stamp of [undefined, null, 0, "", NaN]) {
+      expect(ask({ conversations: [conv({ windowExpiresAt: stamp })] }), String(stamp)).toBe("closed");
+    }
+  });
+  it("asks the server's question, which both send endpoints still ask in these words", () => {
+    expect(read("../src/lib/whatsapp.js")).toContain('if (!windowOpen(conv.windowExpiresAt, o.now)) return "closed";');
+    expect(windowOpen(NOW + 1, NOW)).toBe(true);
+    expect(windowOpen(NOW, NOW)).toBe(false);
+    expect(windowOpen(undefined, NOW)).toBe(false);
+    const gate = "if (!conv.windowExpiresAt || conv.windowExpiresAt <= Date.now()) {";
+    expect(readFileSync(new URL("../api/wa-send.js", import.meta.url), "utf8")).toContain(gate);
+    expect(readFileSync(new URL("../api/wa-media.js", import.meta.url), "utf8")).toContain(gate);
   });
 });
 

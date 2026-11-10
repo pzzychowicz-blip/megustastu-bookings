@@ -456,8 +456,9 @@ export function movedSlot(before, after) {
 //             the guest is muted, the booking no longer says this time (an Undo
 //             landed before the write did), or the reply box already holds text
 //             that is somebody's own
-//   "closed"  the 24-hour window has expired, so a free-text reply cannot be
-//             sent: the caller says so rather than drafting what cannot go out
+//   "closed"  the 24-hour window is not open (`windowOpen`: it has expired, or
+//             the guest never opened one), so a free-text reply cannot be sent:
+//             the caller says so rather than drafting what cannot go out
 //   {…}       put `text` in `phoneKey`'s box, and remember the whole answer
 // `mine` is what THIS session last drafted for the booking (the answer it was
 // given then): text still in the box unchanged is ours, and a second move
@@ -472,7 +473,7 @@ export function movedReplyPlan(o) {
   if (!b || b.date !== o.to.date || b.time !== o.to.time) return null;
   const held = o.textOf(conv.phoneKey);
   if (held && !(o.mine && o.mine.phoneKey === conv.phoneKey && o.mine.text === held)) return null;
-  if (windowState(conv.windowExpiresAt, o.now).expired) return "closed";
+  if (!windowOpen(conv.windowExpiresAt, o.now)) return "closed";
   const prev = held ? { phoneKey: o.mine.phoneKey, text: o.mine.text, to: o.mine.to, prev: null } : null;
   return { phoneKey: conv.phoneKey, text: movedReply(conv.language, o.to), to: { date: o.to.date, time: o.to.time }, prev: prev };
 }
@@ -674,6 +675,19 @@ export function windowState(expiresAt, now = Date.now()) {
   // The label counts whole minutes down, so it is next wrong when the remainder
   // crosses a minute. `|| 60000`: exactly on a boundary, the next one is a minute off.
   return { expired: false, chip: { label: f.label, tone: "warn" }, nextIn: diff % 60000 || 60000 };
+}
+
+// ── May a free-text reply be SENT now: the server's question ─────────────────
+// v18.16.0 (/code-review). `api/wa-send.js` and `api/wa-media.js` refuse a chat
+// whose window has closed AND one that has no window at all
+// (`!conv.windowExpiresAt || conv.windowExpiresAt <= Date.now()`): a coexistence
+// chat holding only the restaurant's own messages, or imported history, was
+// never opened by the guest (tests/api-handlers.test.js pins the missing stamp).
+// `windowState().expired` is the composer's question and answers false for
+// those, so a caller that must not promise a reply the server will refuse asks
+// this one. tests/wa-moved-reply.test.js holds the two files to it.
+export function windowOpen(expiresAt, now = Date.now()) {
+  return Number(expiresAt) > now;
 }
 
 // ── What the LLM said vs what this app can use (v18.0.0 phase 6, CT-WA-01) ───
