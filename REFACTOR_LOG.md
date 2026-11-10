@@ -40952,3 +40952,10 @@ He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the 
   dropped the selection, leaving the draft one tab away. The effect now switches to the Inbox and keeps the chat open when the open chat
   leaves Archived (Patryk), whatever brought it out: the moved reply, a reply sent from it, a Restore. Into Archived it is still dropped.
 
+- **`/code-review` of the follow-ups (high, 9 commits, `379952f5..8f5d0466`): two findings.** (1) The `drop-plan.js` note in
+  `src/lib/CLAUDE.md` said the time drag "pins nothing" and, one sentence on, that the booking "gets … `_manual` + `_locked`":
+  the second clause is gone. (2) The mark's count (`MARK_COUNT`) and the menu rows' counts (`RowBadge`) are pills of their own
+  beside the atom `CountBadge`; moving them onto it changes how big the count looks, so it is in `ROADMAP.md`. Checked and not
+  reported: the composer's `windowOpen` and the chip's `windowState` agree at the boundary (`> now` against `<= now`), and the
+  React Compiler is lint-only here (nothing in `vite.config.js`), so a `Date.now()` behind a call in render is not memoised away;
+  `patchConversation`'s loaded guard cannot refuse a bring-back, because `movedReplyPlan` finds no conversation before the first read.

@@ -21,6 +21,8 @@ session and keeping it in sync.
 
 - **`BookingApp` V2, V3 and V5** (`useInboxEntry`, `useWaitlistOffers`, `useBookingForm`). Designed in `MGT_Bookings_State_By_Domain_Design.md`, context folder. After WhatsApp go-live settles; each version needs its own approval and a fresh census first.
 
+- **The inbox's counts onto `CountBadge`.** The WhatsApp mark's unread count (`MARK_COUNT`, InboxPanel) and the menu rows' counts (`RowBadge`, ConversationMenu) are a small pill of their own (`T.micro`, carried from the old tabs) beside the atom `CountBadge` (`T.small`, 18px, a flat shadow). Moving them onto the atom changes how big the count looks, so it needs Patryk's eye first. Found by the v18.16.0 follow-up's `/code-review`.
+
 - **Replace `FALLBACK_MODEL` before 2027-05-07.** `gemini-3.1-flash-lite` (`api/_lib/env.js`) shuts down that day, and the second try on an overload would then answer 404 and count as refused.
 
 - **WhatsApp coexistence: the rehearsal, then the restaurant's number.** The code
