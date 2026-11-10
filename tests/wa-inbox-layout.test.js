@@ -142,9 +142,11 @@ describe("a conversation on a short screen", () => {
     expect(Inbox).toMatch(/const INBOX_PANEL_SHORT_SCREEN = \{ \.\.\.INBOX_PANEL, height: "calc\(100dvh - " \+ 2 \* SP\.base \+ "px\)" \};/);
     expect(Inbox).toMatch(/panel=\{shortScreen \? INBOX_PANEL_SHORT_SCREEN : INBOX_PANEL\}/);
   });
-  it("draws the filter controls in one place at a time, from one element", () => {
-    expect(Inbox.match(/\{filterControls\}/g)).toHaveLength(2);
-    expect(Inbox).toMatch(/\{shortScreen \? <div [^\n]*\{filterControls\}<\/div> : null\}/);
+  it("draws the filter controls in one place, the title row, at every size", () => {
+    // v18.16.0 (follow-up, Patryk): the short screen's arrangement is every screen's.
+    expect(Inbox.match(/\{filterControls\}/g)).toHaveLength(1);
+    expect(Inbox).toMatch(/\{markEl\}\s*\{showFilters \? <div [^\n]*\{filterControls\}<\/div> : null\}\s*<button onClick=\{onClose\}/);
+    expect(Inbox, "the title row never wraps").not.toMatch(/padding: "10px 14px"[^\n]*flexWrap/);
   });
   it("hands the conversation the one thing it needs to know", () => {
     expect(Inbox).toMatch(/hideNumber=\{shortScreen\}/);
@@ -159,7 +161,14 @@ describe("W5 — the phone's inbox", () => {
   });
 
   it("hides the LIST's toolbar while a conversation replaces the list", () => {
-    expect(Inbox).toMatch(/\{!shortScreen && \(twoPane \|\| !activeKey\) \? \(\s*<div style=\{\{ padding: "8px 14px"/);
+    expect(Inbox).toContain("const showFilters = twoPane || !activeKey;");
+  });
+
+  // v18.16.0 (follow-up): one row with the mark leaves a phone no width for the
+  // words, so the filter is its dot, named by them.
+  it("Needs action is its dot alone below two panes, and keeps its name", () => {
+    expect(Inbox).toContain('aria-label={twoPane ? undefined : "Needs action"}');
+    expect(Inbox).toContain('{twoPane ? "Needs action" : null}</button>');
   });
 
   it("shortens the search placeholder where the long one was cut", () => {

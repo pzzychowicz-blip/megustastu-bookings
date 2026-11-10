@@ -160,12 +160,14 @@ export function InboxPanel({
   // all, and Send ended 13px past the panel. So on the compact layout's screens the
   // panel takes the screen, the filter row joins the title row, and the number leaves
   // the conversation's header. Two panes only, because that is what makes the third
-  // safe: the list beside it shows the same number.
+  // safe: the list beside it shows the same number. (Since the v18.16.0 follow-up the
+  // filter row is in the title row on every screen, so this decides the other two.)
   //
   // Read once, when the panel opens. Android's keyboard moves `innerHeight`
   // (`interactive-widget=resizes-content`), so on a taller tablet a live `winH` would
-  // turn this on while the search box has focus, remount the box in its other parent,
-  // drop the focus and with it the keyboard, and turn it off again.
+  // turn this on while a field has focus and resize the panel under it, and turn it
+  // off again. Until the follow-up it also remounted the search box in its other
+  // parent, which dropped the focus and with it the keyboard.
   const [openedAt] = useState(winH);
   const shortScreen = twoPane && isCompact(openedAt, false);
   // v18.4.0 (Patryk: "the keyboard squeezes WhatsApp"): while somebody types a
@@ -558,8 +560,14 @@ export function InboxPanel({
     />
   );
 
-  // The select toggle, Needs action and the search box: their own row, or the title
-  // row's middle on a short screen (`shortScreen`).
+  // The select toggle, Needs action and the search box: the title row's middle,
+  // between the mark and ✕ (v18.16.0 follow-up, Patryk: one row at every width, to
+  // give the list and the thread the height a second row took; it was the short
+  // screen's arrangement alone, `shortScreen`, since v18.14.0). They belong to the
+  // LIST, so on a phone, where an open conversation replaces the list, they go with
+  // it and the row is the mark and ✕ (v18.2.0, W5). Order (Patryk, 2026-07-16):
+  // Select, then Needs action, then the search box.
+  const showFilters = twoPane || !activeKey;
   const filterControls = (
     <>
       {/* v17.15.6's aria-pressed rule, reaching the module at the 17.16.12
@@ -580,17 +588,21 @@ export function InboxPanel({
         className="mgt-hover-scale mgt-press"
         style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: selectMode ? "var(--wa-green)" : "transparent", color: selectMode ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (selectMode ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
       ><SelectIcon size={IC.chrome} /></button>
+      {/* v18.16.0 (follow-up): on one row with the mark, a phone has no width for
+          the words, so below two panes the filter is its dot alone, in a round
+          button the size of Select's, named by the words it no longer shows. */}
       <button
         onClick={() => setNeedsAction((v) => !v)}
         aria-pressed={needsAction}
+        aria-label={twoPane ? undefined : "Needs action"}
         title="Show only conversations that need a response"
         className="mgt-hover-scale mgt-press"
-        style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }}
+        style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: twoPane ? "8px 14px" : "8px", minHeight: 36, minWidth: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
       >{/* A real 8px dot, not a text ● — the same device NotificationStrip
            uses for a section with no icon. It stays a dot rather than
            becoming an icon because it reports a STATE (this filter is on),
            which is what the strip's dots report too. */}
-        <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "currentColor", flexShrink: 0 }} />Needs action</button>
+        <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "currentColor", flexShrink: 0 }} />{twoPane ? "Needs action" : null}</button>
       <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
         {/* 17.15.0-wa-sandbox: a placeholder is not a name. It is not
             exposed as one consistently, and it is gone the moment there is
@@ -631,9 +643,9 @@ export function InboxPanel({
             rather than announced twice. */}
         <h2 className="mgt-sr-only" {...{ [MODAL_TITLE_ATTR]: "" }}>WhatsApp</h2>
         <Reveal show={!kbFold} inert={kbFold} style={{ flexShrink: 0 }}>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
+        <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {markEl}
-          {shortScreen ? <div style={{ display: "flex", alignItems: "center", gap: SP.base, flex: 1, minWidth: 0, marginLeft: SP.base }}>{filterControls}</div> : null}
+          {showFilters ? <div style={{ display: "flex", alignItems: "center", gap: SP.base, flex: 1, minWidth: 0 }}>{filterControls}</div> : null}
           <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: BTN.quiet }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1, marginLeft: "auto" })}><CloseIcon size={IC.chrome} /></button>
         </div>
         {/* v18.9.0: the WhatsApp Business app's connection is broken (Meta's
@@ -651,17 +663,6 @@ export function InboxPanel({
             </div>
           </Reveal>
         </div>
-        {/* Search + Needs-action filter toolbar — filters the list + ↑/↓ nav.
-            Order (Patryk, 2026-07-16): Select, then Needs action, then the
-            search box (search sits on the right).
-            v18.2.0 (W5): it belongs to the LIST, so on a phone, where an open
-            conversation replaces the list, it goes with it — it stood above
-            the conversation taking ~140px of a phone's height. */}
-        {!shortScreen && (twoPane || !activeKey) ? (
-        <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          {filterControls}
-        </div>
-        ) : null}
         </Reveal>
         {/* Bulk action bar — only in select mode. Actions depend on the tab:
             Inbox → Archive; Archived → Restore + Delete (delete behind one

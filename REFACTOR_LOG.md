@@ -40913,4 +40913,10 @@ He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the 
   ARCHIVED" while Archived is open and carries the Inbox unread count with the tab's sideways reveal (his choice of the three). Its words
   are `textTransform: uppercase` over "WhatsApp", so its accessible name is a word and not eight letters. ←/→, X and T are unchanged, and the
   inbox's keys stand down while the menu is open by the existing `[role="menu"]` check. `HEAD_TEXT_BTN` and `tabBtn` are gone.
+- **The filter strip is in the title row, on every screen.** Select, Needs action and the search box had a row of their own under the title bar,
+  except on the tablet's short screen, where v18.14.0 had already put them between the title and ✕. Patryk: that arrangement everywhere,
+  between the mark and ✕, to give the list and the thread back a row. One row now (`padding: 10px 14px`, no wrap, `showFilters`), and the
+  separate row is gone; on a phone with a chat open the filters leave with the list, as since W5, and the row is the mark and ✕. A phone has
+  no width for "Needs action" beside the mark, so below two panes it is its dot alone in a 36px round button named "Needs action" (his choice
+  over keeping two rows on phones). `shortScreen` keeps the panel's size and the hidden number.
 
