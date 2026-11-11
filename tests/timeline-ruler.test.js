@@ -28,7 +28,12 @@ describe("the ruler is one strip, kept over the grid's minute", () => {
   });
   it("is told of every way the grid scrolls", () => {
     const both = String.raw`syncRuler\(scrollRef\.current, rulerClipRef\.current\);`;
-    expect(Timeline).toMatch(new RegExp(String.raw`function onGridScroll\(\) \{[\s\S]*?` + both));
+    // v18.16.0: the scroll handler's half that the ruler needs is `syncGridScroll`,
+    // because a time drag's edge scroll writes scrollLeft from a frame loop and
+    // calls it in that frame.
+    expect(Timeline).toMatch(new RegExp(String.raw`function syncGridScroll\(\) \{[\s\S]*?` + both + String.raw`\s*\}\s*function onGridScroll\(\) \{\s*syncGridScroll\(\);`));
+    expect(Timeline).toMatch(/sc\.scrollLeft = Math\.min\(before \+ next\.step, d\.sxMax\);[\s\S]{0,260}?if \(syncGridScroll\) syncGridScroll\(\);/);
+    expect(Timeline).toContain("syncGridScroll={syncGridScroll}");
     expect(Timeline).toMatch(/el\.scrollLeft = fraction \* el\.scrollWidth;\s*syncRuler\(el, rulerClipRef\.current\);/);
     expect(Timeline).toMatch(new RegExp(String.raw`scrollRef\.current\.scrollLeft = scrollPosRef\.current;\s*` + both));
     expect(Timeline).toMatch(new RegExp(String.raw`useLayoutEffect\(\(\) => \{\s*` + both + String.raw`\s*\}, \[gridW, date\]\);`));

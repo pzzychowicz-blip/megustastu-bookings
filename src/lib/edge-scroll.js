@@ -95,6 +95,16 @@ export function scrollBounds(sc) {
   return { top, bottom };
 }
 
+// v18.16.0: the same band, sideways, for a block dragged to another TIME. The
+// grid's own scroller is the scrollport (the label column is outside it), clipped
+// to the window: in a split the scroller can run past the screen's edge, and the
+// band has to be where a finger can reach. `edgeVelocity` and `edgeStep` are
+// axis-free and serve both.
+export function scrollBoundsX(sc) {
+  const r = sc.getBoundingClientRect();
+  return { left: Math.max(0, r.left), right: Math.min(window.innerWidth, r.right) };
+}
+
 // Which y to look a table row up at (v18.14.0, H6). A row passing under the stuck
 // ruler is still in the geometry, so a finger resting on the ruler would land a
 // drop on a row it cannot see. While the ruler is stuck (the grid's top has gone

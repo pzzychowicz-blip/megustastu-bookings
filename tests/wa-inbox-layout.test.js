@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { conversationName, conversationSearchNames } from "../src/lib/whatsapp.js";
+import { conversationName, conversationSearchNames, windowState, windowOpen, WA_WINDOW_WARN_MS, WA_WINDOW_RECHECK_MAX_MS } from "../src/lib/whatsapp.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
@@ -51,8 +51,8 @@ describe("W1 — the draft bar never hides what it asks you to accept", () => {
 // pencil, and "Insert template" with the document.
 describe("W2 — two jobs, two names, two marks", () => {
   it("the header's button edits the templates, under the edit pencil", () => {
-    // Since W3 it also SAYS so, which is where its name now comes from.
-    expect(Inbox).toMatch(/title="Edit templates \(T\)"[^>]*><EditIcon size=\{IC\.inline\} \/>Edit templates<\/button>/);
+    // v18.16.0 (follow-up): a row of the WHATSAPP mark's menu, word and pencil.
+    expect(Inbox).toContain('{ id: "templates", label: "Edit templates", icon: EditIcon, rule: !onOpenSim, title: "Edit templates (T)",');
     expect(Inbox).not.toMatch(/title="Templates"/);
   });
 
@@ -80,8 +80,10 @@ describe("W3 — the words are on the buttons, not in a tooltip", () => {
   });
 
   it("the header's Edit templates and Simulator carry their words", () => {
-    expect(Inbox).toMatch(/<FlaskIcon size=\{IC\.inline\} \/>Simulator<\/button>/);
-    expect(Inbox).toMatch(/const HEAD_TEXT_BTN = \{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H\.chrome, fontSize: T\.small, flexShrink: 0, lineHeight: 1 \};/);
+    // v18.16.0 (follow-up): rows of the WHATSAPP mark's menu, which draws a row's
+    // icon before its word (ConversationMenu).
+    expect(Inbox).toContain('{ id: "sim", label: "Simulator", icon: FlaskIcon, rule: true, title: "WhatsApp simulator (X)", onPick: onOpenSim }');
+    expect(Inbox).not.toContain("HEAD_TEXT_BTN");
   });
 });
 
@@ -140,9 +142,11 @@ describe("a conversation on a short screen", () => {
     expect(Inbox).toMatch(/const INBOX_PANEL_SHORT_SCREEN = \{ \.\.\.INBOX_PANEL, height: "calc\(100dvh - " \+ 2 \* SP\.base \+ "px\)" \};/);
     expect(Inbox).toMatch(/panel=\{shortScreen \? INBOX_PANEL_SHORT_SCREEN : INBOX_PANEL\}/);
   });
-  it("draws the filter controls in one place at a time, from one element", () => {
-    expect(Inbox.match(/\{filterControls\}/g)).toHaveLength(2);
-    expect(Inbox).toMatch(/\{shortScreen \? <div [^\n]*\{filterControls\}<\/div> : null\}/);
+  it("draws the filter controls in one place, the title row, at every size", () => {
+    // v18.16.0 (follow-up, Patryk): the short screen's arrangement is every screen's.
+    expect(Inbox.match(/\{filterControls\}/g)).toHaveLength(1);
+    expect(Inbox).toMatch(/\{markEl\}\s*\{showFilters \? <div [^\n]*\{filterControls\}<\/div> : null\}\s*<button onClick=\{onClose\}/);
+    expect(Inbox, "the title row never wraps").not.toMatch(/padding: "10px 14px"[^\n]*flexWrap/);
   });
   it("hands the conversation the one thing it needs to know", () => {
     expect(Inbox).toMatch(/hideNumber=\{shortScreen\}/);
@@ -150,13 +154,21 @@ describe("a conversation on a short screen", () => {
 });
 
 describe("W5 — the phone's inbox", () => {
-  it("keeps Close in the top corner, with the text buttons on a line of their own", () => {
-    expect(Inbox).toMatch(/<div style=\{\{ display: "flex", gap: 6, marginLeft: "auto", order: twoPane \? 0 : 2, flexBasis: twoPane \? "auto" : "100%" \}\}>/);
-    expect(Inbox).toMatch(/order: twoPane \? 0 : 1, marginLeft: twoPane \? 0 : "auto" \}\)\}><CloseIcon size=\{IC\.chrome\} \/><\/button>/);
+  it("keeps Close in the top corner", () => {
+    // v18.16.0 (follow-up): the text buttons went into the mark's menu, so there is
+    // no second line to keep Close off.
+    expect(Inbox).toMatch(/marginLeft: "auto" \}\)\}><CloseIcon size=\{IC\.chrome\} \/><\/button>/);
   });
 
   it("hides the LIST's toolbar while a conversation replaces the list", () => {
-    expect(Inbox).toMatch(/\{!shortScreen && \(twoPane \|\| !activeKey\) \? \(\s*<div style=\{\{ padding: "8px 14px"/);
+    expect(Inbox).toContain("const showFilters = twoPane || !activeKey;");
+  });
+
+  // v18.16.0 (follow-up): one row with the mark leaves a phone no width for the
+  // words, so the filter is its dot, named by them.
+  it("Needs action is its dot alone below two panes, and keeps its name", () => {
+    expect(Inbox).toContain('aria-label={twoPane ? undefined : "Needs action"}');
+    expect(Inbox).toContain('{twoPane ? "Needs action" : null}</button>');
   });
 
   it("shortens the search placeholder where the long one was cut", () => {
@@ -178,11 +190,19 @@ describe("W5 — the phone's inbox", () => {
 describe("W-1 — a wrapping pane header never draws its actions over its title", () => {
   const Panel = read("components/AlertPanel.jsx");
   it("gives the title its content as basis when the header wraps", () => {
-    expect(Panel).toMatch(/flex: onHeaderClick \? "1 1 auto" : 1, minWidth: 0 \}\}>\{title\}<\/span>/);
-    expect(Panel, "the header wraps only when it is a toggle").toMatch(/\.\.\.\(onHeaderClick \? \{ cursor: "pointer", flexWrap: "wrap" \} : null\)/);
+    expect(Panel).toMatch(/flex: wraps \? "1 1 auto" : 1, minWidth: 0 \}\}>\{title\}<\/span>/);
+    // v18.16.0: a toggle always wraps, and a fixed header wraps when its caller asks
+    // (`wrapHeader`); only a toggle takes the pointer.
+    expect(Panel).toContain("const wraps = !!onHeaderClick || wrapHeader;");
+    expect(Panel, "the header wraps only when it is a toggle or was asked to").toMatch(/\.\.\.\(wraps \? \{ flexWrap: "wrap" \} : null\)/);
+    expect(Panel).toMatch(/\.\.\.\(onHeaderClick \? \{ cursor: "pointer" \} : null\),/);
   });
   it("is the header the linked card uses, and the intent banner whenever it has a body (phase 49)", () => {
-    expect(read("components/whatsapp/LinkedBookingCard.jsx")).toMatch(/onHeaderClick=\{toggle\}/);
+    // v18.16.0 (Patryk): the linked card is a toggle on a phone only. On a tablet it is
+    // a fixed strip that keeps the wrap, since its line still shares a row with buttons.
+    const Linked = read("components/whatsapp/LinkedBookingCard.jsx");
+    expect(Linked).toMatch(/onHeaderClick=\{narrow \? toggle : undefined\}/);
+    expect(Linked).toContain("wrapHeader={!narrow}");
     expect(read("components/whatsapp/IntentBanner.jsx")).toMatch(/onHeaderClick=\{opens \? toggle : undefined\}/);
   });
 });
@@ -224,16 +244,25 @@ describe("the inbox's disconnection banner (v18.9.0)", () => {
 // and they ran 40px past the screen, so the group was made to wrap. v18.14.0 (correction
 // 6, Patryk): it has two, Archive or Restore and the ⋯, which fit (Archive 235–318, ⋯
 // 324–360 at 375), so the wrapping went with the other three.
-describe("the conversation header has one action and the ⋯", () => {
+// v18.16.0 (Patryk): Archive and Restore are rows of the ⋯ as well, so the header's
+// one control is the ⋯, and the "Booking confirmed" chip beside the name is gone: the
+// linked booking's own status badge, one row down, says it.
+describe("the conversation header has the ⋯ and nothing else", () => {
   const header = View.slice(View.indexOf("const headerActionBtns"), View.indexOf("const disabled = "));
-  it("in that order, whichever the action is", () => {
-    expect(header.indexOf("<RestoreIcon")).toBeGreaterThan(-1);
-    expect(header.indexOf("<ArchiveIcon")).toBeGreaterThan(header.indexOf("<RestoreIcon"));
-    expect(header.indexOf("<ConversationMenu")).toBeGreaterThan(header.indexOf("<ArchiveIcon"));
+  it("no button of its own, whichever state the thread is in", () => {
+    expect(header).toContain("<ConversationMenu");
+    expect(header).not.toMatch(/<button|<RestoreIcon|<ArchiveIcon/);
+  });
+  it("Archive and Restore are rows of the menu, and Restore reads Customer again on a muted thread", () => {
+    expect(View).toMatch(/archive: \{ label: "Archive", icon: ArchiveIcon,/);
+    expect(View).toMatch(/restore: \{ label: conv\.muted \? "Customer again" : "Restore", icon: RestoreIcon,/);
   });
   it("the rest are not buttons of the header any more", () => {
     expect(header).not.toMatch(/Not a customer<\/button>|Delete<\/button>|Re-check/);
     expect(View).not.toMatch(/mkDangerBtn/);
+  });
+  it("the header no longer says Booking confirmed: the linked booking's badge does", () => {
+    expect(View).not.toMatch(/\bacceptedBadge\b|>Booking confirmed</);
   });
   it("sits at the header's right, unwrapped", () => {
     expect(View).toContain('<div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>');
@@ -250,3 +279,86 @@ describe("Add to waitlist sits at the draft card's right", () => {
     expect(Draft).toContain('<div style={Object.assign({}, row, { marginLeft: "auto", alignSelf: "flex-end", justifyContent: "flex-end" })}>');
   });
 });
+
+// v18.16.0 (Patryk): "Window: 23h 57m left" stood in green on every open chat. The
+// chip is drawn only in the window's last four hours, amber, and red once it has
+// closed. `now` is passed in, so nothing here reads a clock.
+describe("the window chip shows only when it matters", () => {
+  const NOW = 1_800_000_000_000;
+  const MIN = 60000, H = 3600000;
+  it("four hours is the line he chose", () => {
+    expect(WA_WINDOW_WARN_MS).toBe(4 * H);
+  });
+  it("with more than four hours left there is no chip, and the next change is the start of the warning", () => {
+    expect(windowState(NOW + 23 * H + 57 * MIN, NOW)).toEqual({ expired: false, chip: null, nextIn: 19 * H + 57 * MIN });
+    expect(windowState(NOW + 4 * H + MIN, NOW)).toEqual({ expired: false, chip: null, nextIn: MIN });
+  });
+  // v18.16.0 (/code-review): a timer's delay is a 32-bit integer. Past 2^31-1 ms it
+  // wraps, and a wrapped negative fires at once (measured in the Browser pane:
+  // `setTimeout(fn, 2 ** 31 + 1000)` ran after 0 ms), so the view's self-re-arming
+  // timer spun on a stamp weeks ahead. A real window is a day long; this is for the
+  // stamp that is not.
+  it("the wait it hands the view's timer is one a timer can hold, with room for the view's own 50ms", () => {
+    expect(WA_WINDOW_RECHECK_MAX_MS + 50).toBeLessThan(2 ** 31 - 1);
+    for (const days of [25, 30, 49, 400, 365 * 3112]) {
+      const s = windowState(NOW + days * 24 * H, NOW);
+      expect(s, days + " days").toEqual({ expired: false, chip: null, nextIn: WA_WINDOW_RECHECK_MAX_MS });
+    }
+    expect(windowState(Infinity, NOW).nextIn).toBe(WA_WINDOW_RECHECK_MAX_MS);
+    // …and a real window's wait is untouched
+    expect(windowState(NOW + 24 * H, NOW).nextIn).toBe(20 * H);
+    expect(View).toMatch(/setTimeout\(\(\) => setWinBeat\(\(n\) => n \+ 1\), next \+ 50\);/);
+  });
+  it("inside four hours it is amber and counts down by the minute", () => {
+    expect(windowState(NOW + 4 * H, NOW)).toEqual({ expired: false, chip: { label: "Window: 4h 0m left", tone: "warn" }, nextIn: MIN });
+    expect(windowState(NOW + 3 * H + 59 * MIN + 30000, NOW)).toEqual({ expired: false, chip: { label: "Window: 3h 59m left", tone: "warn" }, nextIn: 30000 });
+    expect(windowState(NOW + 40 * MIN + 1, NOW)).toEqual({ expired: false, chip: { label: "Window: 40m left", tone: "warn" }, nextIn: 1 });
+  });
+  it("closed is red, and nothing changes after that", () => {
+    expect(windowState(NOW, NOW)).toEqual({ expired: true, chip: { label: "Window expired", tone: "danger" }, nextIn: null });
+    expect(windowState(NOW - 5 * H, NOW)).toEqual({ expired: true, chip: { label: "Window expired", tone: "danger" }, nextIn: null });
+  });
+  it("a conversation with no window has no chip", () => {
+    expect(windowState(undefined, NOW)).toEqual({ expired: false, chip: null, nextIn: null });
+    expect(windowState(0, NOW)).toEqual({ expired: false, chip: null, nextIn: null });
+  });
+  it("the open chat arms one timer to the next change, and re-arms on its own beat", () => {
+    expect(View).toContain("const win = windowState(conv.windowExpiresAt);");
+    expect(View).toMatch(/const next = windowState\(conv\.windowExpiresAt\)\.nextIn;\s*if \(next == null\) return undefined;/);
+    expect(View).toContain("}, [conv.phoneKey, conv.windowExpiresAt, winBeat]);");
+    expect(View).toContain("<OutlineChip tone={win.chip.tone} size=\"small\">{win.chip.label}</OutlineChip>");
+  });
+});
+
+// v18.16.0 (follow-up, Patryk): the reply box closes on the SERVER's question.
+// `windowState().expired` is false for a chat with no window at all, whose box
+// stayed live while api/wa-send.js and api/wa-media.js answered 410 for it.
+describe("the reply box is closed whenever the server would refuse the send", () => {
+  it("it asks windowOpen, the server's question, and says which of the two it is", () => {
+    expect(View).toContain("const disabled = !windowOpen(conv.windowExpiresAt);");
+    expect(View).toContain("const noWindow = !Number(conv.windowExpiresAt);");
+    expect(View).toContain("disabled={disabled} noWindow={noWindow}");
+    expect(Composer).toContain('const NO_WINDOW_PLACEHOLDER = "The guest hasn\'t written yet, so a reply can\'t be sent";');
+    expect(Composer).toContain('placeholder={disabled ? (noWindow ? NO_WINDOW_PLACEHOLDER : "Conversation closed") :');
+  });
+  it("windowOpen is closed for no window, a past one and now; open only for a future one", () => {
+    const NOW = 1_800_000_000_000, H = 3600000;
+    expect(windowOpen(undefined, NOW)).toBe(false);
+    expect(windowOpen(0, NOW)).toBe(false);
+    expect(windowOpen(NOW, NOW)).toBe(false);
+    expect(windowOpen(NOW - H, NOW)).toBe(false);
+    expect(windowOpen(NOW + 1, NOW)).toBe(true);
+  });
+});
+
+// v18.16.0 (follow-up, Patryk): measured on DEV, Open booking from an archived chat
+// and a save that brought the chat back reopened the inbox on Archived with nothing
+// selected, the draft one tab away. An open chat that leaves Archived is followed.
+describe("an open chat that comes out of Archived is followed to the Inbox", () => {
+  it("switches the list and keeps the chat open, and only in that direction", () => {
+    expect(Inbox).toContain('if (tab === "archived" && !c.archived) { setTab("inbox"); setSelected(new Set()); return; }');
+    expect(Inbox).toContain("if (!inCurrentTab) setActiveKey(null);");
+    expect(Inbox.indexOf('if (tab === "archived" && !c.archived)')).toBeLessThan(Inbox.indexOf("if (!inCurrentTab) setActiveKey(null);"));
+  });
+});
+

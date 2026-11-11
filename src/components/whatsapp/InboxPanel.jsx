@@ -30,8 +30,9 @@ import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, con
 import { ConversationList } from "./ConversationList";
 import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
+import { ConversationMenu } from "./ConversationMenu";
 import { SelectIcon, FlaskIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
-import { CloseIcon, EditIcon, TrashIcon } from "../Icons";
+import { CloseIcon, EditIcon, TrashIcon, ChevronDownIcon } from "../Icons";
 import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Presence, Reveal, InlineAlert, MODAL_TITLE_ATTR } from "../atoms";
 import { disconnectSentence } from "../../lib/wa-coexist";
 import { BTN, R, T, FW, M, IC, H, SP } from "../../lib/constants";
@@ -105,9 +106,15 @@ function resolveInitialKey(convs) {
   return topKeyOfTab(convs, "inbox");
 }
 
-// v18.2.0 (W3): the header's icon-AND-word buttons (Edit templates, the
-// sandbox's Simulator), the shape of the conversation header's Archive.
-const HEAD_TEXT_BTN = { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0, lineHeight: 1 };
+// v18.16.0 (follow-up, Patryk): the WHATSAPP mark is a button, and its menu holds
+// what stood beside it: the Inbox / Archived tabs, the sandbox's Simulator and
+// Edit templates (`ConversationMenu`, the conversation's ⋯ menu, opening from the
+// left). The mark stays the green pill, now at the height of the bar's controls,
+// and says which list is open and how many chats are unread, which the tabs said.
+// `textTransform`, not capitals typed: the words are its accessible name, and a
+// screen reader spells "WHATSAPP" out letter by letter.
+const MARK_BTN = { fontSize: T.small, fontWeight: FW.bold, letterSpacing: "0.02em", textTransform: "uppercase", padding: "8px 12px", minHeight: H.chrome, display: "inline-flex", alignItems: "center", gap: 0, whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1 };
+const MARK_COUNT = { marginLeft: 6, fontSize: T.micro, fontWeight: FW.bold, padding: "0 6px", borderRadius: R.pill, background: "var(--wa-unread-dot)", color: "var(--text-on-accent)", lineHeight: 1.4, textTransform: "none", letterSpacing: 0 };
 
 export function InboxPanel({
   conversations, messages, templates, bookings, initialActiveKey,
@@ -153,12 +160,14 @@ export function InboxPanel({
   // all, and Send ended 13px past the panel. So on the compact layout's screens the
   // panel takes the screen, the filter row joins the title row, and the number leaves
   // the conversation's header. Two panes only, because that is what makes the third
-  // safe: the list beside it shows the same number.
+  // safe: the list beside it shows the same number. (Since the v18.16.0 follow-up the
+  // filter row is in the title row on every screen, so this decides the other two.)
   //
   // Read once, when the panel opens. Android's keyboard moves `innerHeight`
   // (`interactive-widget=resizes-content`), so on a taller tablet a live `winH` would
-  // turn this on while the search box has focus, remount the box in its other parent,
-  // drop the focus and with it the keyboard, and turn it off again.
+  // turn this on while a field has focus and resize the panel under it, and turn it
+  // off again. Until the follow-up it also remounted the search box in its other
+  // parent, which dropped the focus and with it the keyboard.
   const [openedAt] = useState(winH);
   const shortScreen = twoPane && isCompact(openedAt, false);
   // v18.4.0 (Patryk: "the keyboard squeezes WhatsApp"): while somebody types a
@@ -464,10 +473,17 @@ export function InboxPanel({
   // v18.3.2: `activeKey` is listed too. Every door that selects picks from the
   // current tab, so a new selection passes and nothing runs differently; the
   // list now names everything the check reads.
+  // v18.16.0 (follow-up, Patryk): except the way OUT of Archived. An open chat
+  // that comes back to the Inbox is followed there, still open: a moved booking's
+  // reply drafted into it (measured on DEV: after Open booking and a save, the
+  // inbox came back on Archived with nothing selected and the draft one tab
+  // away), a reply sent from it, a Restore. Into Archived it is still dropped,
+  // since the Inbox is where work waits.
   useEffect(() => {
     if (!activeKey) return;
     const c = conversations.find((x) => x.phoneKey === activeKey);
     if (!c) { setActiveKey(null); return; }
+    if (tab === "archived" && !c.archived) { setTab("inbox"); setSelected(new Set()); return; }
     const inCurrentTab = tab === "archived" ? c.archived : !c.archived;
     if (!inCurrentTab) setActiveKey(null);
   }, [conversations, tab, activeKey]);
@@ -522,23 +538,56 @@ export function InboxPanel({
     </div>
   ) : null);
 
-  function tabBtn(key, label, badge) {
-    const isActive = tab === key;
-    return (
-      <button className="mgt-hover-scale" onClick={() => switchTab(key)} style={{ background: isActive ? "var(--bg-tab-active)" : "transparent", color: isActive ? "var(--text-primary)" : "var(--text-muted)", border: "none", borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", display: "flex", alignItems: "center", boxShadow: isActive ? "var(--shadow-btn)" : "none" }}>
-        {label}
-        {/* v18.14.0 (correction 27, Patryk): the first count on a tab opens sideways, its
-            6px with it, so the filter row beside the tabs slides rather than jumps 23px.
-            Nothing can reserve that width: a tab with no count is the common case. */}
-        <Reveal horizontal show={badge != null && badge > 0}>
-          {badge != null && badge > 0 ? <span style={{ marginLeft: 6, fontSize: T.micro, fontWeight: FW.bold, padding: "0 6px", borderRadius: R.pill, background: isActive ? "var(--wa-unread-dot)" : "var(--app-btn-grey)", color: "var(--text-on-accent)", lineHeight: 1.4 }}>{badge}</span> : null}
-        </Reveal>
-      </button>
-    );
-  }
+  // The mark's menu (above MARK_BTN). Inbox and Archived are a choice of one, the
+  // tick on the open list, each with the count its tab carried: the unread red on
+  // Inbox, the grey on Archived. ←/→, X and T still do what these rows do.
+  const markItems = [
+    { id: "inbox", label: "Inbox", checked: tab === "inbox", badge: unreadCount, badgeFill: "var(--wa-unread-dot)", title: "Inbox (←)", onPick: () => switchTab("inbox") },
+    { id: "archived", label: "Archived", checked: tab === "archived", badge: archivedCount, title: "Archived (→)", onPick: () => switchTab("archived") },
+    ...(onOpenSim ? [{ id: "sim", label: "Simulator", icon: FlaskIcon, rule: true, title: "WhatsApp simulator (X)", onPick: onOpenSim }] : []),
+    { id: "templates", label: "Edit templates", icon: EditIcon, rule: !onOpenSim, title: "Edit templates (T)", onPick: () => setShowTpl(true) },
+  ];
+  const markEl = (
+    <ConversationMenu
+      items={markItems}
+      label="WhatsApp menu"
+      align="left"
+      triggerStyle={mkSolidBtn("var(--wa-green)", MARK_BTN)}
+      trigger={
+        <>
+          WhatsApp
+          {/* Which list is open, opening sideways like the count beside it: swapped
+              in one frame, the label grew 109 → 180px and the search box beside it
+              jumped 71px (measured on DEV). `pre`, so the leading space is kept;
+              Reveal unmounts it once closed, so the name is "WhatsApp" again. */}
+          {/* Below two panes the words leave a phone's search box 26px (measured at
+              375px: the mark 109 → 180px), so there it is the archive mark, and the
+              words stay in the name (Patryk, v18.16.0 follow-up). */}
+          <Reveal horizontal show={tab === "archived"}>
+            {tab === "archived" ? (twoPane
+              ? <span style={{ whiteSpace: "pre" }}> · Archived</span>
+              : <span style={{ display: "inline-flex", alignItems: "center", marginLeft: SP.tight }}><span aria-hidden="true" style={{ display: "flex" }}><ArchiveIcon size={IC.inline} /></span><span className="mgt-sr-only"> · Archived</span></span>
+            ) : null}
+          </Reveal>
+          {/* v18.14.0 (correction 27)'s rule, carried from the tab: the count opens
+              sideways, so the controls beside the mark slide rather than jump. */}
+          <Reveal horizontal show={unreadCount > 0}>
+            {unreadCount > 0 ? <span style={MARK_COUNT}>{unreadCount}<span className="mgt-sr-only"> unread</span></span> : null}
+          </Reveal>
+          <span aria-hidden="true" style={{ display: "flex", marginLeft: SP.tight }}><ChevronDownIcon size={IC.inline} /></span>
+        </>
+      }
+    />
+  );
 
-  // The select toggle, Needs action and the search box: their own row, or the title
-  // row's middle on a short screen (`shortScreen`).
+  // The select toggle, Needs action and the search box: the title row's middle,
+  // between the mark and ✕ (v18.16.0 follow-up, Patryk: one row at every width, to
+  // give the list and the thread the height a second row took; it was the short
+  // screen's arrangement alone, `shortScreen`, since v18.14.0). They belong to the
+  // LIST, so on a phone, where an open conversation replaces the list, they go with
+  // it and the row is the mark and ✕ (v18.2.0, W5). Order (Patryk, 2026-07-16):
+  // Select, then Needs action, then the search box.
+  const showFilters = twoPane || !activeKey;
   const filterControls = (
     <>
       {/* v17.15.6's aria-pressed rule, reaching the module at the 17.16.12
@@ -559,17 +608,21 @@ export function InboxPanel({
         className="mgt-hover-scale mgt-press"
         style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: selectMode ? "var(--wa-green)" : "transparent", color: selectMode ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (selectMode ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
       ><SelectIcon size={IC.chrome} /></button>
+      {/* v18.16.0 (follow-up): on one row with the mark, a phone has no width for
+          the words, so below two panes the filter is its dot alone, in a round
+          button the size of Select's, named by the words it no longer shows. */}
       <button
         onClick={() => setNeedsAction((v) => !v)}
         aria-pressed={needsAction}
+        aria-label={twoPane ? undefined : "Needs action"}
         title="Show only conversations that need a response"
         className="mgt-hover-scale mgt-press"
-        style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }}
+        style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: twoPane ? "8px 14px" : "8px", minHeight: 36, minWidth: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
       >{/* A real 8px dot, not a text ● — the same device NotificationStrip
            uses for a section with no icon. It stays a dot rather than
            becoming an icon because it reports a STATE (this filter is on),
            which is what the strip's dots report too. */}
-        <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "currentColor", flexShrink: 0 }} />Needs action</button>
+        <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "currentColor", flexShrink: 0 }} />{twoPane ? "Needs action" : null}</button>
       <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
         {/* 17.15.0-wa-sandbox: a placeholder is not a name. It is not
             exposed as one consistently, and it is gone the moment there is
@@ -610,43 +663,10 @@ export function InboxPanel({
             rather than announced twice. */}
         <h2 className="mgt-sr-only" {...{ [MODAL_TITLE_ATTR]: "" }}>WhatsApp</h2>
         <Reveal show={!kbFold} inert={kbFold} style={{ flexShrink: 0 }}>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            {/* The wordmark. v18.4.0: a <span> hidden from the accessibility
-                tree; the panel's title is the always-mounted <h2> above this
-                bar, which this bar's fold cannot take away. The text stays
-                the all-caps wordmark (the 0.02em letter-spacing is caps
-                tracking and exists for it). */}
-            <span aria-hidden="true" style={{ fontSize: T.small, fontWeight: FW.bold, padding: "2px 8px", borderRadius: R.pill, background: "var(--wa-green)", color: "var(--text-on-accent)", letterSpacing: "0.02em" }}>WHATSAPP</span>
-            <div style={{ display: "flex", gap: 2, background: "var(--bg-tabbar)", borderRadius: R.pill, padding: 2, border: "1px solid var(--border-soft)" }}>
-              {tabBtn("inbox", "Inbox", unreadCount)}
-              {tabBtn("archived", "Archived", archivedCount)}
-            </div>
-          </div>
-          {shortScreen ? <div style={{ display: "flex", alignItems: "center", gap: SP.base, flex: 1, minWidth: 0, marginLeft: SP.base }}>{filterControls}</div> : null}
-          {/* v18.2.0 (the design critique, W5): on a phone this row wrapped and
-              Close landed on the second line at the LEFT, under the badge. Close
-              is now its own item: last on a tablet's one line, and on a phone
-              second in `order`, pushed into the top corner, while the text
-              buttons take a line of their own beneath. */}
-          <div style={{ display: "flex", gap: 6, marginLeft: "auto", order: twoPane ? 0 : 2, flexBasis: twoPane ? "auto" : "100%" }}>
-            {/* Simulator opener (sandbox builds only) — lives next to the
-                quick-reply Templates button per Patryk (2026-07-16); the sim
-                opens on top of this window. */}
-            {onOpenSim ? (
-              <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: BTN.quiet }), HEAD_TEXT_BTN)}><FlaskIcon size={IC.inline} />Simulator</button>
-            ) : null}
-            {/* v18.2.0 (the design critique, W2): "Edit templates", with the
-                app's edit pencil. It was "Templates" with the same document
-                icon as the composer's "Templates", which does a different job
-                (it shows the chips that INSERT one into the reply), so two
-                controls with one name and one mark did two things.
-                W3: and it SAYS so, as does the simulator's — icon-only, their
-                meaning lived in a tooltip the tablets never show. Close stays
-                a bare ✕, the one mark everybody reads. */}
-            <button onClick={() => setShowTpl(true)} title="Edit templates (T)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: BTN.quiet }), HEAD_TEXT_BTN)}><EditIcon size={IC.inline} />Edit templates</button>
-          </div>
-          <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: BTN.quiet }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1, order: twoPane ? 0 : 1, marginLeft: twoPane ? 0 : "auto" })}><CloseIcon size={IC.chrome} /></button>
+        <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {markEl}
+          {showFilters ? <div style={{ display: "flex", alignItems: "center", gap: SP.base, flex: 1, minWidth: 0 }}>{filterControls}</div> : null}
+          <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: BTN.quiet }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1, marginLeft: "auto" })}><CloseIcon size={IC.chrome} /></button>
         </div>
         {/* v18.9.0: the WhatsApp Business app's connection is broken (Meta's
             account_update, recorded on waLink by the server): every device's
@@ -663,17 +683,6 @@ export function InboxPanel({
             </div>
           </Reveal>
         </div>
-        {/* Search + Needs-action filter toolbar — filters the list + ↑/↓ nav.
-            Order (Patryk, 2026-07-16): Select, then Needs action, then the
-            search box (search sits on the right).
-            v18.2.0 (W5): it belongs to the LIST, so on a phone, where an open
-            conversation replaces the list, it goes with it — it stood above
-            the conversation taking ~140px of a phone's height. */}
-        {!shortScreen && (twoPane || !activeKey) ? (
-        <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          {filterControls}
-        </div>
-        ) : null}
         </Reveal>
         {/* Bulk action bar — only in select mode. Actions depend on the tab:
             Inbox → Archive; Archived → Restore + Delete (delete behind one

@@ -379,6 +379,9 @@ explaining why is usually the one to read.
   its words on the seven surfaces it sits on, in both themes. The header's gear and
   search went last, and are `CHROME_BTN` in `App.jsx`: their own grey disc was the
   heaviest thing beside Follow, − and +, for the two least urgent controls there.
+  **The split menu's two steps are both quiet (v18.16.0, Patryk):** step 2 was accent
+  blue from v17.5.0 and the sweep only replaced greys. Two equal choices are not a
+  primary action.
   **What he kept solid:** Following (dark) and Optimiser ON (green), beside their
   quiet idle states; Undo, solid blue; the grey title pills; Completed on a button;
   Send, the moment it can send. Going between the two is one change, in and out:
@@ -636,6 +639,8 @@ explaining why is usually the one to read.
   restaurant's tablets never hover. The inbox's Re-check, Edit templates and
   Simulator were icon-only; each now carries its word beside the mark (the
   shape Archive already had), and the title stays as the longer description.
+  Since the v18.16.0 follow-up the last two are rows of the WHATSAPP mark's
+  menu, word and mark as a menu row draws them.
   A bare ✕ for Close and a bare ⋯ for More are the exceptions: everybody reads
   them, and Re-check keeps its word on the ⋯ menu's row (v18.14.0).
 - **A day is written ONE way: "Thu 24.09" (v18.2.0, C1).** Weekday, day and
@@ -1875,6 +1880,79 @@ exactly like an empty one, and a drop there moved two other parties.
   A check that agrees changes nothing on screen. One that does not fades the new
   words in on `--t-move`, because they replace the old ones under a stopped finger
   and that change is the news, and the tint eases as it does on any row.
+
+### The cell marker (v18.16.0)
+An empty quarter hour on the Timeline starts a booking at that time, with its table as
+the preferred one. The grid shows the offer as one marker: the quarter lit in
+`--bg-ac-hover`, the row warning's "free" blue, and a chip beside it.
+
+- **The chip is the table's badge and the time on the hour pill** (`CellChip`): each
+  drawn as it is drawn where it lives, the label column and the ruler, so the chip
+  introduces no new mark. No drawn "table" icon, by the icon set's reuse rule. The chip
+  carries the ruler's opaque surface as its own ground, because it floats over whatever
+  is beside the cell and both fills are translucent; `tests/contrast.test.js` measures
+  them on that ground.
+- **Beside the cell, never on it**, so the lit quarter stays visible, and on the left
+  of the cell where the right would run off what is on screen.
+- **A mouse hovers and clicks; a finger taps twice.** A finger has no hover, so its
+  first tap selects the cell and shows what the second will do. On the pass, with wet
+  hands, a stray touch on the grid must not open a form (Patryk). The selected marker
+  is a real button, cell and chip together, so the second tap has the row's height to
+  land on. A press anywhere else or any scroll lets it go. A scroll lets a hovered
+  marker go as well: the grid moves under a mouse that has not, and the chip must
+  never name a cell a click would not book.
+- **It follows the pointer without a transition and fades at its ends**: under a mouse
+  it is direct feedback, like a hover tint, so a move from cell to cell is instant; it
+  arrives on `mgt-appear` and leaves on `mgt-ghost-out`.
+- **One marker, outside the grid's render**: it keeps its own state and is told where
+  to be through a handle, so a pointer crossing cells never re-renders the rows.
+- Offered only on the row itself: not over a booking, a waitlist ghost or a blocked
+  span, not past the last start, not on a closed day, and not in the Unplaced row.
+  "Tap an empty cell to book" in Settings → App turns it off, per device, on by default.
+
+### The time drag (v18.16.0)
+A block dragged sideways along its row takes another time and keeps its tables. The
+table drag is the same gesture going the other way, and the two share everything a
+hand can feel: the arm, the lift, the row warning, the Undo.
+
+- **One direction per drag** (Patryk). The first 6px decide whether this is a table
+  drag or a time drag, the larger travel wins, and it stays that until the release. A
+  diagonal hand cannot change a party's table while it is moving their time. A tie
+  goes to the table drag, the older gesture.
+- **It moves by the quarter, and glides between quarters.** A table drag follows the
+  finger pixel for pixel (transition `none`); a time drag has only 40 places to be,
+  so the block steps and each step eases on `M.tap`. Less than half a quarter of
+  travel is no move, so a block that is picked up and put down has not changed.
+- **A pulse on every step** (`pulse`, "Vibrate on drag"), and one more when a new
+  time lands. Under a finger the chip is easy to cover; the hand counts the quarters.
+- **The block carries the cell marker's chip**: its table's badge and the time it
+  would get, at the block's leading edge, which is the start the chip names. It is a
+  sibling of the block, opaque on the ruler's surface, because the block itself is
+  drawn at 0.85 while lifted and clips its content. It arrives on `mgt-appear` and
+  leaves on `mgt-ghost-out`, and after the release it fades where it stood while the
+  block lands under it or eases home.
+- **The row says what the release will do**, in the row warning's three tones and its
+  pill, once per quarter: free, "Moves Ana" (checked against the real plan when the
+  finger rests), or red with the reason. Two things only a time drag says: the form's
+  own sentence for a start outside the day's hours, and "Kitchen busy at 20:00" in
+  amber, which warns and refuses nothing (Patryk).
+- **The release**: the lift comes down on `TL_SETTLE`. A landed time moves the block's
+  `left` while its offset eases to zero on the same curve and duration, so it stays
+  where the finger left it; a refusal eases it home and says why in the refusal toast.
+- **The Undo pill is compact** (Patryk): `Marcos Vidal · 19:00 → 19:30`, then
+  ` · moved Ana Ruiz` when the write re-seated somebody. A table drop keeps its sentence.
+- **What a move did besides the move is a clause on its pill, never a toast over it**
+  (Patryk, 2026-11-10): ` · reply drafted` when the new time was put in a WhatsApp
+  guest's reply box, ` · guest's WhatsApp window is closed` when it could not be. The
+  booking form's edit says it the same way, on "Booking updated", added when the write
+  lands (`noteUndo`). It was first a toast: the toast slot ranks above the pill, so it
+  hid Undo for 3.5 of its 10 seconds. The toast is kept only for a landing that finds
+  its pill gone.
+- **Near the left or right edge the grid scrolls under the block**, the table drag's
+  edge scroll on the other axis, with the ruler kept in step in the same frame. It
+  stops at the grid's own end.
+- Not for a seated party (its time is when it sat down), not from the Unplaced row
+  (no table to keep), and not for a finished booking.
 
 ### Larger text (v18.14.0)
 A switch in Settings → App for the person on the pass who struggles with small text.

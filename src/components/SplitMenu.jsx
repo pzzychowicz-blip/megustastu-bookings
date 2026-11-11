@@ -28,12 +28,21 @@
 // v18.3.0 (M3): the shell is no longer a copy. Both are `PopupShell` (atoms),
 // with the Plan table popover, and App wraps this in `ModalPresence`, so the
 // menu animates out as well as in, inert while it leaves.
+//
+// v18.16.0 (Patryk): both steps are quiet buttons. Step 1 went quiet in
+// v18.14.0's sweep of the secondary greys; step 2 had been accent blue since
+// v17.5.0 and the sweep only looked at greys, so the two steps of one popup
+// read as two components. Step 2's are two equal choices, not one primary
+// action, and two solid blues side by side leave nothing to stand out.
+// Step 2 also has a way back, so a wrong direction is one tap to fix where it
+// was close, reopen and start again. Back sits UNDER the row, so the two view
+// buttons are where they were.
 
 import { useState } from "react";
-import { BTN, S, R, T, FW, IC } from "../lib/constants";
+import { BTN, S, R, T, FW, IC, H } from "../lib/constants";
 import { useArmAfterRelease } from "../hooks/useArmAfterRelease";
 import { mkBtn, PopupShell, useModalPresence } from "./atoms";
-import { SplitSideIcon, SplitStackIcon } from "./Icons";
+import { SplitSideIcon, SplitStackIcon, ChevronLeftIcon } from "./Icons";
 
 const LABEL = { timeline: "Timeline", list: "List", plan: "Plan" };
 const ORDER = ["timeline", "list", "plan"];
@@ -98,13 +107,18 @@ export function SplitMenu({ view, onConfirm, onClose, sideBySideOk = true }) {
             onClick={() => { if (live) { setDir("h"); setStep(2); } }}><SplitStackIcon size={IC.chrome} />Top and bottom</button>
         </div>
       ) : (
-        <div style={row}>
-          {others.map((v) => (
-            <button key={v} className={tlBlocked(v) ? "mgt-nopress" : "mgt-hover-scale"} disabled={tlBlocked(v)}
-              style={btn({ background: S.accent, ...(tlBlocked(v) ? { opacity: 0.45, cursor: "default" } : null) })}
-              onClick={() => { if (live && !tlBlocked(v)) { skipExit(); onConfirm({ a: view, b: v, dir: dir, ratio: 0.5 }); } }}>{LABEL[v]}</button>
-          ))}
-        </div>
+        <>
+          <div style={row}>
+            {others.map((v) => (
+              <button key={v} className={tlBlocked(v) ? "mgt-nopress" : "mgt-hover-scale"} disabled={tlBlocked(v)}
+                style={btn({ background: BTN.quiet, ...(tlBlocked(v) ? { opacity: 0.45, cursor: "default" } : null) })}
+                onClick={() => { if (live && !tlBlocked(v)) { skipExit(); onConfirm({ a: view, b: v, dir: dir, ratio: 0.5 }); } }}>{LABEL[v]}</button>
+            ))}
+          </div>
+          <button type="button" className="mgt-hover-scale"
+            style={mkBtn({ background: BTN.quiet, minHeight: H.touch, padding: "6px 14px", marginTop: 8, fontSize: T.small, display: "inline-flex", alignItems: "center", gap: 4 })}
+            onClick={() => { if (live) { setStep(1); setDir(null); } }}><ChevronLeftIcon size={IC.inline} />Back</button>
+        </>
       )}
 
       {showWhy ? (

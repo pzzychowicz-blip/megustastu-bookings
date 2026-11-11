@@ -906,9 +906,20 @@ export function draftRefusal(f,phoneRefusal){
   if(!f.date) return {field:"date",message:"Please set a date."};
   if(!f.time) return {field:"time",message:"Please set a time."};
   if(!isReadableTime(f.time)) return {field:"time",message:"That time could not be read — please set it again."};
-  const sm=toMins(f.time);
-  const fh=hoursFor(f.date);
-  const wd=WEEKDAY_LONG[new Date(f.date).getUTCDay()]||"that day";
+  return timeRefusal(f.date,toMins(f.time));
+}
+
+// The day's own rules for a START at `mins` on `date`: a closed day, the day's
+// hours, the last start. `{field, message}` or null. v18.16.0: lifted out of
+// `draftRefusal`, statement for statement, because the Timeline now starts a
+// booking from a cell and moves one in time by a drag, and a cell that offers a
+// minute the form would refuse, or a drag that lands one there, is two rules
+// where there is one. `draftRefusal` calls it; so do `cellOffer`
+// (lib/cell-offer.js) and the re-time plan (lib/drop-plan.js).
+export function timeRefusal(date,mins){
+  const sm=mins;
+  const fh=hoursFor(date);
+  const wd=WEEKDAY_LONG[new Date(date).getUTCDay()]||"that day";
   if(fh.closed) return {field:"date",message:"Closed on "+wd+"s — pick another date, or open that day in Settings."};
   if(sm<fh.open*60||sm>fh.close*60) return {field:"time",message:"Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00."};
   if(sm>lastStartMins(fh.close)) return {field:"time",message:"The last start on "+wd+"s is "+toTime(lastStartMins(fh.close))+"."};

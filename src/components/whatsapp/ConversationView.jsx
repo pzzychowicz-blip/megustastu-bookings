@@ -2,10 +2,10 @@
 // Right pane: header (name + WA badge + Regular chip + window state + archive/
 // restore/delete), an optional LinkedBookingCard, an optional IntentBanner, the
 // scrolling message thread, the DraftCard, and the ReplyComposer. The composer
-// is disabled when the 24h service window has expired.
+// is disabled when the 24h service window is not open: expired, or never opened.
 
 import { useState, useRef, useEffect } from "react";
-import { matchCustomerByPhone, regularChipLabel, conversationName, conversationMenuIds, formatWindow, intentBannerVisible, isParsing, threadItems, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
+import { matchCustomerByPhone, regularChipLabel, conversationName, conversationMenuIds, windowState, windowOpen, intentBannerVisible, isParsing, threadItems, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
 import { Reveal, TurnChevron, mkBtn, mkSolidBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { RecheckIcon, ArchiveIcon, DraftIcon, RestoreIcon, MuteIcon } from "./WaIcons";
@@ -87,7 +87,19 @@ export function ConversationView({
   // number there is how the name reaches MGT, so the hint says where to do it.
   const notOnPhone = !!(contactsSynced && contacts && !contacts[conv.phoneKey]);
   const [histOpen, setHistOpen] = useState(false);
-  const win = formatWindow(conv.windowExpiresAt);
+  // v18.16.0: the window's chip shows only in its last hours (`windowState`),
+  // so this view has to notice the moment it starts to, and each minute of the
+  // countdown after it. One timeout to the next change, re-armed by the beat it
+  // sets; a chat with a day left arms a single timer for the whole wait.
+  const [winBeat, setWinBeat] = useState(0);
+  const win = windowState(conv.windowExpiresAt);
+  useEffect(() => {
+    const next = windowState(conv.windowExpiresAt).nextIn;
+    if (next == null) return undefined;
+    // +50ms, so the timer lands just past the change rather than a hair before it.
+    const t = setTimeout(() => setWinBeat((n) => n + 1), next + 50);
+    return () => clearTimeout(t);
+  }, [conv.phoneKey, conv.windowExpiresAt, winBeat]);
   const threadRef = useRef(null);
   // v18.8.0: a thread is listened to only while it is open, so `messages` is
   // `undefined` until its first snapshot lands (InboxPanel), and `[]` means
@@ -172,9 +184,11 @@ export function ConversationView({
   // The big accepted banner used to sit in the thread until someone hit its ✕.
   // It stamps the SAME acceptedBadgeDismissedAt the ✕ does, so the existing
   // re-show rule is untouched: a new inbound message clears the stamp and the
-  // banner comes back. The header's small "✓ Booking confirmed" chip is
-  // deliberately NOT on this timer — that one is the persistent status, and the
-  // LinkedBookingCard below it keeps showing the booking itself.
+  // banner comes back. What stays is the LinkedBookingCard below the header,
+  // which shows the booking itself and its status. (Until v18.16.0 the header
+  // also wore a "✓ Booking confirmed" chip; Patryk took it out, because the
+  // card's status badge one row down said the same thing, and said it better:
+  // the chip went on reading "confirmed" over a booking since cancelled.)
   //
   // Gated on the banner actually being on screen, and keyed by phoneKey, so
   // switching threads restarts the clock rather than dismissing the next
@@ -242,11 +256,6 @@ export function ConversationView({
   const linkedBooking = conv.acceptedBookingId ? bookings.find((b) => b.id === conv.acceptedBookingId) : null;
   const intent = (conv.draftData && conv.draftData.intent) || null;
 
-  // "Booking confirmed" header chip — non-dismissable (the big DraftCard banner
-  // is the dismissable element instead).
-  const acceptedBadge = conv.draftStatus === "accepted"
-    ? <OutlineChip tone="success" size="small"><CheckIcon size={IC.inline} />Booking confirmed</OutlineChip>
-    : null;
   // The disclosure lists the customer's OTHER visits. The linked booking is
   // already rendered in full by LinkedBookingCard a few lines below, and now the
   // COUNT no longer excludes it (see `match` above) it would otherwise appear
@@ -294,13 +303,16 @@ export function ConversationView({
       ))}
     </AlertPanel>
   ) : null;
-  const windowEl = win
-    ? <OutlineChip tone={win.expired ? "danger" : "success"} size="small">{win.label}</OutlineChip>
+  const windowEl = win.chip
+    ? <OutlineChip tone={win.chip.tone} size="small">{win.chip.label}</OutlineChip>
     : null;
 
   // v18.14.0 (correction 6, Patryk): one action stays in the header and the rest
   // are under the ⋯ beside it, `[Archive] [⋯]`, or `[Restore] [⋯]` on an archived
   // thread. Delete still asks (`onDelete` raises the confirm).
+  // v18.16.0 (Patryk) reverses the first half: Archive and Restore are rows of
+  // the ⋯ too, its first, and the header's only control is the ⋯. Archive still
+  // asks before it archives an upcoming linked booking (`handleArchive`).
   //
   // Manual LLM re-check, in BOTH states: an archived thread can be re-checked too,
   // and that's often exactly why you opened it. The ⋯ turns while the round-trip is
@@ -313,6 +325,8 @@ export function ConversationView({
   // conversation (useWhatsApp.handleUnarchive clears both).
   const running = recheck === "running";
   const menuRows = {
+    archive: { label: "Archive", icon: ArchiveIcon, title: "Archive conversation", onPick: () => { if (onArchive) onArchive(conv.phoneKey); } },
+    restore: { label: conv.muted ? "Customer again" : "Restore", icon: RestoreIcon, title: conv.muted ? "A customer after all: back to the inbox, and replied to and read again" : "Restore conversation", onPick: () => { if (onUnarchive) onUnarchive(conv.phoneKey); } },
     recheck: { label: running ? "Checking…" : "Re-check", icon: RecheckIcon, turning: running, inactive: running, title: running ? "Checking…" : "Re-check this conversation for requested changes", onPick: runRecheck },
     mute: { label: "Not a customer", icon: MuteIcon, title: "Not a customer: archive it, and stop replying to and reading its messages", onPick: () => onMute(conv.phoneKey) },
     delete: { label: "Delete", icon: TrashIcon, danger: true, title: "Delete conversation", onPick: () => { if (onDelete) onDelete(conv.phoneKey); } },
@@ -320,15 +334,19 @@ export function ConversationView({
   const menuItems = conversationMenuIds(conv, { recheck: !!onRecheck, mute: !!onMute }).map((id) => ({ id, ...menuRows[id] }));
   const headerActionBtns = (
     <div style={{ display: "flex", gap: 6, flexShrink: 0, justifyContent: "flex-end" }}>
-      {conv.archived
-        ? <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title={conv.muted ? "A customer after all: back to the inbox, and replied to and read again" : "Restore conversation"} className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-handled)", { padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />{conv.muted ? "Customer again" : "Restore"}</button>
-        : <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn(BTN.quiet, { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0 })} ><ArchiveIcon size={IC.inline} />Archive</button>}
       {/* key: this component is not remounted on a thread switch, and a menu must
           not stay open over the next conversation's actions. */}
       {menuItems.length ? <ConversationMenu key={conv.phoneKey} items={menuItems} busy={running} /> : null}
     </div>
   );
-  const disabled = !!(win && win.expired);
+  // v18.16.0 (follow-up, Patryk): the composer asks the SERVER's question
+  // (`windowOpen`), not the chip's. `win.expired` is false for a chat with no
+  // window at all (a coexistence chat holding only the restaurant's messages, or
+  // imported history), whose box stayed live while api/wa-send.js and
+  // api/wa-media.js answered 410. `noWindow` picks the box's sentence: such a
+  // guest has not written, which is a different thing from a window that closed.
+  const disabled = !windowOpen(conv.windowExpiresAt);
+  const noWindow = !Number(conv.windowExpiresAt);
 
   // Intent banner gating: hidden once handled, until a newer INBOUND message
   // arrives (lastInboundAt — a staff reply must not resurrect it). Shared rule
@@ -378,7 +396,6 @@ export function ConversationView({
         {phoneDisplay && !hideNumber ? <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span> : null}
         {regularChip}
         {notOnPhone ? <OutlineChip tone="neutral" size="small" title="Save this number in the WhatsApp Business app's contacts and its name shows here">Not saved on the restaurant phone</OutlineChip> : null}
-        {acceptedBadge}
         {conv.muted
           ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }} title="Its messages are kept, not answered or read, and stay in Archived"><MuteIcon size={IC.inline} />Not a customer</OutlineChip>
           : conv.archived ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }}><ArchiveIcon size={IC.inline} />Archived</OutlineChip> : null}
@@ -460,7 +477,7 @@ export function ConversationView({
           />
         </div>
       </Reveal>
-      <ReplyComposer ref={composerRef} draftOwner={draftOwner} onSend={onSend} onSendMedia={onSendMedia} threadKey={conv.phoneKey} disabled={disabled} templates={templates} convLang={conv.language} />
+      <ReplyComposer ref={composerRef} draftOwner={draftOwner} onSend={onSend} onSendMedia={onSendMedia} threadKey={conv.phoneKey} disabled={disabled} noWindow={noWindow} templates={templates} convLang={conv.language} />
     </div>
   );
 }

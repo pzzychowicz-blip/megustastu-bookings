@@ -106,11 +106,19 @@ describe("what the census could not reach", () => {
     expect(rem).toContain("<FoldRows items={draft.times} idOf={(t, i) => String(i)}>");
     expect(rem).not.toContain("draft.times.map(");
   });
-  it("fades the two search crosses and the linked booking's summary both ways", () => {
+  it("fades the two search crosses both ways", () => {
     const fade = 'inClass="mgt-appear" outClass="mgt-ghost-out"';
     expect(src("atoms.jsx")).toContain("<Presence show={has} " + fade);
     expect(src("whatsapp/InboxPanel.jsx")).toContain("<Presence show={!!query} " + fade);
-    expect(src("whatsapp/LinkedBookingCard.jsx")).toContain('<Presence tag="span" show={collapsed && !narrow} ' + fade);
+  });
+  // v18.16.0 (Patryk): the linked booking's summary faded in and out with the card's
+  // fold. On a tablet the card is a fixed strip now and the line is always there; on a
+  // phone it was never drawn. Nothing shows or hides it, so there is nothing to fade,
+  // and a Presence left on it would be a transition with no trigger.
+  it("the linked booking's summary is a plain line: no tap shows or hides it", () => {
+    const linked = src("whatsapp/LinkedBookingCard.jsx");
+    expect(linked).not.toContain("<Presence");
+    expect(linked).toMatch(/\{narrow \? null : <span style=\{\{[^\n]*minWidth: SUMMARY_MIN[^\n]*\}\}>\{summary\}<\/span>\}/);
   });
   it("eases the usage panel's answer alone, so Refresh under it glides", () => {
     const s = src("Settings.jsx");

@@ -13,6 +13,7 @@
 //   tlSettings, onSetTlSetting                              Timeline zoom and follow
 //   largeText, onToggleLargeText                            Larger text on the Timeline
 //   indoorTint, onToggleIndoorTint                          Tint indoor tables on the Timeline
+//   cellBook, onToggleCellBook                              Tap an empty cell to book, on the Timeline
 //   vibrateOnDrag, onToggleVibrate                          Vibrate on drag (lib/haptics.js)
 //   split, focusedPane, setFocusedPane, applySplit,
 //   fitTimeline, confirmSplit, swapSides, toggleSplitDir,
@@ -196,6 +197,14 @@ const INDOOR_TINT_KEY="mgt-tl-indoortint";
 function readIndoorTint(){
   try{return localStorage.getItem(INDOOR_TINT_KEY)!=="0";}catch{return true;}
 }
+// v18.16.0: per-device "Tap an empty cell to book". Per device like its
+// neighbours, and for a reason of its own: it answers how this screen is touched
+// (a tablet on the pass with wet hands, a laptop with a mouse), not who is signed
+// in. Default on, so only "0" is ever stored.
+const CELL_BOOK_KEY="mgt-tl-cellbook";
+function readCellBook(){
+  try{return localStorage.getItem(CELL_BOOK_KEY)!=="0";}catch{return true;}
+}
 export function readTlSettings(){
   const B=TL_SETTING_BOUNDS;
   const maxZoom=readTlNum(B.maxZoom);
@@ -303,6 +312,14 @@ export function useShellPrefs({
       if(next) localStorage.removeItem(INDOOR_TINT_KEY); else localStorage.setItem(INDOOR_TINT_KEY,"0");
     }catch{/* ignore */}
     setIndoorTint(next);
+  }
+  const [cellBook,setCellBook]=useState(readCellBook);
+  function onToggleCellBook(){
+    const next=!cellBook;
+    try{
+      if(next) localStorage.removeItem(CELL_BOOK_KEY); else localStorage.setItem(CELL_BOOK_KEY,"0");
+    }catch{/* ignore */}
+    setCellBook(next);
   }
   // v17.0.0 correction: per-device app width (see readAppWidth above).
   const [appWidth,setAppWidth]=useState(readAppWidth);
@@ -582,6 +599,7 @@ export function useShellPrefs({
     tlSettings, onSetTlSetting,
     largeText, onToggleLargeText,
     indoorTint, onToggleIndoorTint,
+    cellBook, onToggleCellBook,
     vibrateOnDrag, onToggleVibrate,
     split, focusedPane, setFocusedPane, applySplit, fitTimeline,
     confirmSplit, swapSides, toggleSplitDir, exitSplit, setSplitRatio,

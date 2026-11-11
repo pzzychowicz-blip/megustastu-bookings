@@ -267,8 +267,12 @@ export const WA_PARSING_STALE_MS = 90000;
 // archived thread included, which is often why it was opened. Not a customer until
 // it has been said: Restore reads "Customer again" after that. Delete only from
 // Archived, so a live conversation is two deliberate steps from gone.
+// v18.16.0 (Patryk): Archive and Restore are rows of it too, first, so the header
+// holds the ⋯ and nothing else. Exactly one of the two, by the thread's state, and
+// always: a conversation can be archived or restored whatever else it can do.
+// Delete stays last, the row furthest from the one under the thumb.
 export function conversationMenuIds(conv, can) {
-  const ids = [];
+  const ids = [conv.archived ? "restore" : "archive"];
   if (can.recheck) ids.push("recheck");
   if (can.mute && !conv.muted) ids.push("mute");
   if (conv.archived) ids.push("delete");
@@ -412,6 +416,150 @@ export function availabilityReply(lang, o) {
   return s;
 }
 
+// ── v18.16.0: a moved booking's new time, drafted for its guest ──────────────
+// When staff move the time of a booking that came through WhatsApp (a drag on
+// the Timeline, or the form), the guest has to be told, and until now that was
+// somebody remembering to open the chat. The reply is written here and put in
+// that chat's reply box: a DRAFT on this device (lib/wa-reply-drafts.js), read
+// and sent by a person, never sent by the app and never stored in the database.
+// The same register and the same language rule as `availabilityReply` above.
+export function movedReply(lang, o) {
+  const es = (lang || "es") === "es";
+  const day = spokenDay(o.date, es ? "es" : "en");
+  return es
+    ? "Hemos cambiado su reserva: ahora es el " + day + " a las " + o.time + ". Si no le va bien, díganoslo, por favor."
+    : "We've moved your booking: it is now on " + day + " at " + o.time + ". If that doesn't suit you, please let us know.";
+}
+
+// Did this write change WHEN the guest should come? → null | {date, time, from}.
+// Only for a booking that is still to happen (confirmed or pending): a seated
+// party's time is being corrected, not moved, and a finished booking's is a
+// record. `before` and `after` are the booking as it stood and as it was written.
+// `from` is the slot it left, `{date, time}`, which `movedReplyPlan` needs to
+// tell a move from a move taken back.
+//
+// The time compared is the one the GUEST was given: `scheduledTime`, where the
+// booking has one. A seated party's `time` is when it sat down, so walking a
+// booking back from seated puts its booked start back in `time`, and comparing
+// `time` alone would tell that guest their booking had moved to the time it
+// always had (tests/save-path.test.js's un-seat cases found it).
+function givenTime(b) { return isUsableTime(b.scheduledTime) ? b.scheduledTime : b.time; }
+export function movedSlot(before, after) {
+  if (!before || !after) return null;
+  if (after.status !== "confirmed" && after.status !== "pending") return null;
+  if (before.date === after.date && givenTime(before) === after.time) return null;
+  return { date: after.date, time: after.time, from: { date: before.date, time: givenTime(before) } };
+}
+function sameSlot(a, b) { return !!a && !!b && a.date === b.date && a.time === b.time; }
+
+// What to do about it → null | "closed" | {phoneKey, withdraw, rearchive?} |
+// {phoneKey, text, to, from, prev, bringBack?, broughtBack?}. The hook (`draftMovedReply`) holds the refs
+// and the store; the answers are here.
+//   null      nothing to draft: the module is off (asked FIRST, so an off module
+//             does nothing at all), no conversation is linked to this booking,
+//             the guest is muted, the booking no longer says this time (an Undo
+//             landed before the write did), or the reply box already holds text
+//             that is somebody's own
+//   "closed"  the 24-hour window is not open (`windowOpen`: it has expired, or
+//             the guest never opened one), so a free-text reply cannot be sent:
+//             the caller says so rather than drafting what cannot go out
+//   {withdraw} empty `phoneKey`'s box and forget the draft: the booking is back
+//             where the guest already knows it to be (below)
+//   {…}       put `text` in `phoneKey`'s box, and remember the whole answer
+// `mine` is what THIS session last drafted for the booking (the answer it was
+// given then): text still in the box unchanged is ours, and a second move
+// replaces it rather than leaving a reply that names the time before last.
+// `to` is the time the text names and `prev` the draft of ours it replaced
+// (null when the box was empty), which is what Undo needs: `movedReplyUndo`.
+//
+// v18.16.0 (/code-review): `from` is the slot the guest last HEARD, `{date,
+// time}` or null when the caller did not say (`o.from`, `movedSlot`'s). While
+// our draft sits unsent the guest has heard nothing, so it is the slot the
+// booking stood in before the first of those drafts, carried from draft to
+// draft; once the box is empty (sent, or cleared by hand) it is where this move
+// began. A move that lands back on it is a move taken back by hand: 19:00 →
+// 19:30 → 19:00 wrote "it is now at 19:00" to a guest who had never heard of
+// 19:30 (reproduced in Node), where an Undo of the same move takes the draft
+// away. So does this, before the window is asked about: a draft nobody should
+// send goes whether or not it could be sent.
+//
+// v18.16.0 (follow-up, Patryk): a draft in an ARCHIVED chat waited under
+// Archived, where nobody looks, while the pill said "reply drafted". The chat
+// now comes back to the Inbox, by the rule a sent reply follows
+// (`replyUnarchives`, so never a muted one, which stops above anyway), and the
+// answer says so:
+//   bringBack   true: take this chat out of Archived now
+//   broughtBack {archivedAt}: a draft of this chain brought it back, and this is
+//               where it stood in Archived. Carried from draft to draft (the
+//               second move finds the chat already in the Inbox), and asked by
+//               whatever takes the draft away again: a withdraw answers
+//               `rearchive` with it, and so does `movedReplyUndo`, so the chat
+//               goes back where it was, at its old place in the list. Both keys
+//               are absent when they do not apply.
+export function movedReplyPlan(o) {
+  if (!o || o.on !== true || !o.to) return null;
+  const conv = (o.conversations || []).find(function (c) { return c && c.acceptedBookingId === o.bookingId; });
+  if (!conv || conv.muted) return null;
+  const b = o.booking;
+  if (!b || b.date !== o.to.date || b.time !== o.to.time) return null;
+  const held = o.textOf(conv.phoneKey);
+  const ours = !!held && !!o.mine && o.mine.phoneKey === conv.phoneKey && o.mine.text === held;
+  if (held && !ours) return null;
+  const from = (ours ? o.mine.from : o.from) || null;
+  const carried = ours && o.mine.broughtBack ? o.mine.broughtBack : null;
+  if (ours && sameSlot(from, o.to)) return withBack({ phoneKey: conv.phoneKey, withdraw: true }, "rearchive", carried);
+  if (!windowOpen(conv.windowExpiresAt, o.now)) return "closed";
+  const prev = ours ? withBack({ phoneKey: o.mine.phoneKey, text: o.mine.text, to: o.mine.to, from: from, prev: null }, "broughtBack", o.mine.broughtBack) : null;
+  const out = { phoneKey: conv.phoneKey, text: movedReply(conv.language, o.to), to: { date: o.to.date, time: o.to.time }, from: from, prev: prev };
+  if (replyUnarchives(conv)) return Object.assign(out, { bringBack: true, broughtBack: { archivedAt: Number(conv.archivedAt) || null } });
+  return withBack(out, "broughtBack", carried);
+}
+// `obj` with `key: back` when there is one, else as it is: an absent key, so an
+// answer about a chat that was never archived reads exactly as it did before.
+function withBack(obj, key, back) {
+  if (back) obj[key] = back;
+  return obj;
+}
+
+// What an Undo does to that draft → null (nothing changes) | {mine, text?}:
+// what to remember now, and what to put in the box (absent = leave the box).
+// `restored` is the booking as the Undo put it back.
+//   The Undo pill is one slot for every action on a booking, so the Undo that
+// arrives here may be of a note, a status or a table drop made AFTER the move.
+// Measured on DEV, 2026-11-10: a note edited and undone after a move emptied
+// the reply box while the booking stayed moved, so the guest would never have
+// been told. So the question is whether the booking still says the time the
+// draft names. If it does, the move stands and so does its draft.
+//   If it does not, the draft goes, but only while it is still the text put
+// there (one somebody has edited is theirs now), and the draft of ours it had
+// replaced comes back when the booking is back at THAT time: 19:00 → 19:30 →
+// 20:00 and one Undo leaves the party at 19:30, which the guest has still not
+// heard about.
+//   v18.16.0 (follow-up, Patryk): when the draft goes and nothing replaces it,
+// a chat the draft brought out of Archived goes back (`rearchive`, the plan's
+// `broughtBack`). A draft somebody edited or sent is theirs, and so is the chat:
+// it stays in the Inbox. One an earlier draft gives way to keeps it there too,
+// since that draft still waits in it.
+export function movedReplyUndo(mine, held, restored) {
+  if (!mine || !mine.to || !restored) return null;
+  const names = function (d) { return !!(d && d.to) && d.to.date === restored.date && d.to.time === givenTime(restored); };
+  if (names(mine)) return null;
+  if (held !== mine.text) return { mine: null };
+  const prev = names(mine.prev) ? mine.prev : null;
+  return withBack({ mine: prev, text: prev ? prev.text : "" }, "rearchive", prev ? null : mine.broughtBack);
+}
+
+// How the app says which of the two happened: a clause for the Undo pill (the
+// time drag's, and the form edit's own) and a sentence for the toast slot, for
+// a landing that finds its pill gone.
+export function movedReplyWords(result) {
+  if (result === "drafted") return { pill: "reply drafted", toast: "The new time is drafted in the guest's WhatsApp chat.", good: true };
+  // v18.16.0 (follow-up): the draft brought an archived chat back to the Inbox.
+  if (result === "drafted-back") return { pill: "reply drafted, chat back in Inbox", toast: "The new time is drafted in the guest's WhatsApp chat, which is back in the Inbox.", good: true };
+  if (result === "closed") return { pill: "guest's WhatsApp window is closed", toast: "The guest's WhatsApp window is closed, so no reply was drafted.", good: false };
+  return null;
+}
+
 // Phone-identity primitives — complementarity contract (applied at the v16.0.0
 // prod sync): `src/lib/customers.js` is now the ONE home of normalizePhone /
 // formatPhone / matchCustomerByPhone (ported verbatim from here; its
@@ -543,14 +691,65 @@ export function formatClockTime(ts) {
 }
 
 // Format remaining time on the 24h WA window → { label, expired } or null.
-export function formatWindow(expiresAt) {
+export function formatWindow(expiresAt, now = Date.now()) {
   if (!expiresAt) return null;
-  const diff = expiresAt - Date.now();
+  const diff = expiresAt - now;
   if (diff <= 0) return { label: "Window expired", expired: true };
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
   if (h >= 1) return { label: "Window: " + h + "h " + m + "m left", expired: false };
   return { label: "Window: " + m + "m left", expired: false };
+}
+
+// ── The window chip, only when it matters (v18.16.0, Patryk) ─────────────────
+// The header showed "Window: 23h 57m left" in green on every open chat: a third
+// chip saying all is well. It is drawn now only inside the last WA_WINDOW_WARN_MS
+// (his choice of 4 hours, so a lunchtime message is flagged before evening
+// service), in amber, and in red once the window has closed.
+//
+//   windowState(expiresAt, now) → { expired, chip, nextIn }
+//     expired  the composer's question, unchanged: may a free-text reply be sent
+//     chip     null · { label, tone: "warn" | "danger" }
+//     nextIn   ms until this answer changes, or null when it never will: the
+//              start of the warning, then each minute of its countdown, then the
+//              expiry. ConversationView arms ONE timeout on it, because nothing
+//              else re-renders an open chat that nobody writes in, and a chip
+//              that only appears with the next message is a chip that is late.
+//              Never more than WA_WINDOW_RECHECK_MAX_MS (/code-review): a timer
+//              keeps its delay as a 32-bit integer, so one past 2^31-1 ms (24.8
+//              days) wraps, and a wrapped negative fires at once. Measured in
+//              the Browser pane: `setTimeout(fn, 2 ** 31 + 1000)` ran after 0 ms.
+//              The view's timer re-arms on its own beat, so a stamp that far
+//              ahead would re-render the open chat every few milliseconds
+//              (read from the code; the wrap is what was measured). A real
+//              window is a day long; the stamps that are not are the unclamped
+//              ones api/wa-inbound.js records (the year 5138), and whatever
+//              the next bad one turns out to be. Capped, such a chat is asked
+//              about again in 24 days, and the answer is the same.
+export const WA_WINDOW_WARN_MS = 4 * 3600000;
+export const WA_WINDOW_RECHECK_MAX_MS = 24 * 86400000;
+export function windowState(expiresAt, now = Date.now()) {
+  const f = formatWindow(expiresAt, now);
+  if (!f) return { expired: false, chip: null, nextIn: null };
+  if (f.expired) return { expired: true, chip: { label: f.label, tone: "danger" }, nextIn: null };
+  const diff = expiresAt - now;
+  if (diff > WA_WINDOW_WARN_MS) return { expired: false, chip: null, nextIn: Math.min(diff - WA_WINDOW_WARN_MS, WA_WINDOW_RECHECK_MAX_MS) };
+  // The label counts whole minutes down, so it is next wrong when the remainder
+  // crosses a minute. `|| 60000`: exactly on a boundary, the next one is a minute off.
+  return { expired: false, chip: { label: f.label, tone: "warn" }, nextIn: diff % 60000 || 60000 };
+}
+
+// ── May a free-text reply be SENT now: the server's question ─────────────────
+// v18.16.0 (/code-review). `api/wa-send.js` and `api/wa-media.js` refuse a chat
+// whose window has closed AND one that has no window at all
+// (`!conv.windowExpiresAt || conv.windowExpiresAt <= Date.now()`): a coexistence
+// chat holding only the restaurant's own messages, or imported history, was
+// never opened by the guest (tests/api-handlers.test.js pins the missing stamp).
+// `windowState().expired` is the composer's question and answers false for
+// those, so a caller that must not promise a reply the server will refuse asks
+// this one. tests/wa-moved-reply.test.js holds the two files to it.
+export function windowOpen(expiresAt, now = Date.now()) {
+  return Number(expiresAt) > now;
 }
 
 // ── What the LLM said vs what this app can use (v18.0.0 phase 6, CT-WA-01) ───
@@ -873,6 +1072,29 @@ export function sortConversations(conversations, archivedView) {
 // drift. State that belongs to the LIST rather than to the conversation —
 // select mode, checked — stays at the call site, exactly as the booking card's
 // clash and late clauses do.
+// ── linkedStatus: what the booking a conversation is linked to IS, now ────────
+// v18.16.0. The list's mark and the row's spoken label both said "booking
+// confirmed" from `draftStatus === "accepted"`, which records that a draft was
+// once accepted and never moves again. Reproduced on DEV on 2026-11-09: a
+// linked booking cancelled from its own card, and its row went on showing the
+// green tick titled "Booking confirmed" beside a card reading Cancelled.
+//
+//   → the linked booking's status, when the conversation names one that exists
+//   → null when it names one that is gone (deleted): there is nothing to mark
+//   → "confirmed" for an accepted draft with NO booking id, the shape written
+//     before conversations stored one, so those rows keep the mark they had
+//
+// Read by ConversationRow (the mark) and `describeConversation` (the words), so
+// what is drawn and what is spoken are one answer.
+export function linkedStatus(conv, bookings) {
+  if (!conv) return null;
+  if (conv.acceptedBookingId) {
+    const b = (bookings || []).find(function (x) { return x.id === conv.acceptedBookingId; });
+    return b && b.status ? b.status : null;
+  }
+  return conv.draftStatus === "accepted" ? "confirmed" : null;
+}
+
 export function describeConversation(conv, opts) {
   if (!conv) return "";
   const parts = [];
@@ -898,8 +1120,14 @@ export function describeConversation(conv, opts) {
   if (isParsing(conv)) parts.push("reading the message");
   else if (intent === "cancel") parts.push("requesting to cancel");
   else if (intent === "modify") parts.push("requesting changes");
-  else if (conv.draftStatus === "accepted") parts.push("booking confirmed");
+  // v18.16.0: the row's own order, a draft waiting before the booking already
+  // made, and the booking's status as it stands (`linkedStatus`), where this said
+  // "booking confirmed" for any accepted draft, a cancelled booking's included.
   else if (conv.draftStatus === "parsed" && conv.draftData) parts.push("draft booking");
+  else {
+    const status = linkedStatus(conv, (opts && opts.bookings) || []);
+    if (status) parts.push("booking " + status);
+  }
   const when = formatRelativeTime(conv.lastMessageAt);
   if (when) parts.push(when);
   // Last: the snippet is what the row is ABOUT, and it is spoken in full — the

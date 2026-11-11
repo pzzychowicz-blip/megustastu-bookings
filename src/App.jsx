@@ -105,7 +105,11 @@ import { DateField, Overlay, ModalTitle, mkBtn, mkSolidBtn, mkDangerConfirm, Rev
 import { StatusToasts } from "./components/StatusToasts";
 import { RefusalToast } from "./components/RefusalToast";
 import { toastBox } from "./lib/toast-box";
-import { planDrop, dropPreview, dropCheck } from "./lib/drop-plan";
+import { planDrop, dropPreview, dropCheck, planRetime, retimePreview, retimeCheck } from "./lib/drop-plan";
+import { nextFreeAfter } from "./lib/cell-offer";
+// v18.16.0: a moved booking's new time is drafted for a WhatsApp guest
+// (`saveMove`, `doSaveEdit`). The hook already brings this module into the entry.
+import { movedSlot, movedReplyWords } from "./lib/whatsapp";
 import { planAssign, planReassign, swapSlot, liveSwap } from "./lib/manual-assign";
 import { planStatus, planCancel, completeCleared, seatClashSnap } from "./lib/status-change";
 import { appBannerSections } from "./components/AppBanners";
@@ -453,7 +457,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.15.0"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.16.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1285,6 +1289,8 @@ export function BookingApp({uid}){
   const { tagList, saveTagList, tagError, clearTagError } = useTagSettings();
   const wa = useWhatsApp({
     enabled: whatsappOn,
+    // v18.16.0: whose reply drafts a moved booking's new time is written into.
+    uid: uid,
     bookings, setWriteWarning, waSettings, tagList,
     // v18.4.9: the hook drops an accepted draft's source when the form closes.
     formOpen: showForm,
@@ -1479,6 +1485,7 @@ export function BookingApp({uid}){
     tlSettings,onSetTlSetting,
     largeText,onToggleLargeText,
     indoorTint,onToggleIndoorTint,
+    cellBook,onToggleCellBook,
     vibrateOnDrag,onToggleVibrate,
     split,focusedPane,setFocusedPane,applySplit,fitTimeline,
     confirmSplit,swapSides,toggleSplitDir,exitSplit,setSplitRatio,
@@ -2057,8 +2064,28 @@ export function BookingApp({uid}){
   // would be handed the click event as the draft.
   // v18.14.0 (M5): the time is in the draft `openForm` is given, so it is the
   // baseline too, and a form nobody touched is not dirty.
-  function openNewWith(draft){if(refused("bookingCreate"))return false;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(draft||Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",time:newBookingTime(seedDate,today,nowMins),size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);return true;}
+  // v18.16.0 (/code-review): what a new booking starts with, spelled once. The
+  // Timeline's cell (`newAtCell`) wrote the seed-date rule and this literal out a
+  // second time, six lines below, with two fields changed; a default added to one
+  // and missed in the other would give a booking begun from a cell a different
+  // start from one begun with + New, and nothing would fail. `over` is what a
+  // door knows better.
+  function newDraft(over){const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();return Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",time:newBookingTime(seedDate,today,nowMins),size:generalSettings.defaultBookingSize},over);}
+  function openNewWith(draft){if(refused("bookingCreate"))return false;pendingWaitlistRef.current=null;openForm(draft||newDraft());setEditId(null);setError("");setSwapAffected(null);setShowForm(true);return true;}
   function openNew(){openNewWith(null);}
+  // v18.16.0: the Timeline's empty cell (and, with a block focused, `N`). The time
+  // is the cell's and the table goes in as the PREFERRED one, the form's star, not
+  // as a hand pick (Patryk): the optimiser still seats the party, on that table
+  // when it fits, and the form's Tables row shows where before Save. Through
+  // `openNewWith`, the gated door, so `bookingCreate` is asked before the form opens.
+  function newAtCell(tableId,time){return openNewWith(newDraft({time:time,preferredTables:[tableId]}));}
+  // v18.16.0: `N` with a Timeline block focused: a new booking on that block's
+  // table, right after that booking (`nextFreeAfter`, lib/cell-offer.js), through
+  // the cell's door. When the day has no such time left it is the plain N.
+  function openNewAfter(id,tableId){
+    const at=nextFreeAfter(bookings.find(function(b){return b.id===id;}),tableId,{date:viewDate,blocks:tableBlocks,nowMins:nowMins,today:todayStr()});
+    if(at) newAtCell(at.tableId,at.time); else openNew();
+  }
   // v18.3.4: the draft is the field table's (`draftFromBooking`), so a field the
   // form edits cannot be left out of what it opens with — the silent wipe
   // ROADMAP #13 named, where Save writes the gap.
@@ -2199,14 +2226,28 @@ export function BookingApp({uid}){
     // for a not-yet-persisted write — matches quick-action honesty).
     // v18.4.6: and if a replay finds the booking deleted on another device,
     // the banner says so (`plan.replayRefusal`); the form is closed by then.
-    const ok=saveBookings(plan.next,false,{subject:editId,replayRefusal:plan.replayRefusal});
+    // v18.16.0: an edit that changes WHEN a WhatsApp guest should come drafts the
+    // new time in their chat, when the write has landed and not before (a held
+    // or refused save must not leave "we've moved your booking" in a reply box).
+    // It is said on this edit's own Undo pill (`noteUndo`), as a time drag says
+    // it on its pill. First built as a toast, which covered the pill for 3.5 of
+    // its 10 seconds (measured on DEV, 2026-11-10; Patryk chose the pill). The
+    // toast is what is left for a landing that finds the pill gone: a held save
+    // arms none, and a slow one can outlast it.
+    const id=editId;
+    const moved=movedSlot(bookings.find(function(b){return b.id===id;}),plan.fin.find(function(b){return b.id===id;}));
+    let pill=null;
+    const ok=saveBookings(plan.next,false,Object.assign({subject:id,replayRefusal:plan.replayRefusal},moved?{onLanded:function(){
+      const said=draftMoved(id,moved);
+      if(said&&!noteUndo(pill,said.pill)) flashDragMsg(said.toast,said.good);
+    }}:null));
     // WhatsApp sandbox: if this edit came from a modify request's "Apply
     // changes", auto-mark that request handled — but only on a real save.
     wa.completeModifyApply(editId, ok);
     if(plan.flash&&ok) flash(plan.flash.kind,plan.flash.note);
     // v17.4.0: form edits are undoable — the pre-edit `orig` is the snapshot
     // (undo swaps it back in wholesale, incl. tables/status/duration).
-    if(ok&&plan.changed) armUndo(undoDelta(bookings,plan.fin),editId,"edit",false);
+    if(ok&&plan.changed) pill=armUndo(undoDelta(bookings,plan.fin),editId,"edit",false);
     // v17.16.0: armed only HERE — after the write is dispatched, on the
     // line that closes the form. Every early return above leaves the form
     // open with an error and the guard READY, so Save still works.
@@ -2475,12 +2516,20 @@ export function BookingApp({uid}){
   // appear long after anyone was looking.
   // v18.14.2: a `plan` with a `lead` has its sentence finished here, from what the
   // write moved (`landedSentence`), where a whole-day re-seat can be seen.
+  // v18.16.0: a time drag whose guest came through WhatsApp drafts the new time
+  // in their chat, here, where the write is known to have landed, and the pill
+  // says so (" · reply drafted", or that the guest's window is closed). A landing
+  // too late for the pill still drafts, and says it in the toast slot instead.
+  function draftMoved(id,slot){return slot?movedReplyWords(wa.draftMovedReply(id,slot)):null;}
   function saveMove(transform,id,kind,sentence,quiet,plan){
     const move=withUndoDelta(transform,undoDelta);
     return saveBookings(move.transform,false,Object.assign(id==null?{}:goneReport(id),{onLanded:function(){
       const delta=move.delta();
       if(!delta.length){if(quiet)quiet();return;}
-      if(move.age()<=(generalSettings.undoSecs||10)*1000) armUndo(delta,id,kind,false,landedSentence(plan,sentence,delta,move.post(),id));
+      const byId=function(b){return b.id===id;};
+      const said=plan&&plan.retime?draftMoved(id,movedSlot(delta.find(byId),move.post().find(byId))):null;
+      if(move.age()<=(generalSettings.undoSecs||10)*1000) armUndo(delta,id,kind,false,landedSentence(plan,sentence,delta,move.post(),id)+(said?" · "+said.pill:""));
+      else if(said) flashDragMsg(said.toast,said.good);
     }}));
   }
   // v18.4.5 (#17): WHAT a drop does is `planDrop` (lib/drop-plan.js), which
@@ -2502,6 +2551,28 @@ export function BookingApp({uid}){
   function checkDrop(id,targetId){
     if(!can("bookingAssign")) return null;
     return dropCheck(dropCtx(id,targetId));
+  }
+  // v18.16.0: the same block dragged SIDEWAYS, to a new time. `planRetime` is the
+  // drop's plan with a time in it (lib/drop-plan.js): the booking keeps its tables,
+  // and anyone in the way at the new time is moved as a drop moves them, or the
+  // drag is refused. It asks `bookingEdit`, not `bookingAssign`: a new time is an
+  // edit of the booking, which is what the form asks for the same change. Through
+  // `saveMove`, so its Undo is armed on landing and restores the time and every
+  // party the write moved; nothing here is new undo code (`time` and
+  // `scheduledTime` are both `undo: true` rows).
+  function retimeBooking(id,time){if(refused("bookingEdit"))return;
+    const plan=planRetime(Object.assign(dropCtx(id,null),{time:time}));
+    if(!plan) return;
+    if(plan.refuse){flashDragMsg(plan.refuse);return;}
+    saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);},plan);
+  }
+  function previewRetime(id,time){
+    if(!can("bookingEdit")) return null;
+    return retimePreview(Object.assign(dropCtx(id,null),{time:time}));
+  }
+  function checkRetime(id,time){
+    if(!can("bookingEdit")) return null;
+    return retimeCheck(Object.assign(dropCtx(id,null),{time:time}));
   }
   // The confirm dialog's ONE door. `delBooking` below is the guarantee; this is
   // so a staff member is refused at the point of intent rather than after
@@ -2643,7 +2714,7 @@ export function BookingApp({uid}){
     openEdit:openEdit,updateStatus:updateStatus,
     // v14.4.0: N → new reminder while the Settings Reminders tab is open.
     openNewReminder:openNewReminder,
-    openNew:openNew,openWalkin:openWalkin,
+    openNew:openNew,openNewAfter:openNewAfter,openWalkin:openWalkin,
     // v14.6.0: Summary panel toggle (the g shortcut).
     setSummaryOpen:setSummaryOpen,
     setShowWeek:setShowWeek,
@@ -2966,6 +3037,18 @@ export function BookingApp({uid}){
     // nothing to add.
     setUndoInfo({snapshots:snapshots,primaryId:primaryId,kind:kind,noShow:!!noShow,note:label?"":note,label:label||""});
     undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},(generalSettings.undoSecs||10)*1000);
+    return undoTimerRef.current;
+  }
+  // v18.16.0: a clause added to a pill that is already up, for something learned
+  // after it was armed (the form's edit arms at the dispatch and hears at the
+  // landing that its guest's reply was drafted). `pill` is what `armUndo`
+  // returned, its timer, which is this pill's for exactly as long as it is the
+  // one on screen: another arm replaces it, and the Undo and the timeout clear
+  // it. → whether it was said, so the caller can say it some other way.
+  function noteUndo(pill,clause){
+    if(!pill||undoTimerRef.current!==pill) return false;
+    setUndoInfo(function(u){return u?Object.assign({},u,u.label?{label:u.label+" · "+clause}:{note:u.note?u.note+" · "+clause:clause}):u;});
+    return true;
   }
   // v18.5.1 (#17): WHAT is restored is `planUndo` (lib/delete-undo.js), verbatim
   // and never through bookingsAfterAction (src/CLAUDE.md's one exception).
@@ -2977,6 +3060,11 @@ export function BookingApp({uid}){
       if(undoTimerRef.current){clearTimeout(undoTimerRef.current);undoTimerRef.current=null;}
       setUndoInfo(null);
       setViewDate(plan.date);
+      // v18.16.0: the reply a move drafted in its guest's WhatsApp chat goes
+      // with the move, unless somebody has since made it their own. The hook is
+      // told what the booking was put back to, because this Undo may be of a
+      // note or a table drop made after the move, which leaves the draft alone.
+      wa.undoMovedReply(undoInfo.primaryId,undoInfo.snapshots.find(function(s){return s.id===undoInfo.primaryId;}));
     }
   }
   // v18.4.7 (#17): WHAT the picker's Save writes is `planAssign`
@@ -3511,7 +3599,7 @@ export function BookingApp({uid}){
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only the code's own change resumes; the door is read from its ref, and both doors read the form from formRef
   useEffect(function(){const door=resumeDoorRef.current;if(!door)return;resumeDoorRef.current=null;if(door==="waitlist") addFormToWaitlist();else doSave();},[form.phone]);
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,previewDrop,checkDrop,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
+  viewActionsRef.current={openNew,newAtCell,openEdit,updateStatus,doCancelBooking,dropOnTable,previewDrop,checkDrop,retimeBooking,previewRetime,checkRetime,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -3521,12 +3609,16 @@ export function BookingApp({uid}){
       onDropOnTable:function(id,targetId){return R.current.dropOnTable(id,targetId);},
       onDropPreview:function(id,targetId){return R.current.previewDrop(id,targetId);},
       onDropCheck:function(id,targetId){return R.current.checkDrop(id,targetId);},
+      onRetime:function(id,time){return R.current.retimeBooking(id,time);},
+      onRetimePreview:function(id,time){return R.current.previewRetime(id,time);},
+      onRetimeCheck:function(id,time){return R.current.checkRetime(id,time);},
       onWalkin:function(tableId){R.current.openWalkin(tableId);},
       onManual:function(id){R.current.setManualTarget(id);},
       onBlock:function(id){R.current.setBlockTarget(id);},
       onDelete:function(id){R.current.requestDelete(id);},
       onReshuffle:function(){R.current.setConfirmReshuffle(true);},
       onNew:function(){R.current.openNew();},
+      onNewAt:function(tableId,time){R.current.newAtCell(tableId,time);},
       onToggleFinished:function(next){R.current.toggleShowFinished(next);},
       onTagFilter:function(next){R.current.changeListTags(next);},
       onSelect:function(id){R.current.setSelectedListId(id);},
@@ -3617,6 +3709,9 @@ export function BookingApp({uid}){
     onDropOnTable={VA.onDropOnTable}
     onDropPreview={VA.onDropPreview}
     onDropCheck={VA.onDropCheck}
+    onRetime={VA.onRetime}
+    onRetimePreview={VA.onRetimePreview}
+    onRetimeCheck={VA.onRetimeCheck}
     blocks={tableBlocks}
     onBlock={VA.onBlock}
     nowMins={nowMins}
@@ -3644,6 +3739,8 @@ export function BookingApp({uid}){
     largeText={largeText}
     indoorTint={indoorTint}
     turnBuffer={turnBuffer}
+    cellBook={cellBook}
+    onNewAt={VA.onNewAt}
     waitGhosts={waitGhosts}
     onBookWait={VA.onBookWait}
     hoursSig={hoursSig}
@@ -4290,6 +4387,8 @@ export function BookingApp({uid}){
             onToggleLargeText={onToggleLargeText}
             indoorTint={indoorTint}
             onToggleIndoorTint={onToggleIndoorTint}
+            cellBook={cellBook}
+            onToggleCellBook={onToggleCellBook}
             vibrateOnDrag={vibrateOnDrag}
             onToggleVibrate={onToggleVibrate}
             weekHours={weekHours}

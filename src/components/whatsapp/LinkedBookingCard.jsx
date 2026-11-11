@@ -1,10 +1,17 @@
 // src/components/whatsapp/LinkedBookingCard.jsx
-// Compact teal card shown in the conversation header when the conversation is
-// linked to a booking (acceptedBookingId). Collapsible per-conversation; when
-// collapsed it shrinks to a one-line strip. Holds the single source of truth for
-// the two booking actions — Open booking (blue) and Cancel booking (red).
+// The strip under the conversation header when the conversation is linked to a
+// booking (acceptedBookingId). Holds the single source of truth for the two
+// booking actions — Open booking (blue) and Cancel booking (red).
+//
+// v18.16.0 (Patryk): on a tablet or a desktop it is a FIXED one-line strip, not
+// a fold. Opened, the card only added the table numbers to what its collapsed
+// line already said, so the chevron promised more than there was. The tables
+// are on the line now and nothing opens. The intent banner has had the same
+// rule since v18.2.0 phase 49: with nothing to disclose it is one line and not
+// a toggle. On a phone (`narrow`) it is still a fold, because there the summary
+// and both buttons live in the body to give the thread its height back.
 
-import { Presence, Reveal, mkSolidBtn, OutlineChip, SBadge } from "../atoms";
+import { Reveal, mkSolidBtn, OutlineChip, SBadge } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { useCollapseState } from "../../hooks/useCollapseState";
 import { T, FW, M, IC, H } from "../../lib/constants";
@@ -13,7 +20,7 @@ import { guestsLabel } from "../../lib/booking-logic";
 import { LinkIcon } from "./WaIcons";
 import { ChevronRightIcon } from "../Icons";
 
-// The narrowest the collapsed summary may be squeezed before it wraps to its
+// The narrowest the summary may be squeezed before it wraps to its
 // own line. Chosen from the string it carries — "Name · YYYY-MM-DD · HH:MM · N
 // pax" — as roughly the width at which the date is still readable; below that
 // the line has stopped doing its job and a wrap is strictly better than an
@@ -32,7 +39,12 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
   const [collapsed, toggle] = useCollapseState(phoneKey, "linked", !!defaultCollapsed || !!narrow);
   if (!booking) return null;
   const canCancel = booking.status !== "cancelled" && booking.status !== "completed";
-  const summary = (booking.name || "(no name)") + " · " + (formatDay(booking.date) || "?") + " · " + booking.time + " · " + guestsLabel(booking.size);
+  // One spelling of the booking for both shapes: the strip's line, and the
+  // phone's opened body. The tables close it, where the booking has any.
+  const tables = booking.tables || [];
+  const when = (formatDay(booking.date) || "?") + " · " + booking.time + " · " + guestsLabel(booking.size)
+    + (tables.length ? " · " + (tables.length === 1 ? "table " : "tables ") + tables.join(", ") : "");
+  const summary = (booking.name || "(no name)") + " · " + when;
 
   // v15.8.2-wa-sandbox: the two booking actions moved up onto the header row
   // (before the chevron) instead of stacking vertically in the body, to reclaim
@@ -76,7 +88,8 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
   );
 
   // Unified header + Reveal body (the app's Collapsible pattern) so the
-  // collapse/expand eases instead of the strip ⇄ card swap snapping.
+  // collapse/expand eases instead of the strip ⇄ card swap snapping. (A phone's
+  // shape only since v18.16.0; see the file's header.)
   // v17.8.0-wa-sandbox: the notification-pane idiom, in the WAITLIST palette.
   // This card was the module's last teal surface — a 0.10-alpha teal wash in a
   // teal rim, a hue the booking app does not otherwise use, sitting one line
@@ -91,13 +104,19 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
   // is drawn by one component. The LinkIcon becomes the section mark and the
   // "Linked booking" label its title; the status chip and the collapsed summary
   // ride in the title node, since they belong to the heading rather than to the
-  // controls. Behaviour is unchanged: the whole header is still the toggle.
+  // controls. Behaviour is unchanged: the whole header is still the toggle
+  // (where there is one: a phone, since v18.16.0).
+  // v18.16.0: the fixed strip keeps the header's WRAP (`wrapHeader`) without
+  // being a toggle. A pane without `onHeaderClick` does not wrap, and here the
+  // summary shares the row with two fixed-width buttons, which is the case
+  // SUMMARY_MIN (below) was written for.
   return (
     <AlertPanel
       role="success"
       icon={LinkIcon}
-      onHeaderClick={toggle}
+      onHeaderClick={narrow ? toggle : undefined}
       expanded={!collapsed}
+      wrapHeader={!narrow}
       style={{ marginBottom: 8, boxShadow: "var(--shadow-soft)" }}
       title={<span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
         <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)", textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0 }}>Linked booking</span>
@@ -111,7 +130,7 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
             indexing BLOCK_BG itself. Nothing scans for a copy of a component, so
             the only defence is not keeping one. */}
         <SBadge status={booking.status} />
-        {/* v17.15.3: `minWidth: SUMMARY_MIN`, not 0. The collapsed row exists to
+        {/* v17.15.3: `minWidth: SUMMARY_MIN`, not 0. The row exists to
             show this line, and with `minWidth: 0` it was the only flexible item
             in a row of `flexShrink: 0` buttons, so it absorbed the ENTIRE
             shortfall: measured live in a 495px pane it rendered 18.6px of a
@@ -123,21 +142,26 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
             A floor plus the row's existing `flexWrap` turns starvation into a
             wrap — below the floor the summary takes its own full-width line
             instead of shrinking to nothing. It keeps the ellipsis for the case
-            where even a full line is not enough. */}
-        <Presence tag="span" show={collapsed && !narrow} inClass="mgt-appear" outClass="mgt-ghost-out" style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.regular, flex: "1 1 auto", minWidth: SUMMARY_MIN, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{collapsed && !narrow ? summary : null}</Presence>
+            where even a full line is not enough.
+            v18.16.0: always drawn on the fixed strip and never on a phone, so
+            it is a plain span. It was a `Presence` while a tap could show and
+            hide it; nothing does now. */}
+        {narrow ? null : <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.regular, flex: "1 1 auto", minWidth: SUMMARY_MIN, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span>}
       </span>}
       action={<>
         {narrow ? null : actionBtns}
-        <span style={{ color: "var(--success-text)", flexShrink: 0, display: "inline-flex", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.control} /></span>
+        {narrow ? <span style={{ color: "var(--success-text)", flexShrink: 0, display: "inline-flex", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.control} /></span> : null}
       </>}
     >
-      <Reveal show={!collapsed}>
-        <AlertRow first>
-          <div style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.semi, marginBottom: 2 }}>{booking.name || "(no name)"}</div>
-          <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>{(formatDay(booking.date) || "?") + " · " + booking.time + " · " + guestsLabel(booking.size) + (booking.tables && booking.tables.length ? " · tables " + booking.tables.join(", ") : "")}</div>
-        </AlertRow>
-        {narrow ? <AlertRow first style={{ paddingBottom: 8 }}>{actionBtns}</AlertRow> : null}
-      </Reveal>
+      {narrow ? (
+        <Reveal show={!collapsed}>
+          <AlertRow first>
+            <div style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.semi, marginBottom: 2 }}>{booking.name || "(no name)"}</div>
+            <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>{when}</div>
+          </AlertRow>
+          <AlertRow first style={{ paddingBottom: 8 }}>{actionBtns}</AlertRow>
+        </Reveal>
+      ) : null}
     </AlertPanel>
   );
 }

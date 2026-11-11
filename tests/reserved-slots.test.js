@@ -18,6 +18,14 @@ describe("a control that changes width keeps its widest", () => {
     expect(zoom).toMatch(/const FOLLOW_W = 76;/);
     expect(zoom).toMatch(/minHeight: 36, minWidth: FOLLOW_W,/);
   });
+  // v18.16.0 (follow-up, Patryk): the zoom reset shows its level, "1.5x" or "2x", and
+  // its box keeps the widest one, so a − or + press does not move the + beside it.
+  it("the zoom level keeps \"2.5x\"'s width, in even digits", () => {
+    const zoom = read("TimelineZoomControls.jsx");
+    expect(zoom).toContain('const LEVEL = { display: "inline-block", minWidth: "4ch", textAlign: "center", fontVariantNumeric: "tabular-nums", whiteSpace: "pre" };');
+    expect(zoom).toContain("<span style={LEVEL}>{zoomLevel(zoom)}</span>");
+    expect(zoom).toMatch(/<Reveal horizontal show=\{zoom !== 1\}>\s*\{zoom !== 1 \? <span style=\{\{ whiteSpace: "pre" \}\}> · Whole day<\/span> : null\}/);
+  });
   it("a template's buttons reserve the armed width, and grow leftwards inside it", () => {
     const editor = read("whatsapp/TemplatesEditor.jsx");
     expect(editor).toMatch(/const ARMED_W = 138;/);
@@ -48,10 +56,12 @@ describe("the duration Reset", () => {
 });
 
 // Correction 27: nothing can reserve a count that is usually absent, so it eases.
-describe("the inbox's tab count", () => {
+// v18.16.0 (follow-up): the tabs are rows of the WHATSAPP mark's menu now, and
+// the unread count rides on the mark, which keeps the tab's rule.
+describe("the inbox's unread count, on the WhatsApp mark", () => {
   it("opens sideways with its gap inside it", () => {
     const inbox = read("whatsapp/InboxPanel.jsx");
-    expect(inbox).toMatch(/<Reveal horizontal show=\{badge != null && badge > 0\}>/);
-    expect(inbox).toMatch(/style=\{\{ marginLeft: 6, fontSize: T\.micro/);
+    expect(inbox).toMatch(/<Reveal horizontal show=\{unreadCount > 0\}>/);
+    expect(inbox).toMatch(/const MARK_COUNT = \{ marginLeft: 6, fontSize: T\.micro/);
   });
 });

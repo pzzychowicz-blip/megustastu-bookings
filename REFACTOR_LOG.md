@@ -40532,3 +40532,430 @@ Nine findings. Eight held up and were fixed, one commit each; one was disproved.
   conversation (`getConversation`) and then the parse limit (`parseOverLimit`) in turn, where the two could run together. The limit takes
   that conversation and returns at once for a muted one, so a muted conversation costs no second read; run together, every message would
   pay for both. `tests/api-handlers.test.js` pins it ("a muted conversation costs no read"). Nothing changed.
+
+## v18.16.0 — the Inbox header tidied, a quiet split menu, and two Timeline gestures
+
+**Date:** 2026-11-09 to 2026-11-10 · **Branch:** `feat/v18.16.0-inbox-timeline`
+
+**Why:** Patryk reviewed the Inbox and the Timeline and asked for five changes, then for the nine suggestions the plan made beside them
+(the plan, with every decision he made in five rounds of questions: `/Users/patrykzychowicz/.claude/plans/1-engineering-system-design-inbox-edits-peaceful-candle.md`).
+The Inbox header said one thing twice and kept a fold that revealed almost nothing; the split menu's two steps looked like two components; and
+the Timeline, the view used on the pass, had no direct way to start a booking at a time or to move one in time. **Behavioural change: yes**, each
+commit below. Nothing stored changes shape, so `SCHEMA` stays and no rule moves.
+
+### Commit 1 — the header's one control is the ⋯, and "Booking confirmed" leaves it
+
+- **Archive and Restore are rows of the ⋯** (`conversationMenuIds`, `lib/whatsapp.js`): exactly one of them, first, then Re-check, Not a customer and,
+  on an archived thread, Delete. This reverses the first half of v18.14.0's correction 6 (`[Archive] [⋯]`), by Patryk's decision of 2026-11-09: asked
+  whether Restore should stay a header button on an archived thread, he chose the menu for both. Archive still asks before it archives an upcoming
+  linked booking (`handleArchive`), and Delete still asks.
+- **A hairline above the first red row** (`ConversationMenu.jsx`, `RULE`), because Restore and Delete now share one menu. It is a
+  `role="separator"`; the arrow keys walk `[role="menuitem"]`, so it is never a stop.
+- **The "✓ Booking confirmed" chip is gone from the header** (`ConversationView.jsx`). The linked booking card one row below draws the booking's
+  real status (`SBadge`), and the chip was `draftStatus === "accepted"`, which stays true after that booking is cancelled. The dismissable banner in
+  the thread (DraftCard) is untouched.
+
+`tests/conversation-menu.test.js` (the ids and their order, the menu never empty, the hairline), `tests/wa-inbox-layout.test.js` (the header holds no
+button of its own; the chip is gone).
+
+**Measured on DEV, 2026-11-10, at 998×507, both themes** (this commit had no live check recorded). The header's only button is "More actions".
+On Marcos's thread the menu is Archive · Re-check · Not a customer; Archive raised "Archive conversation? This conversation is linked to a
+booking on Sat 14.11 at 17:30…" and Back left it in the Inbox. On an archived thread (Laura) it is Restore · Re-check · Not a customer, a 1px
+hairline (`rgba(255,255,255,0.1)` Dark, `rgba(210,218,230,0.8)` Light), then Delete in the danger ink. Delete raised "Delete conversation?" and
+Back kept the thread; Restore from the menu emptied Archived and put the thread in the Inbox; Archive from the menu on that thread, which has no
+upcoming booking, archived it at once.
+
+### Commit 2 — the linked booking is a fixed strip on a tablet or desktop
+
+Opened, the card added one thing to its collapsed line: the table numbers. So the chevron promised more than there was (Patryk: "if there's nothing
+to reveal … there's no point to make it revealable"). The tables are on the line now (`· table 5`, `· tables 3, 4, 5`) and on a tablet or desktop
+nothing opens: no toggle button, no chevron, no body. `IntentBanner` has had the rule since v18.2.0 phase 49. **A phone keeps its fold** (his choice):
+there the summary and both buttons live in the body, which v18.4.0 measured as the thread's height.
+
+- `AlertPanel` gains `wrapHeader`: the header's wrap and the title's content basis without the toggle. The strip still shares its row with two
+  fixed-width buttons, the case `SUMMARY_MIN` was written for, and a fake `onHeaderClick` would have announced a disclosure with nothing in it.
+- The summary's `Presence` is gone. It faded the line in and out with the fold; the line is now always drawn on the strip and never on a phone.
+- One spelling of the booking (`when`) serves the strip and the phone's body, which also gained the name-less line's tables in the same words.
+
+**Measured on DEV.** At 998×507 (the tablet), pane 615px wide: the strip reads "Linked booking · Confirmed · Marcos · Sat 14.11 · 16:00 · 6 guests ·
+tables 3, 4, 5" with no `button[aria-expanded]` in it and `cursor: auto` on its header. It is 88px tall, two rows, the buttons under the line. That
+is the height the collapsed card already had at this width: with the summary cut to one letter the pane still measured 88, because the label, the
+badge and `SUMMARY_MIN` beside the two buttons do not fit 615px. At 375×812 the fold opens to 130px and closes to 44px, eased both ways, and
+`aria-expanded` follows.
+
+`tests/wa-inbox-layout.test.js`, `tests/row-slots.test.js`, `tests/short-viewport.test.js`, `tests/date-format.test.js` re-pinned to the new shape;
+`tests/a11y.test.js` still finds `expanded={!collapsed}` beside `onHeaderClick`.
+
+### Commit 3 — the window chip only when it matters
+
+"Window: 23h 57m left" stood in green beside every open chat's name, a chip saying all is well. `windowState(expiresAt, now)` (`lib/whatsapp.js`)
+answers `{expired, chip, nextIn}`: no chip with more than `WA_WINDOW_WARN_MS` left (4 hours, Patryk's choice over 2 and 1, so a lunchtime message is
+flagged before evening service), an amber chip inside it, a red "Window expired" after. The composer's `disabled` reads the same answer's `expired`.
+
+**The chip had no clock.** It was computed at render and an open chat nobody writes in does not re-render, which did not matter while it was always
+there. `nextIn` is the time to the next change (the start of the warning, each minute of the countdown, the expiry), and ConversationView arms one
+timeout on it, re-armed by the beat it sets: a chat with a day left holds a single timer for the whole wait, and one in its last hours re-renders
+once a minute.
+
+`tests/wa-inbox-layout.test.js` runs `windowState` on both sides of the line, at the expiry and with no window, with `now` passed in.
+
+**Measured on DEV** at 998×507, with the page's `Date.now` shifted and the chat re-opened: 22h left, no chip; shifted 20h, "Window: 2h 38m left" in
+`--warn-text` (rgb 138, 75, 10); shifted 30h, "Window expired" in `--danger-text` and the composer reading "Conversation closed". The timer itself was
+not watched across a real crossing; its arithmetic is what the tests hold.
+
+### Commit 4 — the conversation list's mark is the booking's status, as it stands
+
+A finding from reading commit 1's chip, reproduced before anything was changed. **On DEV, 2026-11-09:** Adam's linked booking cancelled from its own
+card; his row in the list went on showing the green tick titled "Booking confirmed", beside a card reading Cancelled, and said "booking confirmed"
+to a screen reader. Both read `draftStatus === "accepted"`, which records that a draft was once accepted and never moves again.
+
+`linkedStatus(conv, bookings)` (`lib/whatsapp.js`) is the linked booking's status now: read by the row (the mark is `StatusIcon`, the app's one
+status → mark source, in `STATUS_INK`) and by `describeConversation` ("booking cancelled"), so the drawn and the spoken cannot differ. A booking that
+has been deleted leaves no mark. A conversation linked by phone, with no accepted draft, is marked too, since its card is shown. An accepted draft
+with no booking id (the shape from before conversations stored one) keeps the "confirmed" it had. A draft waiting still takes the mark's place, and
+the spoken order now matches the drawn one.
+
+**After, on DEV:** Adam's row draws a red × titled "Booking cancelled" (`--danger-text`, rgb 153, 27, 27) and its label says "booking cancelled";
+Laura, Marcos and Sara keep a green tick and "booking confirmed". The new inks (`--warn-text`, `--danger-text`, `--text-secondary`) are registered
+on the row's three fills in `tests/contrast.test.js` at the label bar, and all nine pass in both themes. `tests/whatsapp-describe.test.js` runs
+`linkedStatus` over every status, a deleted booking, a phone link and the legacy shape.
+
+### Commit 5 — the split menu's second step is quiet, and has a way back
+
+Step 1 (Side by side / Top and bottom) went quiet in v18.14.0's sweep of the secondary greys (`fe308718`); step 2 (the two remaining views) had been
+`S.accent` since v17.5.0, and that sweep only replaced greys. Nobody decided the difference. Both are `BTN.quiet` now (Patryk): two equal choices
+are not a primary action. Step 2 gains **Back** (`ChevronLeftIcon`, 44px), under the row so the two view buttons do not move; it refuses while the
+menu is not `live`, like every button there. No new view marks (his choice): the view switcher itself uses words.
+
+`tests/quiet-buttons.test.js` holds both.
+
+**Measured on DEV, 2026-11-10, at 998×507, both themes** (the commit's own session reached its usage limit before it could look). Opened from
+List by a dispatched `contextmenu` and a `pointerup` to arm it (`mgt-measurement-traps`: a synthetic hold opens nothing).
+- Every button of both steps has one fill and one ink: `rgba(118,118,128,0.24)` under `rgb(199,199,204)` in Dark, `rgba(255,255,255,0.5)` under
+  `rgb(74,85,104)` in Light. Back is 73×44.
+- Side by side → "Which view goes alongside?", Timeline refused at this width (disabled, opacity 0.45, the same fill) with the narrow-screen
+  sentence under it. Back → "How should it split?" again, both directions live. Top and bottom → Timeline allowed and no sentence.
+- Top and bottom, then Plan: the menu closed and the split was List over Plan (`{a:"list", b:"plan", dir:"h", ratio:0.5}`).
+- In and out: the card took `mgt-card-in` to open; on Escape it took `mgt-card-out` and its opacity read 1.00, 0.96, 0.83, 0.55, 0.08 over 264ms
+  before it left the DOM.
+- **"The two view buttons do not move" is true of the card, not of the screen.** Back is under the row, so nothing above it shifted inside the
+  card; but the card is centred and step 2 is now taller by Back, so on screen step 2's row sits 34px above step 1's (253 → 219, no refusal
+  shown). A second tap where "Top and bottom" was lands on the lower 10px of the view row, on Back, or on nothing; before this commit it landed
+  squarely on a view button. Not changed.
+
+
+### Commit 6 — an empty cell of the Timeline starts a booking
+
+The Timeline, the view used on the pass, had no way to say "here, at this time": a phone booking mid-service meant + New, then the time, then the
+table. Now an empty quarter hour offers it. The form opens with the cell's time and **the cell's table as the PREFERRED table, the star, not a hand
+pick** (Patryk): the optimiser still seats the party, on that table when it fits, and the form's Tables row shows where before Save.
+
+- **What a cell offers is pure** (`lib/cell-offer.js`): `cellAt` finds the quarter under a pointer and `cellOffer` answers `null` or
+  `{tableId, time}`. It refuses exactly what the form's Save refuses for the time, plus a table block over the cell. To make "exactly" hold, the three
+  time checks left `draftRefusal` for `timeRefusal(date, mins)` (`lib/booking-save.js`), statement for statement, and both call it; commit 7's drag
+  will be the third caller. `tests/cell-offer.test.js` walks every quarter from an hour before opening to an hour past the grid and holds the cell to
+  `draftRefusal` both ways. The form accepts a time earlier today, so the cell does too.
+- **One marker for the grid, with its own state** (`CellMarker`, `TimelineView.jsx`). The view tells it where to be through a handle, so a pointer
+  crossing cells re-renders a leaf and never the 13 memoised rows, and there is no per-cell DOM (13 × 40 quarters would be 500 nodes). The plan had
+  the marker's style written from a ref; a leaf with state does the same job in React's own terms and keeps `Presence` for the fade.
+- **The handlers are on the grid root, not on each row** (the plan said per row). Per row, crossing from one row to the next is a leave and an
+  enter, a hide and a show, and the marker would blink between them; on the root it is a move like any other.
+- **A mouse hovers and clicks; a finger taps twice** (Patryk). The first tap selects the cell and the marker becomes a real button, cell and chip
+  together, named "New booking, table 5, 18:15"; the second tap is a plain click on it. A press anywhere else or any scroll lets it go, both heard in
+  the capture phase. Under a mouse the marker takes no pointer events, or its chip would stand between the pointer and the next cell.
+- **`cellDown`**: the click that ends a block's drag lands on the grid too (the nearest common ancestor of the press and the release), so a click
+  counts only when its press began on an empty cell.
+- **The chip is the table's own badge and the time on the hour pill** (`CellChip`), on the ruler's opaque surface. The plan allowed for a drawn
+  "table" mark and said to check Icons.jsx first; the label column's badge already is the table's mark in this view, so nothing was drawn. **This is
+  the one visual choice in this commit Patryk has not seen**; a drawn mark can replace the badge in `CellChip` alone.
+- **The per-device switch**, "Tap an empty cell to book" (`cellBook`, `mgt-tl-cellbook`, only `"0"` stored), in Settings → App beside the Timeline's
+  other switches. Decided by precedent (Larger text, Tint indoor tables), as the plan records.
+- The hint line under the grid gains "tap an empty cell to book" while the switch is on.
+
+**Measured on DEV, 2026-11-09, at 998×507.** A real pointer over table 1's row lit the 18:45 quarter (36px wide at 2.4px a minute) with the chip
+"1 · 18:45" to its right and `cursor: pointer`; a real click on table 2's 18:45 opened New booking with Time 18:45 and the Tables row reading
+"2 (auto)" with 2 starred. Over Laura's block: no marker, no pointer cursor. At 22:30, past the 21:45 last start: none. With the grid scrolled so
+20:15 sat at the right edge (cell right 975, scroller right 969), the chip stood on the left, 868.8–935. The first version read the cell's width in
+pixels at the pointer event, and during the opening zoom's ease that was 42px against a cell that settled at 36; the gap is now a percentage
+padding, which resolves against the marker's box. The chip is 66.2px for table 1 and 69.6 for table 13, 71.5 and 77.3 at Larger text, which is
+where `cellChipPx` (78 and 86, with the 4px gap) comes from. The chip's pairs on the ruler's surface: outdoor 4.72:1 Light and 4.74 Dark, indoor
+4.69 and 5.41, the time 4.83 and 6.91 (`tests/contrast.test.js`).
+
+**The two taps were driven by dispatched events, not a finger**: a touch `pointerdown` and a `click` on table 6's row selected 14:15 (the button
+then took pointer events), a touch press elsewhere and a `scroll` event each let it go, and a click on the selected marker opened the form at 14:15.
+That exercises the handlers and nothing about how it feels under a wet finger, which is Patryk's to judge on the tablet. (One reading to discard: a
+dispatched `pointerdown` on a block with no `pointerup` armed that block's 800ms drag, and the block then followed the mouse. It was the probe, and
+a reload cleared it; nothing was written.)
+
+### Commit 7 — a block dragged sideways takes another time, and Undo puts it back
+
+A party that rings to say they will be half an hour late meant opening the form, changing the time and saving. Now the block that is already
+dragged to another table can be dragged along its own row. It keeps its tables and its length, takes the new start, and is locked like any drop.
+
+- **One direction per drag** (Patryk). The first 6px choose, the larger travel wins, and the drag stays that until the release, so a diagonal hand
+  cannot change a party's table while it is moving their time. `dragAxis` (`lib/cell-offer.js`) is the rule: a tie goes to the table drag, and a
+  block that cannot be re-timed counts vertical travel only, so the Unplaced row's blocks behave exactly as they did. A finger armed in the top or
+  bottom band and held still becomes a table drag when the rows start moving under it, which is v18.3.1's behaviour kept.
+- **The plan is the drop's plan with a time in it** (`planRetime`, `lib/drop-plan.js`). It goes through the same `dropSite`, so the two drags
+  cannot disagree about who is in the way. One candidate, the booking's own tables; no swap (two parties trading times is not what a sideways
+  drag asks for); confirmed and pending only (a seated party's time is when it sat down); the new start answers to `timeRefusal`, the form's own
+  rule and now its third caller; a block over any of its tables refuses. Somebody in the way is released and re-seated by the same pass a drop
+  uses, and the write commits only if the trial leaves none of them without a table (Patryk: like a table drop). With the Optimiser off nothing
+  re-seats anybody, so it refuses and names who.
+- **The kitchen warns and refuses nothing** (Patryk). `retimePreview` / `retimeCheck` are `rowHint` plus `kitchenAsk`'s own test, said in amber
+  as "Kitchen busy at 20:00", added to a free or an amber answer and never to a red one.
+- **Undo is `saveMove`'s, unchanged.** `retimeBooking` hands the transform over with kind `"move"`, so the Undo is armed on landing and restores
+  the time, `scheduledTime` and every party the write re-seated. The pill is compact (Patryk): `Marcos Vidal · 15:30 → 16:30 · moved Luis Prado`
+  (`retimeLabel`, `retimeSentence`; `landedSentence` takes that branch for a plan with `retime`). It asks `bookingEdit`, where a drop asks
+  `bookingAssign`: a new time is an edit, which is what the form asks for the same change.
+- **In the block**: `dragX` (`{mins, px, live}`) is set once per quarter, not per frame; the block steps and each step glides on `M.tap`; `pulse()`
+  on each step and when a new time lands. `lifted` is one flag for both drags. The view hears once per time (`hoverTime` → `dragTime`, a third
+  plain value beside `dragHover` and `dragOver`), and the row warning asks `onRetimePreview` and, for a settled finger, `onRetimeCheck`.
+- **The chip** is the cell marker's `CellChip`, a sibling of the block at its leading edge, placed by the minute and not by the block's offset,
+  so after the release it fades where it stood while the block lands under it or eases home.
+- **The touch hold on the page moved from the 800ms arm to mount.** The old listener was added when the drag armed, which was enough while
+  `touch-action: pan-x` kept the browser off a vertical move. A sideways move is exactly what `pan-x` gives the browser, and a listener added
+  mid-touch can be too late to cancel it. It is now on the block from mount and acts only while a drag is live, so a swipe that starts on a block
+  still scrolls the timeline. `preventScrollRef` is gone.
+- **The edge scroll serves both axes from one loop** (`scrollBoundsX`, `lib/edge-scroll.js`), and tells the ruler in the same frame
+  (`syncGridScroll`, which `onGridScroll` now calls too).
+
+**Three departures from the plan's text, for Patryk to overrule.** The chip stands INSIDE the block's leading edge, over its own time and the
+start of the name, where the plan said only that the block carries it: outside the edge it would be cut off at the left of the view. The pill
+uses the full name, as a drop's sentence does, where the plan's example read "Marcos". The snap and the axis rule went to `lib/cell-offer.js`
+rather than staying in the component, so they can be tested.
+
+**Measured on DEV, 2026-11-10, at 998×507, on three bookings made through the cell marker for 11.11.**
+- A real pointer drag (the pane's, 273 → 346px on Marcos's block): the booking went 15:00 → 15:30 on table 3, the pill read
+  "Marcos Vidal · 15:00 → 15:30" with Undo, and the block showed the lock. Undo put 15:30 → 16:00 back to 15:30 in a second run.
+- A held drag, driven by dispatched pointer events so it could be looked at: `translateX(72px)`, opacity 0.85, z 30, the lift shadow, the chip
+  "3 · 16:00" at the block's left + 4px (384.5 against 380.5) and centred on the row, the row lit `--bg-ac-hover`. A second move 30px down did
+  not change the axis.
+- Onto Luis's time on the same table: the row turned amber with "Moves Luis", and the release moved Luis to table 1 and read
+  "Marcos Vidal · 15:30 → 16:30 · moved Luis Prado". Undo put both back.
+- Held at the right edge: the grid scrolled (218.5 → 574), the ruler's clip had the same `scrollLeft`, and the block's offset grew with it. Past
+  22:00 the row turned red with "Bookings on this day are accepted between 13:00 and 22:00."; the release raised that sentence as the refusal
+  toast and wrote nothing. **A defect found here and fixed**: the block hanging past the grid's last hour widened the scroller, and the loop
+  followed it 172px into empty space (scrollLeft 746 against a resting end of 574). The loop now stops at the end the grid had when the axis was
+  chosen (`sxMax`); re-measured, it stopped at 574 while the scroller reported 674.
+- `pointercancel` mid-drag wrote nothing and raised nothing.
+- A drag that began 3px across and 10px down stayed a table drag after 100px sideways (`translateY`, no chip), dropped on row 5 as
+  "Luis Prado moved to 5." and undid.
+- A plain click on a block still opened Edit booking.
+- The landing: sampled on each frame after a release 72px from home, the block's left edge read 227px before the release and 227 at 45, 72 and
+  73ms after it, while `left` had already moved to the new time and the transform was mid-ease (54.8px). So the block stays where the hand left
+  it. Three samples only, because the pane then drew one frame a second.
+
+**Not measured, and for the tablet and the iPhone after merge**: the 800ms hold followed by a sideways move under a finger (whether the browser
+gives the move to the drag or to its own horizontal scroll), the pulse on each step, and the edge scroll under a finger. Every drag above was a
+mouse's or a dispatched event's, and a synthetic touch arms nothing here (`mgt-measurement-traps`).
+
+### Commit 8 — a WhatsApp guest's new time is drafted in their chat
+
+Moving a party's time is half the job when the booking came through WhatsApp: somebody then has to remember to open the chat and say so. Now the
+new time is written into that conversation's reply box, in the guest's language, and waits there as a reply draft for a person to read and send.
+Nothing is sent by the app and nothing is stored in the database (reply drafts are this device's, `lib/wa-reply-drafts.js`).
+
+- **The decisions are pure** (`lib/whatsapp.js`, on the Node chain): `movedReply(lang, {date, time})`, EN and ES beside `availabilityReply`, with
+  its `spokenDay` and its language rule; `movedSlot(before, after)`, whether a write changed when the guest should come; `movedReplyPlan(o)`, what to
+  do about it; `movedReplyUndo(mine, held, restored)`, what an Undo does to it; `movedReplyWords(result)`, how it is said.
+- **The plan's five answers**, in the order they are asked: the module off (first, so an off module does nothing at all), no conversation whose
+  `acceptedBookingId` is this booking, a muted guest, a reply box that already holds text this session did not put there, and the 24-hour window
+  expired, which answers `"closed"`: said, not drafted. A sixth was added while building: the booking no longer says this time, because an Undo
+  landed before the write did.
+- **`movedSlot` compares the time the guest was GIVEN** (`scheduledTime` where the booking has one), and counts confirmed and pending only. A
+  seated party's `time` is when it sat down, so walking one back to confirmed puts the booked start back in `time`; comparing `time` alone would
+  have told that guest their booking had moved to the time it always had. `tests/save-path.test.js`'s un-seat cases found it.
+- **Only where a write has landed**, never at a dispatch: `saveMove`'s `onLanded` for a time drag (`plan.retime`), and an `onLanded` on
+  `doSaveEdit`'s report for the form, present only when the edit moved the date or the time. A held or refused save drafts nothing. The hook
+  (`draftMovedReply`) reads the booking from a ref, because the callback closes over the render that dispatched the write.
+- **How it is said**: on the Undo pill, " · reply drafted" or " · guest's WhatsApp window is closed". A time drag's pill is armed at the landing,
+  so the clause is part of its sentence. The form's edit arms its pill at the dispatch, so `armUndo` now returns its pill (its timer) and
+  `noteUndo(pill, clause)` adds to it while it is still the one on screen; a landing that finds the pill gone (a held save arms none) says it in
+  the toast slot instead.
+- **Undo** (`undoLastAction` → `wa.undoMovedReply(id, snapshot)`) takes the draft back only while it is still the text put there.
+
+**Two departures from the plan's text.**
+- *The form's words are on its pill, not in a toast* (Patryk, 2026-11-10, asked). The plan said the toast slot. Built that way and measured on
+  DEV, the toast covered the edit's Undo pill for 3.5 of its 10 seconds, because the toast slot ranks a `dragMsg` above the pill.
+- *Undo asks what the booking was put back to, not which Undo it was* (for Patryk to overrule). The plan said "`undoMovedReply(bookingId)` clears
+  the draft only while it still equals that text". Two defects in that, both reproduced on DEV on 2026-11-10 before anything was changed:
+  (1) the pill is one slot for every action on a booking, so a note edited and undone AFTER a move emptied the reply box while the booking stayed
+  moved, and that guest would never have been told; (2) 17:00 → 17:30 → 18:00 and one Undo left the party at 17:30 with an empty box, the 17:30
+  draft having been replaced by the 18:00 one. Now the draft stays while the booking still says the time it names, and the draft of ours it had
+  replaced comes back when the booking is back at that time (one step is kept, never a chain).
+
+**Measured on DEV, 2026-11-10, at 998×507, on Marcos's linked booking for 14.11 (Spanish) and Sara's for 02.11 (window expired).**
+- The form, 17:00 → 17:30: the box read "Hemos cambiado su reserva: ahora es el sábado 14 de noviembre a las 17:30. Si no le va bien, díganoslo,
+  por favor.", the conversation's row showed "Draft: Hemos cambiado…", and the pill read "Booking updated · tables re-optimised · reply drafted"
+  with Undo, the clause 14ms after the pill. Undo put 17:30 back and emptied the box.
+- A real pointer drag (the pane's) 17:30 → 18:00: "Marcos · 17:30 → 18:00 · reply drafted", the box at 18:00; Undo put both back.
+- A second move replaced the first's draft (17:30 → 18:00), and its Undo left the booking at 17:30 with the 17:30 draft back.
+- A note edited and undone after a move: the booking and its draft both stayed.
+- "Un momento, lo miro" typed in the real composer, then a move and its Undo: the words were there after both, and nothing was said.
+- Sara's date moved through the form: "The guest's WhatsApp window is closed, so no reply was drafted." and no draft. (That run was the toast
+  build; the pill's version of the sentence is run in `tests/save-path.test.js`.)
+- The module switched off in Settings → Admin, then a move: no draft, the pill "Booking updated · tables re-optimised" and nothing else.
+- **An instrument note**: a draft written straight into `localStorage` with a dispatched `storage` event was NOT seen by the store while the inbox
+  was closed (the store listens for `storage` only while something subscribes, and reads its cache otherwise), so the first "somebody's own text"
+  run overwrote it and read as a bug. Typed into the composer, the same case passed. Same family as `mgt-measurement-traps`.
+
+**Not measured**: a second TAB on the same device typing a draft while this tab's inbox is closed is the instrument note's case for real, and a
+move here would then write over it. One installed app per device is how the restaurant runs it; nothing was changed for it.
+
+**Tests**: `tests/wa-moved-reply.test.js` (new: the two texts, `movedSlot`, the plan's answers, `movedReplyUndo`, the hook's and App's wiring,
+`noteUndo`), `tests/save-path.test.js` (the landing's five outcomes, run), `tests/drop-plan.test.js` (`saveMove`'s landing),
+`tests/retry-report.test.js` (the edit's report).
+
+### Commit 9 — `N` on a focused Timeline block books after it
+
+The cell marker is a pointer's door: a keyboard has no cell under it. Its door is the booking it is standing on. With a Timeline block focused,
+`N` opens the new-booking form on that block's table, at the time that table comes free (Patryk: "New booking on that table, right after that
+booking").
+
+- **`nextFreeAfter(booking, tableId, ctx)`** (`lib/cell-offer.js`) → `{tableId, time}` or null: the first quarter at or after `occupancyEnd`
+  that `cellOffer` answers for. `occupancyEnd`, not `time + duration`, so the turnaround buffer is waited out and a seated party running over
+  frees its table now. It refuses what a cell refuses and nothing about fit: another party already on that table is the optimiser's and the
+  Tables row's to answer, because the table goes in as the preferred one, as it does from a cell.
+- **The block says which row it stands on**: `data-tbl` on `TimelineBlock`'s outer element, beside `data-bk`; absent in the Unplaced row and on a
+  leaving copy. `focusedBlockOf(el)` (`lib/keyboard.js`) reads both off the key event's target, and the hook hands it to the table as
+  `env.focusedBlock`, the way it hands over the visible tabs, so `resolveShortcut` still touches no DOM.
+- **The row** sits above the plain `N` in the global layer (`when`: the Timeline is the active view and a block has focus), calls
+  `K.openNewAfter(id, tableId)`, and is printed on the Shortcuts tab as "New booking after the focused one (Timeline)".
+- **App's `openNewAfter`** asks `nextFreeAfter` about the viewed day and goes through `newAtCell`, so the door is the gated one
+  (`bookingCreate`) and the table is preferred, never hand-picked. A null answer (no quarter left that day) is the plain `openNew()`.
+
+**Measured on DEV, 2026-11-10, at 998×507.** Marcos's booking for 14.11 stands on rows 3, 4 and 5 (`data-tbl` "3", "4", "5"), 17:30 for 120
+minutes. With the row-4 block focused, a dispatched `n` keydown opened New booking for Sat 14.11 at 19:30 with Tables "4 (auto)" and the
+preferred button reading 4. With nothing focused the same key opened it at 13:00 with no preferred table. The key was a dispatched event on
+the focused element, which is what the window listener receives from a real key; a real keyboard was not used.
+
+**Tests**: `tests/cell-offer.test.js` (`nextFreeAfter`: the end, off-quarter ends, the buffer, a seated party running over, a block, the last
+start, a closed day, agreement with `cellOffer` over a day of ends; App's `openNewAfter`; the block's `data-tbl`), `tests/keyboard.test.js`
+(`focusedBlockOf`), `tests/shortcuts.test.js` (the row's precedence in each view and behind a modal; the hook's `env`).
+
+### Commit 10 — the docs sweep
+
+`DESIGN.md`'s time-drag section gains the rule commit 8 settled: what a move did besides the move is a clause on its Undo pill, never a toast
+over it. The entry's date covers both days. `ROADMAP.md` listed nothing these commits resolve, and nothing was added to it. The root
+`CLAUDE.md` did not change (37,125 characters).
+
+### `/code-review` (xhigh)
+
+Seven findings. Five held up and were fixed, one commit each; two hold up and are decisions about what the app should do, so they went to
+`ROADMAP.md` and nothing was built. Three things the review suspected were checked and withdrawn before they were reported: a completed booking
+cannot reach the time drag's "is seated" refusal (`isActive` leaves it out), the kitchen warning is the form's own test (`kitchenAsk`:
+`starts + 1 >= KITCHEN_TABLE_LIMIT`), and a re-time onto a free slot changes one booking exactly as a drop onto a free table does.
+
+- **A moved booking's reply was drafted for a chat the server will not send to.** `movedReplyPlan` asked the composer's question
+  (`windowState().expired`), which is false for a conversation with no `windowExpiresAt`: a coexistence chat holding only the restaurant's own
+  messages or imported history (`tests/api-handlers.test.js` pins the missing stamp). A booking made by hand for that number links to it
+  (`linkBookingByPhone`), so a time drag drafted the reply and the pill said "reply drafted", and `api/wa-send.js` answers 410 for it. Reproduced
+  in Node with the pure function. It now asks the server's question, `windowOpen` (`lib/whatsapp.js`: no stamp is no window), and says
+  "guest's WhatsApp window is closed". The test holds both send endpoints to the same words.
+- **A booking moved and then moved back by hand left a draft announcing a move that never was.** 19:00 → 19:30 drafted "now at 19:30"; a
+  second drag back to 19:00 replaced it with "it is now … at 19:00" and the pill said "reply drafted", for a guest who had never heard of
+  19:30. Reproduced in Node. An Undo of the same move already took the draft away; a hand-made return did not. `movedSlot` now carries the
+  slot the booking left (`from`), and `movedReplyPlan` keeps the slot the guest last heard on each draft: while this session's draft is
+  still in the box unsent that is where the booking stood before the first of them, and a move that lands back on it answers `withdraw`
+  (the hook empties the box, forgets the draft and says nothing, as Undo does). Checked live on DEV through the form, on a booking linked to
+  an open chat: 17:30 → 18:00 put "…a las 18:00" in the box and "· reply drafted" on the pill; 18:00 → 17:30 emptied the box and the pill
+  carried no clause. A draft that was sent told the guest, so the move back is
+  drafted as a move; one somebody edited is left alone. **A departure for Patryk to overrule:** the withdrawal is silent, like Undo's. A
+  clause on the pill ("reply draft removed") is the alternative.
+- **A hovered cell marker named the wrong cell after a wheel scroll.** The marker listened for scroll only once a finger had selected it. Under
+  a mouse, a wheel or trackpad scroll carried the lit cell away while the pointer stood still, and Chrome sends no pointermove after a scroll,
+  so the chip went on naming a cell the click would not book (`cellUnder` reads the click point). Measured on DEV: after 120px of scroll the
+  marker still read "table 1, 13:15" over a pointer standing on 14:15. Any shown marker now goes on a scroll (its own effect, keyed on `shown`;
+  the press-away listener stays the selected marker's). After the fix, on DEV: hidden by the scroll, and the next move lights "table 1, 14:15".
+  The two-tap flow was run again: the first tap selects, a press elsewhere clears, the second tap opens the form at the cell's time.
+- **The window chip's timer could be handed a wait it cannot hold.** `windowState` returned the time to the next change uncapped, and the open
+  chat arms `setTimeout` with it and re-arms on its own beat. A timer keeps its delay as a 32-bit integer: measured in the Browser pane,
+  `setTimeout(fn, 2 ** 31 + 1000)` ran after 0 ms and `2 ** 31 - 1` did not run. So a `windowExpiresAt` more than about 25 days ahead would
+  re-render the open chat every few milliseconds for as long as it stayed open (read from the code, not reproduced: it needs such a stamp in
+  the database). A real window is a day long; the stamps that are not are the unclamped ones `api/wa-inbound.js` records, and the next bad
+  one. The wait is capped at `WA_WINDOW_RECHECK_MAX_MS` (24 days), which no real window reaches.
+- **What a new booking starts with is spelled once.** `newAtCell` repeated `openNewWith`'s seed-date rule and its default draft literal six
+  lines below it, with two fields changed. Both are `newDraft(over)` now (`App.jsx`): `openNewWith`'s default is `newDraft()` and the cell's
+  is `newDraft({time, preferredTables})`. Run on DEV after the change: + New opened the form at 13:00 (it was 12:30 at the restaurant, before
+  opening, which is `newBookingTime`'s answer), and a click on table 2 at 15:00 opened it at 15:00 with "Tables 2 (auto)" and an empty phone.
+- **Deferred to `ROADMAP.md`: a chat with no 24-hour window has a live reply box.** The same missing stamp, on the composer: `disabled =
+  win.expired` is false without one, and both send endpoints answer 410. The behaviour is older than this branch, which rewrote the line and
+  kept it. What that composer should say is a decision about coexistence chats, so nothing was built.
+- **Deferred to `ROADMAP.md`: a reply drafted into an archived chat.** `movedReplyPlan` stops for a muted guest and not for an archived
+  conversation (run in Node), so the pill says "reply drafted" and the inbox's list shows nothing. Whether the pill names the place, the chat
+  comes back, or it stays as it is, is Patryk's to choose.
+
+### Follow-up (Patryk, 2026-11-10) — the two deferred findings, and the inbox's title row
+
+He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the inbox's second row back. Four commits, one change each.
+
+- **A chat with no 24-hour window has a closed reply box.** `ConversationView` closed the composer on `windowState().expired`, the chip's
+  question, which is false for a conversation with no `windowExpiresAt`; both send endpoints answer 410 for it. It now asks the server's
+  question, `windowOpen` (the one `movedReplyPlan` already asks), and tells the two closed cases apart: a chat whose window expired keeps
+  "Conversation closed", one the guest never opened says "The guest hasn't written yet, so a reply can't be sent" (his wording, chosen over
+  "Conversation closed" for both and over pointing at the Business app, which was not checked). The chip is unchanged: no window, no chip.
+  `tests/wa-inbox-layout.test.js` pins the question, both sentences and `windowOpen`'s edges.
+- **A moved booking's reply drafted into an archived chat brings the chat back.** `movedReplyPlan` stopped for a muted guest and not for an
+  archived conversation, so the draft waited under Archived while the pill said "reply drafted". Of the three ways out (the pill names the
+  place, the chat comes back, nothing), Patryk chose the chat coming back, by the rule a sent reply follows (`replyUnarchives`), with the pill
+  saying " · reply drafted, chat back in Inbox", and chose that the draft's Undo sends it back. The plan answers `bringBack` and remembers
+  `broughtBack: {archivedAt}` from draft to draft; a withdraw (a move back by hand) and `movedReplyUndo` answer `rearchive` with it, and the
+  hook puts the chat back at its old place in Archived unless somebody archived it since. A draft somebody edited or sent keeps the chat in
+  the Inbox, and so does one an earlier draft gives way to. This is the hook's first database write for a moved reply: the chat's place,
+  through the guarded `patchConversation` (`conversations` is an Admin-SDK node, so no CAS; root `CLAUDE.md`). Ten new cases in
+  `tests/wa-moved-reply.test.js`; its pin that the hook wrote nothing now names the one write it makes.
+- **The WHATSAPP mark is the inbox's menu.** The title bar held the mark, the Inbox / Archived tabs, Simulator and Edit templates, and on a
+  phone the last two took a line of their own. Patryk: the mark becomes a button and the four go into its menu, as in the conversation's ⋯.
+  It IS that menu: `ConversationMenu` gained an optional `trigger` (the button's content, which names it), `triggerStyle`, `label` and
+  `align="left"`, and rows that are a choice of one (`checked` → `menuitemradio`, a tick in the icon slot), carry a count (`badge`) or ask for
+  a hairline (`rule`); the ⋯ passes none and is unchanged. The mark stays the green pill at the bar's control height, reads "WHATSAPP ·
+  ARCHIVED" while Archived is open and carries the Inbox unread count with the tab's sideways reveal (his choice of the three). Its words
+  are `textTransform: uppercase` over "WhatsApp", so its accessible name is a word and not eight letters. ←/→, X and T are unchanged, and the
+  inbox's keys stand down while the menu is open by the existing `[role="menu"]` check. `HEAD_TEXT_BTN` and `tabBtn` are gone.
+- **The filter strip is in the title row, on every screen.** Select, Needs action and the search box had a row of their own under the title bar,
+  except on the tablet's short screen, where v18.14.0 had already put them between the title and ✕. Patryk: that arrangement everywhere,
+  between the mark and ✕, to give the list and the thread back a row. One row now (`padding: 10px 14px`, no wrap, `showFilters`), and the
+  separate row is gone; on a phone with a chat open the filters leave with the list, as since W5, and the row is the mark and ✕. A phone has
+  no width for "Needs action" beside the mark, so below two panes it is its dot alone in a 36px round button named "Needs action" (his choice
+  over keeping two rows on phones). `shortScreen` keeps the panel's size and the hidden number.
+- **A time drag pins nothing.** `planRetime` made the re-timed booking `_manual` + `_locked`, like a table drop, so an optimiser-placed
+  booking dragged to a new time was the optimiser's no more. Patryk: a drag along the row chose a time, not a table. The booking keeps the
+  lock it had (a hand-placed one, a walk-in included, stays pinned; his choice over unpinning those too), and still lands on its own tables
+  with anyone in the way moved, as before (his choice over re-placing it like the form's time edit, or taking any free table). Through a
+  displacement the pass would re-seat an unlocked booking with the others: measured by the generated-days test in
+  `tests/drop-plan.test.js`, which caught it landing on 1+2 instead of 11 the first time this was written. So it is held for that one pass
+  and handed back with its own flags (`ownLock`), an absent flag left absent because an `undefined` property makes the write throw. Two
+  new cases there; the two that said "it is locked" now say it is not.
+- **The mark's " · Archived" opens sideways.** Checking the redesign's motion on DEV (Patryk asked for missing transitions): the menu enters
+  (`mgt-pop-in`) and leaves (`mgt-pop-out`), and the list crossfades on a switch (`mgt-fade-in`), but the mark's label was swapped in one
+  frame: a ResizeObserver read the button 108.8 → 180px at once, so the search box beside it jumped 71px. It is a `Reveal horizontal` now,
+  as the count beside it is (v18.14.0, correction 27): measured after a reload, 109 → 116 → 122 → 127 → 133 → 143 … 180 opening and 180 →
+  174 → 167 … 142 … 109 closing, the words held until closed, and the button's name back to "WhatsApp" afterwards.
+- **The zoom reset shows the zoom level.** It read "Whole day" while zoomed and "1x" at rest, so how far in the Timeline was showed nowhere.
+  Patryk: the level as well, as "2x · Whole day" (his choice over "Whole day (2x)" and the level alone). The level is always drawn and
+  changes in place on each − / + press; " · Whole day" opens and closes sideways as the word did. The level sits in a 4ch box in tabular
+  digits, the widest level's ("2.5x"), so a press that turns "1.5x" into "2x" does not pull the + from under the thumb (correction 26's
+  reason for Follow's fixed width). The name leads with the same words, "2x · Whole day (reset zoom)" (`tests/a11y.test.js`).
+- **On a phone, Archived is the archive mark on the WhatsApp button.** The live checks at 375px measured the search box at 96px on the Inbox
+  list and 26px with Archived open, because "WHATSAPP · ARCHIVED" took the mark from 109 to 180px. Below two panes it now shows the archive
+  icon after "WHATSAPP" (Patryk's choice over "ARCHIVED ▾" and over a search icon), still revealed sideways, with " · Archived" kept in the
+  button's name as hidden text. Tablet and desktop keep the words.
+- **Checked live on DEV** (Browser pane, frames driven where a reading rode them): the WhatsApp menu enters and leaves; the zoom reset reads
+  "2x · Whole day" and its name leads with the same words, holds 119.4px and keeps + at x=1215 from 2x to 4x and back, and eases 119 → 51px to
+  "1x" and back; an archived chat linked to Marcos's Sat 14.11 booking came back to the Inbox when the form moved it 17:30 → 18:00 (pill "…
+  reply drafted, chat back in Inbox", the row "Draft: Hemos cambiado su reserva …"), went back to Archived when the time was moved back by
+  hand, and went back again on Undo of a second move. The time drag itself cannot be run in the pane (a drag inside one frame never lifts the
+  block), so it rests on `tests/drop-plan.test.js`.
+- **An open chat that comes out of Archived is followed to the Inbox.** Found in those checks: "Open booking" from an archived chat, then a
+  save that brought the chat back, reopened the inbox on Archived (the chat was still archived when it reopened) and the tab-leave effect then
+  dropped the selection, leaving the draft one tab away. The effect now switches to the Inbox and keeps the chat open when the open chat
+  leaves Archived (Patryk), whatever brought it out: the moved reply, a reply sent from it, a Restore. Into Archived it is still dropped.
+
+- **`/code-review` of the follow-ups (high, 9 commits, `379952f5..8f5d0466`): two findings.** (1) The `drop-plan.js` note in
+  `src/lib/CLAUDE.md` said the time drag "pins nothing" and, one sentence on, that the booking "gets … `_manual` + `_locked`":
+  the second clause is gone. (2) The mark's count (`MARK_COUNT`) and the menu rows' counts (`RowBadge`) are pills of their own
+  beside the atom `CountBadge`; moving them onto it changes how big the count looks, so it is in `ROADMAP.md`. Checked and not
+  reported: the composer's `windowOpen` and the chip's `windowState` agree at the boundary (`> now` against `<= now`), and the
+  React Compiler is lint-only here (nothing in `vite.config.js`), so a `Date.now()` behind a call in render is not memoised away;
+  `patchConversation`'s loaded guard cannot refuse a bring-back, because `movedReplyPlan` finds no conversation before the first read.

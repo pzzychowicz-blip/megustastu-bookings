@@ -14,7 +14,7 @@
 // the state/handler it reads as `K.<name>` in the ctx object at the call site.
 
 import { useRef, useEffect } from "react";
-import { isTyping, activatesItself } from "../lib/keyboard";
+import { isTyping, activatesItself, focusedBlockOf } from "../lib/keyboard";
 // v16.0.0 follow-up: the ←/→ Settings tab-cycle derives from SETTINGS_TABS (the
 // ONE tab list) so a newly added tab can never be skipped. Never inline ids.
 import { visibleTabs } from "../components/SettingsChrome";
@@ -115,7 +115,9 @@ export function useKeyboardShortcuts(ctx){
       const found=resolveShortcut({key:k,shiftKey:e.shiftKey},K,{
         sandbox:WA_SANDBOX,
         today:todayStr(),
-        settingsTabs:function(){return visibleTabs(K.can,K.hasModule).map(function(t){return t.id;});}
+        settingsTabs:function(){return visibleTabs(K.can,K.hasModule).map(function(t){return t.id;});},
+        // v18.16.0: the Timeline block under the keyboard's focus, for N.
+        focusedBlock:focusedBlockOf(e.target)
       });
       if(!found) return;
       if(found.prevent) e.preventDefault();
