@@ -20,7 +20,7 @@ import { countLabel } from "../../lib/booking-logic";
 import { todayStr } from "../../lib/day";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
 import { simulateInbound, simulateCoexist } from "../../lib/wa-sim";
-import { backendEnabled, setBackendEnabled, backendHealth, WA_BACKEND_URL } from "../../lib/wa-backend";
+import { backendEnabled, setBackendEnabled, backendHealth, WA_BACKEND_URL, HARNESS_CMD } from "../../lib/wa-backend";
 import { suggestCustomerReply, generateScenario, simErrorText, backendInbound } from "../../lib/wa-backend-sim";
 import { WA_SANDBOX } from "../../lib/waSandbox";
 import { FlaskIcon, DiceIcon, PhotoIcon, PlayIcon, FileIcon } from "./WaIcons";
@@ -256,7 +256,7 @@ export function WaSimulator({ ctx, onClose }) {
                 ? (import.meta.env.DEV
                   ? (health
                     ? "Harness alive on " + WA_BACKEND_URL + " — llm=" + health.llm + " · send=" + health.send + " · db " + (health.db === "configured" ? "✓" : "✗ not configured")
-                    : "Harness NOT reachable — run `npm run wa:backend` first.")
+                    : "Harness NOT reachable — run `" + HARNESS_CMD + "` first.")
                   : "ON — messages run server-side via /api/wa-sim-inbound (staff-auth) with live Gemini parsing.")
                 : "OFF — scenarios write Firebase client-side (canned parses, no Gemini)."}
             </div>

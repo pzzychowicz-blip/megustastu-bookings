@@ -23,7 +23,7 @@ import { auth } from "../firebase";
 // Only the URL. `backendEnabled()` is the CALLER's gate — `wa-sim.js` asks it
 // before routing an inbound through here — so importing it would be a second
 // place the same question is asked, and lint caught it as dead on arrival.
-import { WA_BACKEND_URL } from "./wa-backend";
+import { WA_BACKEND_URL, HARNESS_CMD } from "./wa-backend";
 import { simMediaMessage } from "./wa-mock-media";
 
 // Wrap one inbound message in the Meta Cloud API webhook shape and POST it to
@@ -175,7 +175,7 @@ export async function generateScenario({ hint, count } = {}) {
 export function simErrorText(e, dev = import.meta.env.DEV) {
   const msg = (e && e.message) || "unknown error";
   const unreachable = /failed to fetch|load failed|networkerror/i.test(msg);
-  if (dev) return unreachable ? "the local backend is not running (npm run wa:backend)" : msg;
+  if (dev) return unreachable ? "the local backend is not running (" + HARNESS_CMD + ")" : msg;
   // /code-review: deployed, the same three browser messages mean the server
   // was not reached at all, which on a phone is the connection.
   if (unreachable) return "the server could not be reached (check this device's connection)";

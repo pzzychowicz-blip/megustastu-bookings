@@ -14,6 +14,16 @@
 //     address: DEV_ORIGIN_RE) — needed locally because the
 //     app and this harness are different ports; in production /api/* is same-
 //     origin on Vercel and no CORS applies
+//   · WHO CAN REACH IT (2026-11-10, the security review). It listens on this
+//     machine's loopback only. The webhook is unsigned here and /dev/* has no
+//     gate, and both act through the service account and the Gemini key, so
+//     on every interface (as it was) anyone on the same network could write
+//     to the DEV database and spend the key while it ran. A phone or tablet
+//     on the LAN needs the opt-in, as Vite's own dev server does:
+//         npm run wa:backend -- --host
+//     And a request that names an Origin which is not the dev app's is
+//     refused (403), so a web page open in a browser on this machine cannot
+//     post to it either. A request with no Origin (curl) is not a browser's.
 //   · routes:  GET  /health             liveness + active modes
 //              GET  /dev/models         lists Gemini models visible to your key
 //                                       (confirm the GEMINI_MODEL string here)
@@ -49,6 +59,9 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = 3999;
+// `--host`: listen on every interface, for a device on the LAN. Absent, the
+// loopback only (the header says why).
+const LAN = process.argv.includes("--host");
 
 // ── .env.local parser (KEY=VALUE, # comments, optional single/double quotes) ──
 function loadEnvLocal() {
@@ -118,10 +131,15 @@ function readBody(req) {
 
 // The dev app on this machine (localhost) or on a device on the same network,
 // which opens the dev server at this machine's private address (v18.8.0
-// follow-up: the iPhone and the tablet). Private ranges only; the harness
-// already listens on every interface, so this changes what a BROWSER on the
-// LAN may read, not what can reach it.
-const DEV_ORIGIN_RE = /^http:\/\/(localhost|127\.0\.0\.1|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}):\d+$/;
+// follow-up: the iPhone and the tablet). Private ranges only. It decides two
+// things: which origin may READ an answer (cors), and which may ASK at all
+// (originRefused). What can reach the port is `--host`'s question, not this.
+// ONE list of the names this machine answers to, read by both patterns: the
+// loopback's three spellings (the harness binds ::1 too) and the private ranges.
+const DEV_HOST = "(localhost|127\\.0\\.0\\.1|\\[::1\\]|10(\\.\\d{1,3}){3}|192\\.168(\\.\\d{1,3}){2}|172\\.(1[6-9]|2\\d|3[01])(\\.\\d{1,3}){2})";
+const DEV_ORIGIN_RE = new RegExp("^http://" + DEV_HOST + ":\\d+$");
+// The Host header of a request really meant for this harness.
+const DEV_HOST_RE = new RegExp("^" + DEV_HOST + "(:\\d+)?$");
 
 function cors(req, res) {
   const origin = req.headers.origin || "";
@@ -132,7 +150,36 @@ function cors(req, res) {
   }
 }
 
-const server = http.createServer(async (req, res) => {
+// A browser names the page it is asking from on every POST and on every
+// cross-origin fetch. CORS alone only hides the ANSWER: a page on any site could
+// still POST a "simple" request here and the write would land. So a request
+// that names an origin other than the dev app's is not handled at all.
+//
+// **A GET can arrive with no Origin** (an <img>, a link, a same-origin fetch),
+// so this guards the routes that act, which are all POST. A GET route here
+// must stay harmless to ask for, or carry its own gate (wa-prune's secret).
+//
+// The Host header closes the other way in (/code-review): a page whose own
+// name is re-pointed at 127.0.0.1 (DNS rebinding) asks "same-origin", with no
+// Origin on a GET, but its Host is still that name, never one of this
+// machine's. curl sends this machine's. A tunnel (ngrok) sends ITS public
+// name and is refused until it rewrites the Host (`--host-header=rewrite`).
+function originRefused(req) {
+  const origin = req.headers.origin;
+  if (origin && !DEV_ORIGIN_RE.test(origin)) return "origin not allowed";
+  const host = req.headers.host;
+  if (host && !DEV_HOST_RE.test(host)) return "host not allowed";
+  return null;
+}
+
+async function handle(req, res) {
+  const refused = originRefused(req);
+  if (refused) {
+    res.statusCode = 403;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: refused }));
+    return;
+  }
   cors(req, res);
   if (req.method === "OPTIONS") { res.statusCode = 204; res.end(); return; }
   const pathname = vercelify(req, res);
@@ -187,11 +234,29 @@ const server = http.createServer(async (req, res) => {
     if (!res.headersSent) res.status(500).json({ error: e.code === "NO_SERVICE_ACCOUNT" ? e.message : "internal error: " + e.message });
     else res.end();
   }
-});
+}
 
-server.listen(PORT, () => {
+// Loopback is two addresses, and "localhost" resolves to either depending on
+// who asks (a browser tries both, Node prefers ::1), so both are bound. A
+// machine with IPv6 off has no ::1 to bind, which is not an error here.
+function banner() {
   console.log("[wa-backend] WhatsApp backend harness on http://localhost:" + PORT);
+  console.log(LAN
+    ? "[wa-backend]   reach: EVERY interface (--host). Anyone on this network can post to it: use it on a network you trust, and stop it after."
+    : "[wa-backend]   reach: this machine only. For a phone or tablet on the LAN: npm run wa:backend -- --host");
   console.log("[wa-backend]   modes: llm=" + llmMode() + " send=" + sendMode() + " unsigned=" + process.env.WA_ALLOW_UNSIGNED);
   console.log("[wa-backend]   db:    " + (env("FIREBASE_SERVICE_ACCOUNT", null) ? env("WA_DB_URL", "(DEV default)") : "NOT CONFIGURED — set FIREBASE_SERVICE_ACCOUNT in .env.local"));
   console.log("[wa-backend]   try:   curl http://localhost:" + PORT + "/health");
-});
+}
+
+function listenOn(host, onListening) {
+  const server = http.createServer(handle);
+  server.on("error", (e) => {
+    if (host === "::1" && (e.code === "EADDRNOTAVAIL" || e.code === "EAFNOSUPPORT")) return;
+    console.error("[wa-backend] could not listen on " + (host || "every interface") + ":" + PORT + " — " + e.message);
+    process.exit(1);
+  });
+  server.listen(PORT, host, onListening);
+}
+if (LAN) listenOn(undefined, banner);
+else { listenOn("127.0.0.1", banner); listenOn("::1"); }

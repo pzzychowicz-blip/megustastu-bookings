@@ -490,7 +490,7 @@ Everything here is scaffolding. None of it ships.
 | "Sample photo" · a 7-second voice note · "Sample PDF" | **mock media** (`MOCK.<kind>.<id>`, `api/_lib/mock-media/`) | v18.8.0. While `WA_SEND_MODE` is mock, a media id starting `MOCK.` is answered with a bundled sample of its kind, so the bubbles and the viewer can be tried without a Meta token. On a live deployment such an id is 410. |
 | The **WhatsApp Business app (coexistence)** section | **coexistence events** (`simulateCoexist`, `lib/wa-sim.js`; `api/_lib/sim-events.js`) | v18.9.0. Save or remove a contact, reply from the phone, the customer's edit and delete, import chat history (two chats, one old), and, in backend mode only, the photo for the imported chat and Connect (simulated) / Disconnect / Reconnect / Forget. Built as Meta's webhooks and stored through the real handlers. A real connection on the database is never touched. |
 | `__waSim.list()` in the console | **sim console API** (`lib/wa-sim.js`) | |
-| "Harness alive on …" | **the harness** (`scripts/wa-backend-dev.mjs`) | Local backend on **:3999**. Re-check needs it running locally or the button reports "backend not running". |
+| "Harness alive on …" | **the harness** (`scripts/wa-backend-dev.mjs`) | Local backend on **:3999**, on this machine only (`npm run wa:backend -- --host` for a phone or tablet on the LAN). Re-check needs it running locally or the button reports "backend not running". |
 
 ### `panel` mode — how the inbox stopped being an exception
 

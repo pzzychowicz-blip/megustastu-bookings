@@ -31,7 +31,7 @@ import { auth } from "../firebase";
 import { APP_NAME, T, FW, SP, R, IC } from "../lib/constants";
 import { mkBtn, mkSolidBtn, InlineAlert, ALERT_TONES, Reveal } from "../components/atoms";
 import { CheckIcon, AlertIcon, CopyIcon } from "../components/Icons";
-import { WA_BACKEND_URL } from "../lib/wa-backend";
+import { WA_BACKEND_URL, HARNESS_CMD } from "../lib/wa-backend";
 import { FB_SDK_URL, loginOptions, signupMessage, CONNECT_STEPS, mergeSteps, resultHeadline, retryAnnouncement } from "../lib/wa-connect";
 
 const ONBOARD_URL = WA_BACKEND_URL + "/api/wa-onboard";
@@ -109,7 +109,7 @@ export function ConnectPage() {
     onboard(user, "GET").then(function (r) {
       if (!off) setCfg(r.status === 200 ? r.data : { error: errorText(r) });
     }, function () {
-      if (!off) setCfg({ error: UNREACHABLE + (import.meta.env.DEV ? " On the dev server, start the WhatsApp harness: npm run wa:backend." : "") });
+      if (!off) setCfg({ error: UNREACHABLE + (import.meta.env.DEV ? " On the dev server, start the WhatsApp harness: " + HARNESS_CMD + "." : "") });
     });
     return function () { off = true; };
   }, [user]);

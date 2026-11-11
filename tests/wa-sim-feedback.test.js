@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import process from "node:process";
 
 const state = vi.hoisted(() => ({ on: true, result: null }));
-vi.mock("../src/lib/wa-backend", () => ({ backendEnabled: () => state.on, WA_BACKEND_URL: "" }));
+vi.mock("../src/lib/wa-backend", () => ({ backendEnabled: () => state.on, WA_BACKEND_URL: "", HARNESS_CMD: "npm run wa:backend" }));
 vi.mock("../src/lib/wa-backend-sim", async (orig) => {
   const real = await orig();
   return Object.assign({}, real, { backendInbound: vi.fn(() => state.result()) });

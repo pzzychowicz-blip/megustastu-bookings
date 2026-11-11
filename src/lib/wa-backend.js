@@ -33,11 +33,25 @@ import { WA_SANDBOX } from "./waSandbox";
 //                            page (v18.8.0 follow-up): a phone that opened the
 //                            dev server at the Mac's LAN address reaches the
 //                            harness there, where "localhost" meant the phone
+//                            (the harness listens on the Mac alone unless it
+//                            was started with `npm run wa:backend -- --host`)
 //   · deployed sandbox     → same-origin ("") so /api/* hits the Vercel functions
 // The host is read INSIDE the DEV branch, so a production build folds the
 // whole expression to "" and carries no `location` read (/code-review).
 export const WA_BACKEND_URL = import.meta.env.DEV
   ? "http://" + (typeof location !== "undefined" && location.hostname ? location.hostname : "localhost") + ":3999"
+  : "";
+// The command that makes the harness reachable FROM THIS PAGE (the 2026-11-10
+// security review): it listens on the Mac alone, so a page opened at the Mac's
+// LAN address (a phone, a tablet) needs it started with `--host`. Every "not
+// running" hint in DEV reads this one string, or the phone is told to start a
+// harness that is already running. Empty in a production build, like the URL.
+export function harnessCmd(hostname) {
+  const local = !hostname || hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+  return "npm run wa:backend" + (local ? "" : " -- --host");
+}
+export const HARNESS_CMD = import.meta.env.DEV
+  ? harnessCmd(typeof location !== "undefined" ? location.hostname : "")
   : "";
 const FLAG_KEY = "mgt-wa-backend";
 
@@ -126,7 +140,7 @@ export async function sendMediaViaBackend(phoneKey, blob, { mime, filename, capt
   try {
     res = await fetch(WA_BACKEND_URL + "/api/wa-media?phoneKey=" + encodeURIComponent(phoneKey), { method: "POST", headers, body: blob });
   } catch {
-    throw new Error(import.meta.env.DEV ? "backend not running (npm run wa:backend)" : "could not reach the server");
+    throw new Error(import.meta.env.DEV ? "backend not running (" + HARNESS_CMD + ")" : "could not reach the server");
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
@@ -153,7 +167,7 @@ export async function recheckViaBackend(phoneKey) {
       body: JSON.stringify({ phoneKey }),
     });
   } catch {
-    throw new Error(import.meta.env.DEV ? "backend not running (npm run wa:backend)" : "could not reach the server");
+    throw new Error(import.meta.env.DEV ? "backend not running (" + HARNESS_CMD + ")" : "could not reach the server");
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
@@ -173,7 +187,7 @@ export async function usageViaBackend() {
   try {
     res = await fetch(WA_BACKEND_URL + "/api/wa-usage", { headers: { Authorization: "Bearer " + idToken } });
   } catch {
-    throw new Error(import.meta.env.DEV ? "backend not running (npm run wa:backend)" : "could not reach the server");
+    throw new Error(import.meta.env.DEV ? "backend not running (" + HARNESS_CMD + ")" : "could not reach the server");
   }
   const data = await res.json().catch(() => null);
   if (!res.ok || !data || typeof data !== "object") throw new Error((data && data.error) || ("HTTP " + res.status));
@@ -211,7 +225,7 @@ async function loadMedia(phoneKey, msgId) {
       headers: { Authorization: "Bearer " + idToken },
     });
   } catch {
-    throw mediaError("error", import.meta.env.DEV ? "backend not running (npm run wa:backend)" : "could not reach the server");
+    throw mediaError("error", import.meta.env.DEV ? "backend not running (" + HARNESS_CMD + ")" : "could not reach the server");
   }
   if (res.status === 410) throw mediaError("expired", "no longer on WhatsApp's servers");
   if (res.status === 413) throw mediaError("toolarge", "too large to open here");

@@ -115,15 +115,21 @@ the whole of that control.
    row as the app loads, and every listener would fail until that write lands. Test in
    the emulator and on DEV before PROD.
 
-**The server tier (`api/`, v18.0.0).** Production routes four functions: `wa-inbound`,
-`wa-send`, `wa-recheck` and `wa-config`. They write through **firebase-admin, which
-bypasses the security rules entirely**, so their gates are in code:
-- `wa-send`, `wa-recheck` and `wa-config` verify a Firebase ID token
-  (`verifyStaffToken`, `api/_lib/rtdb.js`). When sending live, or when pointed at any
-  database but DEV, they also require the account's email to be on `WA_STAFF_EMAILS`
-  (`requireStaffAllowList`, `api/_lib/env.js`).
+**The server tier (`api/`, v18.0.0).** Production routes eight functions (four until
+v18.8.0; `api/CLAUDE.md` has each one): `wa-inbound`, `wa-send`, `wa-recheck`,
+`wa-config`, `wa-media`, `wa-prune`, `wa-onboard` and `wa-usage`. They write through
+**firebase-admin, which bypasses the security rules entirely**, so their gates are in
+code:
+- `wa-send`, `wa-recheck`, `wa-config`, `wa-media`, `wa-onboard` and `wa-usage` verify a
+  Firebase ID token (`verifyStaffToken`, `api/_lib/rtdb.js`). When sending live, or when
+  pointed at any database but DEV, they also require the account's email to be on
+  `WA_STAFF_EMAILS` (`requireStaffAllowList`, `api/_lib/env.js`). `wa-onboard` then
+  asks for an admin and `wa-usage` for the `waCostView` capability, both read from
+  `/roles` on the server.
 - `wa-inbound` is a public webhook and checks Meta's HMAC signature
-  (`api/_lib/meta.js`).
+  (`api/_lib/meta.js`). `WA_ALLOW_UNSIGNED=1` switches that check off, so it belongs
+  to the local harness and to no Vercel project.
+- `wa-prune` is called by Vercel Cron and answers only to `CRON_SECRET`.
 - Keys (the Meta token, the Gemini key, the service account) live in the deployment's
   environment variables and never in the database.
 - The simulator's endpoints are left out of production deployments by `.vercelignore`,
@@ -181,10 +187,28 @@ before), which is a statement about rights and does not make the contents privat
 Keep that in mind when writing either.
 
 - **No secrets are in the tree or the history.** Scanned on 2026-09-23 for private
-  keys, Meta and GitHub tokens, and Gemini key values: none. The two Firebase web
+  keys, Meta and GitHub tokens, and Gemini key values: none. Scanned again on
+  2026-11-10, every commit on every branch and all 168 pull requests' heads, with the
+  same answer. The two Firebase web
   `apiKey`s (`src/firebase.js` for DEV, `src/tenants/mgt.js` for PROD) are public by
   design, since they ship in every browser bundle. Access is controlled by §2, not by
-  the key.
+  the key. GitHub's secret scanning lists exactly those two, as open alerts.
+- **Three settings the repository cannot show, open since the 2026-11-10 review.** Each
+  is a console check, and each decides whether something above holds:
+  1. **DEV Firebase: is self-signup off, and anonymous sign-in?** Item 1 of §2 was
+     verified for PROD only. The sandbox is a public address on DEV, and while its
+     sends are mock its endpoints take any signed-in DEV account, so an open signup
+     there lets anyone read the DEV database and spend the sandbox's Gemini key.
+  2. **Is each browser key restricted to the APIs Firebase needs** (Credentials → the
+     key → API restrictions)? The referrer list below does not stop a request made
+     outside a browser. If the Gemini API is enabled in the same Google Cloud project
+     as either Firebase project, an unrestricted web key can call it.
+  3. **Vercel:** `WA_ALLOW_UNSIGNED` on neither project, `WA_SIM_ENABLED` not on
+     production.
+- **The local harness listens on this machine only** (`scripts/wa-backend-dev.mjs`,
+  since 2026-11-10). Its webhook is unsigned and it holds the DEV service account, so
+  the LAN is an opt-in (`npm run wa:backend -- --host`), and a request from a web page
+  on any other origin is refused.
 - **Hardening, decided 2026-10-08: restrict each browser key by HTTP referrer**, the
   DEV key first and PROD after a week on DEV shows nothing. The step is Patryk's
   (Google Cloud console → the project → APIs & Services → Credentials → the key named
