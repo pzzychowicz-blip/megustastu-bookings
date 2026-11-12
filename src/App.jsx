@@ -57,6 +57,8 @@ import {
   // v18.0.0 session 8 (C8): what the save toast is allowed to claim.
   // (v18.3.4: its zone note, `offZoneNote`, is the saves' own, in booking-save.js.)
   savedToast,
+  // v18.17.0 (I): whether a write moved anybody else, the claim the toast makes.
+  movedOthers,
   // v18.2.0 (C2): the one word for a party's size.
   guestsLabel,
   // v18.2.0 phase 77: any other count and its word, joined the same way.
@@ -79,7 +81,7 @@ import { undismissedClashes, clashByBooking, clashSpansByTable } from "./lib/cla
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
-import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal, draftForSave, draftRefusal, formSeatClash, kitchenAsk, waitlistEntry } from "./lib/booking-save";
+import { applyEdit, buildBooking, memoByPrev, againDraft, goneRefusal, pickedRefusal, draftForSave, draftRefusal, formSeatClash, kitchenAsk, waitlistEntry } from "./lib/booking-save";
 import { normalizePhone, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { joinPhone } from "./lib/phone-countries";
 import { sameDraft } from "./lib/drafts";
@@ -2624,7 +2626,8 @@ export function BookingApp({uid}){
     // added above deliberately STAYS on undo — the restored occurrence keeps
     // its deterministic id, so the generator never duplicates it, and the
     // skipDate just stops a REGENERATION it no longer needs to do.
-    if(ok){flash();armUndo(undoDelta(bookings,postDel),id,"delete",false);}
+    // v18.17.0 (I): "Tables re-optimised." only when the pass moved somebody else.
+    if(ok){flash(movedOthers(bookings,postDel,[id])?null:"saved");armUndo(undoDelta(bookings,postDel),id,"delete",false);}
     // v18.0.0 session 8 (C6): returned so `settleVoucherBack` can keep
     // `settleVoucher`'s ordering — the booking write first, the money only if
     // it landed.
@@ -3002,7 +3005,7 @@ export function BookingApp({uid}){
     wa.autoHandleCancelIntent(id); // a pending WA cancel-intent banner on this booking's conversation auto-handles
     setConfirmCancel(null);
     if(ok){
-      flash();
+      flash(movedOthers(bookings,post,[id])?null:"saved");   // v18.17.0 (I), as the delete
       armUndo(undoDelta(bookings,post),id,"cancel",!!noShow);
     }
     // Returned for `settleVoucherBack`, which must not move money for a write
@@ -3099,8 +3102,10 @@ export function BookingApp({uid}){
     // places the day around `next`, a list the server does not hold, and closing the
     // dialog would lose the block with nothing said. The dialog reads the false.
     if(!saveBlocks(next)) return false;
-    const ok=saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
-    if(ok) flash();
+    // v18.17.0 (I): memoised, so the toast's question and the write share one pass.
+    const place=memoByPrev(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
+    const ok=saveBookings(place);
+    if(ok) flash(movedOthers(bookings,place(bookings),[])?null:"saved");
     setBlockTarget(null);
   }
   function removeBlock(block){if(refused("tableBlock"))return;
@@ -3109,8 +3114,9 @@ export function BookingApp({uid}){
     // so unblocking either one dropped BOTH. See sanitizeBlock in booking-logic.
     const next=tableBlocks.filter(function(bl){return bl.id!==block.id;});
     if(!saveBlocks(next)) return false;
-    const ok=saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
-    if(ok) flash();
+    const place=memoByPrev(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
+    const ok=saveBookings(place);
+    if(ok) flash(movedOthers(bookings,place(bookings),[])?null:"saved");   // v18.17.0 (I)
     if(next.filter(function(bl){return bl.tableId===block.tableId&&bl.date===block.date;}).length===0) setBlockTarget(null);
   }
 

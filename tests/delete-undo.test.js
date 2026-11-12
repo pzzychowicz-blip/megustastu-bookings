@@ -307,7 +307,8 @@ describe("the wiring", () => {
     expect(skipAt).toBeGreaterThan(-1);
     expect(saveAt).toBeGreaterThan(skipAt);
     expect(body.slice(skipAt, saveAt)).toContain("if(!okSkip){setWriteWarning(");
-    expect(body).toContain('if(ok){flash();armUndo(undoDelta(bookings,postDel),id,"delete",false);}');
+    // v18.17.0 (I): the toast claims a reshuffle only when the pass moved somebody else.
+    expect(body).toContain('if(ok){flash(movedOthers(bookings,postDel,[id])?null:"saved");armUndo(undoDelta(bookings,postDel),id,"delete",false);}');
     expect(body).not.toContain("rehomeGuestTags(");
     expect(body).not.toContain("bookingsAfterAction(");
   });

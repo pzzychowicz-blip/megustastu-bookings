@@ -220,14 +220,19 @@ describe("dropPreview: the row under a dragged block", () => {
       bk("b", "13:00", 2, ["7"], { name: "Yara Domínguez", duration: 60 }),
       bk("c", "14:30", 2, ["7"], { name: "Ariadna Puig", duration: 60 }),
       bk("d", "13:00", 2, ["13"], { name: "Teo Vargas" }),
-      bk("e", "15:00", 2, ["12"], { name: "Emil Kovacs" }),
-      bk("f", "14:00", 2, ["11"], { name: "Lena Brandt" }),
+      bk("e", "15:00", 2, ["10"], { name: "Emil Kovacs" }),
+      // v18.17.0 (I): the pass keeps a party whose tables still suit it, so Teo and
+      // Emil stay (until then this read "Moves Yara, Ariadna, Teo +2"). Lena, two
+      // on joined tables with a single free, is one the pass does not keep.
+      bk("f", "14:00", 2, ["11", "12"], { name: "Lena Brandt" }),
     ];
     const on = { autoOptimizer: true, bookings: list, user: "u@x", nowMins: 600 };
     const plan = drop(list, "a", "7");
     expect(plan.moved.map((b) => b.id)).toEqual(["b", "c"]);
     expect(see(list, "a", "7", { autoOptimizer: true }).text).toBe("Moves Yara, Ariadna");
-    expect(checked(list, "a", "7", on)).toEqual({ tone: "warn", text: "Moves Yara, Ariadna, Teo +2" });
+    expect(checked(list, "a", "7", on)).toEqual({ tone: "warn", text: "Moves Yara, Ariadna, Lena" });
+    const after = plan.transform(list);
+    for (const id of ["d", "e"]) expect(after.find((b) => b.id === id).tables).toEqual(list.find((b) => b.id === id).tables);
     expect(plan.post.map((b) => b.id)).toEqual(plan.transform(list).map((b) => b.id));
   });
   it("a seated party says so, in red, where the drop will be refused", () => {

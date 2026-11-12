@@ -30,7 +30,7 @@
 //
 // `stamp(action, user)` builds a history entry. App passes nothing and gets
 // `histEntry`; a test passes its own so the result has no clock in it.
-import { bookingsAfterAction, histEntry as defaultHistEntry, toMins, findFreeSlot, applyOpt, syncLiveDurations, unlockOffered } from "./booking-logic.js";
+import { bookingsAfterAction, optimizerActiveFor, histEntry as defaultHistEntry, toMins, findFreeSlot, applyOpt, syncLiveDurations, unlockOffered } from "./booking-logic.js";
 import { releaseSwapped } from "./booking-save.js";
 import { getDur } from "./booking-fields.js";
 import { moveSentence } from "./delete-undo.js";
@@ -210,13 +210,17 @@ export function planUnlock(ctx){
   if(target.status==="seated") return {refuse:target.name+" is seated — a seated party stays at its table."};
   if(!unlockOffered(target)) return {refuse:target.name+" is not locked."};
   const date=target.date;
+  // (I): on a day the Optimiser owns, the booking hands its tables back too, or
+  // the pass (which keeps every placed party whose tables still suit it) would
+  // leave it where the lock put it. With the Optimiser off it keeps them.
+  const handBack=optimizerActiveFor(date,autoOptimizer);
   const transform=function(list){
     if(!list.some(function(b){return b.id===id;})) return list;
     const updated=list.map(function(b){
       if(b.id!==id) return b;
-      // `releaseSwapped` with nothing taken: the booking keeps every table and
-      // comes back unlocked and not hand-placed, the one way this app writes that.
-      return Object.assign({},releaseSwapped(b,[{id:id,tables:[]}]),{history:(b.history||[]).concat([histEntry("unlocked: the optimiser may move it",user)])});
+      // `releaseSwapped`: the booking comes back unlocked and not hand-placed,
+      // the one way this app writes that, keeping every table it is not handing back.
+      return Object.assign({},releaseSwapped(b,[{id:id,tables:handBack?(b.tables||[]):[]}]),{history:(b.history||[]).concat([histEntry("unlocked: the optimiser may move it",user)])});
     });
     return bookingsAfterAction(updated,date,tableBlocks,null,false,autoOptimizer);
   };

@@ -91,9 +91,10 @@ describe("where it shows", () => {
     // v18.3.4: each note is decided in its save's plan (`buildBooking`,
     // `applyEdit`) and handed to the toast by App's two wrappers.
     const save = read("lib/booking-save.js");
-    expect(save).toMatch(/flash:\{kind:null,note:!mt\.length&&placedNew\?offZoneNote\(placedNew\):""\}/);
+    // v18.17.0 (I): the kind says whether the pass moved somebody else.
+    expect(save).toMatch(/flash:\{kind:movedOthers\(base,fin,\[newId\]\)\?null:"saved",note:!mt\.length&&placedNew\?offZoneNote\(placedNew\):""\}/);
     expect(save).toMatch(/const zoneNote=!mt\.length&&edited&&offZone\(edited\)/);
-    expect(save).toMatch(/flash:\(needsR\|\|swapAffected\|\|f\.status==="completed"\|\|seatingNow\|\|zoneNote\)\?\{kind:seatingNow\?"saved":null,note:zoneNote\}:null,/);
+    expect(save).toMatch(/flash:\(needsR\|\|swapAffected\|\|f\.status==="completed"\|\|seatingNow\|\|zoneNote\)\?\{kind:\(seatingNow\|\|!movedOthers\(bookings,fin,\[editId\]\)\)\?"saved":null,note:zoneNote\}:null,/);
     expect(app.match(/if\(plan\.flash&&ok\) flash\(plan\.flash\.kind,plan\.flash\.note\);/g) || []).toHaveLength(2);
     expect(app).toMatch(/setReshuffledMsg\(savedToast\(k,active\)\+\(note\?" "\+note:""\)\);/);
   });

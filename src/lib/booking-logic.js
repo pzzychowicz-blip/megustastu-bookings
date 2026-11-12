@@ -338,6 +338,15 @@ export function histEntry(action,user){return {at:new Date().toISOString(),by:us
 // v18.14.0 (correction 14): `"unmoved"`, a Reshuffle that found nothing to move.
 // It said "Booking saved." with the Optimiser off and "Tables re-optimised." with
 // it on, and neither had happened.
+// v18.17.0 (I): whether a write moved anybody besides the parties it acted on,
+// which is what "Tables re-optimised." claims. With a fresh pass on every save
+// that was nearly always so; a save that keeps the day (`applyOptKeep`) usually
+// moves nobody else, so each caller asks this and passes `"saved"` when not.
+export function movedOthers(before,after,exceptIds){
+  var was={};
+  (before||[]).forEach(function(b){if(b) was[b.id]=_tableKey(b.tables);});
+  return (after||[]).some(function(b){return !!b&&(exceptIds||[]).indexOf(b.id)<0&&Object.prototype.hasOwnProperty.call(was,b.id)&&was[b.id]!==_tableKey(b.tables);});
+}
 export function savedToast(kind,optimiserActive){
   if(kind==="saved") return "Booking saved.";
   if(kind==="unmoved") return "No tables needed moving.";
@@ -843,8 +852,16 @@ export function trialFits(bookings,date,time,size,pref,dur,blocks,editId,prefTab
   }
   var trialId=editId||"__trial__";
   var trial={id:trialId,name:"",phone:"",date:date,time:time,size:size,duration:dur,preference:pref||"auto",notes:"",status:"confirmed",tables:[],customDur:null,_manual:false,_locked:false,_conflict:false,preferredTables:Array.isArray(prefTables)?prefTables:[],history:[]};
+  // v18.17.0 (I): an edit that changes nothing its tables were chosen FOR keeps
+  // them in the save (`applyEdit`'s `needsR`: size, time, date, zone, preferred
+  // tables), and the pass then holds them while they still suit it. So the trial
+  // starts on them too, or the preview would name tables the save never moves
+  // to. A locked or seated booking is not the Optimiser's to place.
+  var orig=editId?bookings.find(function(b){return b.id===editId;}):null;
+  if(orig&&!isLocked(orig)&&(orig.tables||[]).length&&orig.date===date&&orig.time===time&&(orig.size||2)===size&&(orig.preference||"auto")===(pref||"auto")&&_tableKey(orig.preferredTables)===_tableKey(prefTables)) trial.tables=orig.tables.slice();
   var base=editId?bookings.map(function(b){return b.id===editId?trial:b;}):bookings.concat([trial]);
-  var result=applyOpt(base,date,blocks);
+  // v18.17.0 (I): the pass a save runs, so the preview shows the save's tables.
+  var result=applyOptKeep(base,date,blocks);
   var assigned=result.find(function(b){return b.id===trialId;});
   if(!assigned||!assigned.tables||!assigned.tables.length) return null;
   // v18.0.0 session 8 (C5): the displacement check runs for an EDIT too. It was
@@ -1195,6 +1212,79 @@ export function optimise(bookings,date,blocks){
 export function applyOpt(bookings,date,blocks){
   var map=optimise(bookings,date,blocks);
   return bookings.map(function(b){if(b.date!==date||b.status==="cancelled") return Object.assign({},b);if(b.status==="completed") return Object.assign({},b,{_conflict:false});var tables=isLocked(b)?b.tables:(map[b.id]||[]);return Object.assign({},b,{tables:tables,_conflict:!tables||!tables.length});});
+}
+
+// ── applyOptKeep: the Optimiser that keeps what it placed (v18.17.0, I) ───────
+// `applyOpt` places every unlocked booking again from nothing, so on a day the
+// Optimiser owns any save could move any party: on generated service days, 36%
+// of saves moved somebody else, up to 19 parties at once. Patryk chose "keep
+// unless it costs a seat" (2026-11-12) over a tie-break (32%) and a soft
+// preference (30%), measured in REFACTOR_LOG v18.17.0.
+//
+// A placed, unlocked booking is HELD on its tables for the pass while they are
+// still right for it (`_keepsTables`), and the pass places only the rest: a new
+// booking, one an edit blanked (`applyEdit` empties the tables of a booking
+// whose size, time, date, zone or preferred tables changed), one a drop
+// displaced, one whose tables stopped being right. If that leaves anybody
+// without a table, today's pass is run too and the one that leaves fewer
+// unplaced wins, a tie going to the held one. So it never costs a seat that a
+// fresh pass would have found, and a day with everyone seated never pays for
+// the second pass.
+//
+// Used where a save runs the Optimiser (`computeAfterAction`) and by the
+// preview that must agree with it (`trialFits`). Reshuffle stays `applyOpt`:
+// asking for a fresh pass is its whole meaning.
+function _tableKey(t){return (t||[]).slice().sort().join("|");}
+function _knownSet(t){
+  if(!t||!t.length) return false;
+  if(t.length===1) return ALL_TABLES.some(function(x){return x.id===t[0];});
+  var k=_tableKey(t);
+  return VALID_COMBOS.some(function(c){return _tableKey(c.ids)===k;});
+}
+// Whether `b` keeps its tables this pass. `others` are the slots of every OTHER
+// placed party of the day, held or not, plus finished parties and blocks: two
+// parties that clash both go back to the pass, so the answer is the same in any
+// order.
+function _keepsTables(b,others){
+  var t=b.tables,size=b.size||2,pref=b.preference||"auto",s=toMins(b.time),e=bookEnd(b);
+  if(!_knownSet(t)||comboCap(t)<size||!comboOk(t,pref)) return false;
+  if(pref!=="auto"&&!_inZone(b,t)) return false;
+  var pt=b.preferredTables;
+  if(pt&&pt.length&&_tableKey(pt)!==_tableKey(t)&&comboCap(pt)>=size&&canAssign(pt,others,s,e)) return false;
+  if(!canAssign(t,others,s,e)) return false;
+  // A set with fewer tables is free for it: the inefficiency banner's own test.
+  var best=findBest(size,pref,s,e,others);
+  if(best&&best.length<t.length) return false;
+  return true;
+}
+function _unplacedOn(list,date){
+  return list.filter(function(b){return b.date===date&&isActive(b)&&!(b.tables||[]).length;}).length;
+}
+export function applyOptKeep(bookings,date,blocks){
+  var placed=bookings.filter(function(b){return b&&b.date===date&&b.time&&(b.tables||[]).length>0&&(b.status==="completed"||isActive(b));});
+  var base=blocks?getBlockSlots(blocks,date):[];
+  var slotOf=function(b){return {tables:b.tables,s:toMins(b.time),e:bookEnd(b)};};
+  var held={};
+  placed.forEach(function(b){
+    if(b.status==="completed"||isLocked(b)) return;
+    var others=base.concat(placed.filter(function(x){return x.id!==b.id;}).map(slotOf));
+    if(_keepsTables(b,others)) held[b.id]=true;
+  });
+  // The hold borrows the lock for one pass. What goes back is exactly what the
+  // booking had: a `false` written where the key was absent would be a change
+  // on every save (and `undefined` would make the write throw).
+  var orig={};
+  var marked=bookings.map(function(b){if(!held[b.id]) return b;orig[b.id]=b;return Object.assign({},b,{_locked:true});});
+  var kept=applyOpt(marked,date,blocks).map(function(b){
+    if(!held[b.id]) return b;
+    var o=Object.assign({},b);
+    if(Object.prototype.hasOwnProperty.call(orig[b.id],"_locked")) o._locked=orig[b.id]._locked; else delete o._locked;
+    return o;
+  });
+  var lost=_unplacedOn(kept,date);
+  if(!lost) return kept;
+  var fresh=applyOpt(bookings,date,blocks);
+  return _unplacedOn(fresh,date)<lost?fresh:kept;
 }
 
 // ── Optimizer-OFF helpers ─────────────────────────────────────────────────────
@@ -1704,7 +1794,8 @@ export function bookingsAfterAction(updatedBks,date,blocks,changedId,forceReassi
   return sameBookings(out,updatedBks)?updatedBks:out;
 }
 function computeAfterAction(synced,date,blocks,changedId,forceReassign,autoOptimizerState){
-  if(optimizerActiveFor(date,autoOptimizerState)) return applyOpt(synced,date,blocks);
+  // v18.17.0 (I): a save keeps what the Optimiser placed unless that costs a seat.
+  if(optimizerActiveFor(date,autoOptimizerState)) return applyOptKeep(synced,date,blocks);
   // OFF path: preserve everyone's tables
   if(!changedId||!forceReassign) return synced.map(function(b){return Object.assign({},b);});
   // Find a slot for changedId without touching others

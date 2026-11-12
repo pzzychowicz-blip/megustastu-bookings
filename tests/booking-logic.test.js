@@ -29,7 +29,7 @@ import {
   keepsHandTables, tablesKept, blockedTablesAt, handKeptRefusal,
   unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
   tablesFreeFor, trialFits, enteredPhone, kitchenRelevant, savedToast, lastStartMins,
-  optimizerActiveFor, earliestOffer, findTimes, findKitchenFriendlyTimes,
+  optimizerActiveFor, earliestOffer, findTimes, findKitchenFriendlyTimes, applyOptKeep, movedOthers,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -2405,16 +2405,19 @@ describe("what a save really does with a revived booking's tables", () => {
     expect(tablesFreeFor([cancelled()], D, "x", ["6"], s, s + 90, [])).toBe(true);
   });
 
-  it("…and the save moves the booking off it anyway", () => {
+  // v18.17.0 (I): until then the save moved it to 1, the fresh pass's choice.
+  // A save now keeps what was placed while it still suits the party
+  // (`applyOptKeep`), and table 6 does.
+  it("…and the save keeps it there", () => {
     const saved = bookingsAfterAction(revive([cancelled()]), D, [], "x", false, true);
-    expect(saved.find((b) => b.id === "x").tables).toEqual(["1"]);
+    expect(saved.find((b) => b.id === "x").tables).toEqual(["6"]);
   });
 
   it("trialFits — what the form already computes — gives exactly that", () => {
-    expect(trialFits([cancelled()], D, "19:00", 2, "auto", 90, [], "x", [], false)).toEqual(["1"]);
+    expect(trialFits([cancelled()], D, "19:00", 2, "auto", 90, [], "x", [], false)).toEqual(["6"]);
   });
 
-  it("the two still agree on a day with other bookings on it", () => {
+  it("the two still agree on a day with other bookings on it, and nobody else moves", () => {
     const day = [
       cancelled(),
       mk({ id: "y", time: "19:00", size: 4, tables: ["9"] }),
@@ -2423,9 +2426,10 @@ describe("what a save really does with a revived booking's tables", () => {
     const preview = trialFits(day, D, "19:00", 2, "auto", 90, [], "x", [], false);
     const saved = bookingsAfterAction(revive(day), D, [], "x", false, true);
     expect(preview).toEqual(saved.find((b) => b.id === "x").tables);
-    // The same pass moves somebody the form never mentions — that is the
-    // "Tables re-optimised." toast's job, and stays out of this row.
-    expect(saved.find((b) => b.id === "z").tables).not.toEqual(["1"]);
+    expect(preview).toEqual(["6"]);
+    // Until v18.17.0 the same pass moved z off 1, which the form never said.
+    expect(saved.find((b) => b.id === "z").tables).toEqual(["1"]);
+    expect(saved.find((b) => b.id === "y").tables).toEqual(["9"]);
   });
 
   it("and agree that a booking the optimiser is content with does not move", () => {
@@ -3480,6 +3484,120 @@ describe("optimise: preferred tables survive another party's zone fix", () => {
 
   it("alone, it has them too: the retry is what the first case is about", () => {
     expect(optimise([star], D, []).b00).toEqual(["5", "4"]);
+  });
+});
+
+// ── v18.17.0 (I): the pass that keeps what it placed ─────────────────────────
+// A save on a day the Optimiser owns holds every placed, unlocked party whose
+// tables still suit it, places the rest, and takes a fresh pass instead only
+// when that seats more. Measured over generated days in REFACTOR_LOG v18.17.0;
+// these are the rules, one case each.
+describe("applyOptKeep: keep unless it costs a seat", () => {
+  const tbl = (out, id) => out.find((b) => b.id === id).tables;
+
+  it("a new booking is placed around the day, and nobody else moves", () => {
+    // Placed where a fresh pass would not put them: 2 on table 4, 2 on 9.
+    const day = [mk({ id: "a", time: "19:00", tables: ["4"] }), mk({ id: "b", time: "19:00", tables: ["9"] })];
+    const fresh = applyOpt(day.concat([mk({ id: "n", time: "19:00" })]), D, []);
+    expect(tbl(fresh, "a")).not.toEqual(["4"]);                // what a save did until v18.17.0
+    const out = applyOptKeep(day.concat([mk({ id: "n", time: "19:00" })]), D, []);
+    expect([tbl(out, "a"), tbl(out, "b")]).toEqual([["4"], ["9"]]);
+    expect(tbl(out, "n")).toHaveLength(1);
+    expect(verifyClean(out, D)).toBe(true);
+  });
+
+  it("gives back exactly the lock flag each held booking had: absent stays absent", () => {
+    const a = mk({ id: "a", time: "19:00", tables: ["4"] });
+    delete a._locked;
+    const out = applyOptKeep([a, mk({ id: "b", time: "19:00", tables: ["9"] })], D, []);
+    expect(Object.prototype.hasOwnProperty.call(out[0], "_locked")).toBe(false);
+    expect(out[1]._locked).toBe(false);
+    expect(out[0]._conflict).toBe(false);
+  });
+
+  it("lets go of tables that stopped suiting the party", () => {
+    const at = (o) => mk(Object.assign({ time: "19:00" }, o));
+    const day = [
+      at({ id: "small", size: 4, tables: ["4"] }),                         // too few seats
+      at({ id: "zone", preference: "indoor", tables: ["3"] }),             // outside the zone it asked for
+      at({ id: "pref", preferredTables: ["7"], tables: ["8"] }),           // its preferred table is free
+      at({ id: "waste", tables: ["11", "12"] }),                           // one table would do
+      at({ id: "gone", tables: ["99"] }),                                  // a table the layout does not have
+      at({ id: "c1", tables: ["1"] }), at({ id: "c2", tables: ["1"], time: "19:30" }), // a clash: both go back
+    ];
+    const out = applyOptKeep(day, D, []);
+    expect(comboCap(tbl(out, "small"))).toBeGreaterThanOrEqual(4);
+    expect(isIn(tbl(out, "zone")[0])).toBe(true);
+    expect(tbl(out, "pref")).toEqual(["7"]);
+    expect(tbl(out, "waste")).toHaveLength(1);
+    expect(tbl(out, "gone")).not.toEqual(["99"]);
+    expect(verifyClean(out, D)).toBe(true);
+  });
+
+  it("a block on a held party's table sends it back to the pass", () => {
+    const day = [mk({ id: "a", time: "19:00", tables: ["4"] })];
+    const blocks = [{ id: "k", date: D, tableId: "4", from: "18:00", to: "22:00" }];
+    expect(tbl(applyOptKeep(day, D, blocks), "a")).not.toEqual(["4"]);
+  });
+
+  it("never touches a locked, seated or finished party", () => {
+    const day = [
+      mk({ id: "l", time: "19:00", tables: ["4"], _locked: true }),
+      mk({ id: "s", time: "19:00", tables: ["5"], status: "seated" }),
+      mk({ id: "c", time: "19:00", tables: ["6"], status: "completed" }),
+      mk({ id: "x", time: "19:00", tables: ["7"], status: "cancelled" }),
+    ];
+    const out = applyOptKeep(day, D, []);
+    expect(out.map((b) => b.tables)).toEqual([["4"], ["5"], ["6"], ["7"]]);
+  });
+
+  it("when holding everyone leaves a party out and a fresh pass seats them all, the fresh pass wins", () => {
+    // Two on the four-seat 9; every pair of joined tables broken by a party of two.
+    const busy = ["1", "3", "5", "6", "8", "10", "11", "13"].map((t) => mk({ id: "p" + t, time: "19:00", tables: [t] }));
+    const day = busy.concat([mk({ id: "two", time: "19:00", tables: ["9"] }), mk({ id: "four", time: "19:00", size: 4 })]);
+    const out = applyOptKeep(day, D, []);
+    expect(tbl(out, "four")).toEqual(["9"]);
+    expect(tbl(out, "two")).toHaveLength(1);
+    expect(out.filter((b) => !b.tables.length)).toEqual([]);
+    expect(out).toEqual(applyOpt(day, D, []));
+  });
+
+  it("a save on a day the Optimiser owns keeps; Reshuffle is still a fresh pass", () => {
+    const day = [mk({ id: "a", time: "19:00", tables: ["4"] })];
+    expect(tbl(bookingsAfterAction(day, D, [], null, false, true), "a")).toEqual(["4"]);
+    expect(tbl(applyOpt(day, D, []), "a")).not.toEqual(["4"]);
+    const ma = stripComments(readFileSync(new URL("../src/lib/manual-assign.js", import.meta.url), "utf8")).join("\n");
+    expect(ma).toContain("return applyOpt(base,viewDate,tableBlocks);");
+  });
+
+  it("the preview of an unchanged edit starts on its tables, as the save keeps them; a changed one does not", () => {
+    const day = [mk({ id: "e", time: "19:00", tables: ["4"] })];
+    expect(trialFits(day, D, "19:00", 2, "auto", 90, [], "e", [], false)).toEqual(["4"]);
+    expect(trialFits(day, D, "19:30", 2, "auto", 90, [], "e", [], false)).not.toEqual(["4"]);
+    const locked = [mk({ id: "e", time: "19:00", tables: ["4"], _locked: true })];
+    expect(trialFits(locked, D, "19:00", 2, "auto", 90, [], "e", [], false)).not.toEqual(["4"]);
+  });
+});
+
+// v18.17.0 (I): "Tables re-optimised." is a claim about the write. With the pass
+// keeping the day, most saves move nobody else, and then the toast says so.
+describe("movedOthers: what the save toast may claim", () => {
+  const a = mk({ id: "a", tables: ["4"] }), b = mk({ id: "b", tables: ["5"] });
+  it("is false when only the parties acted on changed tables", () => {
+    expect(movedOthers([a, b], [Object.assign({}, a, { tables: ["1"] }), b], ["a"])).toBe(false);
+  });
+  it("is true when anybody else's tables changed, in any order", () => {
+    expect(movedOthers([a, b], [Object.assign({}, a, { tables: ["1"] }), Object.assign({}, b, { tables: ["5"] })], [])).toBe(true);
+    expect(movedOthers([a, b], [Object.assign({}, b, { tables: ["2"] }), a], ["a"])).toBe(true);
+    expect(movedOthers([a, b], [b, Object.assign({}, a, { tables: ["4"] })], [])).toBe(false);
+  });
+  it("a booking added or removed is not a move", () => {
+    expect(movedOthers([a], [a, b], [])).toBe(false);
+    expect(movedOthers([a, b], [a], [])).toBe(false);
+  });
+  it("and the two sentences it chooses between", () => {
+    expect(savedToast(null, true)).toBe("Tables re-optimised.");
+    expect(savedToast("saved", true)).toBe("Booking saved.");
   });
 });
 

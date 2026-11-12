@@ -40960,7 +40960,7 @@ He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the 
   React Compiler is lint-only here (nothing in `vite.config.js`), so a `Date.now()` behind a call in render is not memoised away;
   `patchConversation`'s loaded guard cannot refuse a bring-back, because `movedReplyPlan` finds no conversation before the first read.
 
-## v18.17.0 — a lock that can be taken off, and four Optimiser and drag fixes
+## v18.17.0 — a lock that can be taken off, a save that keeps the day, and four Optimiser and drag fixes
 
 **Date:** 2026-11-12 · **Branch:** `feat/v18.17.0-unlock-and-optimiser-fixes`
 
@@ -41092,4 +41092,74 @@ new cases failed before the change.
 
 `tests/drag-hold.test.js` (the three values and the default; stored only when not Normal; unknown and blocked read as Normal; every hold above
 the card's 400; the block reads it at the timer and no 800 is left; the card's 400 untouched; per device; the Settings group).
+
+### Commit 9 (I) — a save keeps the day the Optimiser placed
+
+- **What it was**: on a day the Optimiser owns (every day after today, and today while it is switched on), every save that runs the
+  Optimiser (a new booking, an edit, a status change, a delete, a cancel, a table block, an Unlock) went through `applyOpt`, which places every
+  unlocked booking again from nothing. Saving one party could move several others, and the pill said "Tables re-optimised." after nearly
+  every save.
+- **`applyOptKeep(bookings, date, blocks)`** (`lib/booking-logic.js`) holds each placed, unlocked party on its tables while they still suit it
+  (`_keepsTables`: a real table or join, enough seats, its zone if it asked for one, its preferred tables when those are free, no clash with any
+  other placed party, and no free set with fewer tables at its time, which is the inefficiency banner's test), places the rest around them,
+  and runs a fresh `applyOpt` only when the held day leaves somebody without a table, taking whichever leaves fewer (a tie keeps the held day).
+  So it never costs a seat a fresh pass would have found. The hold borrows `_locked` for that one pass and gives back exactly what was there,
+  so a key that was absent stays absent and the per-child diff writes nothing for a party that stayed. `computeAfterAction` and `trialFits`
+  use it; **Reshuffle stays a fresh `applyOpt`**, because asking for a fresh pass is what the button means.
+- **Measured before building, four ways** (a bench script, not kept, by Patryk's decision): generated days replayed save by save on a day the
+  Optimiser owns, each save a new booking (75%), an edit of time or size (15%) or a cancel (10%). Service-shaped days: 20 to 43 saves, mostly
+  twos and fours, on the half hour, one in ten with a zone. Varied days: sizes 1 to 8, any quarter, longer stays, three in ten with a zone, one
+  in ten with preferred tables, one booking in ten dragged and locked. tie and soft ran on a copy of `booking-logic.js` with a hook in it, and
+  the copy with the hook off matched the real module on every pass. Over 150 service days:
+
+  | Pass | Parties moved per save | Saves that move somebody |
+  |---|---|---|
+  | today (`applyOpt`) | 0.90 | 36% |
+  | tie (current tables win a tie in `findBest`'s ranking) | 0.74 | 32%, at twice the time |
+  | soft (current tables first when free) | 0.69 | 30% |
+  | keep (every placed party held) | 0.26 | 2.3%, the saves where it fell back to today's pass |
+
+  Each variant was "unless it costs a seat". Patryk chose keep (2026-11-12).
+- **Measured as shipped**, the real `applyOptKeep` against `applyOpt` over the same scripts (60 service days, 1,926 saves; varied days,
+  1,106 saves):
+
+  | | Service: today | Service: keep | Varied: today | Varied: keep |
+  |---|---|---|---|---|
+  | Parties moved per save | 0.92 | 0.29 | 0.48 | 0.16 |
+  | Saves that move somebody | 35.8% | 3.6% | 23.3% | 5.4% |
+  | Parties left unplaced at the end of the days | 37 | 35 | 52 | 48 |
+  | Saves where the inefficiency banner would show | 0.2% | 0% | 7.2% | 5.8% |
+  | Parties outside their zone at the end | 3 | 4 | 31 | 34 |
+  | Mean ms per save | 14.9 | 13.6 | 9.0 | 8.6 |
+
+  No pass left a clash. The zone figure is the one that gets worse: a held party can keep a table another party's zone wanted, and only a
+  seat, not a zone, brings the fresh pass back.
+- **What the screen says now, so it tells the truth**:
+  - **"Tables re-optimised."** is claimed only when somebody else moved: `movedOthers(before, after, actedIds)` (`lib/booking-logic.js`) at
+    every toast after a booking write that runs the pass (the edit and the new booking in `booking-save.js`, a completion in `status-change.js`,
+    and App's delete, cancel, block and block removal). Otherwise "Booking saved.", and the Undo pill's "tables re-optimised" note follows the
+    toast. The status change and the block share one pass between the plan and the write (`memoByPrev`), so asking costs nothing.
+  - **The form's preview** (`trialFits`) runs the same pass and starts an unchanged edit on its own tables, as `applyEdit` does, or a
+    notes-only edit previewed a table the save would not give.
+  - **Unlock**, on a day the Optimiser owns, hands the booking's tables back as well (`planUnlock`), or the pass would leave it where the lock
+    put it. With the Optimiser off it keeps them, as before.
+- **Behaviour that changed, each one pinned**:
+  - A notes-only edit of a party on a table the Optimiser would not choose keeps it (was 4 → 1). A cancelled booking revived keeps its table
+    while that still suits it (was 4 → 1). An edit of the time before the cutoff places only the edited party again (the other stayed on 5; it
+    was moved to 1), so its Undo covers one booking.
+  - Two refusals change wording: where a fresh pass would seat the saved party only by unseating somebody else, one party is out either way,
+    the tie keeps the held day, and the refusal is the no-tables one ("No tables available at this time — see suggestions below." for an edit,
+    "Could not assign a table — try manual assignment." for a new booking) instead of naming the guest who would have lost a table.
+  - The drop row's "Moves …" names fewer people, because the trial behind it keeps the others too.
+  - `tests/save-path.test.js`: five scenarios renamed and five snapshots moved (the four above, and the time edit's Undo delta). 27 other snapshot
+    lines changed only `flash(null` to `flash("saved"`, each checked by a script against the old file: no other line moved, and every one was
+    a save that moved nobody else.
+- **Live on DEV** (a day the Optimiser owns): Keep A, alone on 4, stayed on 4 when Keep B was added; Keep B landed on 1, the table the form had
+  previewed; Keep C landed on 2 with the toast "Booking saved.". Nobody else moved.
+
+`tests/booking-logic.test.js` (`applyOptKeep`: a held party stays; one whose tables stopped suiting it, or whose preferred tables came free,
+moves; a clashing pair both go back; a lock and an absent key come back as they were; a block; a locked, seated or finished party untouched;
+falling back when holding costs a seat; the save keeps and Reshuffle does not; the preview's carry; `movedOthers`), `tests/status-change.test.js`
+(a quiet completion), `tests/drop-plan.test.js`, `tests/save-path.test.js` (the tie that keeps the held day is its two refusals),
+`tests/delete-undo.test.js`, `tests/seating-preference.test.js`.
 

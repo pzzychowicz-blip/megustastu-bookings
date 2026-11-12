@@ -35,7 +35,7 @@ import {
   seatRefusal, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, handKeptRefusal,
   offZone, offZoneNote, seatNoteFor,
   canAssign, occupancyEnd, getBlockSlots, padEnd, plannedDuration,
-  phoneForSave, lastStartMins, toTime, seatClashParties, kitchenRelevant, getKitchenLoad,
+  phoneForSave, lastStartMins, toTime, seatClashParties, kitchenRelevant, getKitchenLoad, movedOthers,
 } from "./booking-logic.js";
 import { stampGuestSeed, resolveGuestId, saveGuestTags, guestTagsChange, guestTagMap, bookingTags, hasRealPhone } from "./customers.js";
 import { cleanTagIds } from "./tags.js";
@@ -565,7 +565,8 @@ export function applyEdit(input){
     next:buildNextMemo,
     fin:fin,
     changed:editChanged,
-    flash:(needsR||swapAffected||f.status==="completed"||seatingNow||zoneNote)?{kind:seatingNow?"saved":null,note:zoneNote}:null,
+    // v18.17.0 (I): "Tables re-optimised." only when the pass moved somebody else.
+    flash:(needsR||swapAffected||f.status==="completed"||seatingNow||zoneNote)?{kind:(seatingNow||!movedOthers(bookings,fin,[editId]))?"saved":null,note:zoneNote}:null,
     // v18.0.0 session 7: the seat note. The snapshot is the EDITED booking,
     // so a note typed in this save is shown.
     // v18.5.0: with the booking's tags, read from the list as this save leaves
@@ -682,7 +683,8 @@ export function buildBooking(input){
     fin:fin,
     id:newId,
     rule:recStampId?{id:recStampId,startDate:f.date,name:f.name,phone:cleanPhone,size:size,weekday:new Date(f.date).getUTCDay(),time:f.time,preference:f.preference,notes:f.notes}:null,
-    flash:{kind:null,note:!mt.length&&placedNew?offZoneNote(placedNew):""},
+    // v18.17.0 (I): "Tables re-optimised." only when the pass moved somebody else.
+    flash:{kind:movedOthers(base,fin,[newId])?null:"saved",note:!mt.length&&placedNew?offZoneNote(placedNew):""},
   };
 }
 
