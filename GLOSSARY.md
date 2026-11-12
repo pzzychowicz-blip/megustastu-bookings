@@ -105,6 +105,7 @@ however many fire — that is the whole point of it.
 | "Couldn't load bookings" | **load-failure section** | The initial read failed. Permanent until reload. |
 | "Closed this day" | **closed-day section** | The viewed weekday has no opening hours. Suppresses the empty-day prompt. |
 | "Tables could be reshuffled" | **inefficiency section** | The optimiser could do better. Offers Reshuffle. |
+| "Reshuffle and unlock 2" on the Reshuffle confirm | **Reshuffle and unlock N** (`planReshuffle`'s `unlock`, `lockedOn`, `lib/manual-assign.js`) | v18.17.0. Offered only when the viewed day has locked bookings that have not sat down: unlocks them, then reshuffles, so they may move. The plain Reshuffle beside it keeps every lock, and so does Enter. One Undo puts back the tables and the locks. |
 | The ✕ on a row | **row dismissal** (`useDismissals.js`) | Session-only. Late/overlap/waitlist reset on a date change; clash prunes against live pairs instead. |
 
 ---

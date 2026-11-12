@@ -41042,3 +41042,20 @@ commit below. Nothing stored changes shape, so `SCHEMA` stays and no rule moves.
 `tests/manual-assign.test.js` (who is offered it; the write; both Optimiser states; the booking's own day; the refusals; a replay on a list
 without the booking; the three mounts and App's handler).
 
+### Commit 6 (B) — Reshuffle offers the locks
+
+- **The Reshuffle confirm names the day's locks** and offers a second button, **"Reshuffle and unlock N"**, when the viewed day has any
+  (`lockedOn(list, date)`, `lib/manual-assign.js`: the bookings `unlockOffered` names, so never a seated party). With none, the confirm is as it
+  was. The plain Reshuffle keeps every lock, as it always has; so does Enter on the confirm (`modal-keys.js` calls `forceReshuffle()` with
+  nothing, and only the literal `true` unlocks).
+- **`planReshuffle(ctx)` → `{transform, done}`**: with `unlock: true` the transform first takes the lock off each of those bookings
+  (`releaseSwapped`, one history line, "unlocked by Reshuffle"), then runs the same `applyOpt` over `syncLiveDurations` as commit 1. `done` is
+  the pill's sentence ("Tables re-optimised, 1 unlocked."). One write through `saveMove`, so one Undo puts back the tables and the locks.
+  Both buttons wait out a double tap (`armSettled`).
+- **Measured on DEV** (today, Optimiser off, 21:53): Lock Test assigned to 13 through the picker (locked); the confirm read "1 booking is locked
+  to tables. Reshuffle does not move a locked booking, unless you unlock it here." with "Reshuffle and unlock 1" beside "Reshuffle"; pressing it
+  moved Lock Test to 1 with no padlock and the pill "Tables re-optimised, 1 unlocked."; Undo put it back on 13 with the padlock.
+
+`tests/manual-assign.test.js` (the count; a plain Reshuffle keeps every lock; with unlock, handed back and placed again with its history line;
+never a seated party or another day's booking; only the literal true; the confirm's two buttons and their guard).
+

@@ -7,7 +7,7 @@
 // needs the old code. These are the cases that stay: one per outcome, each
 // asserting what is WRITTEN.
 import { describe, it, expect } from "vitest";
-import { planAssign, planReassign, planReshuffle, planUnlock, swapSlot, liveSwap } from "../src/lib/manual-assign.js";
+import { planAssign, planReassign, planReshuffle, planUnlock, lockedOn, swapSlot, liveSwap } from "../src/lib/manual-assign.js";
 import { todayStr, addDays } from "../src/lib/day.js";
 import { appCode } from "./app-source.js";
 import { unlockOffered } from "../src/lib/booking-logic.js";
@@ -321,7 +321,7 @@ describe("planReshuffle: a seated party running over", () => {
   });
 
   it("App's Reshuffle is this plan, through saveMove", () => {
-    expect(appCode()).toMatch(/function forceReshuffle\(\)\{saveMove\(planReshuffle\(/);
+    expect(appCode()).toMatch(/function forceReshuffle\(unlock\)\{const plan=planReshuffle\(/);
   });
 });
 
@@ -409,6 +409,60 @@ describe("Unlock: the doors", () => {
   });
   it("the card offers it only where unlockOffered says so", () => {
     expect(src("QuickStatusPopup.jsx")).toContain("onUnlock && unlockOffered(booking) ?");
+  });
+});
+
+// ── v18.17.0 (B): Reshuffle can take the day's locks off ─────────────────────
+describe("planReshuffle: Reshuffle and unlock N", () => {
+  const home = byId(planReshuffle({ viewDate: D, tableBlocks: [], today: TODAY, nowMins: 600 }).transform([bk("x", "19:00", 2, [])]), "x").tables;
+  const away = ["13"].filter((t) => !home.includes(t));
+  const list = [
+    bk("drag", "19:00", 2, away, { _locked: true, _manual: true }),
+    bk("sat", "13:00", 2, ["12"], { status: "seated", _locked: true, _manual: true }),
+    bk("far", "19:00", 2, away, { date: addDays(D, 1), _locked: true, _manual: true }),
+  ];
+  const run = (unlock) => planReshuffle({ viewDate: D, tableBlocks: [], today: TODAY, nowMins: 600, unlock, bookings: list, user: "u@x", stamp });
+
+  it("counts the day's locked bookings that have not sat down", () => {
+    expect(lockedOn(list, D)).toBe(1);
+    expect(lockedOn(list, addDays(D, 1))).toBe(1);
+    expect(lockedOn([], D)).toBe(0);
+  });
+
+  it("a plain Reshuffle keeps every lock, as it always has", () => {
+    const out = run(false).transform(list);
+    expect(byId(out, "drag").tables).toEqual(away);
+    expect(byId(out, "drag")._locked).toBe(true);
+    expect(run(false).done).toBe("Tables re-optimised.");
+    expect(run(undefined).done).toBe("Tables re-optimised.");
+  });
+
+  it("with unlock, the day's locked bookings are handed back and placed again", () => {
+    const out = run(true).transform(list);
+    const d = byId(out, "drag");
+    expect(d._locked).toBe(false);
+    expect(d._manual).toBe(false);
+    expect(d.tables).toEqual(home);
+    expect(d.history).toEqual([{ action: "unlocked by Reshuffle", by: "u@x" }]);
+    expect(run(true).done).toBe("Tables re-optimised, 1 unlocked.");
+  });
+
+  it("never a seated party, and never another day's booking", () => {
+    const out = run(true).transform(list);
+    expect(byId(out, "sat")).toMatchObject({ tables: ["12"], _locked: true });
+    expect(byId(out, "far")).toEqual(list[2]);
+  });
+
+  it("only the literal true unlocks: Enter on the confirm passes nothing", () => {
+    expect(byId(planReshuffle({ viewDate: D, tableBlocks: [], today: TODAY, nowMins: 600, unlock: {}, bookings: list }).transform(list), "drag")._locked).toBe(true);
+  });
+
+  it("the confirm offers it only when the day has a lock, and both buttons wait out a double tap", () => {
+    const app = appCode();
+    expect(app).toContain("const reshuffleLocked=confirmReshuffle?lockedOn(bookings,viewDate):0;");
+    expect(app).toContain("{reshuffleLocked>0?<button");
+    expect(app).toContain("if(!armSettled())return;setConfirmReshuffle(false);forceReshuffle(true);");
+    expect(app).toContain("if(!armSettled())return;setConfirmReshuffle(false);forceReshuffle();");
   });
 });
 

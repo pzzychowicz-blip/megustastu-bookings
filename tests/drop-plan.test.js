@@ -370,7 +370,7 @@ describe("BookingApp's saveMove", () => {
     expect(flat).toContain('saveMove(plan.transform,id,"move",plan.done,');
     expect(flat).toContain('saveMove(plan.transform,bookingId,"assign",plan.done,');
     // v18.17.0 (D): the reshuffle's transform is `planReshuffle`'s (lib/manual-assign.js).
-    expect(flat).toContain('saveMove(planReshuffle({viewDate:viewDate,tableBlocks:tableBlocks,today:today,nowMins:nowMins}).transform,null,"reshuffle","Tablesre-optimised.",function(){flash("unmoved");});');
+    expect(flat).toContain('saveMove(plan.transform,null,"reshuffle",plan.done,function(){flash("unmoved");});');
   });
   it("a sentence replaces the pill's label and leaves its note empty", () => {
     expect(flat).toContain('note:label?"":note,label:label||""');

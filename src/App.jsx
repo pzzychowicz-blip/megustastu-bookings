@@ -109,7 +109,7 @@ import { nextFreeAfter } from "./lib/cell-offer";
 // v18.16.0: a moved booking's new time is drafted for a WhatsApp guest
 // (`saveMove`, `doSaveEdit`). The hook already brings this module into the entry.
 import { movedSlot, movedReplyWords } from "./lib/whatsapp";
-import { planAssign, planReassign, planReshuffle, planUnlock, swapSlot, liveSwap } from "./lib/manual-assign";
+import { planAssign, planReassign, planReshuffle, planUnlock, lockedOn, swapSlot, liveSwap } from "./lib/manual-assign";
 import { planStatus, planCancel, completeCleared, seatClashSnap } from "./lib/status-change";
 import { appBannerSections } from "./components/AppBanners";
 import { NotificationStrip } from "./components/NotificationStrip";
@@ -2459,7 +2459,10 @@ export function BookingApp({uid}){
   // the toast still answers the press.
   // v18.17.0 (D): WHAT it writes is `planReshuffle` (lib/manual-assign.js), which
   // reads the day as it stands now: a seated party running over keeps its table.
-  function forceReshuffle(){saveMove(planReshuffle({viewDate:viewDate,tableBlocks:tableBlocks,today:today,nowMins:nowMins}).transform,null,"reshuffle","Tables re-optimised.",function(){flash("unmoved");});}
+  // (B): `unlock` is the confirm's second button, "Reshuffle and unlock N": the
+  // day's locked, unseated bookings are handed back first. Only the literal true,
+  // so Enter on the confirm (`K.forceReshuffle()`) is the plain one.
+  function forceReshuffle(unlock){const plan=planReshuffle({viewDate:viewDate,tableBlocks:tableBlocks,today:today,nowMins:nowMins,unlock:unlock===true,bookings:bookings,user:getUser()});saveMove(plan.transform,null,"reshuffle",plan.done,function(){flash("unmoved");});}
   // v18.5.1 (#17): the Overlap banner's Reassign. WHICH tables, and the four
   // refusals, are `planReassign` (lib/manual-assign.js).
   function reassignBooking(id){
@@ -3143,6 +3146,9 @@ export function BookingApp({uid}){
   //    the row banners (Overlap / Late / WaitAvail / reminders) were already
   //    components. All STATE stays here (the Phase D3 locked decision — only
   //    rendering moved). See CLAUDE.md "Notification layout".
+  // v18.17.0 (B): how many of the viewed day's bookings a plain Reshuffle will
+  // leave where they are, for the confirm. Asked only while it is open.
+  const reshuffleLocked=confirmReshuffle?lockedOn(bookings,viewDate):0;
   const ineffShow=!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer)&&bookingDefaults.reshuffleSuggestEnabled;
   // Overlap warnings banner — shows when one or more seated guests are overstaying
   // into the start time of a booking on the same table (one-tap Reassign per row).
@@ -4362,13 +4368,16 @@ export function BookingApp({uid}){
               const amt=v&&v.redemptions&&v.redemptions[voucherBack.id]?v.redemptions[voucherBack.id].amount:0;
               const why=voucherBack.from==="delete"?"You are deleting this booking":"You are moving it back out of Completed";
               return "This visit redeemed "+money(amt,generalSettings.currency)+" of voucher "+formatCode(v?v.code:"")+". "+why+" — restore that amount to the voucher, or keep it redeemed?";
-            })()}</div><div style={{fontSize: T.small,color:S.sub}}>{voucherBack.from==="delete"?"Restoring puts the balance back. Keeping it redeemed leaves the amount spent against a booking that will no longer exist. The booking is deleted either way.":"Restoring puts the balance back and removes this visit from the voucher’s history. Keeping it redeemed leaves the record as it is."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!seatNote}>{seatNote?<SeatNoteModal note={seatNote} onClose={function(){setSeatNote(null);}} />:null}</ModalPresence><ModalPresence show={!!seatClash}>{seatClash?<SeatClashModal clash={seatClash} onComplete={seatAfterClearing} onAnyway={seatAnyway} onBack={function(){setSeatClash(null);}} />:null}</ModalPresence><ModalPresence show={!!voucherCarry}>{voucherCarry?<VoucherCarryModal carry={voucherCarry} currency={generalSettings.currency} onMove={doVoucherCarry} onNotNow={function(){setVoucherCarry(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+            })()}</div><div style={{fontSize: T.small,color:S.sub}}>{voucherBack.from==="delete"?"Restoring puts the balance back. Keeping it redeemed leaves the amount spent against a booking that will no longer exist. The booking is deleted either way.":"Restoring puts the balance back and removes this visit from the voucher’s history. Keeping it redeemed leaves the record as it is."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!seatNote}>{seatNote?<SeatNoteModal note={seatNote} onClose={function(){setSeatNote(null);}} />:null}</ModalPresence><ModalPresence show={!!seatClash}>{seatClash?<SeatClashModal clash={seatClash} onComplete={seatAfterClearing} onAnyway={seatAnyway} onBack={function(){setSeatClash(null);}} />:null}</ModalPresence><ModalPresence show={!!voucherCarry}>{voucherCarry?<VoucherCarryModal carry={voucherCarry} currency={generalSettings.currency} onMove={doVoucherCarry} onNotNow={function(){setVoucherCarry(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height its sentences and buttons are set when it opens and it is up for one decision */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
-              onClick={function(){setConfirmReshuffle(false);}}>Back</button><button
+              onClick={function(){setConfirmReshuffle(false);}}>Back</button>{/* v18.17.0 (B): offered only when the day has locks to take off. */}{reshuffleLocked>0?<button
+              onClick={function(){if(!armSettled())return;setConfirmReshuffle(false);forceReshuffle(true);}}
+              className="mgt-hover-scale"
+              style={mkSolidBtn(BTN.orange)}>{"Reshuffle and unlock "+reshuffleLocked}</button>:null}<button
               onClick={function(){if(!armSettled())return;setConfirmReshuffle(false);forceReshuffle();}}
               className="mgt-hover-scale"
-              style={mkSolidBtn(BTN.orange)}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div></Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
+              style={mkSolidBtn(BTN.orange)}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:reshuffleLocked>0?8:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div>{reshuffleLocked>0?<div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{countLabel(reshuffleLocked,"booking is locked","bookings are locked")+" to tables. Reshuffle does not move a locked booking, unless you unlock it here."}</div>:null}</Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.

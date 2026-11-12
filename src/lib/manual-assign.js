@@ -145,18 +145,36 @@ export function planReassign(ctx){
 // says: that is what the button is for, and it is only offered while the switch
 // is off.
 //
-//   planReshuffle(ctx) → { transform }
-//   ctx: {viewDate, tableBlocks, today, nowMins}
+//   planReshuffle(ctx) → { transform, done }
+//   ctx: {viewDate, tableBlocks, today, nowMins, unlock?, bookings?, user?, stamp?}
 //
 // It was `applyOpt(list, viewDate, tableBlocks)` written out in App, the one
 // path to the optimiser that did not go through `syncLiveDurations` first. A
 // seated party past its booked end still holds its table, its stored end says it
 // left, and the pass could seat the next party there. The button shows during
 // service, which is when somebody is running over.
+//
+// `unlock: true` is "Reshuffle and unlock N": every booking of the day that
+// Unlock is offered for (`unlockOffered`: locked, confirmed or pending) is
+// handed back first, so the pass may move it. A plain Reshuffle keeps every
+// lock, as it always has. Seated parties are never unlocked: the optimiser
+// holds them by their status, with no flag to clear. `lockedOn` is the N, and
+// `done` says it (`ctx.bookings` is read only for that count).
+export function lockedOn(list,date){
+  return (list||[]).filter(function(b){return !!b&&b.date===date&&unlockOffered(b);}).length;
+}
 export function planReshuffle(ctx){
-  const viewDate=ctx.viewDate,tableBlocks=ctx.tableBlocks,today=ctx.today,nowMins=ctx.nowMins;
-  return {transform:function(list){
-    return applyOpt(syncLiveDurations(list,today,nowMins),viewDate,tableBlocks);
+  const viewDate=ctx.viewDate,tableBlocks=ctx.tableBlocks,today=ctx.today,nowMins=ctx.nowMins,user=ctx.user;
+  const unlock=ctx.unlock===true;
+  const histEntry=ctx.stamp||defaultHistEntry;
+  const n=unlock?lockedOn(ctx.bookings,viewDate):0;
+  return {done:n>0?"Tables re-optimised, "+n+" unlocked.":"Tables re-optimised.",transform:function(list){
+    const synced=syncLiveDurations(list,today,nowMins);
+    const base=!unlock?synced:synced.map(function(b){
+      if(!b||b.date!==viewDate||!unlockOffered(b)) return b;
+      return Object.assign({},releaseSwapped(b,[{id:b.id,tables:[]}]),{history:(b.history||[]).concat([histEntry("unlocked by Reshuffle",user)])});
+    });
+    return applyOpt(base,viewDate,tableBlocks);
   }};
 }
 
