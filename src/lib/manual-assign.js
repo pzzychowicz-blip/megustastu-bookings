@@ -30,7 +30,7 @@
 //
 // `stamp(action, user)` builds a history entry. App passes nothing and gets
 // `histEntry`; a test passes its own so the result has no clock in it.
-import { bookingsAfterAction, histEntry as defaultHistEntry, isLocked, toMins, findFreeSlot } from "./booking-logic.js";
+import { bookingsAfterAction, histEntry as defaultHistEntry, isLocked, toMins, findFreeSlot, applyOpt, syncLiveDurations } from "./booking-logic.js";
 import { releaseSwapped } from "./booking-save.js";
 import { getDur } from "./booking-fields.js";
 import { moveSentence } from "./delete-undo.js";
@@ -140,3 +140,22 @@ export function planReassign(ctx){
   });}};
 }
 
+// ── planReshuffle: the Reshuffle button (v18.17.0) ───────────────────────────
+// A full optimiser pass over the day on screen, whatever the Optimiser switch
+// says: that is what the button is for, and it is only offered while the switch
+// is off.
+//
+//   planReshuffle(ctx) → { transform }
+//   ctx: {viewDate, tableBlocks, today, nowMins}
+//
+// It was `applyOpt(list, viewDate, tableBlocks)` written out in App, the one
+// path to the optimiser that did not go through `syncLiveDurations` first. A
+// seated party past its booked end still holds its table, its stored end says it
+// left, and the pass could seat the next party there. The button shows during
+// service, which is when somebody is running over.
+export function planReshuffle(ctx){
+  const viewDate=ctx.viewDate,tableBlocks=ctx.tableBlocks,today=ctx.today,nowMins=ctx.nowMins;
+  return {transform:function(list){
+    return applyOpt(syncLiveDurations(list,today,nowMins),viewDate,tableBlocks);
+  }};
+}

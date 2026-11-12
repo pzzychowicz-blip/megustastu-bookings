@@ -7,7 +7,7 @@
 // needs the old code. These are the cases that stay: one per outcome, each
 // asserting what is WRITTEN.
 import { describe, it, expect } from "vitest";
-import { planAssign, planReassign, swapSlot, liveSwap } from "../src/lib/manual-assign.js";
+import { planAssign, planReassign, planReshuffle, swapSlot, liveSwap } from "../src/lib/manual-assign.js";
 import { todayStr, addDays } from "../src/lib/day.js";
 import { appCode } from "./app-source.js";
 
@@ -286,3 +286,38 @@ describe("App's reassignBooking is the plan and its three effects", () => {
   });
 });
 
+
+// ── v18.17.0 (D): Reshuffle reads the day as it stands NOW ───────────────────
+// `forceReshuffle` ran `applyOpt` on the stored list, the one path that skipped
+// `syncLiveDurations`. A seated party past its booked end still holds its table,
+// and its stored end said the table was free.
+describe("planReshuffle: a seated party running over", () => {
+  // The table the optimiser gives a lone party of 2, so the test names no table.
+  const lone = planReshuffle({ viewDate: TODAY, tableBlocks: [], today: TODAY, nowMins: 13 * 60 })
+    .transform([bk("x", "15:15", 2, [], { date: TODAY })]);
+  const T = byId(lone, "x").tables;
+  const list = [
+    bk("sat", "13:00", 2, T, { date: TODAY, status: "seated" }),   // booked to 14:30
+    bk("next", "15:15", 2, [], { date: TODAY }),
+  ];
+
+  it("the lone party's table is known", () => {
+    expect(T.length).toBeGreaterThan(0);
+  });
+
+  it("does not seat the next party on a table somebody is still sitting at", () => {
+    const out = planReshuffle({ viewDate: TODAY, tableBlocks: [], today: TODAY, nowMins: 15 * 60 + 20 }).transform(list);
+    const next = byId(out, "next").tables;
+    expect(next.length).toBeGreaterThan(0);
+    expect(next.some((t) => T.includes(t)), "next was given " + next.join("+")).toBe(false);
+  });
+
+  it("and does once the party has really gone by then", () => {
+    const out = planReshuffle({ viewDate: TODAY, tableBlocks: [], today: TODAY, nowMins: 14 * 60 }).transform(list);
+    expect(byId(out, "next").tables).toEqual(T);
+  });
+
+  it("App's Reshuffle is this plan, through saveMove", () => {
+    expect(appCode()).toMatch(/function forceReshuffle\(\)\{saveMove\(planReshuffle\(/);
+  });
+});

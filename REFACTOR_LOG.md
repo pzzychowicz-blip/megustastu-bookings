@@ -40959,3 +40959,25 @@ He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the 
   reported: the composer's `windowOpen` and the chip's `windowState` agree at the boundary (`> now` against `<= now`), and the
   React Compiler is lint-only here (nothing in `vite.config.js`), so a `Date.now()` behind a call in render is not memoised away;
   `patchConversation`'s loaded guard cannot refuse a bring-back, because `movedReplyPlan` finds no conversation before the first read.
+
+## v18.17.0 — a lock that can be taken off, and four Optimiser and drag fixes
+
+**Date:** 2026-11-12 · **Branch:** `feat/v18.17.0-unlock-and-optimiser-fixes`
+
+**Why:** Patryk asked for a review of the Optimiser and of drag-and-drop, and in particular of the lock a table drag leaves on a booking
+(the review, with the decisions he made in two rounds of questions: `/Users/patrykzychowicz/.claude/plans/analyze-the-entire-optimizer-sleepy-ullman.md`).
+The review's opinion: the lock is needed, because on a day the Optimiser owns the next save would undo the drag, and so would Reshuffle during
+service; but nothing ever took it off except the edit form's Clear. Reading the code also found four defects. **Behavioural change: yes**, each
+commit below. Nothing stored changes shape, so `SCHEMA` stays and no rule moves.
+
+### Commit 1 (D) — Reshuffle reads the day as it stands now
+
+- **`planReshuffle(ctx)`** (`lib/manual-assign.js`) is what the Reshuffle button writes: `applyOpt` over `syncLiveDurations(list, today, nowMins)`.
+  App's `forceReshuffle` wrote `applyOpt(list, viewDate, tableBlocks)` itself, the one path to the optimiser that skipped the live-duration sync
+  (every other one goes through `bookingsAfterAction`). A seated party past its booked end still holds its table while its stored end says it has
+  left, so the pass could seat the next party there. The button is only offered while the Optimiser is off, which is during service.
+- **Reproduced before the fix**: with the sync taken out, `tests/manual-assign.test.js` fails with "next was given 1", the table a party seated
+  at 13:00 for 90 minutes was still at when Reshuffle ran at 15:20.
+
+`tests/manual-assign.test.js` (the party running over keeps its table; a party that has left by then frees it; App's Reshuffle is the plan).
+

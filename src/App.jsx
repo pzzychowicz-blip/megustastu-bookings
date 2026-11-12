@@ -36,7 +36,6 @@ import {
   histEntry,
   statusOrder,
   getKitchenLoad,
-  applyOpt,
   optimizerActiveFor, syncLiveDurations, bookingsAfterAction,
   checkInefficent, findClashes, clashRowId,
   nowTime, newBookingTime,
@@ -110,7 +109,7 @@ import { nextFreeAfter } from "./lib/cell-offer";
 // v18.16.0: a moved booking's new time is drafted for a WhatsApp guest
 // (`saveMove`, `doSaveEdit`). The hook already brings this module into the entry.
 import { movedSlot, movedReplyWords } from "./lib/whatsapp";
-import { planAssign, planReassign, swapSlot, liveSwap } from "./lib/manual-assign";
+import { planAssign, planReassign, planReshuffle, swapSlot, liveSwap } from "./lib/manual-assign";
 import { planStatus, planCancel, completeCleared, seatClashSnap } from "./lib/status-change";
 import { appBannerSections } from "./components/AppBanners";
 import { NotificationStrip } from "./components/NotificationStrip";
@@ -457,7 +456,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.16.0"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.17.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -2458,7 +2457,9 @@ export function BookingApp({uid}){
 
   // v18.14.0 (H5): undoable, through `saveMove`. Nothing moved means no pill, so
   // the toast still answers the press.
-  function forceReshuffle(){saveMove(function(b){return applyOpt(b,viewDate,tableBlocks);},null,"reshuffle","Tables re-optimised.",function(){flash("unmoved");});}
+  // v18.17.0 (D): WHAT it writes is `planReshuffle` (lib/manual-assign.js), which
+  // reads the day as it stands now: a seated party running over keeps its table.
+  function forceReshuffle(){saveMove(planReshuffle({viewDate:viewDate,tableBlocks:tableBlocks,today:today,nowMins:nowMins}).transform,null,"reshuffle","Tables re-optimised.",function(){flash("unmoved");});}
   // v18.5.1 (#17): the Overlap banner's Reassign. WHICH tables, and the four
   // refusals, are `planReassign` (lib/manual-assign.js).
   function reassignBooking(id){
