@@ -57,6 +57,7 @@ import { WaitIcon, ClashIcon, AssignIcon, StatusIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
 import { pulse } from "../lib/haptics";
+import { dragHoldMs } from "../lib/drag-hold";
 import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail, twoLineBlock } from "../lib/block-layout";
@@ -737,6 +738,8 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     dragRef.current = { y0: e.clientY, x0: e.clientX, pid: e.pointerId, el: e.currentTarget, active: false, axis: null };
     if (e.pointerType !== "mouse") {
       clearTimeout(dragHoldTimer.current);
+      // v18.17.0 (H): how long the hold is, is this device's choice, read as the
+      // timer is set (`lib/drag-hold.js`): Short 600, Normal 800, Long 1000.
       dragHoldTimer.current = setTimeout(() => {
         const d = dragRef.current;
         if (!d || d.active) return;
@@ -760,7 +763,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         // The page is held still by the block's own non-passive touchmove
         // listener (the effect above), which acts from this moment: `active`.
         kickEdge();                        // v18.3.1 (A5): armed while already in the band
-      }, 800);
+      }, dragHoldMs());
     }
   }
   function onDragPointerMove(e) {
@@ -897,7 +900,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     if (dx > 8 || dy > 8) {
       clearTimeout(pressTimer.current);
       pressTimer.current = null;
-      // moving before the 800ms drag-hold fires = a scroll, not a drag
+      // moving before the drag-hold fires (dragHoldMs) = a scroll, not a drag
       if (!(dragRef.current && dragRef.current.active)) clearTimeout(dragHoldTimer.current);
     }
   }

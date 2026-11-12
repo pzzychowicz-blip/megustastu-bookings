@@ -31,7 +31,7 @@ import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
 import { FoldRows } from "./FoldRows";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, InlineAlert, ALERT_TONES, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE, textWidth, CountBadge } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, InlineAlert, ALERT_TONES, mkBtn, mkInp, mkStep, useOverlayScroll, SEG_TRACK, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE, textWidth, CountBadge } from "./atoms";
 import { connectionLines } from "../lib/wa-coexist";
 import { useIntegrationStatus } from "../hooks/useIntegrationStatus";
 import { useWaUsage } from "../hooks/useWaUsage";
@@ -74,6 +74,7 @@ import { SETTINGS_TABS, visibleTabs } from "./SettingsChrome";
 import { AdminTabContent } from "./AdminSettings";
 import { hourLabel } from "../lib/time-grid";
 import { canVibrate } from "../lib/haptics";
+import { DRAG_HOLDS } from "../lib/drag-hold";
 import { splitExceptions, rangeLabel, specialHoursLabel } from "../lib/special-days";
 import { waAutoReplyOn, AUTO_ACK_TEXT } from "../lib/whatsapp";
 import { markArmed, armSettled } from "../lib/arm-guard";
@@ -485,7 +486,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
 // where noted" is a statement about exactly these controls (the two marked
 // "This device only" are the exceptions it names). Left behind in General it
 // would have been a rule with nothing to govern.
-export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggleAutoTheme = () => {}, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, swEnabled = true, onToggleSw = () => {}, planGestures = true, onTogglePlanGestures = () => {}, planAvail = true, onTogglePlanAvail = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {}, largeText = false, onToggleLargeText = () => {}, indoorTint = true, onToggleIndoorTint = () => {}, cellBook = true, onToggleCellBook = () => {}, vibrateOnDrag = true, onToggleVibrate = () => {} }) {
+export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggleAutoTheme = () => {}, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, swEnabled = true, onToggleSw = () => {}, planGestures = true, onTogglePlanGestures = () => {}, planAvail = true, onTogglePlanAvail = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {}, largeText = false, onToggleLargeText = () => {}, indoorTint = true, onToggleIndoorTint = () => {}, cellBook = true, onToggleCellBook = () => {}, vibrateOnDrag = true, onToggleVibrate = () => {}, dragHold = "normal", onSetDragHold = () => {} }) {
   const tl = tlSettings && typeof tlSettings === "object"
     ? tlSettings : { followZoom: 4, defaultZoom: 1, followLead: 30, maxZoom: 5 };
   return (
@@ -627,7 +628,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
           <div style={{ textAlign: "left", marginBottom: 10 }}>
             <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Timeline</div>
             <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
-              This device only. Text size, row tint, booking from a cell, vibration, zoom and Follow behaviour of the timeline.
+              This device only. Text size, row tint, booking from a cell, vibration, drag hold, zoom and Follow behaviour of the timeline.
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -674,6 +675,28 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
                 <Toggle label="Vibrate on drag" on={vibrateOnDrag} onClick={onToggleVibrate} />
               </div>
             ) : null}
+            {/* v18.17.0 (H): per device, like its neighbours (lib/drag-hold.js).
+                A choice of three named values, so the app's one segmented
+                look (SEG_TRACK / segStyle) with `aria-pressed`, as the zone
+                segment and the Print chooser. */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ textAlign: "left", flex: "1 1 200px" }}>
+                <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)" }}>Drag hold</div>
+                <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
+                  How long a finger holds a block on the Timeline before it lifts to be moved. The status card still opens first.
+                </div>
+              </div>
+              <div role="group" aria-label="Drag hold" style={{ ...SEG_TRACK, flexShrink: 0 }}>
+                {DRAG_HOLDS.map(function (h) {
+                  const on = dragHold === h.id;
+                  return (
+                    <button key={h.id} className="mgt-hover-scale" aria-pressed={on}
+                      onClick={function () { if (!on) onSetDragHold(h.id); }}
+                      style={{ ...segStyle(on), padding: "2px 12px", minHeight: H.chip }}>{h.label}</button>
+                  );
+                })}
+              </div>
+            </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Zoom when opening the app</div>
               <MiniStepper label="zoom when opening the app" value={tl.defaultZoom} fmt={(v) => v + "×"}
@@ -1596,6 +1619,8 @@ export function SettingsContent({
   onToggleCellBook,
   vibrateOnDrag,
   onToggleVibrate,
+  dragHold,
+  onSetDragHold,
   weekHours,
   onSaveDayHours,
   onSaveAllDays,
@@ -1731,7 +1756,7 @@ export function SettingsContent({
       onOpenCapabilities={onOpenCapabilities} onOpenActivity={onOpenActivity} newCrashes={newCrashes} moreCrashes={moreCrashes} retentionDays={activityRetentionDays} onSetRetention={onSetActivityRetention}
       waRetentionDays={waRetentionDays} onSetWaRetention={onSetWaRetention} />;
   } else if (cur === "app") {
-    content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} planAvail={planAvail} onTogglePlanAvail={onTogglePlanAvail} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} largeText={largeText} onToggleLargeText={onToggleLargeText} indoorTint={indoorTint} onToggleIndoorTint={onToggleIndoorTint} cellBook={cellBook} onToggleCellBook={onToggleCellBook} vibrateOnDrag={vibrateOnDrag} onToggleVibrate={onToggleVibrate} />;
+    content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} planAvail={planAvail} onTogglePlanAvail={onTogglePlanAvail} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} largeText={largeText} onToggleLargeText={onToggleLargeText} indoorTint={indoorTint} onToggleIndoorTint={onToggleIndoorTint} cellBook={cellBook} onToggleCellBook={onToggleCellBook} vibrateOnDrag={vibrateOnDrag} onToggleVibrate={onToggleVibrate} dragHold={dragHold} onSetDragHold={onSetDragHold} />;
   } else if (cur === "general") {
     content = <GeneralTabContent can={can} appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} exceptions={exceptions} onOpenSpecialDay={onOpenSpecialDay} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} backupStatus={backupStatus} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
   } else if (cur === "layout") {

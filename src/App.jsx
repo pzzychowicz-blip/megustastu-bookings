@@ -1486,6 +1486,7 @@ export function BookingApp({uid}){
     indoorTint,onToggleIndoorTint,
     cellBook,onToggleCellBook,
     vibrateOnDrag,onToggleVibrate,
+    dragHold,onSetDragHold,
     split,focusedPane,setFocusedPane,applySplit,fitTimeline,
     confirmSplit,swapSides,toggleSplitDir,exitSplit,setSplitRatio,
     splitSideBySideOk,shellFixed,
@@ -4415,6 +4416,8 @@ export function BookingApp({uid}){
             onToggleCellBook={onToggleCellBook}
             vibrateOnDrag={vibrateOnDrag}
             onToggleVibrate={onToggleVibrate}
+            dragHold={dragHold}
+            onSetDragHold={onSetDragHold}
             weekHours={weekHours}
             onSaveDayHours={function(i,p){if(refused("hoursEdit"))return;saveDayHours(i,p);}}
             onSaveAllDays={function(d){if(refused("hoursEdit"))return;saveAllDays(d);}}

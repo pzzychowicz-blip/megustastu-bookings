@@ -41075,3 +41075,21 @@ never a seated party or another day's booking; only the literal true; the confir
 `tests/manual-assign.test.js` (a locked booking moved and kept locked; a lock taken off before the replay stays off; seated still refused). Both
 new cases failed before the change.
 
+### Commit 8 (H) — Drag hold, a choice for this device
+
+- **Settings → App → Timeline → Drag hold: Short · Normal · Long** (600 · 800 · 1000ms), how long a finger holds a Timeline block before it lifts
+  to be moved. It was a fixed 800ms, and with wet hands on the tablet that is a long hold; how long is too long is a question for the hand on
+  the device, so Patryk made it a device setting (2026-11-12). The status card still opens at 400ms, so every choice leaves the card a moment
+  first. A mouse drag starts on movement and never waits.
+- **`lib/drag-hold.js`**, the Vibrate-on-drag pattern (`lib/haptics.js`): per device in `localStorage`, Normal the default, so only another
+  value is stored (`mgt-tl-drag-hold`); an unknown value reads as Normal and a blocked storage never throws. `TimelineBlock` reads
+  `dragHoldMs()` as it sets the timer, so no prop reaches a block. `useShellPrefs` holds `dragHold` / `onSetDragHold` for Settings only.
+- **The control is a three-way segment** (`SEG_TRACK` / `segStyle`, `aria-pressed`, a group named "Drag hold"), the app's one segmented look,
+  as the zone segment and the Print chooser use it.
+- **Measured on DEV**: the segment showed Normal pressed with nothing stored; Long stored `"long"`. A `pointerdown` (touch) on a block, with
+  `setTimeout` recorded, set the arm timer at 1000, 600 and 800ms for Long, Short and Normal in turn, with no reload between. Not checked
+  under a finger on the tablet, which is the point of the setting.
+
+`tests/drag-hold.test.js` (the three values and the default; stored only when not Normal; unknown and blocked read as Normal; every hold above
+the card's 400; the block reads it at the timer and no 800 is left; the card's 400 untouched; per device; the Settings group).
+
