@@ -30,7 +30,7 @@
 //
 // `stamp(action, user)` builds a history entry. App passes nothing and gets
 // `histEntry`; a test passes its own so the result has no clock in it.
-import { bookingsAfterAction, histEntry as defaultHistEntry, isLocked, toMins, findFreeSlot, applyOpt, syncLiveDurations, unlockOffered } from "./booking-logic.js";
+import { bookingsAfterAction, histEntry as defaultHistEntry, toMins, findFreeSlot, applyOpt, syncLiveDurations, unlockOffered } from "./booking-logic.js";
 import { releaseSwapped } from "./booking-save.js";
 import { getDur } from "./booking-fields.js";
 import { moveSentence } from "./delete-undo.js";
@@ -85,7 +85,8 @@ export function planAssign(ctx){
 // Reassign a single booking to a different set of tables without touching any
 // other booking. Used by the overlap warning's Reassign button when Optimizer
 // is OFF and staff need a quick escape hatch for a booking about to be crowded
-// out by an overstaying guest. Skips locked bookings (manual intent preserved).
+// out by an overstaying guest. Refuses a seated party; a locked one is moved and
+// stays locked on its new tables (v18.17.0, C).
 // v14: feeds liveBookings into findFreeSlot so already-overstaying seated
 // guests' tables are correctly treated as occupied.
 // v14 p1 (Issue 1 fix): ALSO transiently extends the duration of any seated
@@ -101,7 +102,10 @@ export function planReassign(ctx){
   const histEntry=ctx.stamp||defaultHistEntry;
   const target=bookings.find(function(b){return b.id===id;});
   if(!target) return {refuse:"Booking not found."};
-  if(isLocked(target)) return {refuse:"Booking is manually locked. Edit manually to change tables."};
+  // v18.17.0 (C): only a SEATED party is refused. A `_locked` one (a drag, an
+  // Assign) is moved and keeps its lock on the new tables (Patryk, 2026-11-12):
+  // somebody placed it on purpose, and the rescue changes the table, not that.
+  if(target.status==="seated") return {refuse:"Booking is manually locked. Edit manually to change tables."};
   const targetStart=toMins(target.time);
   const targetEnd=targetStart+(target.duration||90);
   // Build a search-view where any seated booking sharing tables with THIS
@@ -136,7 +140,10 @@ export function planReassign(ctx){
   const user=ctx.getUser();
   return {transform:function(prev){return prev.map(function(b){
     if(b.id!==id) return b;
-    return Object.assign({},b,{tables:tables,_manual:false,_conflict:false,history:(b.history||[]).concat([histEntry("reassigned "+prevTables+" → "+tables.join("+"),user)])});
+    // (C): the lock is read off the row being written, not the plan's snapshot,
+    // so a lock taken off on another device before a replay is not put back.
+    const keep=b._locked===true;
+    return Object.assign({},b,{tables:tables,_manual:keep?b._manual:false,_conflict:false,history:(b.history||[]).concat([histEntry("reassigned "+prevTables+" → "+tables.join("+"),user)])});
   });}};
 }
 

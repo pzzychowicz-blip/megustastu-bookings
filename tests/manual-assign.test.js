@@ -231,14 +231,33 @@ describe("planReassign", () => {
     const list = [bk("a", "20:00", 2, [])];
     expect(byId(re("a", list).transform(list), "a").history[0].action).toMatch(/^reassigned none → /);
   });
-  it("refuses a booking that is not there, and one that is locked or seated, without asking who", () => {
+  it("refuses a booking that is not there, and a seated one, without asking who", () => {
     asked.length = 0;
     expect(re("gone", [])).toEqual({ refuse: "Booking not found." });
-    const locked = [bk("a", "20:00", 2, ["3"], { _locked: true })];
-    expect(re("a", locked)).toEqual({ refuse: "Booking is manually locked. Edit manually to change tables." });
     const seated = [bk("a", "20:00", 2, ["3"], { status: "seated" })];
     expect(re("a", seated).refuse).toBe("Booking is manually locked. Edit manually to change tables.");
+    const seatedLocked = [bk("a", "20:00", 2, ["3"], { status: "seated", _locked: true, _manual: true })];
+    expect(re("a", seatedLocked).refuse).toBe("Booking is manually locked. Edit manually to change tables.");
     expect(asked).toEqual([]);
+  });
+  // v18.17.0 (C): a locked booking is moved, and stays locked on its new tables
+  // (Patryk, 2026-11-12). Somebody put it there on purpose; the rescue changes
+  // the table, not that decision.
+  it("moves a locked booking and keeps it locked, with the same history line", () => {
+    const list = [bk("a", "20:00", 2, ["3"], { _locked: true, _manual: true, _conflict: true }), bk("b", "20:00", 2, ["4"])];
+    const plan = re("a", list);
+    expect(plan.refuse).toBe(undefined);
+    const a = byId(plan.transform(list), "a");
+    expect(a.tables).not.toEqual(["3"]);
+    expect(a.tables).not.toContain("4");
+    expect([a._locked, a._manual, a._conflict]).toEqual([true, true, false]);
+    expect(a.history).toEqual([{ action: "reassigned 3 → " + a.tables.join("+"), by: "u@x" }]);
+  });
+  it("a lock taken off elsewhere before the replay is not put back", () => {
+    const list = [bk("a", "20:00", 2, ["3"], { _locked: true, _manual: true })];
+    const plan = re("a", list);
+    const fresh = [bk("a", "20:00", 2, ["3"], { _locked: false, _manual: false })];
+    expect(byId(plan.transform(fresh), "a")).toMatchObject({ _locked: false, _manual: false });
   });
   it("refuses by name when every other table is taken", () => {
     const ids = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];

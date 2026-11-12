@@ -92,7 +92,7 @@ however many fire — that is the whole point of it.
 | "⧉2 ⏳1" on the right | **tally** | Icon + count per live section. Stays visible when the strip opens. |
 | "+2 more" | **overflow count** | How many sections the collapsed lid isn't naming. |
 | Amber "Running late" rows | **Running late** section (`LateBanner.jsx`) | Confirmed bookings past their time today. Offers No show. |
-| Amber "Overlap warnings" rows | **Overlap warnings** section (`OverlapBanner.jsx`) | A **seated** party overstaying into the next booking. A prediction. |
+| Amber "Overlap warnings" rows | **Overlap warnings** section (`OverlapBanner.jsx`) | A **seated** party overstaying into the next booking. A prediction. Its Reassign (`planReassign`) moves the next booking alone; since v18.17.0 a locked one is moved too and keeps its lock on the new tables. |
 | Red "Double-booked" / "Double-bookings" rows | **clash** section (`ClashBanner.jsx`, `findClashes`) | Two bookings genuinely on one table. **Not** an overlap warning — the schedule is already wrong. Offers Assign. |
 | Red "Not on the grid" rows, dashed-square mark | **Not on the grid** section (`UnplacedBanner.jsx`, `UnplacedIcon`, `unplacedOf`) | v18.2.0. Every booking in the timeline's **Unplaced row**, one row each, saying why (no table · a table the layout does not have · an optimiser conflict). Offers Assign. No ✕: it clears itself when the booking is placed. |
 | Green "Waitlist — table free" rows | **waitlist availability** section (`WaitAvailBanner.jsx`) | A waiting party a table now fits. Offers Book. |

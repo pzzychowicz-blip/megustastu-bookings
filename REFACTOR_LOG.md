@@ -41059,3 +41059,19 @@ without the booking; the three mounts and App's handler).
 `tests/manual-assign.test.js` (the count; a plain Reshuffle keeps every lock; with unlock, handed back and placed again with its history line;
 never a seated party or another day's booking; only the literal true; the confirm's two buttons and their guard).
 
+### Commit 7 (C) — Reassign moves a locked booking and keeps it locked
+
+- **`planReassign`** (`lib/manual-assign.js`) refuses only a seated party now. A `_locked` booking (a drag, an Assign) used to be refused with
+  "Booking is manually locked. Edit manually to change tables.", so a party dragged at 19:00 lost the banner's one-tap rescue when a neighbour
+  ran over at 20:30. Patryk's decision of 2026-11-12: move it, and keep it locked on the new tables, since somebody placed it on purpose and the
+  rescue changes the table, not that decision.
+- **The lock is read off the row the transform writes**, not off the plan's snapshot: a lock taken off on another device before a replay is not
+  put back. An unlocked booking is written as before (`_manual: false`). The history line is unchanged ("reassigned 13 → 1"). ClashBanner's
+  action stays Assign.
+- **Measured on DEV** (today, Optimiser off): Lock Test locked on 13 at 21:30, a seated party staged on 13 from 20:00 and running over; the
+  Overlap row read "Overlap Test (overstaying) → Lock Test at 21:30 — overdue". Reassign Lock Test: stored `tables: ["1"]`, `_locked: true`,
+  `_manual: true`, history "reassigned 13 → 1", and the Overlap row was gone.
+
+`tests/manual-assign.test.js` (a locked booking moved and kept locked; a lock taken off before the replay stays off; seated still refused). Both
+new cases failed before the change.
+
