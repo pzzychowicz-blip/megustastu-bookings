@@ -41009,3 +41009,16 @@ commit below. Nothing stored changes shape, so `SCHEMA` stays and no rule moves.
   table. The plan said "any row the booking already holds"; this is narrower, so that shrinking a party onto one of its tables keeps working.
 
 `tests/drop-plan.test.js` (nothing to do, in either stored order, with no preview; the shrink still moves). Both new cases failed before the fix.
+
+### Commit 4 (G) — Escape puts a lifted block back
+
+- **`armEscape` / `disarmEscape`** (`TimelineBlock`, `TimelineView.jsx`): a `keydown` listener on `window`, capture phase, that lives only while a
+  drag is armed. Escape releases the pointer capture and runs `endDrag(null, false)`, the teardown with no dispatch, and stops the key so
+  `useKeyboardShortcuts`' own Escape (which also drops the List's selection) does not run. `endDrag` takes the listener off on every way out, and
+  so does the unmount cleanup. Both drags, the table drag and the time drag, since both end in `endDrag`.
+- **Measured on DEV** with pointer events dispatched from a script, paced across frames (not a real mouse, so the feel is not claimed): a block
+  lifted 89px towards row 3, Escape, release over row 3: the block is on row 1 with no transform, nothing written, and a bubble-phase `keydown`
+  probe on `window` saw no Escape. The control, the same drag without Escape: "Esc Test moved to 3." with its Undo.
+
+`tests/timeline-drag.test.js` (armed with the drag, off on every way out and at unmount; capture phase; no drop).
+

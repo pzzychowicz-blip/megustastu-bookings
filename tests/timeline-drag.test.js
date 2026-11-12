@@ -248,3 +248,26 @@ describe("the time drag", () => {
     } finally { if (win === undefined) delete globalThis.window; else globalThis.window = win; }
   });
 });
+
+// v18.17.0 (G): Escape calls a drag off.
+describe("Escape puts a lifted block back", () => {
+  const arm = Timeline.slice(Timeline.indexOf("function armEscape("), Timeline.indexOf("function onDragPointerDown("));
+  it("is armed with the drag and taken off on every way out of it", () => {
+    expect(Timeline).toMatch(/try \{ el\.setPointerCapture\(pid\); \} catch \{[^}]*\}\s+armEscape\(\);/);
+    expect(Timeline).toMatch(/function endDrag\(e, commit\) \{\s+disarmEscape\(\);/);
+    expect(Timeline, "and at unmount").toContain('if (escRef.current) { window.removeEventListener("keydown", escRef.current, true); escRef.current = null; }');
+  });
+  it("listens in the capture phase and keeps the key from the app's own Escape", () => {
+    expect(arm).toContain('window.addEventListener("keydown", onKey, true);');
+    expect(arm).toContain('if (ev.key !== "Escape") return;');
+    expect(arm).toContain("ev.stopPropagation();");
+  });
+  it("ends the drag without a drop, and lets the pointer go", () => {
+    expect(arm).toContain("d.el.releasePointerCapture(d.pid);");
+    expect(arm).toContain("endDrag(null, false);");
+    const end = Timeline.slice(Timeline.indexOf("function endDrag("), Timeline.indexOf("const handlers = leaving"));
+    expect(end, "no event is read unless the drag commits").toContain("const target = d && d.active && commit && !timeDrag ? tableAtY(e.clientY) : null;");
+    expect(end).toContain("if (timeDrag && commit && Number.isFinite(e.clientX)) d.lastX = e.clientX;");
+  });
+});
+

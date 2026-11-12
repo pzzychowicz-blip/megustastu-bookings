@@ -527,6 +527,8 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // timestamp (0 = not running), for a time-based speed on any refresh rate.
   const edgeRafRef = useRef(0);
   const edgeLastRef = useRef(0);
+  // v18.17.0 (G): the Escape listener a live drag holds (`armEscape`).
+  const escRef = useRef(null);
   // v18.14.0 (/code-review): a block can leave under a held drag, when another device
   // deletes or moves it. No pointerup reaches it then, so `endDrag` never ran, and the
   // row kept its warning about a party that had gone. Measured past the release, until
@@ -535,6 +537,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     cancelAnimationFrame(edgeRafRef.current);
     cancelAnimationFrame(dragRafRef.current);
     clearTimeout(dragHoldTimer.current);
+    if (escRef.current) { window.removeEventListener("keydown", escRef.current, true); escRef.current = null; }
     if (dragRef.current && dragRef.current.active && setDragHover) setDragHover(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, at unmount: `hoverRow` is new each render and only calls setters, and watching it would tear a live drag down
   }, []);
@@ -685,6 +688,34 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     // on a PARENT, which redirects child clicks) — and needed so a fast mouse
     // that leaves the block mid-drag keeps sending us moves.
     try { el.setPointerCapture(pid); } catch { /* no-op */ }
+    armEscape();
+  }
+  // v18.17.0 (G): Escape puts a lifted block back. A drag could only be called
+  // off by carrying the block home, which a mouse far down the grid cannot do
+  // without scrolling back. The listener is on `window` in the CAPTURE phase and
+  // stops the key there, because Escape is `useKeyboardShortcuts`' on the way
+  // back up, where it would also drop the List's selection. It lives only while
+  // a drag is armed: `endDrag` takes it off on every way out, and so does the
+  // unmount. The capture is released, so the pointer's later moves are no longer
+  // the block's; the click that ends the press is swallowed by `didLong`, as
+  // after any drag.
+  function armEscape() {
+    if (escRef.current) return;
+    const onKey = (ev) => {
+      if (ev.key !== "Escape") return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const d = dragRef.current;
+      if (d && d.el) { try { d.el.releasePointerCapture(d.pid); } catch { /* no-op */ } }
+      endDrag(null, false);
+    };
+    escRef.current = onKey;
+    window.addEventListener("keydown", onKey, true);
+  }
+  function disarmEscape() {
+    if (!escRef.current) return;
+    window.removeEventListener("keydown", escRef.current, true);
+    escRef.current = null;
   }
   function onDragPointerDown(e) {
     // v17.16.12: the click-suppression flag is re-armed HERE — on the one event
@@ -763,6 +794,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     });
   }
   function endDrag(e, commit) {
+    disarmEscape();
     clearTimeout(dragHoldTimer.current);
     if (dragRafRef.current) { cancelAnimationFrame(dragRafRef.current); dragRafRef.current = 0; }
     if (edgeRafRef.current) { cancelAnimationFrame(edgeRafRef.current); edgeRafRef.current = 0; }
