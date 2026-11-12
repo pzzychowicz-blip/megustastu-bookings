@@ -40998,3 +40998,14 @@ commit below. Nothing stored changes shape, so `SCHEMA` stays and no rule moves.
 - **Noticed, not changed**: a booking whose preferred tables are outside the zone it asked for is seated on them by the first pass and moved off
   them by the zone retry. Which of the two wishes should win is Patryk's call.
 
+
+### Commit 3 (F) — a party on joined tables, dropped on its own other row, is not a move
+
+- **`dropSite`** (`lib/drop-plan.js`) answers null when the row's first choice is the set the party already holds (`sameSet`, order-free). The
+  "released where it began" test asked only about a party on one table; a party on 3+4 dropped on its own row 4 went on, found its own tables free
+  (it is not in `dayActive`), and was written as a move: locked, with "moved to 3+4 (drag)" in its history and an Undo pill for a move that moved
+  nothing. The row's preview is null too, since both read `dropSite`.
+- **A party the one row seats alone still moves onto it** (a party of 1 on joined tables, dropped on one of them): its first choice is that single
+  table. The plan said "any row the booking already holds"; this is narrower, so that shrinking a party onto one of its tables keeps working.
+
+`tests/drop-plan.test.js` (nothing to do, in either stored order, with no preview; the shrink still moves). Both new cases failed before the fix.

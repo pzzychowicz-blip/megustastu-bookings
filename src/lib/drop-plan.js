@@ -79,6 +79,9 @@ import { moveSentence, movedNames, retimeLabel } from "./delete-undo.js";
 // the way". No trial runs in here, which is what makes it cheap enough to ask
 // during a drag.
 // → null | {refuse} | {src,cur,size,s,e,blockSlots,dayActive,candSets,occOf,desired,occ}
+function sameSet(a,b){
+  return a.length===b.length&&a.slice().sort().join("|")===b.slice().sort().join("|");
+}
 function dropSite(ctx){
   const id=ctx.id,targetId=ctx.targetId,liveBookings=ctx.liveBookings;
   const viewDate=ctx.viewDate,nowMins=ctx.nowMins,today=ctx.today;
@@ -149,6 +152,14 @@ function dropSite(ctx){
   }
   const occOf=function(set){return dayActive.filter(function(b){return isOver(b)&&(b.tables||[]).some(function(t){return set.includes(t);});});};
   const desired=candSets[0];
+  // v18.17.0 (F): released where it began, for a party on JOINED tables. The test
+  // at the top asks only about a party on one table; a party on 3+4 dropped on its
+  // own row 4 went on as a move onto the set it already held (the party itself is
+  // not in `dayActive`, so its own tables read as free), was locked, and got
+  // "moved to 3+4 (drag)" in its history. The row's first choice being the tables
+  // it has is nothing to do. A party the one row seats alone still moves onto it:
+  // its first choice is that single table, which is a different set.
+  if(sameSet(desired,cur)) return null;
   return {src:src,cur:cur,size:size,s:s,e:e,blockSlots:blockSlots,dayActive:dayActive,candSets:candSets,occOf:occOf,desired:desired,occ:occOf(desired)};
 }
 

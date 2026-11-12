@@ -45,6 +45,36 @@ describe("planDrop: nothing to do", () => {
   });
 });
 
+// v18.17.0 (F): "released where it began" asked only about a party on ONE table.
+// A party on joined tables, dropped on another of its own rows, went on as a
+// move onto the set it already held: locked, with "moved to …" in its history.
+describe("planDrop: a party on joined tables, dropped on its own other row", () => {
+  // The set a party of 4 takes at row 3, so the test names no combination.
+  const S = byId(drop([bk("p", "19:00", 4, ["8"])], "p", "3").transform([bk("p", "19:00", 4, ["8"])]), "p").tables;
+  const other = S.find((t) => t !== "3");
+
+  it("the set is joined tables that include the row", () => {
+    expect(S.length).toBeGreaterThan(1);
+    expect(S).toContain("3");
+  });
+
+  it("changes nothing when the drop would give it the tables it has", () => {
+    const list = [bk("a", "19:00", 4, S)];
+    expect(drop(list, "a", "3")).toBeNull();
+    expect(dropPreview({ id: "a", targetId: "3", liveBookings: list, bookings: list, viewDate: D, nowMins: 600, today: TODAY, tableBlocks: [], autoOptimizer: true })).toBeNull();
+  });
+
+  it("whatever order its tables are stored in", () => {
+    expect(drop([bk("a", "19:00", 4, S.slice().reverse())], "a", "3")).toBeNull();
+  });
+
+  it("a party small enough for the one row still moves onto it alone", () => {
+    const list = [bk("a", "19:00", 1, S)];
+    const plan = drop(list, "a", other);
+    expect(byId(plan.transform(list), "a").tables).toEqual([other]);
+  });
+});
+
 describe("planDrop: a free table", () => {
   it("moves the booking, locks it, and says where", () => {
     const list = [bk("a", "19:00", 2, ["3"]), bk("b", "19:00", 2, ["5"])];
