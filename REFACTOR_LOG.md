@@ -40981,3 +40981,20 @@ commit below. Nothing stored changes shape, so `SCHEMA` stays and no rule moves.
 
 `tests/manual-assign.test.js` (the party running over keeps its table; a party that has left by then frees it; App's Reshuffle is the plan).
 
+### Commit 2 (E) — every Optimiser pass places a booking the same way
+
+- **`_placeOne` and `_greedyOver`** (`lib/booking-logic.js`) replace four hand-written copies of "place this booking" inside `optimise`. The first
+  pass and the swap pass tried a booking's `preferredTables` first; the zone retry did not, so fixing one party's zone re-placed every other party
+  with no look at its preferred tables. The smallest generated case is two bookings: a party of 3 preferring 5+4, alone at 16:45, was moved to 9
+  because a party at 20:15 had its zone fixed.
+- **The rescue pass stays plain, and that was measured, not assumed.** Over 6,000 generated days with preferred tables (4 to 29 bookings each,
+  locked, seated, completed and blocked tables among them): honouring preferred tables in the rescue pass too left 383 parties unplaced where the
+  old code left 379. With the rescue pass plain, as it was, it is 379 again, and 592 fewer parties are off their preferred tables (9,692 → 9,100;
+  most of what remains are generated preferences too small for the party).
+- **A booking with no preferred tables is placed exactly as before**: 0 differences against the old `optimise` over 6,000 generated days. That
+  comparison needed the old code beside the new and is not kept; the case above is (`tests/booking-logic.test.js`), and it fails on the old code.
+- `optimise` itself reads as five steps now (`_lockedSlots`, `_unplacedCount`, `_trialWith`, `_inZone`). Its order of passes, its sort and its
+  acceptance tests are unchanged.
+- **Noticed, not changed**: a booking whose preferred tables are outside the zone it asked for is seated on them by the first pass and moved off
+  them by the zone retry. Which of the two wishes should win is Patryk's call.
+

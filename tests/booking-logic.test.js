@@ -3458,3 +3458,28 @@ describe("newBookingTime", () => {
     }
   });
 });
+
+// ── v18.17.0 (E) — every pass places a booking the same way ─────────────────
+// The zone retry re-placed everyone with no look at their preferred tables, so
+// fixing one party's zone took another party off preferred tables that were free.
+describe("optimise: preferred tables survive another party's zone fix", () => {
+  // `zone` asks for indoor and prefers an OUTDOOR table, so the first pass seats
+  // it there and the zone retry moves it indoors, re-placing `star` on the way.
+  const star = mk({ id: "b00", time: "16:45", size: 3, duration: 60, preferredTables: ["5", "4"] });
+  const zone = mk({ id: "b01", time: "20:15", size: 1, duration: 120, preference: "indoor", preferredTables: ["2"] });
+
+  it("the party the retry did not touch keeps its preferred tables", () => {
+    const out = optimise([star, zone], D, []);
+    expect(out.b00).toEqual(["5", "4"]);
+  });
+
+  it("and the zone fix itself still happens", () => {
+    const out = optimise([star, zone], D, []);
+    expect(out.b01.every((t) => isIn(t)), "zone was given " + out.b01.join("+")).toBe(true);
+  });
+
+  it("alone, it has them too: the retry is what the first case is about", () => {
+    expect(optimise([star], D, []).b00).toEqual(["5", "4"]);
+  });
+});
+

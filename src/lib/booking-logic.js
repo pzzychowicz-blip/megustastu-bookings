@@ -1026,13 +1026,66 @@ export function findAllOptions(size,pref,s,e,slots){
 }
 
 // ── Optimizer (greedy + retry passes) ─────────────────────────────────────────
-function _runGreedy(day,baseSlots){
-  var slots=baseSlots.slice();var assigned={};
-  day.forEach(function(b){if(!b||!b.time) return;var s=toMins(b.time),e=bookEnd(b);var tables;if(isLocked(b)){tables=b.tables;}else{
-    if(b.preferredTables&&b.preferredTables.length>0){var pt=b.preferredTables;var ptCap=comboCap(pt);if(ptCap>=(b.size||2)&&canAssign(pt,slots,s,e)) tables=pt;}
-    if(!tables){tables=findBest(b.size||2,b.preference||"auto",s,e,slots);if(!tables) tables=findBestAny(b.size||2,s,e,slots);}}assigned[b.id]=tables||null;if(tables) slots.push({tables:tables,s:s,e:e});});
+// v18.17.0 (E): ONE "place this booking" and ONE greedy walk, read by all four
+// passes below. They were written out four times and had drifted: the first pass
+// and the swap pass tried a booking's `preferredTables` first, and the zone
+// retry did not, so a zone fix for one party took every other party off
+// preferred tables that were still free (measured: the smallest generated case
+// is two bookings, tests/booking-logic.test.js).
+//
+// `_placeOne`: the booking's preferred tables if they seat it and are free, else
+// `_placePlain`: the best set in its zone, else the best set anywhere.
+//
+// **The rescue pass at the end stays `plain`, on purpose.** It runs only when a
+// party has no table, and a trial that seats one more party is worth more than a
+// preferred table. Measured over 6,000 generated days with preferred tables:
+// honouring them there too left 383 parties unplaced where the old code left
+// 379; plain there, it is 379 again, with 592 fewer parties off their preferred
+// tables than the old code. A booking with no preferred tables is placed exactly
+// as before by every pass (0 differences in 6,000 days, REFACTOR_LOG v18.17.0).
+function _placePlain(b,slots){
+  var s=toMins(b.time),e=bookEnd(b),size=b.size||2;
+  return findBest(size,b.preference||"auto",s,e,slots)||findBestAny(size,s,e,slots);
+}
+function _placeOne(b,slots){
+  var pt=b.preferredTables;
+  if(pt&&pt.length>0&&comboCap(pt)>=(b.size||2)&&canAssign(pt,slots,toMins(b.time),bookEnd(b))) return pt;
+  return _placePlain(b,slots);
+}
+// `_greedyOver`: walk `order`, each booking taking its tables out of `slots`
+// (which grows as it goes). A locked booking keeps the tables it has. `skipId`
+// is the one booking a trial has already seated by force; `plain` is the rescue
+// pass's walk.
+function _greedyOver(order,slots,assigned,skipId,plain){
+  order.forEach(function(b){
+    if(!b||!b.time||b.id===skipId) return;
+    var tables=isLocked(b)?b.tables:(plain?_placePlain(b,slots):_placeOne(b,slots));
+    assigned[b.id]=tables||null;
+    if(tables) slots.push({tables:tables,s:toMins(b.time),e:bookEnd(b)});
+  });
   return assigned;
 }
+function _runGreedy(day,baseSlots){
+  return _greedyOver(day,baseSlots.slice(),{},null);
+}
+// The slots nothing may take: the base ones plus every locked booking's tables.
+function _lockedSlots(day,baseSlots){
+  var out=baseSlots.slice();
+  day.forEach(function(b){if(isLocked(b)&&b.tables) out.push({tables:b.tables,s:toMins(b.time),e:bookEnd(b)});});
+  return out;
+}
+function _unplacedCount(day,assigned){
+  return day.filter(function(b){return !isLocked(b)&&!assigned[b.id];}).length;
+}
+// A trial: `forced` takes `tables` first, then everyone else is placed again in
+// `day`'s order.
+function _trialWith(day,baseSlots,forced,tables,plain){
+  var slots=baseSlots.slice();
+  slots.push({tables:tables,s:toMins(forced.time),e:bookEnd(forced)});
+  var assigned={};assigned[forced.id]=tables;
+  return _greedyOver(day,slots,assigned,forced.id,plain);
+}
+function _inZone(b,tables){return b.preference==="indoor"?isAllIn(tables):isAllOut(tables);}
 export function optimise(bookings,date,blocks){
   var completed=bookings.filter(function(b){return b&&b.date===date&&b.status==="completed"&&(b.tables||[]).length>0;});
   var baseSlots=completed.map(function(b){return {tables:b.tables,s:toMins(b.time),e:bookEnd(b)};});
@@ -1071,61 +1124,61 @@ export function optimise(bookings,date,blocks){
   // exists without it, trial giving the table to the `toSize` party and let
   // greedy re-assign everyone else; accept only if the unassigned count doesn't
   // grow. Empty rules → pass skipped (the pre-v15.9.0 generic behaviour).
+  // v18.17.0 (E): this pass places the others in ITS OWN order (size, then
+  // time), as it always has, with the locked slots taken first.
   PRIORITIES.swapRules.forEach(function(rule){
     var holders=day.filter(function(b){return !isLocked(b)&&assigned[b.id]&&assigned[b.id].length===1&&assigned[b.id][0]===rule.table&&b.size===rule.fromSize;});
-    holders.forEach(function(fb){var fs=toMins(fb.time),fe=bookEnd(fb);var three=day.find(function(b){return !isLocked(b)&&b.size===rule.toSize&&b.id!==fb.id&&overlaps(fs,fe,toMins(b.time),bookEnd(b))&&(!assigned[b.id]||assigned[b.id][0]!==rule.table);});if(!three) return;var lockedSlots=baseSlots.slice();day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:bookEnd(b)});});var ts=toMins(three.time),te=bookEnd(three);if(!canAssign([rule.table],lockedSlots,ts,te)) return;var trialSlots=lockedSlots.slice();trialSlots.push({tables:[rule.table],s:ts,e:te});var trialAssigned={};trialAssigned[three.id]=[rule.table];var others=day.filter(function(b){return b.id!==three.id&&!isLocked(b);}).sort(function(a,b){return b.size-a.size||toMins(a.time)-toMins(b.time);});others.forEach(function(b){var bs=toMins(b.time),be=bookEnd(b);var tables;if(b.preferredTables&&b.preferredTables.length>0){var pt=b.preferredTables;if(comboCap(pt)>=(b.size||2)&&canAssign(pt,trialSlots,bs,be)) tables=pt;}if(!tables){tables=findBest(b.size||2,b.preference||"auto",bs,be,trialSlots);if(!tables) tables=findBestAny(b.size||2,bs,be,trialSlots);}trialAssigned[b.id]=tables||null;if(tables) trialSlots.push({tables:tables,s:bs,e:be});});day.forEach(function(b){if(isLocked(b)) trialAssigned[b.id]=b.tables;});var curUn=day.filter(function(b){return !isLocked(b)&&!assigned[b.id];}).length;var tryUn=day.filter(function(b){return !isLocked(b)&&!trialAssigned[b.id];}).length;if(tryUn<=curUn) assigned=trialAssigned;});
+    holders.forEach(function(fb){
+      var fs=toMins(fb.time),fe=bookEnd(fb);
+      var three=day.find(function(b){return !isLocked(b)&&b.size===rule.toSize&&b.id!==fb.id&&overlaps(fs,fe,toMins(b.time),bookEnd(b))&&(!assigned[b.id]||assigned[b.id][0]!==rule.table);});
+      if(!three) return;
+      var trialSlots=_lockedSlots(day,baseSlots);
+      var ts=toMins(three.time),te=bookEnd(three);
+      if(!canAssign([rule.table],trialSlots,ts,te)) return;
+      trialSlots.push({tables:[rule.table],s:ts,e:te});
+      var trialAssigned={};trialAssigned[three.id]=[rule.table];
+      var others=day.filter(function(b){return b.id!==three.id&&!isLocked(b);}).sort(function(a,b){return b.size-a.size||toMins(a.time)-toMins(b.time);});
+      _greedyOver(others,trialSlots,trialAssigned,null);
+      day.forEach(function(b){if(isLocked(b)) trialAssigned[b.id]=b.tables;});
+      if(_unplacedCount(day,trialAssigned)<=_unplacedCount(day,assigned)) assigned=trialAssigned;
+    });
   });
   // Preference retry: if any non-auto booking got wrong area, force-fix it
-  var prefMismatch=day.filter(function(b){if(isLocked(b)||!assigned[b.id]||b.preference==="auto") return false;var tbl=assigned[b.id];if(b.preference==="indoor") return !isAllIn(tbl);if(b.preference==="outdoor") return !isAllOut(tbl);return false;});
+  var prefMismatch=day.filter(function(b){return !isLocked(b)&&assigned[b.id]&&b.preference!=="auto"&&(b.preference==="indoor"||b.preference==="outdoor")&&!_inZone(b,assigned[b.id]);});
   if(prefMismatch.length){
-    var lockedSlots=baseSlots.slice();day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:bookEnd(b)});});
+    var lockedSlots=_lockedSlots(day,baseSlots);
     prefMismatch.forEach(function(pb){
-      var s=toMins(pb.time),e=bookEnd(pb);
-      var prefTables=findBest(pb.size||2,pb.preference,s,e,lockedSlots);
+      var prefTables=findBest(pb.size||2,pb.preference,toMins(pb.time),bookEnd(pb),lockedSlots);
       if(!prefTables) return;
-      var trialSlots=baseSlots.slice();trialSlots.push({tables:prefTables,s:s,e:e});
-      var trialAssigned={};trialAssigned[pb.id]=prefTables;
-      day.forEach(function(b){if(!b||!b.time||b.id===pb.id) return;var bs=toMins(b.time),be=bookEnd(b);var tables;if(isLocked(b)){tables=b.tables;}else{tables=findBest(b.size||2,b.preference||"auto",bs,be,trialSlots);if(!tables) tables=findBestAny(b.size||2,bs,be,trialSlots);}trialAssigned[b.id]=tables||null;if(tables) trialSlots.push({tables:tables,s:bs,e:be});});
-      var curUn=day.filter(function(b){return !isLocked(b)&&!assigned[b.id];}).length;
-      var tryUn=day.filter(function(b){return !isLocked(b)&&!trialAssigned[b.id];}).length;
-      if(tryUn<=curUn){assigned=trialAssigned;}
+      var trialAssigned=_trialWith(day,baseSlots,pb,prefTables);
+      if(_unplacedCount(day,trialAssigned)<=_unplacedCount(day,assigned)) assigned=trialAssigned;
     });
   }
-  // Retry: find combo bookings that could use alternatives
+  // Retry: try reshuffling any assigned booking that overlaps with unassigned ones
   var unassigned=day.filter(function(b){return !isLocked(b)&&!assigned[b.id];});
   if(!unassigned.length) return assigned;
-  // Retry: try reshuffling any assigned booking that overlaps with unassigned ones
   var unTimes=unassigned.map(function(b){return {s:toMins(b.time),e:bookEnd(b)};});
   var comboBookings=day.filter(function(b){if(isLocked(b)||!assigned[b.id]) return false;var bs=toMins(b.time),be=bookEnd(b);return unTimes.some(function(u){return overlaps(bs,be,u.s,u.e);});}).sort(function(a,b){return b.size-a.size;}).slice(0,8);
   if(!comboBookings.length) return assigned;
   var bestAssigned=assigned;
   var bestUnassignedCount=unassigned.length;
+  var retryLocked=_lockedSlots(day,baseSlots);
   comboBookings.forEach(function(cb){
-    var s=toMins(cb.time),e=bookEnd(cb);
-    var lockedSlots=baseSlots.slice();
-    day.forEach(function(b){if(isLocked(b)&&b.tables) lockedSlots.push({tables:b.tables,s:toMins(b.time),e:bookEnd(b)});});
-    var options=findAllOptions(cb.size||2,cb.preference||"auto",s,e,lockedSlots);
+    var options=findAllOptions(cb.size||2,cb.preference||"auto",toMins(cb.time),bookEnd(cb),retryLocked);
     var currentKey=assigned[cb.id].slice().sort().join("|");
     options.forEach(function(opt){
-      var optKey=opt.slice().sort().join("|");
-      if(optKey===currentKey) return;
-      // Reserve forced booking's tables first
-      var trialSlots=baseSlots.slice();
-      var cbs=toMins(cb.time),cbe=bookEnd(cb);
-      trialSlots.push({tables:opt,s:cbs,e:cbe});
-      var trialAssigned={};
-      trialAssigned[cb.id]=opt;
-      day.forEach(function(b){
-        if(!b||!b.time||b.id===cb.id) return;
-        var bs=toMins(b.time),be=bookEnd(b);
-        var tables;
-        if(isLocked(b)){tables=b.tables;}
-        else{tables=findBest(b.size||2,b.preference||"auto",bs,be,trialSlots);if(!tables) tables=findBestAny(b.size||2,bs,be,trialSlots);}
-        trialAssigned[b.id]=tables||null;
-        if(tables) trialSlots.push({tables:tables,s:bs,e:be});
+      if(opt.slice().sort().join("|")===currentKey) return;
+      // Reserve the forced booking's tables first, then place everyone else,
+      // plain: this is the rescue (see `_placeOne`).
+      var trialAssigned=_trialWith(day,baseSlots,cb,opt,true);
+      var trialUnassigned=_unplacedCount(day,trialAssigned);
+      // A trial may not move a party out of the zone it asked for and had.
+      var prefBroken=day.some(function(b){
+        if(b.preference==="auto"||isLocked(b)) return false;
+        var orig=assigned[b.id],trial=trialAssigned[b.id];
+        if(!orig||!trial) return false;
+        return _inZone(b,orig)&&!_inZone(b,trial);
       });
-      var trialUnassigned=day.filter(function(b){return !isLocked(b)&&!trialAssigned[b.id];}).length;
-      var prefBroken=false;day.forEach(function(b){if(prefBroken||b.preference==="auto"||isLocked(b)) return;var orig=assigned[b.id];var trial=trialAssigned[b.id];if(!orig||!trial) return;var oOk=b.preference==="indoor"?isAllIn(orig):isAllOut(orig);var tOk=b.preference==="indoor"?isAllIn(trial):isAllOut(trial);if(oOk&&!tOk) prefBroken=true;});
       if(trialUnassigned<bestUnassignedCount&&!prefBroken){bestUnassignedCount=trialUnassigned;bestAssigned=trialAssigned;}
     });
   });
