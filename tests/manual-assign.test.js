@@ -7,9 +7,12 @@
 // needs the old code. These are the cases that stay: one per outcome, each
 // asserting what is WRITTEN.
 import { describe, it, expect } from "vitest";
-import { planAssign, planReassign, planReshuffle, swapSlot, liveSwap } from "../src/lib/manual-assign.js";
+import { planAssign, planReassign, planReshuffle, planUnlock, swapSlot, liveSwap } from "../src/lib/manual-assign.js";
 import { todayStr, addDays } from "../src/lib/day.js";
 import { appCode } from "./app-source.js";
+import { unlockOffered } from "../src/lib/booking-logic.js";
+import { readFileSync } from "node:fs";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 const TODAY = todayStr();
 // A day that is not today: the optimiser is always on.
@@ -321,3 +324,91 @@ describe("planReshuffle: a seated party running over", () => {
     expect(appCode()).toMatch(/function forceReshuffle\(\)\{saveMove\(planReshuffle\(/);
   });
 });
+
+// ── v18.17.0 (A): a lock can be taken off ────────────────────────────────────
+// A drag, an Assign and a walk-in all lock a booking to its tables, and the only
+// way out was the edit form's Clear. Unlock hands the booking back to the
+// optimiser in one tap, through `saveMove`, so it can be undone.
+describe("unlockOffered: who can be unlocked", () => {
+  it("a locked booking that has not sat down", () => {
+    expect(unlockOffered(bk("a", "19:00", 2, ["3"], { _locked: true, _manual: true }))).toBe(true);
+    expect(unlockOffered(bk("a", "19:00", 2, ["3"], { _locked: true, status: "pending" }))).toBe(true);
+  });
+  it("never a seated party (a walk-in is one), a finished booking, or one that is not locked", () => {
+    for (const status of ["seated", "completed", "cancelled"]) {
+      expect(unlockOffered(bk("a", "19:00", 2, ["3"], { _locked: true, status })), status).toBe(false);
+    }
+    expect(unlockOffered(bk("a", "19:00", 2, ["3"]))).toBe(false);
+    expect(unlockOffered(bk("a", "19:00", 2, ["3"], { _manual: true }))).toBe(false);
+    expect(unlockOffered(null)).toBe(false);
+  });
+});
+
+describe("planUnlock: the lock comes off and the day is handed back", () => {
+  const unlock = (list, id, more) => planUnlock(Object.assign({ id, bookings: list, tableBlocks: [], autoOptimizer: true, user: "u@x", stamp }, more || {}));
+  // The table the optimiser gives a lone party of 2, so the test names no table.
+  const home = byId(planReshuffle({ viewDate: D, tableBlocks: [], today: TODAY, nowMins: 600 }).transform([bk("x", "19:00", 2, [])]), "x").tables;
+  const away = ["13"].filter((t) => !home.includes(t));
+
+  it("the booking is no longer locked or hand-placed, with one history line", () => {
+    const list = [bk("a", "19:00", 2, away, { _locked: true, _manual: true })];
+    const a = byId(unlock(list, "a").transform(list), "a");
+    expect(a._locked).toBe(false);
+    expect(a._manual).toBe(false);
+    expect(a.history).toEqual([{ action: "unlocked: the optimiser may move it", by: "u@x" }]);
+  });
+
+  it("with the Optimiser on, it goes where the optimiser would put it, and the sentence says so", () => {
+    const list = [bk("a", "19:00", 2, away, { _locked: true, _manual: true })];
+    const plan = unlock(list, "a");
+    expect(byId(plan.transform(list), "a").tables).toEqual(home);
+    expect(plan.done).toBe("A unlocked, now on " + home.join("+") + ".");
+  });
+
+  it("with the Optimiser off (today, after the cutoff) it stays where it is", () => {
+    const list = [bk("a", "19:00", 2, away, { date: TODAY, _locked: true, _manual: true })];
+    const plan = unlock(list, "a", { autoOptimizer: false });
+    const a = byId(plan.transform(list), "a");
+    expect(a.tables).toEqual(away);
+    expect(a._locked).toBe(false);
+    expect(plan.done).toBe("A unlocked.");
+  });
+
+  it("re-optimises the BOOKING's day, whatever day is on screen", () => {
+    const far = addDays(D, 3);
+    const list = [bk("a", "19:00", 2, away, { date: far, _locked: true, _manual: true })];
+    expect(byId(unlock(list, "a").transform(list), "a").tables).toEqual(home);
+  });
+
+  it("refuses what is not offered, by name", () => {
+    const list = [bk("s", "19:00", 2, ["3"], { status: "seated", _locked: true }), bk("free", "19:00", 2, ["4"])];
+    expect(unlock(list, "s")).toEqual({ refuse: "S is seated — a seated party stays at its table." });
+    expect(unlock(list, "free")).toEqual({ refuse: "FREE is not locked." });
+    expect(unlock(list, "nobody")).toEqual({ refuse: "Booking not found." });
+  });
+
+  it("a replay on a list where the booking has gone changes nothing", () => {
+    const list = [bk("a", "19:00", 2, away, { _locked: true, _manual: true })];
+    const other = [bk("b", "19:00", 2, home)];
+    expect(unlock(list, "a").transform(other)).toBe(other);
+  });
+});
+
+describe("Unlock: the doors", () => {
+  const src = (f) => stripComments(readFileSync(new URL("../src/components/" + f, import.meta.url), "utf8")).join("\n");
+  it("App's unlockBooking is the gate, the plan and saveMove", () => {
+    const app = appCode();
+    expect(app).toMatch(/function unlockBooking\(id\)\{if\(refused\("bookingAssign"\)\)return;/);
+    expect(app).toContain('saveMove(plan.transform,id,"move",plan.done,');
+    expect(app).toContain("onUnlock:function(id){R.current.unlockBooking(id);}");
+  });
+  it("all three places the status card opens hand it onUnlock", () => {
+    for (const f of ["TimelineView.jsx", "ListView.jsx", "PlanView.jsx"]) {
+      expect(src(f), f).toMatch(/<QuickStatusPopup[^]*?onUnlock=\{onUnlock\}/);
+    }
+  });
+  it("the card offers it only where unlockOffered says so", () => {
+    expect(src("QuickStatusPopup.jsx")).toContain("onUnlock && unlockOffered(booking) ?");
+  });
+});
+

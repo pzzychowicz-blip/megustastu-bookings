@@ -608,6 +608,14 @@ export function comboOk(ids,pref){var mixed=!isAllIn(ids)&&!isAllOut(ids);if(mix
 export function comboCap(ids){var k=ids.slice().sort().join("|");var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});return c?c.cap:ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}
 export function isLocked(b){return b&&(b._locked===true||b.status==="seated");}
 export function isActive(b){return b.status!=="cancelled"&&b.status!=="completed";}
+// v18.17.0 (A): who the Unlock action is offered for. A lock somebody put on a
+// booking that has not sat down: a drag, an Assign. Never a seated party (a
+// walk-in is seated from its first write), whose table is a fact, and never a
+// finished booking, whose tables are a record. `_locked === true`, not
+// `isLocked`: a seated booking is "locked" by its status, with no flag to clear.
+export function unlockOffered(b){
+  return !!b&&b._locked===true&&(b.status==="confirmed"||b.status==="pending");
+}
 
 // ── Slot/busy/assignment checks ───────────────────────────────────────────────
 // v17.16.6 (/code-review) — the malformed-block predicate, EXPORTED because it

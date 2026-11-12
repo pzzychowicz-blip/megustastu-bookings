@@ -133,7 +133,7 @@ function TablePopover({ id, queue, canWalkin, popRef, onClose, onPick, onWalkinH
 export const PlanView = memo(function PlanView({
   bookings, date, layout, blocks = [],
   nowMins = 0, late = {}, freeing = {},
-  onEdit, onStatus, onNoShow, onWalkin = () => {},
+  onEdit, onStatus, onNoShow, onUnlock = null, onWalkin = () => {},
   // v17.11.0: the empty-day prompt (EmptyDay.jsx), which shipped in List only.
   // `emptyWalkin` is separate from `onWalkin` above: that one is this view's own
   // per-table handler and is always present, while the prompt's button must
@@ -956,7 +956,7 @@ export const PlanView = memo(function PlanView({
       <ModalPresence show={!!tablePop}>{popover}</ModalPresence>
       <ModalPresence show={!!quick}>
         {quick ? (
-          <QuickStatusPopup booking={quick} late={late} today={today} nowMins={nowMins} onStatus={onStatus} onNoShow={onNoShow} onClose={() => setQuick(null)} />
+          <QuickStatusPopup booking={quick} late={late} today={today} nowMins={nowMins} onStatus={onStatus} onNoShow={onNoShow} onUnlock={onUnlock} onClose={() => setQuick(null)} />
         ) : null}
       </ModalPresence>
     </div>

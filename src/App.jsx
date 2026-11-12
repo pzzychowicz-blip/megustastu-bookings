@@ -109,7 +109,7 @@ import { nextFreeAfter } from "./lib/cell-offer";
 // v18.16.0: a moved booking's new time is drafted for a WhatsApp guest
 // (`saveMove`, `doSaveEdit`). The hook already brings this module into the entry.
 import { movedSlot, movedReplyWords } from "./lib/whatsapp";
-import { planAssign, planReassign, planReshuffle, swapSlot, liveSwap } from "./lib/manual-assign";
+import { planAssign, planReassign, planReshuffle, planUnlock, swapSlot, liveSwap } from "./lib/manual-assign";
 import { planStatus, planCancel, completeCleared, seatClashSnap } from "./lib/status-change";
 import { appBannerSections } from "./components/AppBanners";
 import { NotificationStrip } from "./components/NotificationStrip";
@@ -2567,6 +2567,16 @@ export function BookingApp({uid}){
     if(plan.refuse){flashDragMsg(plan.refuse);return;}
     saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);},plan);
   }
+  // v18.17.0 (A): the lock a drag, an Assign or a walk-in leaves can be taken
+  // off, from the status card. WHAT it writes is `planUnlock`
+  // (lib/manual-assign.js); this keeps the gate and the write. It is a move, so it
+  // asks `bookingAssign` and goes through `saveMove`: undoable, and the pill says
+  // who else the optimiser moved once the booking was its to place again.
+  function unlockBooking(id){if(refused("bookingAssign"))return;
+    const plan=planUnlock({id:id,bookings:bookings,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,user:getUser()});
+    if(plan.refuse){flashDragMsg(plan.refuse);return;}
+    saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);},plan);
+  }
   function previewRetime(id,time){
     if(!can("bookingEdit")) return null;
     return retimePreview(Object.assign(dropCtx(id,null),{time:time}));
@@ -3600,13 +3610,14 @@ export function BookingApp({uid}){
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only the code's own change resumes; the door is read from its ref, and both doors read the form from formRef
   useEffect(function(){const door=resumeDoorRef.current;if(!door)return;resumeDoorRef.current=null;if(door==="waitlist") addFormToWaitlist();else doSave();},[form.phone]);
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,newAtCell,openEdit,updateStatus,doCancelBooking,dropOnTable,previewDrop,checkDrop,retimeBooking,previewRetime,checkRetime,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
+  viewActionsRef.current={openNew,newAtCell,openEdit,updateStatus,doCancelBooking,unlockBooking,dropOnTable,previewDrop,checkDrop,retimeBooking,previewRetime,checkRetime,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
       onEdit:function(b){R.current.openEdit(b);},
       onStatus:function(id,s){R.current.updateStatus(id,s);},
       onNoShow:function(id){R.current.doCancelBooking(id,true);},
+      onUnlock:function(id){R.current.unlockBooking(id);},
       onDropOnTable:function(id,targetId){return R.current.dropOnTable(id,targetId);},
       onDropPreview:function(id,targetId){return R.current.previewDrop(id,targetId);},
       onDropCheck:function(id,targetId){return R.current.checkDrop(id,targetId);},
@@ -3674,6 +3685,7 @@ export function BookingApp({uid}){
     onEdit={VA.onEdit}
     onStatus={VA.onStatus}
     onNoShow={VA.onNoShow}
+    onUnlock={VA.onUnlock}
     onWalkin={VA.onWalkin}
     gesturesEnabled={planGestures}
     isMobile={isMobile}
@@ -3724,6 +3736,7 @@ export function BookingApp({uid}){
     tagList={tagList}
     guestTags={guestTags}
     onNoShow={VA.onNoShow}
+    onUnlock={VA.onUnlock}
     zoom={timelineZoom}
     setZoom={VA.onSetZoom}
     followZoom={tlSettings.followZoom}
@@ -3778,6 +3791,7 @@ export function BookingApp({uid}){
     late={lateMap}
     clashes={clashMap}
     onNoShow={VA.onNoShow}
+    onUnlock={VA.onUnlock}
     selectedId={selectedListId}
     focusReq={listFocusReq}
     onSelect={VA.onSelect}

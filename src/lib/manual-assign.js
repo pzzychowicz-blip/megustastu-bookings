@@ -30,7 +30,7 @@
 //
 // `stamp(action, user)` builds a history entry. App passes nothing and gets
 // `histEntry`; a test passes its own so the result has no clock in it.
-import { bookingsAfterAction, histEntry as defaultHistEntry, isLocked, toMins, findFreeSlot, applyOpt, syncLiveDurations } from "./booking-logic.js";
+import { bookingsAfterAction, histEntry as defaultHistEntry, isLocked, toMins, findFreeSlot, applyOpt, syncLiveDurations, unlockOffered } from "./booking-logic.js";
 import { releaseSwapped } from "./booking-save.js";
 import { getDur } from "./booking-fields.js";
 import { moveSentence } from "./delete-undo.js";
@@ -158,4 +158,46 @@ export function planReshuffle(ctx){
   return {transform:function(list){
     return applyOpt(syncLiveDurations(list,today,nowMins),viewDate,tableBlocks);
   }};
+}
+
+// ── planUnlock: the lock comes off (v18.17.0) ────────────────────────────────
+// Every table drag, every Assign and every walk-in locks a booking to its
+// tables, and nothing took a lock off except being displaced by somebody else's
+// drag, or the edit form's Clear on the Tables row. Locks only accumulated, and
+// each one is a table the optimiser has to work around.
+//
+//   planUnlock(ctx) → { refuse } | { transform, done, lead }
+//   ctx: {id, bookings, tableBlocks, autoOptimizer, user, stamp?}
+//
+// The booking loses `_locked` and `_manual`, and its own day goes through
+// `bookingsAfterAction`: on a day the optimiser owns it is placed again at once
+// (that is what handing it back means), and with the Optimiser off it stays
+// where it is, unlocked for the next Reshuffle. Its day, not the day on screen:
+// the List opens this card on bookings of the viewed day only, but the plan
+// should not depend on that.
+//
+// `done` is known now, from a trial on `ctx.bookings`, as a drop's is.
+export function planUnlock(ctx){
+  const id=ctx.id,tableBlocks=ctx.tableBlocks,autoOptimizer=ctx.autoOptimizer,user=ctx.user;
+  const histEntry=ctx.stamp||defaultHistEntry;
+  const target=(ctx.bookings||[]).find(function(b){return b.id===id;});
+  if(!target) return {refuse:"Booking not found."};
+  if(target.status==="seated") return {refuse:target.name+" is seated — a seated party stays at its table."};
+  if(!unlockOffered(target)) return {refuse:target.name+" is not locked."};
+  const date=target.date;
+  const transform=function(list){
+    if(!list.some(function(b){return b.id===id;})) return list;
+    const updated=list.map(function(b){
+      if(b.id!==id) return b;
+      // `releaseSwapped` with nothing taken: the booking keeps every table and
+      // comes back unlocked and not hand-placed, the one way this app writes that.
+      return Object.assign({},releaseSwapped(b,[{id:id,tables:[]}]),{history:(b.history||[]).concat([histEntry("unlocked: the optimiser may move it",user)])});
+    });
+    return bookingsAfterAction(updated,date,tableBlocks,null,false,autoOptimizer);
+  };
+  const after=transform(ctx.bookings).find(function(b){return b.id===id;});
+  const was=(target.tables||[]).slice().sort().join("|");
+  const now=((after&&after.tables)||[]).slice().sort().join("|");
+  const lead=target.name+" unlocked"+(now&&now!==was?", now on "+after.tables.join("+"):"");
+  return {transform:transform,lead:lead,done:lead+".",moved:[]};
 }

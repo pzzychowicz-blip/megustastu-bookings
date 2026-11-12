@@ -41022,3 +41022,23 @@ commit below. Nothing stored changes shape, so `SCHEMA` stays and no rule moves.
 
 `tests/timeline-drag.test.js` (armed with the drag, off on every way out and at unmount; capture phase; no drop).
 
+### Commit 5 (A) — a lock can be taken off: Unlock on the status card
+
+- **Unlock** is a button on the status card (`QuickStatusPopup`), in all three places it opens: a hold on a Timeline block, a hold on a Plan
+  table, and the List card's ⋯. Shown where `unlockOffered(b)` (`lib/booking-logic.js`) says so: `_locked === true` on a confirmed or pending
+  booking. Never a seated party (a walk-in is seated from its first write), whose table is a fact, and never a finished booking.
+- **`planUnlock(ctx)`** (`lib/manual-assign.js`) → `{refuse}` or `{transform, done, lead}`: the booking loses `_locked` and `_manual`, gets one
+  history line, and its own day goes through `bookingsAfterAction`. On a day the Optimiser owns it is placed again at once; with the Optimiser
+  off it stays where it is, unlocked for the next Reshuffle. App's `unlockBooking` asks `bookingAssign` and writes through `saveMove`, so the
+  Undo pill carries the sentence ("Esc Test unlocked, now on 1.") and Undo restores the tables and the lock.
+- **Why**: every table drag, every Assign and every walk-in locks a booking, and the only ways out were another party's drag displacing it or the
+  edit form's Clear on the Tables row. Locks only accumulated. Patryk's decision of 2026-11-12: keep the lock, make it easy to take off.
+- **The button is quiet** (`mkBtn()` with no fill) with the flag's own padlock: it neither commits a status nor destroys anything. No new icon,
+  no new colour pair.
+- **Measured on DEV** (the day after today, Optimiser on): a booking dragged to table 3 showed Unlock on the List's ⋯ card; one tap put it on
+  table 1 with no padlock and the pill "Esc Test unlocked, now on 1."; Undo put it back on 3 with the padlock. Not checked under a finger on the
+  tablet (the hold-opened card on a Timeline block).
+
+`tests/manual-assign.test.js` (who is offered it; the write; both Optimiser states; the booking's own day; the refusals; a replay on a list
+without the booking; the three mounts and App's handler).
+
