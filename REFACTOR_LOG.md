@@ -40969,6 +40969,8 @@ He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the 
 The review's opinion: the lock is needed, because on a day the Optimiser owns the next save would undo the drag, and so would Reshuffle during
 service; but nothing ever took it off except the edit form's Clear. Reading the code also found four defects. **Behavioural change: yes**, each
 commit below. Nothing stored changes shape, so `SCHEMA` stays and no rule moves.
+**Commits 13 to 16 (2026-11-14)** are four changes to the WhatsApp inbox's title row and list that Patryk asked for while the version
+was waiting for its review, decided with him in three rounds of questions.
 
 ### Commit 1 (D) — Reshuffle reads the day as it stands now
 
@@ -41238,3 +41240,16 @@ Two findings from the staff comparison's captures, fixed in this version on Patr
   brought to render by a resize, showed the padlock. A real device does the same: the measurement lands with the first rendered frame.
 
 `tests/a11y.test.js` (the leaving blocks pass `railPxPerMin`).
+
+### Commit 13 — the inbox's Needs action is its dot, red only when it would find something
+
+- **Asked by Patryk** (2026-11-14): Needs action becomes an icon only, the mark a conversation that needs action carries on the list,
+  then red only when there is something to act on. The button is the round 36px Select is, on every screen (it was "● Needs action" in
+  two panes and the dot alone on a phone since the v18.16.0 follow-up), named "Needs action", `aria-pressed` for the state.
+- **The dot** is the row's unread dot (`--wa-unread-dot`, `--wa-unread-ring`) while the OPEN list holds a conversation `isActionable`
+  passes (`dotRed`), so red means pressing it finds something (his choice over "the Inbox only"); otherwise the button's grey, and
+  white on the green of the pressed filter.
+- **Measured** (headless Chromium, 1280×800, DEV): Inbox with actionable threads: `rgb(220, 38, 38)` with the ring; Archived with none:
+  `rgb(90, 100, 116)`, no ring; pressed: white on `rgb(18, 134, 98)`.
+
+`tests/wa-inbox-layout.test.js` (the W5 pin, rewritten).

@@ -164,11 +164,15 @@ describe("W5 — the phone's inbox", () => {
     expect(Inbox).toContain("const showFilters = twoPane || !activeKey;");
   });
 
-  // v18.16.0 (follow-up): one row with the mark leaves a phone no width for the
-  // words, so the filter is its dot, named by them.
-  it("Needs action is its dot alone below two panes, and keeps its name", () => {
-    expect(Inbox).toContain('aria-label={twoPane ? undefined : "Needs action"}');
-    expect(Inbox).toContain('{twoPane ? "Needs action" : null}</button>');
+  // v18.16.0 (follow-up): one row with the mark left a phone no width for the
+  // words, so the filter became its dot there; v18.17.0 (Patryk) made it the dot
+  // at every width, named by the words, and the row's red dot only while the open
+  // list holds something it would find.
+  it("Needs action is its dot alone at every width, and keeps its name", () => {
+    expect(Inbox).toContain('aria-label="Needs action"');
+    expect(Inbox).not.toContain('"Needs action" : null}</button>');
+    expect(Inbox).toMatch(/const dotRed = !needsAction && conversations\.some\(\(c\) => \(tab === "archived" \? !!c\.archived : !c\.archived\) && isActionable\(c\)\);/);
+    expect(Inbox).toContain('backgroundColor: dotRed ? "var(--wa-unread-dot)" : "currentColor", boxShadow: dotRed ? "var(--wa-unread-ring)" : "none"');
   });
 
   it("shortens the search placeholder where the long one was cut", () => {
