@@ -41230,8 +41230,11 @@ Two findings from the staff comparison's captures, fixed in this version on Patr
   ResizeObserver on the scroller, so it changes with the window and not on every frame of a zoom's ease. Every `TimelineBlock` and the
   waitlist ghost take it. The start-time chip decision and the now-pill's hour label keep the lower bound, which errs their way, so no day
   changes between one line and two.
-- **Live on DEV** (1 Dec, 1×). At 1280px a 90-minute block is 172px and now shows the ring and the padlock (the capture showed neither); a
-  150-minute one is 287px, as before. At 1024px the 90-minute block is 134px, and its fixed parts leave 23px: no ring and no flag fit, which
-  is the ladder working, not this defect.
+- **Live on DEV** (1 Dec, headless Chromium in the foreground). At 1280px and 1× a 90-minute locked block is 172px and now shows the ring
+  and the padlock (the capture showed neither); a 150-minute one is 287px, as before. At the tablet's 998px: 130px at 1×, which leaves 19px,
+  room for one flag and not the 24px ring, so the padlock shows and the ring goes, as the ladder says; from 1.5× (162px) both show.
+- **A reading that measured the tool**: the first 1024px check, in a Browser pane tab that was in the BACKGROUND, showed no padlock. A tab
+  that is not rendering delivers no ResizeObserver callbacks, so `fillW` stayed 0 and the block still had the old estimate. The same tab,
+  brought to render by a resize, showed the padlock. A real device does the same: the measurement lands with the first rendered frame.
 
 `tests/a11y.test.js` (the leaving blocks pass `railPxPerMin`).
