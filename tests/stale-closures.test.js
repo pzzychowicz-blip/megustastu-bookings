@@ -24,7 +24,7 @@ describe("InboxPanel's keydown listener is re-added on every render", () => {
   it("its effect has no dependency array to leave the selection out of", () => {
     expect(Inbox).toMatch(/window\.addEventListener\("keydown", onKey, true\);\s*return \(\) => window\.removeEventListener\("keydown", onKey, true\);\s*\}\);/);
   });
-  it("and Backspace and R still take their keys from the selection", () => {
+  it("and H (Backspace until v18.17.0) and R still take their keys from the selection", () => {
     expect(Inbox.match(/if \(selectMode\) \{ const keys = selectedKeysInTab\(\);/g)).toHaveLength(2);
     expect(Inbox).toMatch(/function selectedKeysInTab\(\) \{ return visibleInTab\.filter\(\(c\) => selected\.has\(c\.phoneKey\)\)/);
   });

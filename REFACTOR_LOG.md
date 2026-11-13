@@ -41285,3 +41285,12 @@ Two findings from the staff comparison's captures, fixed in this version on Patr
   the headless rig measured it.
 
 `tests/wa-inbox-layout.test.js`. DESIGN.md (Adding motion), GLOSSARY.md (inbox search), `src/components/CLAUDE.md`.
+
+### Commit 16 — Archive in the inbox is H
+
+- **Asked by Patryk**: change the shortcut for Archive (Inbox; the selection in select mode). It was Backspace, a key that does other work
+  everywhere else; it is **H**, for "hide" (his pick over Y and Z), and Restore stays R. The shortcut sheet says H.
+- **Measured** (headless, DEV): with a conversation open, Backspace archived nothing (8 → 8 rows), H archived it (8 → 7); typing "h" in the
+  search box archived nothing, since the handler stands down in a text field as before.
+
+`tests/wa-inbox-layout.test.js`, `tests/stale-closures.test.js` (its name).

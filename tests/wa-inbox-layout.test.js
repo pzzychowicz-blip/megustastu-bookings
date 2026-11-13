@@ -175,6 +175,13 @@ describe("W5 — the phone's inbox", () => {
     expect(Inbox).toContain('backgroundColor: dotRed ? "var(--wa-unread-dot)" : "currentColor", boxShadow: dotRed ? "var(--wa-unread-ring)" : "none"');
   });
 
+  // v18.17.0 (Patryk): Archive is H, where it was Backspace, and the sheet says so.
+  it("archives on H, not Backspace, and the shortcut sheet agrees", () => {
+    expect(Inbox).toContain('if (k === "h" && tab === "inbox") {');
+    expect(Inbox).not.toContain('e.key === "Backspace"');
+    expect(Shortcuts).toContain('{ keys: ["H"],        label: "Archive (Inbox; selection in select mode)" },');
+  });
+
   // v18.17.0 (Patryk): the select checkbox eases in and out on the list's fold.
   it("the select checkbox comes and goes in a RowSlot", () => {
     expect(Row).toContain("<RowSlot show={!!selectMode} gap={10} speed={ROW_FOLD}>{selectMode ? (");

@@ -430,9 +430,10 @@ export function InboxPanel({
       // / → open and focus the search box.
       // v18.17.0: it opens the field first, which is a magnifier until then.
       if (e.key === "/") { e.preventDefault(); openSearch(); return; }
-      // Backspace → Archive (Inbox tab): bulk-archive the selection in select mode,
-      // else archive the active conversation.
-      if (e.key === "Backspace" && tab === "inbox") {
+      // H → Archive (Inbox tab): bulk-archive the selection in select mode,
+      // else archive the active conversation. v18.17.0 (Patryk): H, for "hide",
+      // where it was Backspace, a key that does other work everywhere else.
+      if (k === "h" && tab === "inbox") {
         e.preventDefault();
         if (selectMode) { const keys = selectedKeysInTab(); if (keys.length && onBulkArchive) { onBulkArchive(keys); exitSelectMode(); } }
         else if (ac && onArchive) onArchive(ac.phoneKey);
