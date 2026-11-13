@@ -180,6 +180,19 @@ describe("W5 — the phone's inbox", () => {
     expect(Row).toContain("<RowSlot show={!!selectMode} gap={10} speed={ROW_FOLD}>{selectMode ? (");
   });
 
+  // v18.17.0 (Patryk): search is a magnifier until pressed or "/", opens out of
+  // it to 90% of the room left, on M.reveal both ways, and closes when left
+  // empty, by its ✕ and by Escape. On a phone Select and Needs action fold away
+  // while it is open.
+  it("search opens out of its magnifier and closes back into it", () => {
+    expect(Inbox).toContain("const searchShown = searchOpen || !!query;");
+    expect(Inbox).toContain('width: searchShown ? "90%" : 36, minWidth: 36, transition: "width " + M.reveal');
+    expect(Inbox).toContain("onBlur={() => { if (!query) setSearchOpen(false); }}");
+    expect(Inbox).toMatch(/if \(e\.key === "\/"\) \{ e\.preventDefault\(\); openSearch\(\); return; \}/);
+    expect(Inbox).toMatch(/e\.target === searchRef\.current && searchShown\) \{ consume\(\); closeSearch\(\); return; \}/);
+    expect(Inbox).toContain("const beside = twoPane || !searchShown;");
+  });
+
   it("shortens the search placeholder where the long one was cut", () => {
     expect(Inbox).toMatch(/placeholder=\{twoPane && !shortScreen \? "Search name, number or message…" : "Search…"\}/);
   });

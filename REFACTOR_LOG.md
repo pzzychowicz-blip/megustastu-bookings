@@ -41265,3 +41265,23 @@ Two findings from the staff comparison's captures, fixed in this version on Patr
   reverse, the checkbox unmounting after the fold. The checkbox sits at the same x (70) as before the change.
 
 `tests/wa-inbox-layout.test.js`.
+
+### Commit 15 — the inbox's search is a magnifier that opens into the field
+
+- **Asked by Patryk**: the search becomes the search icon; pressed, the field opens from the icon to the right, to 90% of its width, and
+  closes as the reverse. Decided with him: it closes when left EMPTY, by its ✕ and by Escape (with text it stays open, so a filter in
+  force stays on screen); 90% of the room the title row leaves it, so it scales with the screen; the same on a phone, where Select and
+  Needs action fold out of its way while it is open (the row leaves it 80px there, measured 72px open without the fold).
+- **One pill** (`InboxPanel.jsx`): the field is always mounted at the icon's 36px with the magnifier over it as the button, and its
+  `width` eases to `90%`. So the opening grows the very box the icon sat in, and the press focuses the field inside the gesture, which
+  iOS needs to raise the keyboard. `/` opens it the same way (`openSearch`); Escape in it empties and closes it before anything else
+  (`closeSearch`); `searchShown` is open-or-holding-text, because `query` is App's and outlives the panel.
+- **Speed, measured twice.** First on `M.shift` with an ease-in close (a new `M.shiftExit`): 385ms. Patryk found both too fast, the close
+  most of all (an accelerating close does most of its travel at the end), and chose 520ms both ways with a close that also decelerates,
+  over the strict reverse or a slower 760ms close. So it is `M.reveal` both ways and `shiftExit` was removed before commit. Headless at
+  1280×800: open 36 → 829px (90% of 921), 70% of the way at 250ms, settled by ~520ms, its left edge fixed at the icon; close 829 → 36 the
+  same way. On a 375×812 phone it opens to 166px with Select and Needs action folded, and both come back on close.
+- **A tool reading on the way**: the Browser pane was hidden, which freezes CSS transitions (every sample read the start width) and rAF;
+  the headless rig measured it.
+
+`tests/wa-inbox-layout.test.js`. DESIGN.md (Adding motion), GLOSSARY.md (inbox search), `src/components/CLAUDE.md`.
