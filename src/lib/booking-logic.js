@@ -1058,8 +1058,14 @@ export function findAllOptions(size,pref,s,e,slots){
 // preferred tables that were still free (measured: the smallest generated case
 // is two bookings, tests/booking-logic.test.js).
 //
-// `_placeOne`: the booking's preferred tables if they seat it and are free, else
-// `_placePlain`: the best set in its zone, else the best set anywhere.
+// `_placeOne`: the booking's preferred tables if they seat it, are free and are
+// a set its zone allows (`comboOk`); else the best set in its zone; else its
+// preferred tables after all; else the best set anywhere. v18.17.0 (J),
+// Patryk: when the preferred tables are outside the zone the guest asked for,
+// the ZONE wins, and the preferred tables come before any other table outside
+// it. That is `findFreeSlot`'s order, the Optimiser-off path, so the two paths
+// agree. This pass used to seat them on the preferred tables first and leave
+// the zone retry to move them off, re-placing other parties on the way.
 //
 // **The rescue pass at the end stays `plain`, on purpose.** It runs only when a
 // party has no table, and a trial that seats one more party is worth more than a
@@ -1074,8 +1080,13 @@ function _placePlain(b,slots){
 }
 function _placeOne(b,slots){
   var pt=b.preferredTables;
-  if(pt&&pt.length>0&&comboCap(pt)>=(b.size||2)&&canAssign(pt,slots,toMins(b.time),bookEnd(b))) return pt;
-  return _placePlain(b,slots);
+  var s=toMins(b.time),e=bookEnd(b),size=b.size||2,pref=b.preference||"auto";
+  var fits=!!(pt&&pt.length>0&&comboCap(pt)>=size&&canAssign(pt,slots,s,e));
+  if(fits&&comboOk(pt,pref)) return pt;
+  var inZone=findBest(size,pref,s,e,slots);
+  if(inZone) return inZone;
+  if(fits&&comboOk(pt,"auto")) return pt;
+  return findBestAny(size,s,e,slots);
 }
 // `_greedyOver`: walk `order`, each booking taking its tables out of `slots`
 // (which grows as it goes). A locked booking keeps the tables it has. `skipId`
@@ -1250,7 +1261,8 @@ function _keepsTables(b,others){
   if(!_knownSet(t)||comboCap(t)<size||!comboOk(t,pref)) return false;
   if(pref!=="auto"&&!_inZone(b,t)) return false;
   var pt=b.preferredTables;
-  if(pt&&pt.length&&_tableKey(pt)!==_tableKey(t)&&comboCap(pt)>=size&&canAssign(pt,others,s,e)) return false;
+  // Preferred tables the zone allows (J): ones outside it never call a party back.
+  if(pt&&pt.length&&_tableKey(pt)!==_tableKey(t)&&comboCap(pt)>=size&&comboOk(pt,pref)&&canAssign(pt,others,s,e)) return false;
   if(!canAssign(t,others,s,e)) return false;
   // A set with fewer tables is free for it: the inefficiency banner's own test.
   var best=findBest(size,pref,s,e,others);

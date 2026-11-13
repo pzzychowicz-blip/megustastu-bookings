@@ -31,7 +31,7 @@ import {
   tablesFreeFor, trialFits, enteredPhone, kitchenRelevant, savedToast, lastStartMins,
   optimizerActiveFor, earliestOffer, findTimes, findKitchenFriendlyTimes, applyOptKeep, movedOthers,
 } from "../src/lib/booking-logic.js";
-import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
+import { TOTAL_SEATS, ALL_TABLES, VALID_COMBOS, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
 import { setWeekHours, DEFAULT_WEEK_HOURS, setHourExceptions } from "../src/lib/constants.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
@@ -3467,23 +3467,69 @@ describe("newBookingTime", () => {
 // The zone retry re-placed everyone with no look at their preferred tables, so
 // fixing one party's zone took another party off preferred tables that were free.
 describe("optimise: preferred tables survive another party's zone fix", () => {
-  // `zone` asks for indoor and prefers an OUTDOOR table, so the first pass seats
-  // it there and the zone retry moves it indoors, re-placing `star` on the way.
-  const star = mk({ id: "b00", time: "16:45", size: 3, duration: 60, preferredTables: ["5", "4"] });
-  const zone = mk({ id: "b01", time: "20:15", size: 1, duration: 120, preference: "indoor", preferredTables: ["2"] });
+  // Two indoor parties of three, and indoors seats one of them: the first pass
+  // gives it to the earlier one, the zone retry hands it to the later one, and
+  // re-places everyone else on the way, `star` with them. (J: the first fixture
+  // was a party asking indoor while preferring an outdoor table; since J the
+  // first pass seats such a party in its zone, so the retry never ran there.
+  // This one was found by a generated search: with the retry placing plainly,
+  // `star` is moved to 10.)
+  const early = mk({ id: "b01", time: "19:15", size: 3, duration: 90, preference: "indoor" });
+  const zone = mk({ id: "b00", time: "19:30", size: 3, duration: 120, preference: "indoor" });
+  const star = mk({ id: "b02", time: "19:45", size: 1, duration: 90, preferredTables: ["2"] });
 
   it("the party the retry did not touch keeps its preferred tables", () => {
-    const out = optimise([star, zone], D, []);
-    expect(out.b00).toEqual(["5", "4"]);
+    const out = optimise([zone, early, star], D, []);
+    expect(out.b02).toEqual(["2"]);
   });
 
   it("and the zone fix itself still happens", () => {
-    const out = optimise([star, zone], D, []);
-    expect(out.b01.every((t) => isIn(t)), "zone was given " + out.b01.join("+")).toBe(true);
+    const out = optimise([zone, early, star], D, []);
+    expect(out.b00.every((t) => isIn(t)), "zone was given " + out.b00.join("+")).toBe(true);
   });
 
   it("alone, it has them too: the retry is what the first case is about", () => {
-    expect(optimise([star], D, []).b00).toEqual(["5", "4"]);
+    expect(optimise([star], D, []).b02).toEqual(["2"]);
+  });
+});
+
+// ── v18.17.0 (J) — the zone wins over preferred tables ──────────────────────
+// Patryk, 2026-11-13: when a guest's preferred tables are outside the zone they
+// asked for, the zone wins, and the preferred tables come before any other
+// table outside it. That was already `findFreeSlot`'s order (the Optimiser-off
+// path); the Optimiser seated the preferred tables first and left the zone
+// retry to move the party off them.
+describe("optimise: the zone wins over preferred tables", () => {
+  it("a party in its zone stays there although its preferred tables outside it are free", () => {
+    // Until J a free outdoor preferred table called it back to the pass, and the
+    // retry then put it on the zone's first choice, 10.
+    const k = mk({ id: "k", time: "19:00", preference: "indoor", preferredTables: ["2"], tables: ["11"] });
+    const out = applyOptKeep([k, mk({ id: "n", time: "13:00" })], D, []);
+    expect(out.find((b) => b.id === "k").tables).toEqual(["11"]);
+  });
+
+  it("with its zone full, its preferred tables come before any other table outside it", () => {
+    const full = [mk({ id: "i1", time: "19:00", tables: ["10"], _locked: true }), mk({ id: "i2", time: "19:00", size: 6, tables: ["11", "12", "13"], _locked: true })];
+    const plain = mk({ id: "k", time: "19:00", preference: "indoor" });
+    expect(optimise(full.concat([plain]), D, []).k).toEqual(["1"]);          // what it gets with no wish
+    const k = mk({ id: "k", time: "19:00", preference: "indoor", preferredTables: ["5"] });
+    expect(optimise(full.concat([k]), D, []).k).toEqual(["5"]);
+    expect(findFreeSlot(full, D, "19:00", 2, "indoor", 90, [], null, ["5"])).toEqual(["5"]);
+  });
+
+  it("a lone booking is placed the same with the Optimiser on and off, whatever its preferred tables", () => {
+    // Every table, every combo and three sets no combo allows, at every size and
+    // zone. Until J the Optimiser seated 32 of these on a mix of indoor and
+    // outdoor tables that `comboOk` refuses and the Optimiser-off path never gives.
+    const key = (t) => (t || []).slice().sort().join("|");
+    const sets = ALL_TABLES.map((t) => [t.id]).concat(VALID_COMBOS.map((c) => c.ids)).concat([["2", "10"], ["9", "13"], ["1", "11", "12"]]);
+    const bad = [];
+    for (const pref of ["auto", "indoor", "outdoor"]) for (let size = 1; size <= 8; size++) for (const pt of sets) {
+      const on = optimise([mk({ id: "x", time: "19:00", size, preference: pref, preferredTables: pt })], D, []).x;
+      const off = findFreeSlot([], D, "19:00", size, pref, 90, [], null, pt);
+      if (key(on) !== key(off)) bad.push(pref + " " + size + " " + pt.join("+") + ": " + key(on) + " / " + key(off));
+    }
+    expect(bad).toEqual([]);
   });
 });
 

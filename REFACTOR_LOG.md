@@ -40996,7 +40996,7 @@ commit below. Nothing stored changes shape, so `SCHEMA` stays and no rule moves.
 - `optimise` itself reads as five steps now (`_lockedSlots`, `_unplacedCount`, `_trialWith`, `_inZone`). Its order of passes, its sort and its
   acceptance tests are unchanged.
 - **Noticed, not changed**: a booking whose preferred tables are outside the zone it asked for is seated on them by the first pass and moved off
-  them by the zone retry. Which of the two wishes should win is Patryk's call.
+  them by the zone retry. Which of the two wishes should win is Patryk's call. (He chose the zone: commit 10.)
 
 
 ### Commit 3 (F) — a party on joined tables, dropped on its own other row, is not a move
@@ -41162,4 +41162,36 @@ moves; a clashing pair both go back; a lock and an absent key come back as they 
 falling back when holding costs a seat; the save keeps and Reshuffle does not; the preview's carry; `movedOthers`), `tests/status-change.test.js`
 (a quiet completion), `tests/drop-plan.test.js`, `tests/save-path.test.js` (the tie that keeps the held day is its two refusals),
 `tests/delete-undo.test.js`, `tests/seating-preference.test.js`.
+
+### Commit 10 (J) — the zone wins over preferred tables
+
+- **Patryk's decision (2026-11-13)**, on the question commit 2 left open: when a guest's preferred tables are outside the zone they asked for,
+  the zone wins.
+- **`_placeOne`** (`lib/booking-logic.js`) now places in `findFreeSlot`'s order, the Optimiser-off path's: the preferred tables if they seat
+  the party, are free and are a set its zone allows (`comboOk`); else the best set in its zone; else the preferred tables after all; else the
+  best set anywhere. So with indoor full, an indoor guest whose preferred table is outdoor still gets that table before any other. The first
+  pass used to seat the preferred tables whatever the zone and leave the zone retry to move the party off them, re-placing other parties on the
+  way. A booking with no preferred tables is placed exactly as before (the same two steps as `_placePlain`).
+- **`_keepsTables`** asks the same: preferred tables outside the zone no longer call a party in its zone back to the pass. Until now a free
+  outdoor preferred table sent an indoor party on 11 back to the pass, and the retry moved it to 10.
+- **The two paths now agree**: a lone booking is placed the same with the Optimiser on and off for every table, every combo and three sets no
+  combo allows, at sizes 1 to 8 and all three zones (1,344 cases; the old code disagreed on 32, each a mix of indoor and outdoor tables that
+  `comboOk` refuses, which the Optimiser seated and the off path never gives).
+- **Measured, old against new, over 6,000 generated days** (4 to 29 bookings, sizes 1 to 8, any quarter, 35% with a zone, 30% with preferred
+  tables, single or combo): 614 days differ, every one of them holding a zoned party with preferred tables; no day without one moved. Parties
+  left without a table 5,934 → 5,884; parties outside their zone 4,138 → 3,883; parties on preferred tables 3,216 → 2,911, almost all of the
+  drop being the out-of-zone ones the decision gives up. Those whose preferred tables the zone allows: 2,959 → 2,908 (of about 20,700), the
+  cost of the zoned parties now taking their zone first. No clashes; the same time per pass (35.0 ms).
+- **Commit 2's test needed a new fixture.** It was a party asking indoor while preferring an outdoor table, and since this change the first
+  pass seats that party in its zone, so the zone retry never ran and the test held nothing. The new one was found by a generated search:
+  two indoor parties of three at 19:15 and 19:30 (indoors seats one), and a party of one at 19:45 preferring table 2. The retry gives indoors to
+  the later party; with the retry placing plainly (commit 2's bug put back) the party of one is moved to 10, and the test fails.
+- **Live on DEV** (Thu 19.11, a day the Optimiser owns): "Zone J", Indoor, preferred table 2: the form previewed 10 and the save stored
+  `tables: ["10"]` with the star kept. "Mix J", Auto, four guests, preferred 2 + 11 (an outdoor and an indoor table that do not join): the
+  form previewed 9, the save stored `["9"]`, Zone J stayed on 10, and the toast said "Booking saved.". The old code would have seated Mix J on
+  2 and 11.
+
+`tests/booking-logic.test.js` (a party in its zone stays put; with the zone full, the preferred tables before the Optimiser's own pick; the
+on/off agreement over every case; commit 2's new fixture). The first and the agreement failed on the old code; the zone-full case pins what
+the old code already did.
 
