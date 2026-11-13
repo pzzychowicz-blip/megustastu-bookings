@@ -41309,3 +41309,4 @@ Seven findings, each fixed in its own commit.
 - **A constant `aria-expanded={false}`** on the magnifier, which the open field replaces, so it could only ever say "collapsed". Removed.
 - **The Needs action tooltip promised A**, which accepts an open draft first and is the filter only when none is waiting. The "(A)" is gone;
   the shortcut sheet says both halves.
+- **The shortcut sheet said "Focus search"** for "/", which now opens the field from its magnifier: "Open search".
