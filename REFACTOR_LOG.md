@@ -41307,3 +41307,5 @@ Seven findings, each fixed in its own commit.
 - **Two "Search conversations" while closed**: the 36px field behind the magnifier stayed in the accessibility tree under the button's
   name. Closed, it is `aria-hidden` as well as out of the tab order.
 - **A constant `aria-expanded={false}`** on the magnifier, which the open field replaces, so it could only ever say "collapsed". Removed.
+- **The Needs action tooltip promised A**, which accepts an open draft first and is the filter only when none is waiting. The "(A)" is gone;
+  the shortcut sheet says both halves.

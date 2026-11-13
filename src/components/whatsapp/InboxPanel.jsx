@@ -661,7 +661,9 @@ export function InboxPanel({
         onClick={() => setNeedsAction((v) => !v)}
         aria-pressed={needsAction}
         aria-label="Needs action"
-        title="Show only conversations that need a response (A)"
+        // No "(A)" here (/code-review): A accepts an open draft first and is
+        // this filter only when none is waiting, which a tooltip cannot say.
+        title="Show only conversations that need a response"
         className="mgt-hover-scale mgt-press"
         style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "background-color " + M.tap + ", color " + M.tap + ", border-color " + M.tap + ", transform " + M.tap }}
       >{/* A real 8px dot, not a text ● (the device NotificationStrip uses for a
