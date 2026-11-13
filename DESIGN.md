@@ -2438,5 +2438,9 @@ after, it went from the ~1.69× on screen to 1.95×, one notch).
   and disappears *without* a navigation, when the last booking of a day is
   cancelled or the first is made, and there it was the only in-flow surface left
   changing the page height in one frame.
+- **A column that a mode adds to every row eases in and out** (v18.17.0): the
+  inbox's select checkbox is a `RowSlot` on the list's `ROW_FOLD`, where it
+  appeared in one frame and every row's text jumped 28px. `RowSlot` takes a
+  `speed` for this; as a row's FIRST item it works unchanged.
 
 ---

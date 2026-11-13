@@ -175,6 +175,11 @@ describe("W5 — the phone's inbox", () => {
     expect(Inbox).toContain('backgroundColor: dotRed ? "var(--wa-unread-dot)" : "currentColor", boxShadow: dotRed ? "var(--wa-unread-ring)" : "none"');
   });
 
+  // v18.17.0 (Patryk): the select checkbox eases in and out on the list's fold.
+  it("the select checkbox comes and goes in a RowSlot", () => {
+    expect(Row).toContain("<RowSlot show={!!selectMode} gap={10} speed={ROW_FOLD}>{selectMode ? (");
+  });
+
   it("shortens the search placeholder where the long one was cut", () => {
     expect(Inbox).toMatch(/placeholder=\{twoPane && !shortScreen \? "Search name, number or message…" : "Search…"\}/);
   });

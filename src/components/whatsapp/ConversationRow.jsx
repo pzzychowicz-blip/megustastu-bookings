@@ -8,8 +8,8 @@
 
 import { useRef, useEffect } from "react";
 import { conversationName, formatRelativeTime, isParsing, describeConversation, linkedStatus } from "../../lib/whatsapp";
-import { R, T, FW, IC } from "../../lib/constants";
-import { OutlineChip } from "../atoms";
+import { R, T, FW, IC, ROW_FOLD } from "../../lib/constants";
+import { OutlineChip, RowSlot } from "../atoms";
 import { WarnIcon, PencilIcon, DraftIcon, ArchiveIcon, MuteIcon } from "./WaIcons";
 import { StatusIcon } from "../Icons";
 import { useReplyDraft } from "../../hooks/useReplyDraft";
@@ -132,7 +132,11 @@ export function ConversationRow({ conv, active, onClick, bookings, contacts, fli
       className="mgt-ac-row"
       style={{ "--row-bg": bg, "--row-bg-hover": bgHover, cursor: "pointer", padding: "12px 14px", borderRadius: R.card, border, marginBottom: 6, boxShadow: (selHi || (active && !selectMode)) ? "var(--wa-row-active-glow)" : "var(--shadow-soft)", opacity: archivedDimming, display: "flex", alignItems: "center", gap: 10 }}
     >
-      {selectMode ? (
+      {/* v18.17.0 (Patryk): the checkbox eases in and out with select mode,
+          where it appeared and went in one frame and the row's text jumped
+          28px. A RowSlot, so closed it takes no room and the row's 10px gap
+          comes and goes inside the ease; on the list's own ROW_FOLD. */}
+      <RowSlot show={!!selectMode} gap={10} speed={ROW_FOLD}>{selectMode ? (
         <input /* @no-lift readOnly + pointerEvents:none — the ROW is the control, and this is painted state */
           type="checkbox"
           checked={!!checked}
@@ -148,7 +152,7 @@ export function ConversationRow({ conv, active, onClick, bookings, contacts, fli
           aria-label="Select conversation"
           style={{ flexShrink: 0, width: 18, height: 18, accentColor: "var(--accent)", pointerEvents: "none", cursor: "pointer" }}
         />
-      ) : null}
+      ) : null}</RowSlot>
       <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flex: 1 }}>

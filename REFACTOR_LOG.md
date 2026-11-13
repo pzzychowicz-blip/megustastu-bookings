@@ -41253,3 +41253,15 @@ Two findings from the staff comparison's captures, fixed in this version on Patr
   `rgb(90, 100, 116)`, no ring; pressed: white on `rgb(18, 134, 98)`.
 
 `tests/wa-inbox-layout.test.js` (the W5 pin, rewritten).
+
+### Commit 14 — the select checkboxes ease in and out
+
+- **The finding** (Patryk): Select conversations put a checkbox on every row in one frame and took it away in one, and the row's text
+  jumped 28px each way. The checkbox is now a `RowSlot` (`ConversationRow.jsx`) on the list's `ROW_FOLD`: closed it takes no room and the
+  row's 10px gap goes with it, so at rest every position is what it was.
+- **`RowSlot` takes a `speed`** (`atoms.jsx`, default `"reveal"` as before). As a row's FIRST item it needs nothing else: the slot's own
+  gap sits in front of the row's padding while it opens.
+- **Measured** (headless, 1280×800, a rAF sampler in the page): in, the slot 0 → 35px and the text 66 → 101px over ~400ms; out, the
+  reverse, the checkbox unmounting after the fold. The checkbox sits at the same x (70) as before the change.
+
+`tests/wa-inbox-layout.test.js`.
