@@ -40978,6 +40978,11 @@ commit below. Nothing stored changes shape, so `SCHEMA` stays and no rule moves.
   left, so the pass could seat the next party there. The button is only offered while the Optimiser is off, which is during service.
 - **Reproduced before the fix**: with the sync taken out, `tests/manual-assign.test.js` fails with "next was given 1", the table a party seated
   at 13:00 for 90 minutes was still at when Reshuffle ran at 15:20.
+- **What it closes in the app is small, measured on DEV on 2026-11-13.** The auto-extend effect (`usePersistence.js`) already writes an
+  overstaying seated party's live duration, once a minute on the 15-second tick, on any device with the app open, so the end Reshuffle read
+  on 18.16 was at most a minute behind. Staged live on 18.16.0 (a party seated 18:40 still at table 1 at 20:20, the next booked at 20:15),
+  Reshuffle put nobody on that table. The fix stands, because the button now reads what every other path reads, but staff would not have
+  met the defect, so the staff comparison leaves it out. The test above removes the sync from the pure function, where no effect runs.
 
 `tests/manual-assign.test.js` (the party running over keeps its table; a party that has left by then frees it; App's Reshuffle is the plan).
 
