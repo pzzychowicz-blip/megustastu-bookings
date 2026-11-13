@@ -253,10 +253,15 @@ export function InboxPanel({
   const [searchOpen, setSearchOpen] = useState(false);
   const searchShown = searchOpen || !!query;
   // Focus in the same call as the open: on iOS only a focus inside the press
-  // raises the keyboard. The field is always mounted, so it is there to take it.
+  // raises the keyboard. The field is mounted whenever the title row draws the
+  // list's controls, so it is there to take it. Where it is NOT (a phone with a
+  // conversation open, `showFilters` false) there is nothing to open: "/" from
+  // a keyboard there used to leave the list an open, empty, unfocused field that
+  // only a focus and a blur would close (/code-review).
   function openSearch() {
+    if (!searchRef.current) return;
     setSearchOpen(true);
-    if (searchRef.current) searchRef.current.focus({ preventScroll: true });
+    searchRef.current.focus({ preventScroll: true });
   }
   // The ✕ and Escape: empty it and fold it back into the icon.
   function closeSearch() {

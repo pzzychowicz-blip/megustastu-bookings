@@ -41294,3 +41294,11 @@ Two findings from the staff comparison's captures, fixed in this version on Patr
   search box archived nothing, since the handler stands down in a text field as before.
 
 `tests/wa-inbox-layout.test.js`, `tests/stale-closures.test.js` (its name).
+
+### /code-review fixes (commits 13 to 16)
+
+Seven findings, each fixed in its own commit.
+
+- **"/" with no field to open** (`openSearch`): on a phone with a conversation open the title row does not draw the search, so the key
+  set `searchOpen` with nothing to focus, and back on the list the field stood open, empty and unfocused, with Select and Needs action
+  folded, until a focus and a blur. It now opens nothing where there is no field.

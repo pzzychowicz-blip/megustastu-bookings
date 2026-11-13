@@ -198,6 +198,8 @@ describe("W5 — the phone's inbox", () => {
     expect(Inbox).toMatch(/if \(e\.key === "\/"\) \{ e\.preventDefault\(\); openSearch\(\); return; \}/);
     expect(Inbox).toMatch(/e\.target === searchRef\.current && searchShown\) \{ consume\(\); closeSearch\(\); return; \}/);
     expect(Inbox).toContain("const beside = twoPane || !searchShown;");
+    // /code-review: "/" opens nothing where the title row draws no field.
+    expect(Inbox).toMatch(/function openSearch\(\) \{\s*if \(!searchRef\.current\) return;\s*setSearchOpen\(true\);/);
   });
 
   it("shortens the search placeholder where the long one was cut", () => {
