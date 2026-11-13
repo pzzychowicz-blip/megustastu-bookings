@@ -41306,3 +41306,4 @@ Seven findings, each fixed in its own commit.
   ("No matches." with no reason). While it is on it now stays; the field then opens into the room that is left.
 - **Two "Search conversations" while closed**: the 36px field behind the magnifier stayed in the accessibility tree under the button's
   name. Closed, it is `aria-hidden` as well as out of the tab order.
+- **A constant `aria-expanded={false}`** on the magnifier, which the open field replaces, so it could only ever say "collapsed". Removed.

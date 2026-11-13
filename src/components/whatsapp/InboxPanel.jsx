@@ -719,10 +719,11 @@ export function InboxPanel({
           {searchShown ? (
             <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", pointerEvents: "none" }}><SearchIcon size={IC.chrome} /></span>
           ) : (
+            // No `aria-expanded` (/code-review): this button is gone the
+            // moment it opens the field, so it could only ever say "collapsed".
             <button
               onClick={openSearch}
               aria-label="Search conversations"
-              aria-expanded={false}
               title="Search conversations (/)"
               className="mgt-hover-scale mgt-press"
               style={{ position: "absolute", left: 0, top: 0, width: 36, height: 36, padding: 0, background: "transparent", border: "none", borderRadius: R.pill, color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "transform " + M.tap }}
