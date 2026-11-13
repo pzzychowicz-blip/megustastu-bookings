@@ -105,7 +105,9 @@ export function planReassign(ctx){
   // v18.17.0 (C): only a SEATED party is refused. A `_locked` one (a drag, an
   // Assign) is moved and keeps its lock on the new tables (Patryk, 2026-11-12):
   // somebody placed it on purpose, and the rescue changes the table, not that.
-  if(target.status==="seated") return {refuse:"Booking is manually locked. Edit manually to change tables."};
+  // (K): the refusal says why, in Unlock's words. It said "Booking is manually
+  // locked. Edit manually to change tables.", the reason before C.
+  if(target.status==="seated") return {refuse:seatedStays(target)};
   const targetStart=toMins(target.time);
   const targetEnd=targetStart+(target.duration||90);
   // Build a search-view where any seated booking sharing tables with THIS
@@ -185,6 +187,10 @@ export function planReshuffle(ctx){
   }};
 }
 
+// (K): one sentence for the two actions a seated party refuses, Reassign and
+// Unlock, so they cannot drift apart.
+function seatedStays(b){return b.name+" is seated — a seated party stays at its table.";}
+
 // ── planUnlock: the lock comes off (v18.17.0) ────────────────────────────────
 // Every table drag, every Assign and every walk-in locks a booking to its
 // tables, and nothing took a lock off except being displaced by somebody else's
@@ -207,7 +213,7 @@ export function planUnlock(ctx){
   const histEntry=ctx.stamp||defaultHistEntry;
   const target=(ctx.bookings||[]).find(function(b){return b.id===id;});
   if(!target) return {refuse:"Booking not found."};
-  if(target.status==="seated") return {refuse:target.name+" is seated — a seated party stays at its table."};
+  if(target.status==="seated") return {refuse:seatedStays(target)};
   if(!unlockOffered(target)) return {refuse:target.name+" is not locked."};
   const date=target.date;
   // (I): on a day the Optimiser owns, the booking hands its tables back too, or

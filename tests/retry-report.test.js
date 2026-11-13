@@ -209,8 +209,9 @@ describe("every single-booking write in App hands saveBookings the report", () =
     // once above the call.
     ["the form's edit", "saveBookings(plan.next,false,Object.assign({subject:id,replayRefusal:plan.replayRefusal},moved?{onLanded:"],
     // v18.5.1 (#17): reassign hands over `planReassign`'s transform too, told
-    // apart by the error it clears on the next line.
-    ["reassign", /saveBookings\(plan\.transform,false,goneReport\(id\)\);\s+setError\(""\);/],
+    // apart by the error it cleared on the next line; since v18.17.0 (K) its
+    // refusal is the toast, the line went, and it is told apart by the flash.
+    ["reassign", /saveBookings\(plan\.transform,false,goneReport\(id\)\);\s+if\(ok\) flash\(\);\s+\}/],
     // v18.14.0 (H5): a drop, the picker's Save and Reshuffle write through
     // `saveMove`, which carries the report for the two with a subject.
     ["a move", "saveBookings(move.transform,false,Object.assign(id==null?{}:goneReport(id),{onLanded:"],

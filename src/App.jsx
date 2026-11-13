@@ -2468,11 +2468,14 @@ export function BookingApp({uid}){
   function forceReshuffle(unlock){const plan=planReshuffle({viewDate:viewDate,tableBlocks:tableBlocks,today:today,nowMins:nowMins,unlock:unlock===true,bookings:bookings,user:getUser()});saveMove(plan.transform,null,"reshuffle",plan.done,function(){flash("unmoved");});}
   // v18.5.1 (#17): the Overlap banner's Reassign. WHICH tables, and the four
   // refusals, are `planReassign` (lib/manual-assign.js).
+  // v18.17.0 (K): a refusal is the refusal toast. It went to `setError`, the
+  // booking form's error line, and Reassign is pressed on the Overlap banner with
+  // no form open, so "No alternative tables available" showed nowhere and the
+  // button read as broken (measured on DEV, 18.16.0).
   function reassignBooking(id){
     const plan=planReassign({id:id,bookings:bookings,liveBookings:liveBookings,tableBlocks:tableBlocks,getUser:getUser});
-    if(plan.refuse){setError(plan.refuse);return;}
+    if(plan.refuse){flashRefusal(plan.refuse);return;}
     const ok=saveBookings(plan.transform,false,goneReport(id));
-    setError("");
     if(ok) flash();
   }
   // ── Timeline drag & drop ───────────────────────────────────────────────────

@@ -234,10 +234,13 @@ describe("planReassign", () => {
   it("refuses a booking that is not there, and a seated one, without asking who", () => {
     asked.length = 0;
     expect(re("gone", [])).toEqual({ refuse: "Booking not found." });
+    // v18.17.0 (K): the reason is that the party is seated, in Unlock's words. It
+    // said "Booking is manually locked. Edit manually to change tables."
     const seated = [bk("a", "20:00", 2, ["3"], { status: "seated" })];
-    expect(re("a", seated).refuse).toBe("Booking is manually locked. Edit manually to change tables.");
+    expect(re("a", seated).refuse).toBe("A is seated — a seated party stays at its table.");
     const seatedLocked = [bk("a", "20:00", 2, ["3"], { status: "seated", _locked: true, _manual: true })];
-    expect(re("a", seatedLocked).refuse).toBe("Booking is manually locked. Edit manually to change tables.");
+    expect(re("a", seatedLocked).refuse).toBe("A is seated — a seated party stays at its table.");
+    expect(re("a", seated).refuse).toBe(planUnlock({ id: "a", bookings: seated, tableBlocks: [], autoOptimizer: true, user: "u@x" }).refuse);
     expect(asked).toEqual([]);
   });
   // v18.17.0 (C): a locked booking is moved, and stays locked on its new tables
@@ -302,9 +305,12 @@ describe("App's reassignBooking is the plan and its three effects", () => {
   it("decides nothing itself", () => {
     for (const word of ["findFreeSlot", "isLocked", "histEntry", "toMins(", ".map("]) expect(body, word).not.toContain(word);
   });
-  it("shows a refusal, else writes with the deleted-elsewhere report, clears the error and flashes when the write went", () => {
+  // v18.17.0 (K): the refusal is the refusal toast. `setError` is the booking
+  // form's line, and Reassign is pressed on the Overlap banner with no form open.
+  it("shows a refusal in the refusal toast, else writes with the deleted-elsewhere report and flashes when the write went", () => {
     const flat = body.replace(/\s+/g, "");
-    expect(flat).toContain("constplan=planReassign({id:id,bookings:bookings,liveBookings:liveBookings,tableBlocks:tableBlocks,getUser:getUser});if(plan.refuse){setError(plan.refuse);return;}constok=saveBookings(plan.transform,false,goneReport(id));setError(\"\");if(ok)flash();");
+    expect(flat).toContain("constplan=planReassign({id:id,bookings:bookings,liveBookings:liveBookings,tableBlocks:tableBlocks,getUser:getUser});if(plan.refuse){flashRefusal(plan.refuse);return;}constok=saveBookings(plan.transform,false,goneReport(id));if(ok)flash();");
+    expect(body).not.toContain("setError");
   });
 });
 

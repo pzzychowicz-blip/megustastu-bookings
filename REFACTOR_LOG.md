@@ -41200,3 +41200,21 @@ falling back when holding costs a seat; the save keeps and Reshuffle does not; t
 on/off agreement over every case; commit 2's new fixture). The first and the agreement failed on the old code; the zone-full case pins what
 the old code already did.
 
+
+### Commit 11 (K) — Reassign's refusals reach the screen, and say why
+
+Two findings from the staff comparison's captures, fixed in this version on Patryk's word (2026-11-13).
+- **A refusal is the refusal toast** (`flashRefusal`). `reassignBooking` sent it to `setError`, the booking form's error line, and Reassign is
+  pressed on the Overlap banner with no form open, so the refusal showed nowhere and the button read as broken. Measured on 18.16.0 before C:
+  Reassign on a locked booking changed nothing on screen. After C the locked case moves, which left "No alternative tables available for X
+  at T." as the refusal staff can meet. **Live on DEV** (today, clock frozen at 20:20): Tomás seated on 6 since 18:30, Rubén locked to 6 at
+  20:30, every other table taken from 20:00 to 22:30. Reassign Rubén Molina: the toast read "No alternative tables available for Rubén
+  Molina at 20:30." and Rubén stayed on 6, locked. The `setError("")` after a write went too: it only cleared the old refusal.
+- **The seated refusal says the party is seated**, in Unlock's words: "X is seated — a seated party stays at its table." It said "Booking is
+  manually locked. Edit manually to change tables.", the reason before C. One function, `seatedStays`, gives both plans the sentence. The
+  Overlap warning never offers a seated party (`overlapWarnings` skips them as the next booking), so this refusal is reached only when the
+  party sits down between the warning and the press.
+- `ClashBanner.jsx` and `src/components/CLAUDE.md` said `reassignBooking` refuses a locked booking, which C made untrue; both now say so.
+
+`tests/manual-assign.test.js` (the seated refusal's words, and the same as Unlock's; App's `reassignBooking` uses the toast and never
+`setError`).
