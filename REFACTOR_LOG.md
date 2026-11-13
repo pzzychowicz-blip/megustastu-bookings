@@ -41310,3 +41310,5 @@ Seven findings, each fixed in its own commit.
 - **The Needs action tooltip promised A**, which accepts an open draft first and is the filter only when none is waiting. The "(A)" is gone;
   the shortcut sheet says both halves.
 - **The shortcut sheet said "Focus search"** for "/", which now opens the field from its magnifier: "Open search".
+- **The tab-membership test written out twice** in `InboxPanel.jsx` (the leaves-the-tab effect and the new dot): one module-scope
+  `inTab(c, which)` now.

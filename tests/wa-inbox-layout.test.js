@@ -171,7 +171,7 @@ describe("W5 — the phone's inbox", () => {
   it("Needs action is its dot alone at every width, and keeps its name", () => {
     expect(Inbox).toContain('aria-label="Needs action"');
     expect(Inbox).not.toContain('"Needs action" : null}</button>');
-    expect(Inbox).toMatch(/const dotRed = !needsAction && conversations\.some\(\(c\) => \(tab === "archived" \? !!c\.archived : !c\.archived\) && isActionable\(c\)\);/);
+    expect(Inbox).toContain("const dotRed = !needsAction && conversations.some((c) => inTab(c, tab) && isActionable(c));");
     expect(Inbox).toContain('backgroundColor: dotRed ? "var(--wa-unread-dot)" : "currentColor", boxShadow: dotRed ? "var(--wa-unread-ring)" : "none"');
   });
 
@@ -392,8 +392,8 @@ describe("the reply box is closed whenever the server would refuse the send", ()
 describe("an open chat that comes out of Archived is followed to the Inbox", () => {
   it("switches the list and keeps the chat open, and only in that direction", () => {
     expect(Inbox).toContain('if (tab === "archived" && !c.archived) { setTab("inbox"); setSelected(new Set()); return; }');
-    expect(Inbox).toContain("if (!inCurrentTab) setActiveKey(null);");
-    expect(Inbox.indexOf('if (tab === "archived" && !c.archived)')).toBeLessThan(Inbox.indexOf("if (!inCurrentTab) setActiveKey(null);"));
+    expect(Inbox).toContain("if (!inTab(c, tab)) setActiveKey(null);");
+    expect(Inbox.indexOf('if (tab === "archived" && !c.archived)')).toBeLessThan(Inbox.indexOf("if (!inTab(c, tab)) setActiveKey(null);"));
   });
 });
 

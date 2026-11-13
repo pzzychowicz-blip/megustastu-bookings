@@ -67,6 +67,13 @@ function isActionable(c) {
   return !!(c.unread || c.draftStatus === "parsed");
 }
 
+// Whether a conversation belongs to a tab ("inbox" or "archived"). One rule for
+// the leaves-the-tab effect and the Needs action dot (/code-review: it was
+// written out in both).
+function inTab(c, which) {
+  return which === "archived" ? !!c.archived : !c.archived;
+}
+
 // Top conversation (phoneKey) of a tab, in the same order ConversationList
 // renders (shared sort) — used to auto-select on open, on tab switch, and when
 // the layout widens to two-pane. Returns null for an empty tab.
@@ -511,8 +518,7 @@ export function InboxPanel({
     const c = conversations.find((x) => x.phoneKey === activeKey);
     if (!c) { setActiveKey(null); return; }
     if (tab === "archived" && !c.archived) { setTab("inbox"); setSelected(new Set()); return; }
-    const inCurrentTab = tab === "archived" ? c.archived : !c.archived;
-    if (!inCurrentTab) setActiveKey(null);
+    if (!inTab(c, tab)) setActiveKey(null);
   }, [conversations, tab, activeKey]);
 
   const activeConv = activeKey ? conversations.find((c) => c.phoneKey === activeKey) : null;
@@ -618,7 +624,7 @@ export function InboxPanel({
   // Select and Needs action stand beside the search unless a phone needs their room for it.
   const beside = twoPane || !searchShown;
   // The Needs action dot is red while the open list holds something it would find.
-  const dotRed = !needsAction && conversations.some((c) => (tab === "archived" ? !!c.archived : !c.archived) && isActionable(c));
+  const dotRed = !needsAction && conversations.some((c) => inTab(c, tab) && isActionable(c));
   const filterControls = (
     <>
       {/* v17.15.6's aria-pressed rule, reaching the module at the 17.16.12
