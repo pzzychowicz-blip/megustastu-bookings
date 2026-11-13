@@ -41317,3 +41317,6 @@ Measured after the fixes (headless Chromium, 375×812, touch, DEV): closed, the 
 accessibility tree holds ONE "Search conversations" (the button), with no `aria-expanded`; open, one (the textbox). "/" pressed in an
 open conversation and Escape back to the list: the field still 36px and closed, Select and Needs action in place. Needs action on, then
 search: the field opens to 126px with Needs action beside it and Select folded; off: 166px, both folded. No page errors.
+
+**A side effect, kept (Patryk, 2026-11-14):** the search box was `mkInp`'s 44px beside 36px buttons; as a 36px circle opening into a 36px
+field, the inbox's title row is 8px shorter, which goes to the list and the conversation. He chose to keep it.
