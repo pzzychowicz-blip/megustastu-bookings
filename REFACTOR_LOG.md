@@ -41302,3 +41302,5 @@ Seven findings, each fixed in its own commit.
 - **"/" with no field to open** (`openSearch`): on a phone with a conversation open the title row does not draw the search, so the key
   set `searchOpen` with nothing to focus, and back on the list the field stood open, empty and unfocused, with Select and Needs action
   folded, until a focus and a blur. It now opens nothing where there is no field.
+- **An active Needs action folded out of sight** while a phone searched, so the list was narrowed by a filter nothing on screen showed
+  ("No matches." with no reason). While it is on it now stays; the field then opens into the room that is left.

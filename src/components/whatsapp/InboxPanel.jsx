@@ -652,8 +652,11 @@ export function InboxPanel({
           red means pressing it finds something; otherwise the button's grey.
           On the green of the pressed filter it is the button's ink (white).
           Named by the words it no longer shows; `aria-pressed` carries the
-          state, the name stays still (the note above). */}
-      <RowSlot show={beside} gap={SP.base} speed="reveal">{beside ? (
+          state, the name stays still (the note above). While it is ON it does
+          not fold for a phone's search (/code-review): it is the only thing
+          on screen saying the list is narrowed, and the search's own rule is
+          that a filter in force stays in view. */}
+      <RowSlot show={beside || needsAction} gap={SP.base} speed="reveal">{beside || needsAction ? (
       <button
         onClick={() => setNeedsAction((v) => !v)}
         aria-pressed={needsAction}
