@@ -41312,3 +41312,8 @@ Seven findings, each fixed in its own commit.
 - **The shortcut sheet said "Focus search"** for "/", which now opens the field from its magnifier: "Open search".
 - **The tab-membership test written out twice** in `InboxPanel.jsx` (the leaves-the-tab effect and the new dot): one module-scope
   `inTab(c, which)` now.
+
+Measured after the fixes (headless Chromium, 375×812, touch, DEV): closed, the field is `aria-hidden` and out of the tab order, and the
+accessibility tree holds ONE "Search conversations" (the button), with no `aria-expanded`; open, one (the textbox). "/" pressed in an
+open conversation and Escape back to the list: the field still 36px and closed, Select and Needs action in place. Needs action on, then
+search: the field opens to 126px with Needs action beside it and Select folded; off: 166px, both folded. No page errors.
