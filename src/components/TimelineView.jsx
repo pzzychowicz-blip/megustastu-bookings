@@ -1986,6 +1986,24 @@ export const TimelineView = memo(function TimelineView({
   // lower bound — minWidth:100% can stretch wider — so the hide errs
   // conservative) + the repeat-no-show map (full bookings list, all dates).
   const pxPerMin = gridW / totalMins;
+  // v18.17.0 (L): what a block can wear is decided at the width it is DRAWN at.
+  // `minWidth: 100%` stretches the grid to the scroller, so at 1× on a 1280px
+  // screen a 90-minute block is drawn 172px wide while `gridW` says 108: its
+  // fixed parts take 111 of those, and the size ring and every flag, the padlock
+  // among them, were dropped from a block with room for them (measured on DEV).
+  // At 1.5× and above the grid is wider than the screen and the two agree. The
+  // scroller's content box is what 100% resolves against, and it changes only
+  // with the window, not with a zoom's ease, so this re-renders on a resize only.
+  // The chip decision and the now-pill keep the lower bound, which errs their way.
+  const [fillW, setFillW] = useState(0);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver((entries) => { setFillW(Math.round(entries[0].contentRect.width)); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const railPxPerMin = Math.max(gridW, fillW) / totalMins;
   // v17.1.0 perf: noShowMap walks EVERY booking (all dates — grows with
   // history); memo on the bookings ref so it no longer reruns per render.
   const nsMap = useMemo(() => noShowMap(bookings), [bookings]);
@@ -2700,7 +2718,7 @@ export const TimelineView = memo(function TimelineView({
         <Fragment key={"leaving-" + b.id}>
           {tail}
           {ghost}
-          <TimelineBlock sz={sz} leaving b={b} pxPerMin={pxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={snap.warnings} clash={snap.clash} currency={currency} late={snap.late} noShows={snap.noShows} showChip={snap.chip} freeMin={primary ? snap.freeMin : null} />
+          <TimelineBlock sz={sz} leaving b={b} pxPerMin={railPxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={snap.warnings} clash={snap.clash} currency={currency} late={snap.late} noShows={snap.noShows} showChip={snap.chip} freeMin={primary ? snap.freeMin : null} />
         </Fragment>
       );
     }
@@ -2708,7 +2726,7 @@ export const TimelineView = memo(function TimelineView({
       <Fragment key={b.id}>
         {tail}
         {ghost}
-        <TimelineBlock sz={sz} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={hoverRow} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} onRetime={onRetime} setDragTime={hoverTime} syncGridScroll={syncGridScroll} />
+        <TimelineBlock sz={sz} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={railPxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={hoverRow} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} onRetime={onRetime} setDragTime={hoverTime} syncGridScroll={syncGridScroll} />
       </Fragment>
     );
   }
@@ -2760,7 +2778,7 @@ export const TimelineView = memo(function TimelineView({
               g={cell ? cell.g : null}
               leaving={!cell}
               focusFallbackRef={scrollRef}
-              pxPerMin={pxPerMin}
+              pxPerMin={railPxPerMin}
               totalMins={totalMins}
               onBook={onBookWait}
             />
@@ -2803,11 +2821,11 @@ export const TimelineView = memo(function TimelineView({
       <div style={unplacedEdge}>{unplacedLine}<GridLines /></div>
       {Array.from({ length: heldLanes }, (_, li) => unplacedLanes[li] || []).map((lane, li) => (
         <div key={"ul" + li} style={{ height: sz.rowH + "px", position: "relative", boxSizing: "border-box", transition: "height " + M.shift }}>
-          {lane.map((b) => <TimelineBlock sz={sz} key={b.id} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={hoverRow} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />)}
+          {lane.map((b) => <TimelineBlock sz={sz} key={b.id} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={railPxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={hoverRow} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />)}
           {/* v18.3.0 (O1): a booking that left while in THIS lane. v18.3.2
               (O4): a lane the row is easing away from is still drawn, so the
               last booking leaving it fades there while the row shrinks. */}
-          {leavingCells.filter((s) => s.lane === li).map((s) => <TimelineBlock sz={sz} key={"leaving-" + s.b.id} leaving b={s.b} pxPerMin={pxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={s.warnings} clash={s.clash} currency={currency} late={s.late} noShows={s.noShows} showChip={s.chip} />)}
+          {leavingCells.filter((s) => s.lane === li).map((s) => <TimelineBlock sz={sz} key={"leaving-" + s.b.id} leaving b={s.b} pxPerMin={railPxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={s.warnings} clash={s.clash} currency={currency} late={s.late} noShows={s.noShows} showChip={s.chip} />)}
         </div>
       ))}
     </>

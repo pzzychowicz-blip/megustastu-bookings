@@ -41218,3 +41218,20 @@ Two findings from the staff comparison's captures, fixed in this version on Patr
 
 `tests/manual-assign.test.js` (the seated refusal's words, and the same as Unlock's; App's `reassignBooking` uses the toast and never
 `setError`).
+
+### Commit 12 (L) — a block's flags are sized at the width it is drawn at
+
+- **The finding**: in the staff comparison's captures (1280px, 1×) a locked 90-minute booking showed no padlock, and no size ring either.
+  The drop order was not the cause. `TimelineBlock` decides what fits from `pxPerMin = gridW / totalMins`, and `gridW` is a lower bound
+  (`totalMins × zoom × 1.2`) that the grid stretches past with `minWidth: 100%`. At 1× on 1280px a 90-minute block is drawn 172px wide while
+  the rail was told 108; its fixed parts take 111, so the ring and every flag went from a block with room for them. At 1.5× and above the
+  grid is wider than the screen and the two agree, which is why Patryk's service zoom never showed it.
+- **`railPxPerMin`** (`TimelineView.jsx`) is `max(gridW, the scroller's content width) / totalMins`: what `100%` resolves against, read by a
+  ResizeObserver on the scroller, so it changes with the window and not on every frame of a zoom's ease. Every `TimelineBlock` and the
+  waitlist ghost take it. The start-time chip decision and the now-pill's hour label keep the lower bound, which errs their way, so no day
+  changes between one line and two.
+- **Live on DEV** (1 Dec, 1×). At 1280px a 90-minute block is 172px and now shows the ring and the padlock (the capture showed neither); a
+  150-minute one is 287px, as before. At 1024px the 90-minute block is 134px, and its fixed parts leave 23px: no ring and no flag fit, which
+  is the ladder working, not this defect.
+
+`tests/a11y.test.js` (the leaving blocks pass `railPxPerMin`).
