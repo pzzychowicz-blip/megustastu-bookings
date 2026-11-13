@@ -198,6 +198,8 @@ describe("W5 — the phone's inbox", () => {
     expect(Inbox).toMatch(/if \(e\.key === "\/"\) \{ e\.preventDefault\(\); openSearch\(\); return; \}/);
     expect(Inbox).toMatch(/e\.target === searchRef\.current && searchShown\) \{ consume\(\); closeSearch\(\); return; \}/);
     expect(Inbox).toContain("const beside = twoPane || !searchShown;");
+    // /code-review: closed, the field is neither a stop nor a second name.
+    expect(Inbox).toContain("tabIndex={searchShown ? undefined : -1}\n            aria-hidden={searchShown ? undefined : true}");
     // /code-review: an active Needs action stays beside a phone's search.
     expect(Inbox).toContain('<RowSlot show={beside || needsAction} gap={SP.base} speed="reveal">{beside || needsAction ? (');
     // /code-review: "/" opens nothing where the title row draws no field.

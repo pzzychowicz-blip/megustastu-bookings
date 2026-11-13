@@ -41304,3 +41304,5 @@ Seven findings, each fixed in its own commit.
   folded, until a focus and a blur. It now opens nothing where there is no field.
 - **An active Needs action folded out of sight** while a phone searched, so the list was narrowed by a filter nothing on screen showed
   ("No matches." with no reason). While it is on it now stays; the field then opens into the room that is left.
+- **Two "Search conversations" while closed**: the 36px field behind the magnifier stayed in the accessibility tree under the button's
+  name. Closed, it is `aria-hidden` as well as out of the tab order.

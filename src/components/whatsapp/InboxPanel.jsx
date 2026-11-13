@@ -696,8 +696,14 @@ export function InboxPanel({
             onChange={(e) => setQuery(e.target.value)}
             onBlur={() => { if (!query) setSearchOpen(false); }}
             // Closed, the field is the icon's backdrop and not a stop of its
-            // own: the magnifier button over it is the control.
+            // own: the magnifier button over it is the control. Nor is it in
+            // the accessibility tree (/code-review): it carried the button's
+            // name, so a screen reader met two "Search conversations" in a
+            // row, the first one doing nothing. `tabIndex` -1 keeps it out of
+            // the tab order, which is what lets it be hidden; `openSearch`
+            // focuses it in the press and the same render un-hides it.
             tabIndex={searchShown ? undefined : -1}
+            aria-hidden={searchShown ? undefined : true}
             // v18.2.0 (W5): a phone cut the long one to "Search name, number
             // or". The field is named either way (aria-label above).
             placeholder={twoPane && !shortScreen ? "Search name, number or message…" : "Search…"}
