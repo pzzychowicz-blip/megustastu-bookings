@@ -35,7 +35,7 @@ import {
   seatRefusal, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, handKeptRefusal,
   offZone, offZoneNote, seatNoteFor,
   canAssign, occupancyEnd, getBlockSlots, padEnd, plannedDuration,
-  phoneForSave, lastStartMins, toTime, seatClashParties, kitchenRelevant, getKitchenLoad,
+  phoneForSave, lastStartMins, toTime, seatClashParties, kitchenRelevant, getKitchenLoad, movedOthers,
 } from "./booking-logic.js";
 import { stampGuestSeed, resolveGuestId, saveGuestTags, guestTagsChange, guestTagMap, bookingTags, hasRealPhone } from "./customers.js";
 import { cleanTagIds } from "./tags.js";
@@ -84,13 +84,16 @@ export function releaseSwapped(b,affected){
 // Those differ only by a swap's release, and a swap comes with tables picked by
 // hand, when neither save asks this.
 // v18.3.4 (/code-review): written out twice, in the two saves.
-function displacedBy(before,fin,date,id){
+// v18.17.0 (/code-review): exported, with `displaceRefusal`, for Unlock and
+// "Reshuffle and unlock" (lib/manual-assign.js), which ask it with no `id`: the
+// booking being unlocked is one of the parties that must keep a table.
+export function displacedBy(before,fin,date,id){
   const prevAssigned=before.filter(function(b){return b.date===date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==id;});
   const displaced=fin.filter(function(b){return b.id!==id&&b.date===date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
   return displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
 }
 // The refusal, with `what` naming the save: "this change" or "adding this booking".
-function displaceRefusal(what,kicked){
+export function displaceRefusal(what,kicked){
   return "Not enough capacity — "+what+" would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".";
 }
 
@@ -395,6 +398,10 @@ export function applyEdit(input){
   // each other is not either of them agreeing with the pass that
   // overrides both. The preview says the same thing in `optOwns`
   // (BookingFormModal) and now this side says it too.
+  // v18.17.0 (I): that branch is `applyOptKeep` now, not a greedy re-run of the
+  // whole day: it holds a placed party whose tables still suit it. The
+  // conclusion is unchanged (on those dates the pass decides, and
+  // `keepsWindowTables` does not), but the pass now usually agrees with it.
   const winStart=toMins(saveTime);
   const keepsWindowTables=(recheck&&!needsR&&!mt.length&&!pinned)
     ? tablesFreeFor(bookings,f.date,editId,(orig&&orig.tables)||[],winStart,winStart+saveDur,tableBlocks)
@@ -565,7 +572,8 @@ export function applyEdit(input){
     next:buildNextMemo,
     fin:fin,
     changed:editChanged,
-    flash:(needsR||swapAffected||f.status==="completed"||seatingNow||zoneNote)?{kind:seatingNow?"saved":null,note:zoneNote}:null,
+    // v18.17.0 (I): "Tables re-optimised." only when the pass moved somebody else.
+    flash:(needsR||swapAffected||f.status==="completed"||seatingNow||zoneNote)?{kind:(seatingNow||!movedOthers(bookings,fin,[editId]))?"saved":null,note:zoneNote}:null,
     // v18.0.0 session 7: the seat note. The snapshot is the EDITED booking,
     // so a note typed in this save is shown.
     // v18.5.0: with the booking's tags, read from the list as this save leaves
@@ -682,7 +690,8 @@ export function buildBooking(input){
     fin:fin,
     id:newId,
     rule:recStampId?{id:recStampId,startDate:f.date,name:f.name,phone:cleanPhone,size:size,weekday:new Date(f.date).getUTCDay(),time:f.time,preference:f.preference,notes:f.notes}:null,
-    flash:{kind:null,note:!mt.length&&placedNew?offZoneNote(placedNew):""},
+    // v18.17.0 (I): "Tables re-optimised." only when the pass moved somebody else.
+    flash:{kind:movedOthers(base,fin,[newId])?null:"saved",note:!mt.length&&placedNew?offZoneNote(placedNew):""},
   };
 }
 

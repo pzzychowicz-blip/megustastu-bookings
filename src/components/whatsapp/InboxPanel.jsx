@@ -32,8 +32,8 @@ import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
 import { ConversationMenu } from "./ConversationMenu";
 import { SelectIcon, FlaskIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
-import { CloseIcon, EditIcon, TrashIcon, ChevronDownIcon } from "../Icons";
-import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Presence, Reveal, InlineAlert, MODAL_TITLE_ATTR } from "../atoms";
+import { CloseIcon, EditIcon, TrashIcon, ChevronDownIcon, SearchIcon } from "../Icons";
+import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Presence, Reveal, RowSlot, InlineAlert, MODAL_TITLE_ATTR } from "../atoms";
 import { disconnectSentence } from "../../lib/wa-coexist";
 import { BTN, R, T, FW, M, IC, H, SP } from "../../lib/constants";
 // v18.2.0 /code-review: "3 selected", "Delete 3 conversations?" keep their count and word together.
@@ -65,6 +65,13 @@ function isActionable(c) {
   const intent = c.draftData && c.draftData.intent;
   if (intent === "cancel" || intent === "modify") return intentBannerVisible(c);
   return !!(c.unread || c.draftStatus === "parsed");
+}
+
+// Whether a conversation belongs to a tab ("inbox" or "archived"). One rule for
+// the leaves-the-tab effect and the Needs action dot (/code-review: it was
+// written out in both).
+function inTab(c, which) {
+  return which === "archived" ? !!c.archived : !c.archived;
 }
 
 // Top conversation (phoneKey) of a tab, in the same order ConversationList
@@ -246,6 +253,29 @@ export function InboxPanel({
   });
   const [showTpl, setShowTpl] = useState(false);
   const searchRef = useRef(null); // "/" focuses the search box
+  // v18.17.0: the search field opens out of its magnifier (the title row's note
+  // at `filterControls`). Open while pressed open OR while it holds text, so a
+  // live search (App's `query`, which outlives the panel) is never behind a
+  // closed field.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchShown = searchOpen || !!query;
+  // Focus in the same call as the open: on iOS only a focus inside the press
+  // raises the keyboard. The field is mounted whenever the title row draws the
+  // list's controls, so it is there to take it. Where it is NOT (a phone with a
+  // conversation open, `showFilters` false) there is nothing to open: "/" from
+  // a keyboard there used to leave the list an open, empty, unfocused field that
+  // only a focus and a blur would close (/code-review).
+  function openSearch() {
+    if (!searchRef.current) return;
+    setSearchOpen(true);
+    searchRef.current.focus({ preventScroll: true });
+  }
+  // The ✕ and Escape: empty it and fold it back into the icon.
+  function closeSearch() {
+    setQuery("");
+    setSearchOpen(false);
+    if (searchRef.current && document.activeElement === searchRef.current) searchRef.current.blur();
+  }
 
   // ── Multi-select (bulk archive / restore / delete) ──────────────────────────
   // selectMode flips the list rows into checkbox mode (row click toggles the
@@ -342,6 +372,8 @@ export function InboxPanel({
         const consume = () => { e.preventDefault(); e.stopPropagation(); };
         if (showTpl) { consume(); setShowTpl(false); return; }
         if (confirmBulkDelete) { consume(); setConfirmBulkDelete(false); return; }
+        // v18.17.0: Escape in the search field closes the search first.
+        if (searchRef.current && e.target === searchRef.current && searchShown) { consume(); closeSearch(); return; }
         if (selectMode) { consume(); exitSelectMode(); return; }
         if (!twoPane && activeKey) { consume(); setActiveKey(null); return; }
         // Falls through on purpose: the global chain closes the inbox, so the
@@ -407,11 +439,13 @@ export function InboxPanel({
         if (draftPending && onDismiss) { e.preventDefault(); onDismiss(ac.phoneKey); }
         return;
       }
-      // / → focus the search box.
-      if (e.key === "/") { e.preventDefault(); if (searchRef.current) searchRef.current.focus(); return; }
-      // Backspace → Archive (Inbox tab): bulk-archive the selection in select mode,
-      // else archive the active conversation.
-      if (e.key === "Backspace" && tab === "inbox") {
+      // / → open and focus the search box.
+      // v18.17.0: it opens the field first, which is a magnifier until then.
+      if (e.key === "/") { e.preventDefault(); openSearch(); return; }
+      // H → Archive (Inbox tab): bulk-archive the selection in select mode,
+      // else archive the active conversation. v18.17.0 (Patryk): H, for "hide",
+      // where it was Backspace, a key that does other work everywhere else.
+      if (k === "h" && tab === "inbox") {
         e.preventDefault();
         if (selectMode) { const keys = selectedKeysInTab(); if (keys.length && onBulkArchive) { onBulkArchive(keys); exitSelectMode(); } }
         else if (ac && onArchive) onArchive(ac.phoneKey);
@@ -484,8 +518,7 @@ export function InboxPanel({
     const c = conversations.find((x) => x.phoneKey === activeKey);
     if (!c) { setActiveKey(null); return; }
     if (tab === "archived" && !c.archived) { setTab("inbox"); setSelected(new Set()); return; }
-    const inCurrentTab = tab === "archived" ? c.archived : !c.archived;
-    if (!inCurrentTab) setActiveKey(null);
+    if (!inTab(c, tab)) setActiveKey(null);
   }, [conversations, tab, activeKey]);
 
   const activeConv = activeKey ? conversations.find((c) => c.phoneKey === activeKey) : null;
@@ -588,6 +621,10 @@ export function InboxPanel({
   // it and the row is the mark and ✕ (v18.2.0, W5). Order (Patryk, 2026-07-16):
   // Select, then Needs action, then the search box.
   const showFilters = twoPane || !activeKey;
+  // Select and Needs action stand beside the search unless a phone needs their room for it.
+  const beside = twoPane || !searchShown;
+  // The Needs action dot is red while the open list holds something it would find.
+  const dotRed = !needsAction && conversations.some((c) => inTab(c, tab) && isActionable(c));
   const filterControls = (
     <>
       {/* v17.15.6's aria-pressed rule, reaching the module at the 17.16.12
@@ -600,6 +637,11 @@ export function InboxPanel({
           two. This one has no text at all, so its flipping `title` WAS its
           name; the static aria-label outranks `title` and demotes the
           flipping text to a description, which is where it belongs. */}
+      {/* v18.17.0 (Patryk): on a phone the row leaves the search 80px, so while
+          the field is open Select and Needs action fold sideways out of its way,
+          on the field's own `reveal`, and come back as it closes. Two panes
+          have the room and keep them. RowSlot: the row's gap goes with each. */}
+      <RowSlot show={beside} gap={SP.base} speed="reveal">{beside ? (
       <button
         onClick={() => { if (selectMode) exitSelectMode(); else setSelectMode(true); }}
         title={selectMode ? "Exit selection" : "Select conversations"}
@@ -607,45 +649,96 @@ export function InboxPanel({
         aria-label="Select conversations"
         className="mgt-hover-scale mgt-press"
         style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: selectMode ? "var(--wa-green)" : "transparent", color: selectMode ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (selectMode ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
-      ><SelectIcon size={IC.chrome} /></button>
-      {/* v18.16.0 (follow-up): on one row with the mark, a phone has no width for
-          the words, so below two panes the filter is its dot alone, in a round
-          button the size of Select's, named by the words it no longer shows. */}
+      ><SelectIcon size={IC.chrome} /></button>) : null}</RowSlot>
+      {/* v18.17.0 (Patryk): an icon on every screen, where two panes had the
+          words beside it. The icon is the list's own: the dot a conversation
+          that needs answering carries on its row (ConversationRow), red with
+          its ring, so the filter and what it finds wear one mark. Red only while
+          the open list holds a conversation the filter would show (Patryk), so
+          red means pressing it finds something; otherwise the button's grey.
+          On the green of the pressed filter it is the button's ink (white).
+          Named by the words it no longer shows; `aria-pressed` carries the
+          state, the name stays still (the note above). While it is ON it does
+          not fold for a phone's search (/code-review): it is the only thing
+          on screen saying the list is narrowed, and the search's own rule is
+          that a filter in force stays in view. */}
+      <RowSlot show={beside || needsAction} gap={SP.base} speed="reveal">{beside || needsAction ? (
       <button
         onClick={() => setNeedsAction((v) => !v)}
         aria-pressed={needsAction}
-        aria-label={twoPane ? undefined : "Needs action"}
+        aria-label="Needs action"
+        // No "(A)" here (/code-review): A accepts an open draft first and is
+        // this filter only when none is waiting, which a tooltip cannot say.
         title="Show only conversations that need a response"
         className="mgt-hover-scale mgt-press"
-        style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: twoPane ? "8px 14px" : "8px", minHeight: 36, minWidth: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}
-      >{/* A real 8px dot, not a text ● — the same device NotificationStrip
-           uses for a section with no icon. It stays a dot rather than
-           becoming an icon because it reports a STATE (this filter is on),
-           which is what the strip's dots report too. */}
-        <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "currentColor", flexShrink: 0 }} />{twoPane ? "Needs action" : null}</button>
-      <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
-        {/* 17.15.0-wa-sandbox: a placeholder is not a name. It is not
-            exposed as one consistently, and it is gone the moment there is
-            a value — so the control a screen reader meets while you are
-            typing in it has no name at all. There is no visible label to
-            associate here by design (the field is the width of the pane and
-            its purpose is obvious to the eye), which is exactly the case
-            `aria-label` exists for. */}
-        <input /* @no-lift a full-width text input — index.css records exactly this case: the booking form's Date/Time inputs overflowed their Section when they lifted, and 28 of the app's 29 inputs are unlifted for it */
-          ref={searchRef}
-          aria-label="Search conversations"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          // v18.2.0 (W5): a phone cut the long one to "Search name, number
-          // or". The field is named either way (aria-label above).
-          placeholder={twoPane && !shortScreen ? "Search name, number or message…" : "Search…"}
-          // v18.10.0: 16px under a finger (.mgt-touch-16, index.css), and a
-          // Search key on the phone's keyboard.
-          className="mgt-touch-16"
-          enterKeyHint="search"
-          style={Object.assign({}, mkInp(), { fontSize: T.body, padding: "8px 12px", paddingRight: query ? 30 : 12 })}
-        />
-        <Presence show={!!query} inClass="mgt-appear" outClass="mgt-ghost-out">{query ? <button /* @no-lift transparent, radius-less and absolutely positioned INSIDE the input: the class supplies an opaque --bg-hover-card and no radius (v17.7.0), which is the hard-edged rectangle ConnectionStatus's dot hit — and its scale would be out-specified by this element's own inline translateY(-50%) anyway */ onClick={() => setQuery("")} title="Clear search" className="mgt-press" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "var(--text-muted)", padding: "2px 6px", lineHeight: 1 }}><CloseIcon size={IC.inline} /></button> : null}</Presence>
+        style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "background-color " + M.tap + ", color " + M.tap + ", border-color " + M.tap + ", transform " + M.tap }}
+      >{/* A real 8px dot, not a text ● (the device NotificationStrip uses for a
+           section with no icon), and the row's exact one: same size, fill and ring. */}
+        <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: dotRed ? "var(--wa-unread-dot)" : "currentColor", boxShadow: dotRed ? "var(--wa-unread-ring)" : "none", flexShrink: 0, transition: "background-color " + M.tap + ", box-shadow " + M.tap }} /></button>) : null}</RowSlot>
+      {/* v18.17.0 (Patryk): search is a magnifier until it is wanted. Pressed
+          (or "/"), the field opens out of the icon to the right, to 90% of the
+          room the row leaves it, and closes back into it along the same path,
+          both on `M.reveal` (520ms, ease-out both ways: Patryk found 385ms too
+          fast, the close most of all, and chose a close that settles into the
+          icon over one that speeds up into it). ONE pill does both: the field is always mounted at the icon's
+          size, so the opening grows the very box the icon sat in rather than
+          swapping one element for another, and the focus can be given in the
+          press itself (iOS raises the keyboard only for a focus inside the
+          gesture). It closes when it is left EMPTY, by its ✕, and by Escape;
+          with text it stays open, so a filter in force is always on screen.
+          `query` is App's and outlives the panel, so a field reopened on a
+          live search starts open. */}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center" }}>
+        <div style={{ position: "relative", flexShrink: 0, width: searchShown ? "90%" : 36, minWidth: 36, transition: "width " + M.reveal }}>
+          {/* 17.15.0-wa-sandbox: a placeholder is not a name. It is not
+              exposed as one consistently, and it is gone the moment there is
+              a value — so the control a screen reader meets while you are
+              typing in it has no name at all. There is no visible label to
+              associate here by design (the field is the width of the pane and
+              its purpose is obvious to the eye), which is exactly the case
+              `aria-label` exists for. */}
+          <input /* @no-lift a full-width text input — index.css records exactly this case: the booking form's Date/Time inputs overflowed their Section when they lifted, and 28 of the app's 29 inputs are unlifted for it */
+            ref={searchRef}
+            aria-label="Search conversations"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onBlur={() => { if (!query) setSearchOpen(false); }}
+            // Closed, the field is the icon's backdrop and not a stop of its
+            // own: the magnifier button over it is the control. Nor is it in
+            // the accessibility tree (/code-review): it carried the button's
+            // name, so a screen reader met two "Search conversations" in a
+            // row, the first one doing nothing. `tabIndex` -1 keeps it out of
+            // the tab order, which is what lets it be hidden; `openSearch`
+            // focuses it in the press and the same render un-hides it.
+            tabIndex={searchShown ? undefined : -1}
+            aria-hidden={searchShown ? undefined : true}
+            // v18.2.0 (W5): a phone cut the long one to "Search name, number
+            // or". The field is named either way (aria-label above).
+            placeholder={twoPane && !shortScreen ? "Search name, number or message…" : "Search…"}
+            // v18.10.0: 16px under a finger (.mgt-touch-16, index.css), and a
+            // Search key on the phone's keyboard.
+            className="mgt-touch-16"
+            enterKeyHint="search"
+            // The text starts after the magnifier, which stays where it was
+            // pressed. Closed, the fill and edge are the round buttons' beside
+            // it (transparent on --border-soft), and ease to the field's.
+            style={Object.assign({}, mkInp(), { height: H.chrome, fontSize: T.body, padding: "8px 12px", paddingLeft: 32, paddingRight: query ? 30 : 12, background: searchShown ? "var(--bg-input)" : "transparent", border: "1px solid " + (searchShown ? "var(--field-edge)" : "var(--border-soft)"), boxShadow: searchShown ? "var(--shadow-input)" : "none", transition: "background-color " + M.tap + ", border-color " + M.tap + ", box-shadow " + M.tap })}
+          />
+          {searchShown ? (
+            <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", pointerEvents: "none" }}><SearchIcon size={IC.chrome} /></span>
+          ) : (
+            // No `aria-expanded` (/code-review): this button is gone the
+            // moment it opens the field, so it could only ever say "collapsed".
+            <button
+              onClick={openSearch}
+              aria-label="Search conversations"
+              title="Search conversations (/)"
+              className="mgt-hover-scale mgt-press"
+              style={{ position: "absolute", left: 0, top: 0, width: 36, height: 36, padding: 0, background: "transparent", border: "none", borderRadius: R.pill, color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "transform " + M.tap }}
+            ><SearchIcon size={IC.chrome} /></button>
+          )}
+          <Presence show={!!query} inClass="mgt-appear" outClass="mgt-ghost-out">{query ? <button /* @no-lift transparent, radius-less and absolutely positioned INSIDE the input: the class supplies an opaque --bg-hover-card and no radius (v17.7.0), which is the hard-edged rectangle ConnectionStatus's dot hit — and its scale would be out-specified by this element's own inline translateY(-50%) anyway */ onClick={closeSearch} title="Clear search" className="mgt-press" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "var(--text-muted)", padding: "2px 6px", lineHeight: 1 }}><CloseIcon size={IC.inline} /></button> : null}</Presence>
+        </div>
       </div>
     </>
   );

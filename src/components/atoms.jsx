@@ -1313,9 +1313,13 @@ export function TurnChevron({ open, size = IC.control, flip = false }) {
 // through the ease and is clipped, so a label never wraps on the way. Pass null
 // while closed: Reveal keeps the last copy for the exit, and that copy is inert,
 // because it has been answered and is only on its way out.
-export function RowSlot({ show, gap, children }) {
+// `speed` is Reveal's, a name from `M` (v18.17.0: the inbox's select checkboxes
+// open on the list's ROW_FOLD, the row's geometry rather than a disclosure). As
+// the FIRST item of a row it works the same: the slot's own gap then sits in
+// front of the row's padding while it opens, and the row's gap follows it.
+export function RowSlot({ show, gap, children, speed = "reveal" }) {
   return (
-    <Reveal horizontal show={show} inert={!show} style={{ marginLeft: -gap }}>
+    <Reveal horizontal show={show} inert={!show} speed={speed} style={{ marginLeft: -gap }}>
       {children ? <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, whiteSpace: "nowrap", paddingLeft: gap }}>{children}</span> : null}
     </Reveal>
   );

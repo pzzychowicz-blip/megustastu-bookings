@@ -2438,5 +2438,20 @@ after, it went from the ~1.69× on screen to 1.95×, one notch).
   and disappears *without* a navigation, when the last booking of a day is
   cancelled or the first is made, and there it was the only in-flow surface left
   changing the page height in one frame.
+- **The inbox's search opens out of its own icon** (v18.17.0, Patryk). A
+  magnifier until pressed (or `/`); the field is one pill, always mounted at the
+  icon's 36px, whose `width` eases to 90% of the room the title row leaves it and
+  back, so the opening grows the box the icon sat in and the focus is given in
+  the press (iOS raises the keyboard only then). **Both ways on `M.reveal`,
+  ease-out both ways**: 385ms with an ease-in close read as too fast, the close
+  most of all, because an accelerating close does most of its travel at the end;
+  Patryk chose a close that settles into the icon over the strict reverse. It
+  closes when left empty, by its ✕ and by Escape, never while it holds text, so a
+  filter in force is always on screen. On a phone, where the row leaves it 80px,
+  Select and Needs action fold out of its way on the same `reveal` (`RowSlot`).
+- **A column that a mode adds to every row eases in and out** (v18.17.0): the
+  inbox's select checkbox is a `RowSlot` on the list's `ROW_FOLD`, where it
+  appeared in one frame and every row's text jumped 28px. `RowSlot` takes a
+  `speed` for this; as a row's FIRST item it works unchanged.
 
 ---

@@ -131,13 +131,25 @@ describe("planStatus: what a status tap writes", () => {
   });
 
   it("a seat never lets the optimiser move anybody else; a completion does", () => {
-    // On today with the switch on, the pass moves a party of two off table 7.
-    const list = [bk("a", "20:00", 2, ["3"]), bk("o", "13:00", 2, ["9"])];
+    // On today with the switch on, the pass moves a party of two off joined
+    // tables when one table would do. (v18.17.0, I: the pass keeps a party where
+    // its tables still suit it, so a party of two on the four-seat 9 now stays,
+    // and the fixture is a set the pass would not keep.)
+    const list = [bk("a", "20:00", 2, ["3"]), bk("o", "13:00", 2, ["4", "5"])];
     const seat = status("a", "seated", list, { autoOptimizer: true }).plan.transform(list);
     expect(byId(seat, "o")).toBe(list[1]);
     const done = status("a", "completed", list, { autoOptimizer: true });
-    expect(byId(done.plan.transform(list), "o").tables).not.toEqual(["9"]);
+    expect(byId(done.plan.transform(list), "o").tables).toHaveLength(1);
     expect([done.plan.flashes, done.plan.flashKind]).toEqual([true, null]);
+  });
+
+  // v18.17.0 (I): a completion that moved nobody else does not claim it did.
+  it("a completion that moves nobody else says Booking saved, and its plan-time pass is the write's", () => {
+    const list = [bk("a", "20:00", 2, ["3"]), bk("o", "13:00", 2, ["9"])];
+    const done = status("a", "completed", list, { autoOptimizer: true });
+    expect([done.plan.flashes, done.plan.flashKind]).toEqual([true, "saved"]);
+    expect(done.plan.transform(list)).toBe(done.plan.transform(list));
+    expect(byId(done.plan.transform(list), "o").tables).toEqual(["9"]);
   });
 
   it("cuts a seated visit's length to the stay when it completes, and stamps the stay", () => {
@@ -343,7 +355,7 @@ describe("BookingApp's three functions are the gate, the plan and the side effec
       "wa.autoHandleCancelIntent(id);",
       "setConfirmCancel(null);",
       "if(ok){",
-      "flash();",
+      'flash(movedOthers(bookings,post,[id])?null:"saved");',
       'armUndo(undoDelta(bookings,post),id,"cancel",!!noShow);',
       "}",
     ].join("\n"));

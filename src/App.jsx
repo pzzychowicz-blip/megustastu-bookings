@@ -36,7 +36,6 @@ import {
   histEntry,
   statusOrder,
   getKitchenLoad,
-  applyOpt,
   optimizerActiveFor, syncLiveDurations, bookingsAfterAction,
   checkInefficent, findClashes, clashRowId,
   nowTime, newBookingTime,
@@ -58,6 +57,8 @@ import {
   // v18.0.0 session 8 (C8): what the save toast is allowed to claim.
   // (v18.3.4: its zone note, `offZoneNote`, is the saves' own, in booking-save.js.)
   savedToast,
+  // v18.17.0 (I): whether a write moved anybody else, the claim the toast makes.
+  movedOthers,
   // v18.2.0 (C2): the one word for a party's size.
   guestsLabel,
   // v18.2.0 phase 77: any other count and its word, joined the same way.
@@ -80,7 +81,7 @@ import { undismissedClashes, clashByBooking, clashSpansByTable } from "./lib/cla
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
-import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal, draftForSave, draftRefusal, formSeatClash, kitchenAsk, waitlistEntry } from "./lib/booking-save";
+import { applyEdit, buildBooking, memoByPrev, againDraft, goneRefusal, pickedRefusal, draftForSave, draftRefusal, formSeatClash, kitchenAsk, waitlistEntry } from "./lib/booking-save";
 import { normalizePhone, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { joinPhone } from "./lib/phone-countries";
 import { sameDraft } from "./lib/drafts";
@@ -110,7 +111,7 @@ import { nextFreeAfter } from "./lib/cell-offer";
 // v18.16.0: a moved booking's new time is drafted for a WhatsApp guest
 // (`saveMove`, `doSaveEdit`). The hook already brings this module into the entry.
 import { movedSlot, movedReplyWords } from "./lib/whatsapp";
-import { planAssign, planReassign, swapSlot, liveSwap } from "./lib/manual-assign";
+import { planAssign, planReassign, planReshuffle, planUnlock, lockedOn, swapSlot, liveSwap } from "./lib/manual-assign";
 import { planStatus, planCancel, completeCleared, seatClashSnap } from "./lib/status-change";
 import { appBannerSections } from "./components/AppBanners";
 import { NotificationStrip } from "./components/NotificationStrip";
@@ -457,7 +458,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.16.0"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.17.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1487,6 +1488,7 @@ export function BookingApp({uid}){
     indoorTint,onToggleIndoorTint,
     cellBook,onToggleCellBook,
     vibrateOnDrag,onToggleVibrate,
+    dragHold,onSetDragHold,
     split,focusedPane,setFocusedPane,applySplit,fitTimeline,
     confirmSplit,swapSides,toggleSplitDir,exitSplit,setSplitRatio,
     splitSideBySideOk,shellFixed,
@@ -2458,14 +2460,30 @@ export function BookingApp({uid}){
 
   // v18.14.0 (H5): undoable, through `saveMove`. Nothing moved means no pill, so
   // the toast still answers the press.
-  function forceReshuffle(){saveMove(function(b){return applyOpt(b,viewDate,tableBlocks);},null,"reshuffle","Tables re-optimised.",function(){flash("unmoved");});}
+  // v18.17.0 (D): WHAT it writes is `planReshuffle` (lib/manual-assign.js), which
+  // reads the day as it stands now: a seated party running over keeps its table.
+  // (B): `unlock` is the confirm's second button, "Reshuffle and unlock N": the
+  // day's locked, unseated bookings are handed back first. Only the literal true,
+  // so Enter on the confirm (`K.forceReshuffle()`) is the plain one.
+  function forceReshuffle(unlock){const plan=planReshuffle({viewDate:viewDate,tableBlocks:tableBlocks,today:today,nowMins:nowMins,unlock:unlock===true,bookings:bookings,user:getUser()});
+    // /code-review: "Reshuffle and unlock" is refused when taking the locks off
+    // would leave a party without a table. The plain Reshuffle never is.
+    if(plan.refuse){flashRefusal(plan.refuse);return;}
+    saveMove(plan.transform,null,"reshuffle",plan.done,function(){flash("unmoved");});}
   // v18.5.1 (#17): the Overlap banner's Reassign. WHICH tables, and the four
   // refusals, are `planReassign` (lib/manual-assign.js).
-  function reassignBooking(id){
+  // v18.17.0 (K): a refusal is the refusal toast. It went to `setError`, the
+  // booking form's error line, and Reassign is pressed on the Overlap banner with
+  // no form open, so "No alternative tables available" showed nowhere and the
+  // button read as broken (measured on DEV, 18.16.0).
+  // (/code-review, Patryk 2026-11-14): it asks `bookingAssign`, as the drop,
+  // Assign and Unlock do. It never had: an account that could not drag or
+  // unlock a booking could move it from the Overlap banner, and since (C) a
+  // locked one too.
+  function reassignBooking(id){if(refused("bookingAssign"))return;
     const plan=planReassign({id:id,bookings:bookings,liveBookings:liveBookings,tableBlocks:tableBlocks,getUser:getUser});
-    if(plan.refuse){setError(plan.refuse);return;}
+    if(plan.refuse){flashRefusal(plan.refuse);return;}
     const ok=saveBookings(plan.transform,false,goneReport(id));
-    setError("");
     if(ok) flash();
   }
   // ── Timeline drag & drop ───────────────────────────────────────────────────
@@ -2521,6 +2539,15 @@ export function BookingApp({uid}){
   // says so (" · reply drafted", or that the guest's window is closed). A landing
   // too late for the pill still drafts, and says it in the toast slot instead.
   function draftMoved(id,slot){return slot?movedReplyWords(wa.draftMovedReply(id,slot)):null;}
+  // v18.17.0 (/code-review): a plan may bring its own question for a REPLAY
+  // (`planUnlock`: the booking was seated, or the day filled, on another device
+  // while the write was held). Asked after "the booking has gone", whose report
+  // it takes the place of in `saveMove`.
+  function planReplay(id,plan){
+    if(!plan||!plan.replayRefusal) return {};
+    const gone=id==null?null:goneRefusal(id,bookings);
+    return {replayRefusal:function(prev){return (gone&&gone(prev))||plan.replayRefusal(prev);}};
+  }
   function saveMove(transform,id,kind,sentence,quiet,plan){
     const move=withUndoDelta(transform,undoDelta);
     return saveBookings(move.transform,false,Object.assign(id==null?{}:goneReport(id),{onLanded:function(){
@@ -2530,7 +2557,7 @@ export function BookingApp({uid}){
       const said=plan&&plan.retime?draftMoved(id,movedSlot(delta.find(byId),move.post().find(byId))):null;
       if(move.age()<=(generalSettings.undoSecs||10)*1000) armUndo(delta,id,kind,false,landedSentence(plan,sentence,delta,move.post(),id)+(said?" · "+said.pill:""));
       else if(said) flashDragMsg(said.toast,said.good);
-    }}));
+    }},planReplay(id,plan)));
   }
   // v18.4.5 (#17): WHAT a drop does is `planDrop` (lib/drop-plan.js), which
   // returns its conclusion. App keeps the gate and the two side effects.
@@ -2563,6 +2590,16 @@ export function BookingApp({uid}){
   function retimeBooking(id,time){if(refused("bookingEdit"))return;
     const plan=planRetime(Object.assign(dropCtx(id,null),{time:time}));
     if(!plan) return;
+    if(plan.refuse){flashDragMsg(plan.refuse);return;}
+    saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);},plan);
+  }
+  // v18.17.0 (A): the lock a drag, an Assign or a walk-in leaves can be taken
+  // off, from the status card. WHAT it writes is `planUnlock`
+  // (lib/manual-assign.js); this keeps the gate and the write. It is a move, so it
+  // asks `bookingAssign` and goes through `saveMove`: undoable, and the pill says
+  // who else the optimiser moved once the booking was its to place again.
+  function unlockBooking(id){if(refused("bookingAssign"))return;
+    const plan=planUnlock({id:id,bookings:bookings,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,user:getUser()});
     if(plan.refuse){flashDragMsg(plan.refuse);return;}
     saveMove(plan.transform,id,"move",plan.done,function(){flashDragMsg(plan.done,true);},plan);
   }
@@ -2609,7 +2646,8 @@ export function BookingApp({uid}){
     // added above deliberately STAYS on undo — the restored occurrence keeps
     // its deterministic id, so the generator never duplicates it, and the
     // skipDate just stops a REGENERATION it no longer needs to do.
-    if(ok){flash();armUndo(undoDelta(bookings,postDel),id,"delete",false);}
+    // v18.17.0 (I): "Tables re-optimised." only when the pass moved somebody else.
+    if(ok){flash(movedOthers(bookings,postDel,[id])?null:"saved");armUndo(undoDelta(bookings,postDel),id,"delete",false);}
     // v18.0.0 session 8 (C6): returned so `settleVoucherBack` can keep
     // `settleVoucher`'s ordering — the booking write first, the money only if
     // it landed.
@@ -2987,7 +3025,7 @@ export function BookingApp({uid}){
     wa.autoHandleCancelIntent(id); // a pending WA cancel-intent banner on this booking's conversation auto-handles
     setConfirmCancel(null);
     if(ok){
-      flash();
+      flash(movedOthers(bookings,post,[id])?null:"saved");   // v18.17.0 (I), as the delete
       armUndo(undoDelta(bookings,post),id,"cancel",!!noShow);
     }
     // Returned for `settleVoucherBack`, which must not move money for a write
@@ -3084,8 +3122,10 @@ export function BookingApp({uid}){
     // places the day around `next`, a list the server does not hold, and closing the
     // dialog would lose the block with nothing said. The dialog reads the false.
     if(!saveBlocks(next)) return false;
-    const ok=saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
-    if(ok) flash();
+    // v18.17.0 (I): memoised, so the toast's question and the write share one pass.
+    const place=memoByPrev(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
+    const ok=saveBookings(place);
+    if(ok) flash(movedOthers(bookings,place(bookings),[])?null:"saved");
     setBlockTarget(null);
   }
   function removeBlock(block){if(refused("tableBlock"))return;
@@ -3094,8 +3134,9 @@ export function BookingApp({uid}){
     // so unblocking either one dropped BOTH. See sanitizeBlock in booking-logic.
     const next=tableBlocks.filter(function(bl){return bl.id!==block.id;});
     if(!saveBlocks(next)) return false;
-    const ok=saveBookings(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
-    if(ok) flash();
+    const place=memoByPrev(function(b){return bookingsAfterAction(b,block.date,next,null,false,autoOptimizer);});
+    const ok=saveBookings(place);
+    if(ok) flash(movedOthers(bookings,place(bookings),[])?null:"saved");   // v18.17.0 (I)
     if(next.filter(function(bl){return bl.tableId===block.tableId&&bl.date===block.date;}).length===0) setBlockTarget(null);
   }
 
@@ -3132,6 +3173,9 @@ export function BookingApp({uid}){
   //    the row banners (Overlap / Late / WaitAvail / reminders) were already
   //    components. All STATE stays here (the Phase D3 locked decision — only
   //    rendering moved). See CLAUDE.md "Notification layout".
+  // v18.17.0 (B): how many of the viewed day's bookings a plain Reshuffle will
+  // leave where they are, for the confirm. Asked only while it is open.
+  const reshuffleLocked=confirmReshuffle?lockedOn(bookings,viewDate):0;
   const ineffShow=!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer)&&bookingDefaults.reshuffleSuggestEnabled;
   // Overlap warnings banner — shows when one or more seated guests are overstaying
   // into the start time of a booking on the same table (one-tap Reassign per row).
@@ -3599,13 +3643,14 @@ export function BookingApp({uid}){
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only the code's own change resumes; the door is read from its ref, and both doors read the form from formRef
   useEffect(function(){const door=resumeDoorRef.current;if(!door)return;resumeDoorRef.current=null;if(door==="waitlist") addFormToWaitlist();else doSave();},[form.phone]);
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,newAtCell,openEdit,updateStatus,doCancelBooking,dropOnTable,previewDrop,checkDrop,retimeBooking,previewRetime,checkRetime,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
+  viewActionsRef.current={openNew,newAtCell,openEdit,updateStatus,doCancelBooking,unlockBooking,dropOnTable,previewDrop,checkDrop,retimeBooking,previewRetime,checkRetime,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
       onEdit:function(b){R.current.openEdit(b);},
       onStatus:function(id,s){R.current.updateStatus(id,s);},
       onNoShow:function(id){R.current.doCancelBooking(id,true);},
+      onUnlock:function(id){R.current.unlockBooking(id);},
       onDropOnTable:function(id,targetId){return R.current.dropOnTable(id,targetId);},
       onDropPreview:function(id,targetId){return R.current.previewDrop(id,targetId);},
       onDropCheck:function(id,targetId){return R.current.checkDrop(id,targetId);},
@@ -3673,6 +3718,7 @@ export function BookingApp({uid}){
     onEdit={VA.onEdit}
     onStatus={VA.onStatus}
     onNoShow={VA.onNoShow}
+    onUnlock={VA.onUnlock}
     onWalkin={VA.onWalkin}
     gesturesEnabled={planGestures}
     isMobile={isMobile}
@@ -3723,6 +3769,7 @@ export function BookingApp({uid}){
     tagList={tagList}
     guestTags={guestTags}
     onNoShow={VA.onNoShow}
+    onUnlock={VA.onUnlock}
     zoom={timelineZoom}
     setZoom={VA.onSetZoom}
     followZoom={tlSettings.followZoom}
@@ -3777,6 +3824,7 @@ export function BookingApp({uid}){
     late={lateMap}
     clashes={clashMap}
     onNoShow={VA.onNoShow}
+    onUnlock={VA.onUnlock}
     selectedId={selectedListId}
     focusReq={listFocusReq}
     onSelect={VA.onSelect}
@@ -4347,13 +4395,16 @@ export function BookingApp({uid}){
               const amt=v&&v.redemptions&&v.redemptions[voucherBack.id]?v.redemptions[voucherBack.id].amount:0;
               const why=voucherBack.from==="delete"?"You are deleting this booking":"You are moving it back out of Completed";
               return "This visit redeemed "+money(amt,generalSettings.currency)+" of voucher "+formatCode(v?v.code:"")+". "+why+" — restore that amount to the voucher, or keep it redeemed?";
-            })()}</div><div style={{fontSize: T.small,color:S.sub}}>{voucherBack.from==="delete"?"Restoring puts the balance back. Keeping it redeemed leaves the amount spent against a booking that will no longer exist. The booking is deleted either way.":"Restoring puts the balance back and removes this visit from the voucher’s history. Keeping it redeemed leaves the record as it is."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!seatNote}>{seatNote?<SeatNoteModal note={seatNote} onClose={function(){setSeatNote(null);}} />:null}</ModalPresence><ModalPresence show={!!seatClash}>{seatClash?<SeatClashModal clash={seatClash} onComplete={seatAfterClearing} onAnyway={seatAnyway} onBack={function(){setSeatClash(null);}} />:null}</ModalPresence><ModalPresence show={!!voucherCarry}>{voucherCarry?<VoucherCarryModal carry={voucherCarry} currency={generalSettings.currency} onMove={doVoucherCarry} onNotNow={function(){setVoucherCarry(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+            })()}</div><div style={{fontSize: T.small,color:S.sub}}>{voucherBack.from==="delete"?"Restoring puts the balance back. Keeping it redeemed leaves the amount spent against a booking that will no longer exist. The booking is deleted either way.":"Restoring puts the balance back and removes this visit from the voucher’s history. Keeping it redeemed leaves the record as it is."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!seatNote}>{seatNote?<SeatNoteModal note={seatNote} onClose={function(){setSeatNote(null);}} />:null}</ModalPresence><ModalPresence show={!!seatClash}>{seatClash?<SeatClashModal clash={seatClash} onComplete={seatAfterClearing} onAnyway={seatAnyway} onBack={function(){setSeatClash(null);}} />:null}</ModalPresence><ModalPresence show={!!voucherCarry}>{voucherCarry?<VoucherCarryModal carry={voucherCarry} currency={generalSettings.currency} onMove={doVoucherCarry} onNotNow={function(){setVoucherCarry(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height its sentences and buttons are set when it opens and it is up for one decision */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
-              onClick={function(){setConfirmReshuffle(false);}}>Back</button><button
+              onClick={function(){setConfirmReshuffle(false);}}>Back</button>{/* v18.17.0 (B): offered only when the day has locks to take off. */}{reshuffleLocked>0?<button
+              onClick={function(){if(!armSettled())return;setConfirmReshuffle(false);forceReshuffle(true);}}
+              className="mgt-hover-scale"
+              style={mkSolidBtn(BTN.orange)}>{"Reshuffle and unlock "+reshuffleLocked}</button>:null}<button
               onClick={function(){if(!armSettled())return;setConfirmReshuffle(false);forceReshuffle();}}
               className="mgt-hover-scale"
-              style={mkSolidBtn(BTN.orange)}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div></Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
+              style={mkSolidBtn(BTN.orange)}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:reshuffleLocked>0?8:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div>{reshuffleLocked>0?<div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{countLabel(reshuffleLocked,"booking is locked","bookings are locked")+" to tables. Reshuffle does not move a locked booking, unless you unlock it here."}</div>:null}</Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.
@@ -4391,6 +4442,8 @@ export function BookingApp({uid}){
             onToggleCellBook={onToggleCellBook}
             vibrateOnDrag={vibrateOnDrag}
             onToggleVibrate={onToggleVibrate}
+            dragHold={dragHold}
+            onSetDragHold={onSetDragHold}
             weekHours={weekHours}
             onSaveDayHours={function(i,p){if(refused("hoursEdit"))return;saveDayHours(i,p);}}
             onSaveAllDays={function(d){if(refused("hoursEdit"))return;saveAllDays(d);}}

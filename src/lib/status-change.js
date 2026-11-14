@@ -38,7 +38,7 @@
 import {
   bookingsAfterAction, histEntry as defaultHistEntry,
   seatRefusal, seatClashParties, seatNoteFor,
-  seatedElapsed, unseatRestore, applySeatedShift, completedSeatedPatch
+  seatedElapsed, unseatRestore, applySeatedShift, completedSeatedPatch, movedOthers
 } from "./booking-logic.js";
 import { memoByPrev } from "./booking-save.js";
 import { guestTagMap, bookingTags } from "./customers.js";
@@ -90,7 +90,7 @@ export function planStatus(ctx){
   const seatSnap=seatNoteFor(seatCur&&seatCur.status,status,seatCur,(status==="seated"&&seatCur&&seatCur.status!=="seated")?bookingTags(seatCur,guestTagMap(ctx.bookings),ctx.tagList):null);
   const user=ctx.getUser();
   const nowM=ctx.nowMins;
-  return {transform:function(b){
+  const transform=memoByPrev(function(b){
     const target=b.find(function(x){return x.id===id;});
     const d=target?target.date:viewDate;
     // v14: detect confirmed → seated transition (for any prior non-seated status).
@@ -147,10 +147,15 @@ export function planStatus(ctx){
     // Seated transitions never reshuffle others — even when optimizer is ON.
     const optState=(status==="seated")?false:autoOptimizer;
     return bookingsAfterAction(updated,d,tableBlocks,null,false,optState);
-  },
+  });
   // C8: a seat never reshuffles (`optState` above), so its toast says "saved".
+  // v18.17.0 (I): nor does a completion that moved nobody else, which with the
+  // pass keeping the day is the usual case. Asked of the write itself (memoised,
+  // so the dispatch on the same list reuses this pass).
+  const completedQuiet=status==="completed"&&!movedOthers(bookings,transform(bookings),[id]);
+  return {transform:transform,
   flashes:status==="completed"||status==="seated",
-  flashKind:status==="seated"?"saved":null,
+  flashKind:(status==="seated"||completedQuiet)?"saved":null,
   seatNote:seatSnap};
 }
 

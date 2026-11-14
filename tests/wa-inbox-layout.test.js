@@ -164,11 +164,46 @@ describe("W5 — the phone's inbox", () => {
     expect(Inbox).toContain("const showFilters = twoPane || !activeKey;");
   });
 
-  // v18.16.0 (follow-up): one row with the mark leaves a phone no width for the
-  // words, so the filter is its dot, named by them.
-  it("Needs action is its dot alone below two panes, and keeps its name", () => {
-    expect(Inbox).toContain('aria-label={twoPane ? undefined : "Needs action"}');
-    expect(Inbox).toContain('{twoPane ? "Needs action" : null}</button>');
+  // v18.16.0 (follow-up): one row with the mark left a phone no width for the
+  // words, so the filter became its dot there; v18.17.0 (Patryk) made it the dot
+  // at every width, named by the words, and the row's red dot only while the open
+  // list holds something it would find.
+  it("Needs action is its dot alone at every width, and keeps its name", () => {
+    expect(Inbox).toContain('aria-label="Needs action"');
+    expect(Inbox).not.toContain('"Needs action" : null}</button>');
+    expect(Inbox).toContain("const dotRed = !needsAction && conversations.some((c) => inTab(c, tab) && isActionable(c));");
+    expect(Inbox).toContain('backgroundColor: dotRed ? "var(--wa-unread-dot)" : "currentColor", boxShadow: dotRed ? "var(--wa-unread-ring)" : "none"');
+  });
+
+  // v18.17.0 (Patryk): Archive is H, where it was Backspace, and the sheet says so.
+  it("archives on H, not Backspace, and the shortcut sheet agrees", () => {
+    expect(Inbox).toContain('if (k === "h" && tab === "inbox") {');
+    expect(Inbox).not.toContain('e.key === "Backspace"');
+    expect(Shortcuts).toContain('{ keys: ["H"],        label: "Archive (Inbox; selection in select mode)" },');
+  });
+
+  // v18.17.0 (Patryk): the select checkbox eases in and out on the list's fold.
+  it("the select checkbox comes and goes in a RowSlot", () => {
+    expect(Row).toContain("<RowSlot show={!!selectMode} gap={10} speed={ROW_FOLD}>{selectMode ? (");
+  });
+
+  // v18.17.0 (Patryk): search is a magnifier until pressed or "/", opens out of
+  // it to 90% of the room left, on M.reveal both ways, and closes when left
+  // empty, by its ✕ and by Escape. On a phone Select and Needs action fold away
+  // while it is open.
+  it("search opens out of its magnifier and closes back into it", () => {
+    expect(Inbox).toContain("const searchShown = searchOpen || !!query;");
+    expect(Inbox).toContain('width: searchShown ? "90%" : 36, minWidth: 36, transition: "width " + M.reveal');
+    expect(Inbox).toContain("onBlur={() => { if (!query) setSearchOpen(false); }}");
+    expect(Inbox).toMatch(/if \(e\.key === "\/"\) \{ e\.preventDefault\(\); openSearch\(\); return; \}/);
+    expect(Inbox).toMatch(/e\.target === searchRef\.current && searchShown\) \{ consume\(\); closeSearch\(\); return; \}/);
+    expect(Inbox).toContain("const beside = twoPane || !searchShown;");
+    // /code-review: closed, the field is neither a stop nor a second name.
+    expect(Inbox).toContain("tabIndex={searchShown ? undefined : -1}\n            aria-hidden={searchShown ? undefined : true}");
+    // /code-review: an active Needs action stays beside a phone's search.
+    expect(Inbox).toContain('<RowSlot show={beside || needsAction} gap={SP.base} speed="reveal">{beside || needsAction ? (');
+    // /code-review: "/" opens nothing where the title row draws no field.
+    expect(Inbox).toMatch(/function openSearch\(\) \{\s*if \(!searchRef\.current\) return;\s*setSearchOpen\(true\);/);
   });
 
   it("shortens the search placeholder where the long one was cut", () => {
@@ -357,8 +392,8 @@ describe("the reply box is closed whenever the server would refuse the send", ()
 describe("an open chat that comes out of Archived is followed to the Inbox", () => {
   it("switches the list and keeps the chat open, and only in that direction", () => {
     expect(Inbox).toContain('if (tab === "archived" && !c.archived) { setTab("inbox"); setSelected(new Set()); return; }');
-    expect(Inbox).toContain("if (!inCurrentTab) setActiveKey(null);");
-    expect(Inbox.indexOf('if (tab === "archived" && !c.archived)')).toBeLessThan(Inbox.indexOf("if (!inCurrentTab) setActiveKey(null);"));
+    expect(Inbox).toContain("if (!inTab(c, tab)) setActiveKey(null);");
+    expect(Inbox.indexOf('if (tab === "archived" && !c.archived)')).toBeLessThan(Inbox.indexOf("if (!inTab(c, tab)) setActiveKey(null);"));
   });
 });
 

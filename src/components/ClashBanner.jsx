@@ -28,6 +28,8 @@
 // tables."), and a clash that survived the reconciler is locked BY DEFINITION —
 // being locked is the exact condition under which the reconciler leaves it. The
 // row opens the manual assign modal, which is the surface that can resolve it.
+// v18.17.0 (C) changed the premise: Reassign now moves a locked booking (not a
+// seated one). The row still offers Assign, where the host picks the tables.
 //
 // It offers the LATER booking. Both are equally "wrong", but the earlier party
 // may already be at the table, and the reconciler's own tie-break (newest

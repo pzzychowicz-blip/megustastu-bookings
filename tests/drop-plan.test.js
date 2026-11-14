@@ -45,6 +45,36 @@ describe("planDrop: nothing to do", () => {
   });
 });
 
+// v18.17.0 (F): "released where it began" asked only about a party on ONE table.
+// A party on joined tables, dropped on another of its own rows, went on as a
+// move onto the set it already held: locked, with "moved to …" in its history.
+describe("planDrop: a party on joined tables, dropped on its own other row", () => {
+  // The set a party of 4 takes at row 3, so the test names no combination.
+  const S = byId(drop([bk("p", "19:00", 4, ["8"])], "p", "3").transform([bk("p", "19:00", 4, ["8"])]), "p").tables;
+  const other = S.find((t) => t !== "3");
+
+  it("the set is joined tables that include the row", () => {
+    expect(S.length).toBeGreaterThan(1);
+    expect(S).toContain("3");
+  });
+
+  it("changes nothing when the drop would give it the tables it has", () => {
+    const list = [bk("a", "19:00", 4, S)];
+    expect(drop(list, "a", "3")).toBeNull();
+    expect(dropPreview({ id: "a", targetId: "3", liveBookings: list, bookings: list, viewDate: D, nowMins: 600, today: TODAY, tableBlocks: [], autoOptimizer: true })).toBeNull();
+  });
+
+  it("whatever order its tables are stored in", () => {
+    expect(drop([bk("a", "19:00", 4, S.slice().reverse())], "a", "3")).toBeNull();
+  });
+
+  it("a party small enough for the one row still moves onto it alone", () => {
+    const list = [bk("a", "19:00", 1, S)];
+    const plan = drop(list, "a", other);
+    expect(byId(plan.transform(list), "a").tables).toEqual([other]);
+  });
+});
+
 describe("planDrop: a free table", () => {
   it("moves the booking, locks it, and says where", () => {
     const list = [bk("a", "19:00", 2, ["3"]), bk("b", "19:00", 2, ["5"])];
@@ -190,14 +220,19 @@ describe("dropPreview: the row under a dragged block", () => {
       bk("b", "13:00", 2, ["7"], { name: "Yara Domínguez", duration: 60 }),
       bk("c", "14:30", 2, ["7"], { name: "Ariadna Puig", duration: 60 }),
       bk("d", "13:00", 2, ["13"], { name: "Teo Vargas" }),
-      bk("e", "15:00", 2, ["12"], { name: "Emil Kovacs" }),
-      bk("f", "14:00", 2, ["11"], { name: "Lena Brandt" }),
+      bk("e", "15:00", 2, ["10"], { name: "Emil Kovacs" }),
+      // v18.17.0 (I): the pass keeps a party whose tables still suit it, so Teo and
+      // Emil stay (until then this read "Moves Yara, Ariadna, Teo +2"). Lena, two
+      // on joined tables with a single free, is one the pass does not keep.
+      bk("f", "14:00", 2, ["11", "12"], { name: "Lena Brandt" }),
     ];
     const on = { autoOptimizer: true, bookings: list, user: "u@x", nowMins: 600 };
     const plan = drop(list, "a", "7");
     expect(plan.moved.map((b) => b.id)).toEqual(["b", "c"]);
     expect(see(list, "a", "7", { autoOptimizer: true }).text).toBe("Moves Yara, Ariadna");
-    expect(checked(list, "a", "7", on)).toEqual({ tone: "warn", text: "Moves Yara, Ariadna, Teo +2" });
+    expect(checked(list, "a", "7", on)).toEqual({ tone: "warn", text: "Moves Yara, Ariadna, Lena" });
+    const after = plan.transform(list);
+    for (const id of ["d", "e"]) expect(after.find((b) => b.id === id).tables).toEqual(list.find((b) => b.id === id).tables);
     expect(plan.post.map((b) => b.id)).toEqual(plan.transform(list).map((b) => b.id));
   });
   it("a seated party says so, in red, where the drop will be refused", () => {
@@ -339,7 +374,8 @@ describe("BookingApp's saveMove", () => {
   it("carries all three kinds of move", () => {
     expect(flat).toContain('saveMove(plan.transform,id,"move",plan.done,');
     expect(flat).toContain('saveMove(plan.transform,bookingId,"assign",plan.done,');
-    expect(flat).toContain('saveMove(function(b){returnapplyOpt(b,viewDate,tableBlocks);},null,"reshuffle","Tablesre-optimised.",function(){flash("unmoved");});');
+    // v18.17.0 (D): the reshuffle's transform is `planReshuffle`'s (lib/manual-assign.js).
+    expect(flat).toContain('saveMove(plan.transform,null,"reshuffle",plan.done,function(){flash("unmoved");});');
   });
   it("a sentence replaces the pill's label and leaves its note empty", () => {
     expect(flat).toContain('note:label?"":note,label:label||""');

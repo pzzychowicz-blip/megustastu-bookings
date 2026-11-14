@@ -40959,3 +40959,417 @@ He decided both `/code-review` findings left in `ROADMAP.md`, and asked for the 
   reported: the composer's `windowOpen` and the chip's `windowState` agree at the boundary (`> now` against `<= now`), and the
   React Compiler is lint-only here (nothing in `vite.config.js`), so a `Date.now()` behind a call in render is not memoised away;
   `patchConversation`'s loaded guard cannot refuse a bring-back, because `movedReplyPlan` finds no conversation before the first read.
+
+## v18.17.0 — a lock that can be taken off, a save that keeps the day, and four Optimiser and drag fixes
+
+**Date:** 2026-11-12 · **Branch:** `feat/v18.17.0-unlock-and-optimiser-fixes`
+
+**Why:** Patryk asked for a review of the Optimiser and of drag-and-drop, and in particular of the lock a table drag leaves on a booking
+(the review, with the decisions he made in two rounds of questions: `/Users/patrykzychowicz/.claude/plans/analyze-the-entire-optimizer-sleepy-ullman.md`).
+The review's opinion: the lock is needed, because on a day the Optimiser owns the next save would undo the drag, and so would Reshuffle during
+service; but nothing ever took it off except the edit form's Clear. Reading the code also found four defects. **Behavioural change: yes**, each
+commit below. Nothing stored changes shape, so `SCHEMA` stays and no rule moves.
+**Commits 13 to 16 (2026-11-14)** are four changes to the WhatsApp inbox's title row and list that Patryk asked for while the version
+was waiting for its review, decided with him in three rounds of questions.
+
+### Commit 1 (D) — Reshuffle reads the day as it stands now
+
+- **`planReshuffle(ctx)`** (`lib/manual-assign.js`) is what the Reshuffle button writes: `applyOpt` over `syncLiveDurations(list, today, nowMins)`.
+  App's `forceReshuffle` wrote `applyOpt(list, viewDate, tableBlocks)` itself, the one path to the optimiser that skipped the live-duration sync
+  (every other one goes through `bookingsAfterAction`). A seated party past its booked end still holds its table while its stored end says it has
+  left, so the pass could seat the next party there. The button is only offered while the Optimiser is off, which is during service.
+- **Reproduced before the fix**: with the sync taken out, `tests/manual-assign.test.js` fails with "next was given 1", the table a party seated
+  at 13:00 for 90 minutes was still at when Reshuffle ran at 15:20.
+- **What it closes in the app is small, measured on DEV on 2026-11-13.** The auto-extend effect (`usePersistence.js`) already writes an
+  overstaying seated party's live duration, once a minute on the 15-second tick, on any device with the app open, so the end Reshuffle read
+  on 18.16 was at most a minute behind. Staged live on 18.16.0 (a party seated 18:40 still at table 1 at 20:20, the next booked at 20:15),
+  Reshuffle put nobody on that table. The fix stands, because the button now reads what every other path reads, but staff would not have
+  met the defect, so the staff comparison leaves it out. The test above removes the sync from the pure function, where no effect runs.
+
+`tests/manual-assign.test.js` (the party running over keeps its table; a party that has left by then frees it; App's Reshuffle is the plan).
+
+### Commit 2 (E) — every Optimiser pass places a booking the same way
+
+- **`_placeOne` and `_greedyOver`** (`lib/booking-logic.js`) replace four hand-written copies of "place this booking" inside `optimise`. The first
+  pass and the swap pass tried a booking's `preferredTables` first; the zone retry did not, so fixing one party's zone re-placed every other party
+  with no look at its preferred tables. The smallest generated case is two bookings: a party of 3 preferring 5+4, alone at 16:45, was moved to 9
+  because a party at 20:15 had its zone fixed.
+- **The rescue pass stays plain, and that was measured, not assumed.** Over 6,000 generated days with preferred tables (4 to 29 bookings each,
+  locked, seated, completed and blocked tables among them): honouring preferred tables in the rescue pass too left 383 parties unplaced where the
+  old code left 379. With the rescue pass plain, as it was, it is 379 again, and 592 fewer parties are off their preferred tables (9,692 → 9,100;
+  most of what remains are generated preferences too small for the party).
+- **A booking with no preferred tables is placed exactly as before**: 0 differences against the old `optimise` over 6,000 generated days. That
+  comparison needed the old code beside the new and is not kept; the case above is (`tests/booking-logic.test.js`), and it fails on the old code.
+- `optimise` itself reads as five steps now (`_lockedSlots`, `_unplacedCount`, `_trialWith`, `_inZone`). Its order of passes, its sort and its
+  acceptance tests are unchanged.
+- **Noticed, not changed**: a booking whose preferred tables are outside the zone it asked for is seated on them by the first pass and moved off
+  them by the zone retry. Which of the two wishes should win is Patryk's call. (He chose the zone: commit 10.)
+
+
+### Commit 3 (F) — a party on joined tables, dropped on its own other row, is not a move
+
+- **`dropSite`** (`lib/drop-plan.js`) answers null when the row's first choice is the set the party already holds (`sameSet`, order-free). The
+  "released where it began" test asked only about a party on one table; a party on 3+4 dropped on its own row 4 went on, found its own tables free
+  (it is not in `dayActive`), and was written as a move: locked, with "moved to 3+4 (drag)" in its history and an Undo pill for a move that moved
+  nothing. The row's preview is null too, since both read `dropSite`.
+- **A party the one row seats alone still moves onto it** (a party of 1 on joined tables, dropped on one of them): its first choice is that single
+  table. The plan said "any row the booking already holds"; this is narrower, so that shrinking a party onto one of its tables keeps working.
+
+`tests/drop-plan.test.js` (nothing to do, in either stored order, with no preview; the shrink still moves). Both new cases failed before the fix.
+
+### Commit 4 (G) — Escape puts a lifted block back
+
+- **`armEscape` / `disarmEscape`** (`TimelineBlock`, `TimelineView.jsx`): a `keydown` listener on `window`, capture phase, that lives only while a
+  drag is armed. Escape releases the pointer capture and runs `endDrag(null, false)`, the teardown with no dispatch, and stops the key so
+  `useKeyboardShortcuts`' own Escape (which also drops the List's selection) does not run. `endDrag` takes the listener off on every way out, and
+  so does the unmount cleanup. Both drags, the table drag and the time drag, since both end in `endDrag`.
+- **Measured on DEV** with pointer events dispatched from a script, paced across frames (not a real mouse, so the feel is not claimed): a block
+  lifted 89px towards row 3, Escape, release over row 3: the block is on row 1 with no transform, nothing written, and a bubble-phase `keydown`
+  probe on `window` saw no Escape. The control, the same drag without Escape: "Esc Test moved to 3." with its Undo.
+
+`tests/timeline-drag.test.js` (armed with the drag, off on every way out and at unmount; capture phase; no drop).
+
+### Commit 5 (A) — a lock can be taken off: Unlock on the status card
+
+- **Unlock** is a button on the status card (`QuickStatusPopup`), in all three places it opens: a hold on a Timeline block, a hold on a Plan
+  table, and the List card's ⋯. Shown where `unlockOffered(b)` (`lib/booking-logic.js`) says so: `_locked === true` on a confirmed or pending
+  booking. Never a seated party (a walk-in is seated from its first write), whose table is a fact, and never a finished booking.
+- **`planUnlock(ctx)`** (`lib/manual-assign.js`) → `{refuse}` or `{transform, done, lead}`: the booking loses `_locked` and `_manual`, gets one
+  history line, and its own day goes through `bookingsAfterAction`. On a day the Optimiser owns it is placed again at once; with the Optimiser
+  off it stays where it is, unlocked for the next Reshuffle. App's `unlockBooking` asks `bookingAssign` and writes through `saveMove`, so the
+  Undo pill carries the sentence ("Esc Test unlocked, now on 1.") and Undo restores the tables and the lock.
+- **Why**: every table drag, every Assign and every walk-in locks a booking, and the only ways out were another party's drag displacing it or the
+  edit form's Clear on the Tables row. Locks only accumulated. Patryk's decision of 2026-11-12: keep the lock, make it easy to take off.
+- **The button is quiet** (`mkBtn()` with no fill) with the flag's own padlock: it neither commits a status nor destroys anything. No new icon,
+  no new colour pair.
+- **Measured on DEV** (the day after today, Optimiser on): a booking dragged to table 3 showed Unlock on the List's ⋯ card; one tap put it on
+  table 1 with no padlock and the pill "Esc Test unlocked, now on 1."; Undo put it back on 3 with the padlock. Not checked under a finger on the
+  tablet (the hold-opened card on a Timeline block).
+
+`tests/manual-assign.test.js` (who is offered it; the write; both Optimiser states; the booking's own day; the refusals; a replay on a list
+without the booking; the three mounts and App's handler).
+
+### Commit 6 (B) — Reshuffle offers the locks
+
+- **The Reshuffle confirm names the day's locks** and offers a second button, **"Reshuffle and unlock N"**, when the viewed day has any
+  (`lockedOn(list, date)`, `lib/manual-assign.js`: the bookings `unlockOffered` names, so never a seated party). With none, the confirm is as it
+  was. The plain Reshuffle keeps every lock, as it always has; so does Enter on the confirm (`modal-keys.js` calls `forceReshuffle()` with
+  nothing, and only the literal `true` unlocks).
+- **`planReshuffle(ctx)` → `{transform, done}`**: with `unlock: true` the transform first takes the lock off each of those bookings
+  (`releaseSwapped`, one history line, "unlocked by Reshuffle"), then runs the same `applyOpt` over `syncLiveDurations` as commit 1. `done` is
+  the pill's sentence ("Tables re-optimised, 1 unlocked."). One write through `saveMove`, so one Undo puts back the tables and the locks.
+  Both buttons wait out a double tap (`armSettled`).
+- **Measured on DEV** (today, Optimiser off, 21:53): Lock Test assigned to 13 through the picker (locked); the confirm read "1 booking is locked
+  to tables. Reshuffle does not move a locked booking, unless you unlock it here." with "Reshuffle and unlock 1" beside "Reshuffle"; pressing it
+  moved Lock Test to 1 with no padlock and the pill "Tables re-optimised, 1 unlocked."; Undo put it back on 13 with the padlock.
+
+`tests/manual-assign.test.js` (the count; a plain Reshuffle keeps every lock; with unlock, handed back and placed again with its history line;
+never a seated party or another day's booking; only the literal true; the confirm's two buttons and their guard).
+
+### Commit 7 (C) — Reassign moves a locked booking and keeps it locked
+
+- **`planReassign`** (`lib/manual-assign.js`) refuses only a seated party now. A `_locked` booking (a drag, an Assign) used to be refused with
+  "Booking is manually locked. Edit manually to change tables.", so a party dragged at 19:00 lost the banner's one-tap rescue when a neighbour
+  ran over at 20:30. Patryk's decision of 2026-11-12: move it, and keep it locked on the new tables, since somebody placed it on purpose and the
+  rescue changes the table, not that decision.
+- **The lock is read off the row the transform writes**, not off the plan's snapshot: a lock taken off on another device before a replay is not
+  put back. An unlocked booking is written as before (`_manual: false`). The history line is unchanged ("reassigned 13 → 1"). ClashBanner's
+  action stays Assign.
+- **Measured on DEV** (today, Optimiser off): Lock Test locked on 13 at 21:30, a seated party staged on 13 from 20:00 and running over; the
+  Overlap row read "Overlap Test (overstaying) → Lock Test at 21:30 — overdue". Reassign Lock Test: stored `tables: ["1"]`, `_locked: true`,
+  `_manual: true`, history "reassigned 13 → 1", and the Overlap row was gone.
+
+`tests/manual-assign.test.js` (a locked booking moved and kept locked; a lock taken off before the replay stays off; seated still refused). Both
+new cases failed before the change.
+
+### Commit 8 (H) — Drag hold, a choice for this device
+
+- **Settings → App → Timeline → Drag hold: Short · Normal · Long** (600 · 800 · 1000ms), how long a finger holds a Timeline block before it lifts
+  to be moved. It was a fixed 800ms, and with wet hands on the tablet that is a long hold; how long is too long is a question for the hand on
+  the device, so Patryk made it a device setting (2026-11-12). The status card still opens at 400ms, so every choice leaves the card a moment
+  first. A mouse drag starts on movement and never waits.
+- **`lib/drag-hold.js`**, the Vibrate-on-drag pattern (`lib/haptics.js`): per device in `localStorage`, Normal the default, so only another
+  value is stored (`mgt-tl-drag-hold`); an unknown value reads as Normal and a blocked storage never throws. `TimelineBlock` reads
+  `dragHoldMs()` as it sets the timer, so no prop reaches a block. `useShellPrefs` holds `dragHold` / `onSetDragHold` for Settings only.
+- **The control is a three-way segment** (`SEG_TRACK` / `segStyle`, `aria-pressed`, a group named "Drag hold"), the app's one segmented look,
+  as the zone segment and the Print chooser use it.
+- **Measured on DEV**: the segment showed Normal pressed with nothing stored; Long stored `"long"`. A `pointerdown` (touch) on a block, with
+  `setTimeout` recorded, set the arm timer at 1000, 600 and 800ms for Long, Short and Normal in turn, with no reload between. Not checked
+  under a finger on the tablet, which is the point of the setting.
+
+`tests/drag-hold.test.js` (the three values and the default; stored only when not Normal; unknown and blocked read as Normal; every hold above
+the card's 400; the block reads it at the timer and no 800 is left; the card's 400 untouched; per device; the Settings group).
+
+### Commit 9 (I) — a save keeps the day the Optimiser placed
+
+- **What it was**: on a day the Optimiser owns (every day after today, and today while it is switched on), every save that runs the
+  Optimiser (a new booking, an edit, a status change, a delete, a cancel, a table block, an Unlock) went through `applyOpt`, which places every
+  unlocked booking again from nothing. Saving one party could move several others, and the pill said "Tables re-optimised." after nearly
+  every save.
+- **`applyOptKeep(bookings, date, blocks)`** (`lib/booking-logic.js`) holds each placed, unlocked party on its tables while they still suit it
+  (`_keepsTables`: a real table or join, enough seats, its zone if it asked for one, its preferred tables when those are free, no clash with any
+  other placed party, and no free set with fewer tables at its time, which is the inefficiency banner's test), places the rest around them,
+  and runs a fresh `applyOpt` only when the held day leaves somebody without a table, taking whichever leaves fewer (a tie keeps the held day).
+  So it never costs a seat a fresh pass would have found. The hold borrows `_locked` for that one pass and gives back exactly what was there,
+  so a key that was absent stays absent and the per-child diff writes nothing for a party that stayed. `computeAfterAction` and `trialFits`
+  use it; **Reshuffle stays a fresh `applyOpt`**, because asking for a fresh pass is what the button means.
+- **Measured before building, four ways** (a bench script, not kept, by Patryk's decision): generated days replayed save by save on a day the
+  Optimiser owns, each save a new booking (75%), an edit of time or size (15%) or a cancel (10%). Service-shaped days: 20 to 43 saves, mostly
+  twos and fours, on the half hour, one in ten with a zone. Varied days: sizes 1 to 8, any quarter, longer stays, three in ten with a zone, one
+  in ten with preferred tables, one booking in ten dragged and locked. tie and soft ran on a copy of `booking-logic.js` with a hook in it, and
+  the copy with the hook off matched the real module on every pass. Over 150 service days:
+
+  | Pass | Parties moved per save | Saves that move somebody |
+  |---|---|---|
+  | today (`applyOpt`) | 0.90 | 36% |
+  | tie (current tables win a tie in `findBest`'s ranking) | 0.74 | 32%, at twice the time |
+  | soft (current tables first when free) | 0.69 | 30% |
+  | keep (every placed party held) | 0.26 | 2.3%, the saves where it fell back to today's pass |
+
+  Each variant was "unless it costs a seat". Patryk chose keep (2026-11-12).
+- **Measured as shipped**, the real `applyOptKeep` against `applyOpt` over the same scripts (60 service days, 1,926 saves; varied days,
+  1,106 saves):
+
+  | | Service: today | Service: keep | Varied: today | Varied: keep |
+  |---|---|---|---|---|
+  | Parties moved per save | 0.92 | 0.29 | 0.48 | 0.16 |
+  | Saves that move somebody | 35.8% | 3.6% | 23.3% | 5.4% |
+  | Parties left unplaced at the end of the days | 37 | 35 | 52 | 48 |
+  | Saves where the inefficiency banner would show | 0.2% | 0% | 7.2% | 5.8% |
+  | Parties outside their zone at the end | 3 | 4 | 31 | 34 |
+  | Mean ms per save | 14.9 | 13.6 | 9.0 | 8.6 |
+
+  No pass left a clash. The zone figure is the one that gets worse: a held party can keep a table another party's zone wanted, and only a
+  seat, not a zone, brings the fresh pass back.
+- **What the screen says now, so it tells the truth**:
+  - **"Tables re-optimised."** is claimed only when somebody else moved: `movedOthers(before, after, actedIds)` (`lib/booking-logic.js`) at
+    every toast after a booking write that runs the pass (the edit and the new booking in `booking-save.js`, a completion in `status-change.js`,
+    and App's delete, cancel, block and block removal). Otherwise "Booking saved.", and the Undo pill's "tables re-optimised" note follows the
+    toast. The status change and the block share one pass between the plan and the write (`memoByPrev`), so asking costs nothing.
+  - **The form's preview** (`trialFits`) runs the same pass and starts an unchanged edit on its own tables, as `applyEdit` does, or a
+    notes-only edit previewed a table the save would not give.
+  - **Unlock**, on a day the Optimiser owns, hands the booking's tables back as well (`planUnlock`), or the pass would leave it where the lock
+    put it. With the Optimiser off it keeps them, as before.
+- **Behaviour that changed, each one pinned**:
+  - A notes-only edit of a party on a table the Optimiser would not choose keeps it (was 4 → 1). A cancelled booking revived keeps its table
+    while that still suits it (was 4 → 1). An edit of the time before the cutoff places only the edited party again (the other stayed on 5; it
+    was moved to 1), so its Undo covers one booking.
+  - Two refusals change wording: where a fresh pass would seat the saved party only by unseating somebody else, one party is out either way,
+    the tie keeps the held day, and the refusal is the no-tables one ("No tables available at this time — see suggestions below." for an edit,
+    "Could not assign a table — try manual assignment." for a new booking) instead of naming the guest who would have lost a table.
+  - The drop row's "Moves …" names fewer people, because the trial behind it keeps the others too.
+  - `tests/save-path.test.js`: five scenarios renamed and five snapshots moved (the four above, and the time edit's Undo delta). 27 other snapshot
+    lines changed only `flash(null` to `flash("saved"`, each checked by a script against the old file: no other line moved, and every one was
+    a save that moved nobody else.
+- **Live on DEV** (a day the Optimiser owns): Keep A, alone on 4, stayed on 4 when Keep B was added; Keep B landed on 1, the table the form had
+  previewed; Keep C landed on 2 with the toast "Booking saved.". Nobody else moved.
+
+`tests/booking-logic.test.js` (`applyOptKeep`: a held party stays; one whose tables stopped suiting it, or whose preferred tables came free,
+moves; a clashing pair both go back; a lock and an absent key come back as they were; a block; a locked, seated or finished party untouched;
+falling back when holding costs a seat; the save keeps and Reshuffle does not; the preview's carry; `movedOthers`), `tests/status-change.test.js`
+(a quiet completion), `tests/drop-plan.test.js`, `tests/save-path.test.js` (the tie that keeps the held day is its two refusals),
+`tests/delete-undo.test.js`, `tests/seating-preference.test.js`.
+
+### Commit 10 (J) — the zone wins over preferred tables
+
+- **Patryk's decision (2026-11-13)**, on the question commit 2 left open: when a guest's preferred tables are outside the zone they asked for,
+  the zone wins.
+- **`_placeOne`** (`lib/booking-logic.js`) now places in `findFreeSlot`'s order, the Optimiser-off path's: the preferred tables if they seat
+  the party, are free and are a set its zone allows (`comboOk`); else the best set in its zone; else the preferred tables after all; else the
+  best set anywhere. So with indoor full, an indoor guest whose preferred table is outdoor still gets that table before any other. The first
+  pass used to seat the preferred tables whatever the zone and leave the zone retry to move the party off them, re-placing other parties on the
+  way. A booking with no preferred tables is placed exactly as before (the same two steps as `_placePlain`).
+- **`_keepsTables`** asks the same: preferred tables outside the zone no longer call a party in its zone back to the pass. Until now a free
+  outdoor preferred table sent an indoor party on 11 back to the pass, and the retry moved it to 10.
+- **The two paths now agree**: a lone booking is placed the same with the Optimiser on and off for every table, every combo and three sets no
+  combo allows, at sizes 1 to 8 and all three zones (1,344 cases; the old code disagreed on 32, each a mix of indoor and outdoor tables that
+  `comboOk` refuses, which the Optimiser seated and the off path never gives).
+- **Measured, old against new, over 6,000 generated days** (4 to 29 bookings, sizes 1 to 8, any quarter, 35% with a zone, 30% with preferred
+  tables, single or combo): 614 days differ, every one of them holding a zoned party with preferred tables; no day without one moved. Parties
+  left without a table 5,934 → 5,884; parties outside their zone 4,138 → 3,883; parties on preferred tables 3,216 → 2,911, almost all of the
+  drop being the out-of-zone ones the decision gives up. Those whose preferred tables the zone allows: 2,959 → 2,908 (of about 20,700), the
+  cost of the zoned parties now taking their zone first. No clashes; the same time per pass (35.0 ms).
+- **Commit 2's test needed a new fixture.** It was a party asking indoor while preferring an outdoor table, and since this change the first
+  pass seats that party in its zone, so the zone retry never ran and the test held nothing. The new one was found by a generated search:
+  two indoor parties of three at 19:15 and 19:30 (indoors seats one), and a party of one at 19:45 preferring table 2. The retry gives indoors to
+  the later party; with the retry placing plainly (commit 2's bug put back) the party of one is moved to 10, and the test fails.
+- **Live on DEV** (Thu 19.11, a day the Optimiser owns): "Zone J", Indoor, preferred table 2: the form previewed 10 and the save stored
+  `tables: ["10"]` with the star kept. "Mix J", Auto, four guests, preferred 2 + 11 (an outdoor and an indoor table that do not join): the
+  form previewed 9, the save stored `["9"]`, Zone J stayed on 10, and the toast said "Booking saved.". The old code would have seated Mix J on
+  2 and 11.
+
+`tests/booking-logic.test.js` (a party in its zone stays put; with the zone full, the preferred tables before the Optimiser's own pick; the
+on/off agreement over every case; commit 2's new fixture). The first and the agreement failed on the old code; the zone-full case pins what
+the old code already did.
+
+
+### Commit 11 (K) — Reassign's refusals reach the screen, and say why
+
+Two findings from the staff comparison's captures, fixed in this version on Patryk's word (2026-11-13).
+- **A refusal is the refusal toast** (`flashRefusal`). `reassignBooking` sent it to `setError`, the booking form's error line, and Reassign is
+  pressed on the Overlap banner with no form open, so the refusal showed nowhere and the button read as broken. Measured on 18.16.0 before C:
+  Reassign on a locked booking changed nothing on screen. After C the locked case moves, which left "No alternative tables available for X
+  at T." as the refusal staff can meet. **Live on DEV** (today, clock frozen at 20:20): Tomás seated on 6 since 18:30, Rubén locked to 6 at
+  20:30, every other table taken from 20:00 to 22:30. Reassign Rubén Molina: the toast read "No alternative tables available for Rubén
+  Molina at 20:30." and Rubén stayed on 6, locked. The `setError("")` after a write went too: it only cleared the old refusal.
+- **The seated refusal says the party is seated**, in Unlock's words: "X is seated — a seated party stays at its table." It said "Booking is
+  manually locked. Edit manually to change tables.", the reason before C. One function, `seatedStays`, gives both plans the sentence. The
+  Overlap warning never offers a seated party (`overlapWarnings` skips them as the next booking), so this refusal is reached only when the
+  party sits down between the warning and the press.
+- `ClashBanner.jsx` and `src/components/CLAUDE.md` said `reassignBooking` refuses a locked booking, which C made untrue; both now say so.
+
+`tests/manual-assign.test.js` (the seated refusal's words, and the same as Unlock's; App's `reassignBooking` uses the toast and never
+`setError`).
+
+### Commit 12 (L) — a block's flags are sized at the width it is drawn at
+
+- **The finding**: in the staff comparison's captures (1280px, 1×) a locked 90-minute booking showed no padlock, and no size ring either.
+  The drop order was not the cause. `TimelineBlock` decides what fits from `pxPerMin = gridW / totalMins`, and `gridW` is a lower bound
+  (`totalMins × zoom × 1.2`) that the grid stretches past with `minWidth: 100%`. At 1× on 1280px a 90-minute block is drawn 172px wide while
+  the rail was told 108; its fixed parts take 111, so the ring and every flag went from a block with room for them. At 1.5× and above the
+  grid is wider than the screen and the two agree, which is why Patryk's service zoom never showed it.
+- **`railPxPerMin`** (`TimelineView.jsx`) is `max(gridW, the scroller's content width) / totalMins`: what `100%` resolves against, read by a
+  ResizeObserver on the scroller, so it changes with the window and not on every frame of a zoom's ease. Every `TimelineBlock` and the
+  waitlist ghost take it. The start-time chip decision and the now-pill's hour label keep the lower bound, which errs their way, so no day
+  changes between one line and two.
+- **Live on DEV** (1 Dec, headless Chromium in the foreground). At 1280px and 1× a 90-minute locked block is 172px and now shows the ring
+  and the padlock (the capture showed neither); a 150-minute one is 287px, as before. At the tablet's 998px: 130px at 1×, which leaves 19px,
+  room for one flag and not the 24px ring, so the padlock shows and the ring goes, as the ladder says; from 1.5× (162px) both show.
+- **A reading that measured the tool**: the first 1024px check, in a Browser pane tab that was in the BACKGROUND, showed no padlock. A tab
+  that is not rendering delivers no ResizeObserver callbacks, so `fillW` stayed 0 and the block still had the old estimate. The same tab,
+  brought to render by a resize, showed the padlock. A real device does the same: the measurement lands with the first rendered frame.
+
+`tests/a11y.test.js` (the leaving blocks pass `railPxPerMin`).
+
+### Commit 13 — the inbox's Needs action is its dot, red only when it would find something
+
+- **Asked by Patryk** (2026-11-14): Needs action becomes an icon only, the mark a conversation that needs action carries on the list,
+  then red only when there is something to act on. The button is the round 36px Select is, on every screen (it was "● Needs action" in
+  two panes and the dot alone on a phone since the v18.16.0 follow-up), named "Needs action", `aria-pressed` for the state.
+- **The dot** is the row's unread dot (`--wa-unread-dot`, `--wa-unread-ring`) while the OPEN list holds a conversation `isActionable`
+  passes (`dotRed`), so red means pressing it finds something (his choice over "the Inbox only"); otherwise the button's grey, and
+  white on the green of the pressed filter.
+- **Measured** (headless Chromium, 1280×800, DEV): Inbox with actionable threads: `rgb(220, 38, 38)` with the ring; Archived with none:
+  `rgb(90, 100, 116)`, no ring; pressed: white on `rgb(18, 134, 98)`.
+
+`tests/wa-inbox-layout.test.js` (the W5 pin, rewritten).
+
+### Commit 14 — the select checkboxes ease in and out
+
+- **The finding** (Patryk): Select conversations put a checkbox on every row in one frame and took it away in one, and the row's text
+  jumped 28px each way. The checkbox is now a `RowSlot` (`ConversationRow.jsx`) on the list's `ROW_FOLD`: closed it takes no room and the
+  row's 10px gap goes with it, so at rest every position is what it was.
+- **`RowSlot` takes a `speed`** (`atoms.jsx`, default `"reveal"` as before). As a row's FIRST item it needs nothing else: the slot's own
+  gap sits in front of the row's padding while it opens.
+- **Measured** (headless, 1280×800, a rAF sampler in the page): in, the slot 0 → 35px and the text 66 → 101px over ~400ms; out, the
+  reverse, the checkbox unmounting after the fold. The checkbox sits at the same x (70) as before the change.
+
+`tests/wa-inbox-layout.test.js`.
+
+### Commit 15 — the inbox's search is a magnifier that opens into the field
+
+- **Asked by Patryk**: the search becomes the search icon; pressed, the field opens from the icon to the right, to 90% of its width, and
+  closes as the reverse. Decided with him: it closes when left EMPTY, by its ✕ and by Escape (with text it stays open, so a filter in
+  force stays on screen); 90% of the room the title row leaves it, so it scales with the screen; the same on a phone, where Select and
+  Needs action fold out of its way while it is open (the row leaves it 80px there, measured 72px open without the fold).
+- **One pill** (`InboxPanel.jsx`): the field is always mounted at the icon's 36px with the magnifier over it as the button, and its
+  `width` eases to `90%`. So the opening grows the very box the icon sat in, and the press focuses the field inside the gesture, which
+  iOS needs to raise the keyboard. `/` opens it the same way (`openSearch`); Escape in it empties and closes it before anything else
+  (`closeSearch`); `searchShown` is open-or-holding-text, because `query` is App's and outlives the panel.
+- **Speed, measured twice.** First on `M.shift` with an ease-in close (a new `M.shiftExit`): 385ms. Patryk found both too fast, the close
+  most of all (an accelerating close does most of its travel at the end), and chose 520ms both ways with a close that also decelerates,
+  over the strict reverse or a slower 760ms close. So it is `M.reveal` both ways and `shiftExit` was removed before commit. Headless at
+  1280×800: open 36 → 829px (90% of 921), 70% of the way at 250ms, settled by ~520ms, its left edge fixed at the icon; close 829 → 36 the
+  same way. On a 375×812 phone it opens to 166px with Select and Needs action folded, and both come back on close.
+- **A tool reading on the way**: the Browser pane was hidden, which freezes CSS transitions (every sample read the start width) and rAF;
+  the headless rig measured it.
+
+`tests/wa-inbox-layout.test.js`. DESIGN.md (Adding motion), GLOSSARY.md (inbox search), `src/components/CLAUDE.md`.
+
+### Commit 16 — Archive in the inbox is H
+
+- **Asked by Patryk**: change the shortcut for Archive (Inbox; the selection in select mode). It was Backspace, a key that does other work
+  everywhere else; it is **H**, for "hide" (his pick over Y and Z), and Restore stays R. The shortcut sheet says H.
+- **Measured** (headless, DEV): with a conversation open, Backspace archived nothing (8 → 8 rows), H archived it (8 → 7); typing "h" in the
+  search box archived nothing, since the handler stands down in a text field as before.
+
+`tests/wa-inbox-layout.test.js`, `tests/stale-closures.test.js` (its name).
+
+### /code-review fixes (commits 13 to 16)
+
+Seven findings, each fixed in its own commit.
+
+- **"/" with no field to open** (`openSearch`): on a phone with a conversation open the title row does not draw the search, so the key
+  set `searchOpen` with nothing to focus, and back on the list the field stood open, empty and unfocused, with Select and Needs action
+  folded, until a focus and a blur. It now opens nothing where there is no field.
+- **An active Needs action folded out of sight** while a phone searched, so the list was narrowed by a filter nothing on screen showed
+  ("No matches." with no reason). While it is on it now stays; the field then opens into the room that is left.
+- **Two "Search conversations" while closed**: the 36px field behind the magnifier stayed in the accessibility tree under the button's
+  name. Closed, it is `aria-hidden` as well as out of the tab order.
+- **A constant `aria-expanded={false}`** on the magnifier, which the open field replaces, so it could only ever say "collapsed". Removed.
+- **The Needs action tooltip promised A**, which accepts an open draft first and is the filter only when none is waiting. The "(A)" is gone;
+  the shortcut sheet says both halves.
+- **The shortcut sheet said "Focus search"** for "/", which now opens the field from its magnifier: "Open search".
+- **The tab-membership test written out twice** in `InboxPanel.jsx` (the leaves-the-tab effect and the new dot): one module-scope
+  `inTab(c, which)` now.
+
+Measured after the fixes (headless Chromium, 375×812, touch, DEV): closed, the field is `aria-hidden` and out of the tab order, and the
+accessibility tree holds ONE "Search conversations" (the button), with no `aria-expanded`; open, one (the textbox). "/" pressed in an
+open conversation and Escape back to the list: the field still 36px and closed, Select and Needs action in place. Needs action on, then
+search: the field opens to 126px with Needs action beside it and Select folded; off: 166px, both folded. No page errors.
+
+**A side effect, kept (Patryk, 2026-11-14):** the search box was `mkInp`'s 44px beside 36px buttons; as a 36px circle opening into a 36px
+field, the inbox's title row is 8px shorter, which goes to the list and the conversation. He chose to keep it.
+
+### /code-review fixes (the ship run, 2026-11-14, over the whole branch)
+
+Five findings, each fixed in its own commit. Nothing was added to `ROADMAP.md`: two of them were first headed there as questions (the
+Reassign gate, the pass that does not settle) and Patryk, mid-run, said to fix everything here.
+
+- **A replayed Unlock emptied a seated party's tables** (`planUnlock`, `lib/manual-assign.js`). The transform decided who may be unlocked
+  from the plan's snapshot. A held write replays on a fresh list, and over a booking another device had seated meanwhile it handed the
+  tables back; the pass never places a seated party, so it was left seated with none (measured with the plan made on a confirmed booking
+  and run on the seated one: `tables: []`, `_conflict: true`). A completed booking lost its table record the same way, and one already
+  unlocked was taken off its table and placed again. The transform now asks `unlockOffered` of the row it writes, as Reassign reads its
+  lock (C), and returns the list as it was. The plan also brings `replayRefusal`, which `saveMove` asks after "the booking has gone", so
+  such a replay is dropped with "The unlock of … was not saved: the day changed on another device." and not landed as "unlocked".
+  `tests/manual-assign.test.js`.
+- **Unlock, and "Reshuffle and unlock N", could cost a party its table** (`planUnlock`, `planReshuffle`). A lock can hold a party where
+  the optimiser would never put it: five at a two-top, tables joined by hand. Measured on a full 19:00 (one party per table, a locked five
+  on a two-top), a day the Optimiser owns: Unlock handed the table back, the pass found nowhere for the five, and it ended with no table
+  under "BIG unlocked."; "Reshuffle and unlock 1" seated the five on a joined set and left a party of two, which had a table, without one,
+  under "Tables re-optimised, 1 unlocked.". The plain Reshuffle on the same day unseats nobody. Both now ask the saves' own question,
+  `displacedBy(before, after, date, null)` (exported from `lib/booking-save.js` with `displaceRefusal`; no `id`, because the booking being
+  unlocked must keep a table too), and refuse in the saves' sentence: "Not enough capacity — unlocking BIG would displace 1 existing
+  booking: BIG.". Asked at the press and again in the transform, which then returns the list as it was, so a replay on a day that filled
+  up meanwhile writes nothing. Unlock asks it only where it hands tables back: with the Optimiser off nothing moves. **A departure to
+  overrule (no question could be asked in the ship run):** refusing is the conservative reading of "never costs a seat", the rule (I) was
+  chosen on and the one a drop and both saves already keep; the alternative is to let it happen and say so in the toast.
+  `tests/manual-assign.test.js` (the full day is its `fullDay()`).
+- **Three notes still described what this version changed.** GLOSSARY's drag-and-drop row said touch arms at ~800ms, beside its own
+  Drag hold row; it names the setting now. Two code comments (`applyEdit` in `lib/booking-save.js`, the form's `optOwns` note in
+  `BookingFormModal.jsx`) said a save on an optimising day is a greedy re-run of the whole date: each has a dated line saying the pass
+  is `applyOptKeep`, and that their conclusion (the pass decides there, `keepsWindowTables` does not) stands. No code changed.
+- **Reassign asked no permission** (`reassignBooking`, App). The Overlap banner's Reassign moves a booking's tables and had no
+  `refused("bookingAssign")` gate, while the drop, Assign and this version's Unlock all have it; and since (C) it moves a LOCKED booking,
+  so an account that could neither drag nor unlock one could still move it there. It asks `bookingAssign` now, first, with the app's
+  usual refusal toast. Open in the hand-off note as Patryk's call; he took it in the ship run ("fix everything here").
+  `tests/manual-assign.test.js`.
+- **What a save wrote, the next save could move** (`applyOptKeep`, I). One keep-pass places a party around the others as they stood
+  BEFORE it, so its own result could hold a party `_keepsTables` turns down: one beside its preferred table, which a later step of the
+  pass had freed, or a three on two joined tables with the four-top's holder now free for the swap rule. The next save, about anything,
+  then moved that party. Measured over 3,622 generated days (a third with arbitrary starting tables, 676 overbooked): a second pass moved
+  somebody on 48, always settling there, never in a cycle. The pass now repeats until it would move nobody (`KEEP_PASSES`, 4 at most), so
+  this save makes that move and its toast (`movedOthers`) can say so. A day with nobody open after a pass (everybody held, nobody
+  unplaced) is settled by construction and costs one more hold check and no pass; the fresh pass reads nothing a keep-pass changes, so it
+  is computed once at most. Measured after, on the same days: 0 where a second call moves anybody, 0 clashes, 0 borrowed locks left
+  behind, 0 with fewer parties seated than a fresh pass, and the result differs from the single pass's on exactly those 48. Time over the
+  run: 22.4s against 21.9s (+2.6%). `trialFits` runs the same function, so the form's preview still shows the save's tables.
+  `tests/booking-logic.test.js` ("what a save writes, the next save leaves alone", 60 seeded days, two of which fail with one pass).
+
+Checked live on DEV after the fixes (localhost, 18.17.0): the app loads with no console error, the Reshuffle confirm opens, and a plain
+Reshuffle lands as "Tables re-optimised." with its Undo. The two refusals are held by their tests; neither was raised by hand (it takes a
+full evening with a hand-placed party the optimiser cannot seat).
+
+Gate on the last fix: main entry 479.00 kB, gzip 141.65 kB (141.39 before the run) · Tests 4681 passed (4669 before) · Lint 63 problems
+(0 errors, 63 warnings) · style invariants OK. No rule changed and nothing stored changed shape (`SCHEMA` stays).

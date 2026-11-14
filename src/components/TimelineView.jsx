@@ -57,6 +57,7 @@ import { WaitIcon, ClashIcon, AssignIcon, StatusIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
 import { pulse } from "../lib/haptics";
+import { dragHoldMs } from "../lib/drag-hold";
 import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail, twoLineBlock } from "../lib/block-layout";
@@ -527,6 +528,8 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // timestamp (0 = not running), for a time-based speed on any refresh rate.
   const edgeRafRef = useRef(0);
   const edgeLastRef = useRef(0);
+  // v18.17.0 (G): the Escape listener a live drag holds (`armEscape`).
+  const escRef = useRef(null);
   // v18.14.0 (/code-review): a block can leave under a held drag, when another device
   // deletes or moves it. No pointerup reaches it then, so `endDrag` never ran, and the
   // row kept its warning about a party that had gone. Measured past the release, until
@@ -535,6 +538,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     cancelAnimationFrame(edgeRafRef.current);
     cancelAnimationFrame(dragRafRef.current);
     clearTimeout(dragHoldTimer.current);
+    if (escRef.current) { window.removeEventListener("keydown", escRef.current, true); escRef.current = null; }
     if (dragRef.current && dragRef.current.active && setDragHover) setDragHover(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, at unmount: `hoverRow` is new each render and only calls setters, and watching it would tear a live drag down
   }, []);
@@ -685,6 +689,34 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     // on a PARENT, which redirects child clicks) — and needed so a fast mouse
     // that leaves the block mid-drag keeps sending us moves.
     try { el.setPointerCapture(pid); } catch { /* no-op */ }
+    armEscape();
+  }
+  // v18.17.0 (G): Escape puts a lifted block back. A drag could only be called
+  // off by carrying the block home, which a mouse far down the grid cannot do
+  // without scrolling back. The listener is on `window` in the CAPTURE phase and
+  // stops the key there, because Escape is `useKeyboardShortcuts`' on the way
+  // back up, where it would also drop the List's selection. It lives only while
+  // a drag is armed: `endDrag` takes it off on every way out, and so does the
+  // unmount. The capture is released, so the pointer's later moves are no longer
+  // the block's; the click that ends the press is swallowed by `didLong`, as
+  // after any drag.
+  function armEscape() {
+    if (escRef.current) return;
+    const onKey = (ev) => {
+      if (ev.key !== "Escape") return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const d = dragRef.current;
+      if (d && d.el) { try { d.el.releasePointerCapture(d.pid); } catch { /* no-op */ } }
+      endDrag(null, false);
+    };
+    escRef.current = onKey;
+    window.addEventListener("keydown", onKey, true);
+  }
+  function disarmEscape() {
+    if (!escRef.current) return;
+    window.removeEventListener("keydown", escRef.current, true);
+    escRef.current = null;
   }
   function onDragPointerDown(e) {
     // v17.16.12: the click-suppression flag is re-armed HERE — on the one event
@@ -706,6 +738,8 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     dragRef.current = { y0: e.clientY, x0: e.clientX, pid: e.pointerId, el: e.currentTarget, active: false, axis: null };
     if (e.pointerType !== "mouse") {
       clearTimeout(dragHoldTimer.current);
+      // v18.17.0 (H): how long the hold is, is this device's choice, read as the
+      // timer is set (`lib/drag-hold.js`): Short 600, Normal 800, Long 1000.
       dragHoldTimer.current = setTimeout(() => {
         const d = dragRef.current;
         if (!d || d.active) return;
@@ -729,7 +763,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         // The page is held still by the block's own non-passive touchmove
         // listener (the effect above), which acts from this moment: `active`.
         kickEdge();                        // v18.3.1 (A5): armed while already in the band
-      }, 800);
+      }, dragHoldMs());
     }
   }
   function onDragPointerMove(e) {
@@ -763,6 +797,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     });
   }
   function endDrag(e, commit) {
+    disarmEscape();
     clearTimeout(dragHoldTimer.current);
     if (dragRafRef.current) { cancelAnimationFrame(dragRafRef.current); dragRafRef.current = 0; }
     if (edgeRafRef.current) { cancelAnimationFrame(edgeRafRef.current); edgeRafRef.current = 0; }
@@ -865,7 +900,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     if (dx > 8 || dy > 8) {
       clearTimeout(pressTimer.current);
       pressTimer.current = null;
-      // moving before the 800ms drag-hold fires = a scroll, not a drag
+      // moving before the drag-hold fires (dragHoldMs) = a scroll, not a drag
       if (!(dragRef.current && dragRef.current.active)) clearTimeout(dragHoldTimer.current);
     }
   }
@@ -1799,7 +1834,7 @@ export const TimelineView = memo(function TimelineView({
   // v17.16.2: TODAY (App's single `todayStr()`), which is NOT `date` — that is
   // the day being VIEWED. liveBarDur needs both to put now on a booking's axis.
   today = "",
-  late = NO_MARKS, freeing = NO_MARKS, onNoShow = () => {},
+  late = NO_MARKS, freeing = NO_MARKS, onNoShow = () => {}, onUnlock = null,
   zoom = 1, setZoom,
   // v17.2.0: per-device Timeline settings (App's tlSettings — scalars, memo-safe).
   followZoom = 4,      // zoom the Follow button jumps to (was hard-coded 4)
@@ -1951,6 +1986,24 @@ export const TimelineView = memo(function TimelineView({
   // lower bound — minWidth:100% can stretch wider — so the hide errs
   // conservative) + the repeat-no-show map (full bookings list, all dates).
   const pxPerMin = gridW / totalMins;
+  // v18.17.0 (L): what a block can wear is decided at the width it is DRAWN at.
+  // `minWidth: 100%` stretches the grid to the scroller, so at 1× on a 1280px
+  // screen a 90-minute block is drawn 172px wide while `gridW` says 108: its
+  // fixed parts take 111 of those, and the size ring and every flag, the padlock
+  // among them, were dropped from a block with room for them (measured on DEV).
+  // At 1.5× and above the grid is wider than the screen and the two agree. The
+  // scroller's content box is what 100% resolves against, and it changes only
+  // with the window, not with a zoom's ease, so this re-renders on a resize only.
+  // The chip decision and the now-pill keep the lower bound, which errs their way.
+  const [fillW, setFillW] = useState(0);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver((entries) => { setFillW(Math.round(entries[0].contentRect.width)); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const railPxPerMin = Math.max(gridW, fillW) / totalMins;
   // v17.1.0 perf: noShowMap walks EVERY booking (all dates — grows with
   // history); memo on the bookings ref so it no longer reruns per render.
   const nsMap = useMemo(() => noShowMap(bookings), [bookings]);
@@ -2665,7 +2718,7 @@ export const TimelineView = memo(function TimelineView({
         <Fragment key={"leaving-" + b.id}>
           {tail}
           {ghost}
-          <TimelineBlock sz={sz} leaving b={b} pxPerMin={pxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={snap.warnings} clash={snap.clash} currency={currency} late={snap.late} noShows={snap.noShows} showChip={snap.chip} freeMin={primary ? snap.freeMin : null} />
+          <TimelineBlock sz={sz} leaving b={b} pxPerMin={railPxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={snap.warnings} clash={snap.clash} currency={currency} late={snap.late} noShows={snap.noShows} showChip={snap.chip} freeMin={primary ? snap.freeMin : null} />
         </Fragment>
       );
     }
@@ -2673,7 +2726,7 @@ export const TimelineView = memo(function TimelineView({
       <Fragment key={b.id}>
         {tail}
         {ghost}
-        <TimelineBlock sz={sz} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={hoverRow} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} onRetime={onRetime} setDragTime={hoverTime} syncGridScroll={syncGridScroll} />
+        <TimelineBlock sz={sz} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={railPxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={hoverRow} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} onRetime={onRetime} setDragTime={hoverTime} syncGridScroll={syncGridScroll} />
       </Fragment>
     );
   }
@@ -2725,7 +2778,7 @@ export const TimelineView = memo(function TimelineView({
               g={cell ? cell.g : null}
               leaving={!cell}
               focusFallbackRef={scrollRef}
-              pxPerMin={pxPerMin}
+              pxPerMin={railPxPerMin}
               totalMins={totalMins}
               onBook={onBookWait}
             />
@@ -2768,11 +2821,11 @@ export const TimelineView = memo(function TimelineView({
       <div style={unplacedEdge}>{unplacedLine}<GridLines /></div>
       {Array.from({ length: heldLanes }, (_, li) => unplacedLanes[li] || []).map((lane, li) => (
         <div key={"ul" + li} style={{ height: sz.rowH + "px", position: "relative", boxSizing: "border-box", transition: "height " + M.shift }}>
-          {lane.map((b) => <TimelineBlock sz={sz} key={b.id} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={hoverRow} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />)}
+          {lane.map((b) => <TimelineBlock sz={sz} key={b.id} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={railPxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={hoverRow} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />)}
           {/* v18.3.0 (O1): a booking that left while in THIS lane. v18.3.2
               (O4): a lane the row is easing away from is still drawn, so the
               last booking leaving it fades there while the row shrinks. */}
-          {leavingCells.filter((s) => s.lane === li).map((s) => <TimelineBlock sz={sz} key={"leaving-" + s.b.id} leaving b={s.b} pxPerMin={pxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={s.warnings} clash={s.clash} currency={currency} late={s.late} noShows={s.noShows} showChip={s.chip} />)}
+          {leavingCells.filter((s) => s.lane === li).map((s) => <TimelineBlock sz={sz} key={"leaving-" + s.b.id} leaving b={s.b} pxPerMin={railPxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={s.warnings} clash={s.clash} currency={currency} late={s.late} noShows={s.noShows} showChip={s.chip} />)}
         </div>
       ))}
     </>
@@ -2965,6 +3018,7 @@ export const TimelineView = memo(function TimelineView({
           nowMins={nowMins}
           onStatus={onStatus}
           onNoShow={onNoShow}
+          onUnlock={onUnlock}
           onClose={() => setQuickStatus(null)} />
       ) : null}
     </ModalPresence>

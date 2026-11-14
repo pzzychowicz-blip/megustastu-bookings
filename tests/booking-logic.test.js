@@ -29,9 +29,9 @@ import {
   keepsHandTables, tablesKept, blockedTablesAt, handKeptRefusal,
   unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
   tablesFreeFor, trialFits, enteredPhone, kitchenRelevant, savedToast, lastStartMins,
-  optimizerActiveFor, earliestOffer, findTimes, findKitchenFriendlyTimes,
+  optimizerActiveFor, earliestOffer, findTimes, findKitchenFriendlyTimes, applyOptKeep, movedOthers,
 } from "../src/lib/booking-logic.js";
-import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
+import { TOTAL_SEATS, ALL_TABLES, VALID_COMBOS, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
 import { setWeekHours, DEFAULT_WEEK_HOURS, setHourExceptions } from "../src/lib/constants.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
@@ -2405,16 +2405,19 @@ describe("what a save really does with a revived booking's tables", () => {
     expect(tablesFreeFor([cancelled()], D, "x", ["6"], s, s + 90, [])).toBe(true);
   });
 
-  it("…and the save moves the booking off it anyway", () => {
+  // v18.17.0 (I): until then the save moved it to 1, the fresh pass's choice.
+  // A save now keeps what was placed while it still suits the party
+  // (`applyOptKeep`), and table 6 does.
+  it("…and the save keeps it there", () => {
     const saved = bookingsAfterAction(revive([cancelled()]), D, [], "x", false, true);
-    expect(saved.find((b) => b.id === "x").tables).toEqual(["1"]);
+    expect(saved.find((b) => b.id === "x").tables).toEqual(["6"]);
   });
 
   it("trialFits — what the form already computes — gives exactly that", () => {
-    expect(trialFits([cancelled()], D, "19:00", 2, "auto", 90, [], "x", [], false)).toEqual(["1"]);
+    expect(trialFits([cancelled()], D, "19:00", 2, "auto", 90, [], "x", [], false)).toEqual(["6"]);
   });
 
-  it("the two still agree on a day with other bookings on it", () => {
+  it("the two still agree on a day with other bookings on it, and nobody else moves", () => {
     const day = [
       cancelled(),
       mk({ id: "y", time: "19:00", size: 4, tables: ["9"] }),
@@ -2423,9 +2426,10 @@ describe("what a save really does with a revived booking's tables", () => {
     const preview = trialFits(day, D, "19:00", 2, "auto", 90, [], "x", [], false);
     const saved = bookingsAfterAction(revive(day), D, [], "x", false, true);
     expect(preview).toEqual(saved.find((b) => b.id === "x").tables);
-    // The same pass moves somebody the form never mentions — that is the
-    // "Tables re-optimised." toast's job, and stays out of this row.
-    expect(saved.find((b) => b.id === "z").tables).not.toEqual(["1"]);
+    expect(preview).toEqual(["6"]);
+    // Until v18.17.0 the same pass moved z off 1, which the form never said.
+    expect(saved.find((b) => b.id === "z").tables).toEqual(["1"]);
+    expect(saved.find((b) => b.id === "y").tables).toEqual(["9"]);
   });
 
   it("and agree that a booking the optimiser is content with does not move", () => {
@@ -3458,3 +3462,230 @@ describe("newBookingTime", () => {
     }
   });
 });
+
+// ── v18.17.0 (E) — every pass places a booking the same way ─────────────────
+// The zone retry re-placed everyone with no look at their preferred tables, so
+// fixing one party's zone took another party off preferred tables that were free.
+describe("optimise: preferred tables survive another party's zone fix", () => {
+  // Two indoor parties of three, and indoors seats one of them: the first pass
+  // gives it to the earlier one, the zone retry hands it to the later one, and
+  // re-places everyone else on the way, `star` with them. (J: the first fixture
+  // was a party asking indoor while preferring an outdoor table; since J the
+  // first pass seats such a party in its zone, so the retry never ran there.
+  // This one was found by a generated search: with the retry placing plainly,
+  // `star` is moved to 10.)
+  const early = mk({ id: "b01", time: "19:15", size: 3, duration: 90, preference: "indoor" });
+  const zone = mk({ id: "b00", time: "19:30", size: 3, duration: 120, preference: "indoor" });
+  const star = mk({ id: "b02", time: "19:45", size: 1, duration: 90, preferredTables: ["2"] });
+
+  it("the party the retry did not touch keeps its preferred tables", () => {
+    const out = optimise([zone, early, star], D, []);
+    expect(out.b02).toEqual(["2"]);
+  });
+
+  it("and the zone fix itself still happens", () => {
+    const out = optimise([zone, early, star], D, []);
+    expect(out.b00.every((t) => isIn(t)), "zone was given " + out.b00.join("+")).toBe(true);
+  });
+
+  it("alone, it has them too: the retry is what the first case is about", () => {
+    expect(optimise([star], D, []).b02).toEqual(["2"]);
+  });
+});
+
+// ── v18.17.0 (J) — the zone wins over preferred tables ──────────────────────
+// Patryk, 2026-11-13: when a guest's preferred tables are outside the zone they
+// asked for, the zone wins, and the preferred tables come before any other
+// table outside it. That was already `findFreeSlot`'s order (the Optimiser-off
+// path); the Optimiser seated the preferred tables first and left the zone
+// retry to move the party off them.
+describe("optimise: the zone wins over preferred tables", () => {
+  it("a party in its zone stays there although its preferred tables outside it are free", () => {
+    // Until J a free outdoor preferred table called it back to the pass, and the
+    // retry then put it on the zone's first choice, 10.
+    const k = mk({ id: "k", time: "19:00", preference: "indoor", preferredTables: ["2"], tables: ["11"] });
+    const out = applyOptKeep([k, mk({ id: "n", time: "13:00" })], D, []);
+    expect(out.find((b) => b.id === "k").tables).toEqual(["11"]);
+  });
+
+  it("with its zone full, its preferred tables come before any other table outside it", () => {
+    const full = [mk({ id: "i1", time: "19:00", tables: ["10"], _locked: true }), mk({ id: "i2", time: "19:00", size: 6, tables: ["11", "12", "13"], _locked: true })];
+    const plain = mk({ id: "k", time: "19:00", preference: "indoor" });
+    expect(optimise(full.concat([plain]), D, []).k).toEqual(["1"]);          // what it gets with no wish
+    const k = mk({ id: "k", time: "19:00", preference: "indoor", preferredTables: ["5"] });
+    expect(optimise(full.concat([k]), D, []).k).toEqual(["5"]);
+    expect(findFreeSlot(full, D, "19:00", 2, "indoor", 90, [], null, ["5"])).toEqual(["5"]);
+  });
+
+  it("a lone booking is placed the same with the Optimiser on and off, whatever its preferred tables", () => {
+    // Every table, every combo and three sets no combo allows, at every size and
+    // zone. Until J the Optimiser seated 32 of these on a mix of indoor and
+    // outdoor tables that `comboOk` refuses and the Optimiser-off path never gives.
+    const key = (t) => (t || []).slice().sort().join("|");
+    const sets = ALL_TABLES.map((t) => [t.id]).concat(VALID_COMBOS.map((c) => c.ids)).concat([["2", "10"], ["9", "13"], ["1", "11", "12"]]);
+    const bad = [];
+    for (const pref of ["auto", "indoor", "outdoor"]) for (let size = 1; size <= 8; size++) for (const pt of sets) {
+      const on = optimise([mk({ id: "x", time: "19:00", size, preference: pref, preferredTables: pt })], D, []).x;
+      const off = findFreeSlot([], D, "19:00", size, pref, 90, [], null, pt);
+      if (key(on) !== key(off)) bad.push(pref + " " + size + " " + pt.join("+") + ": " + key(on) + " / " + key(off));
+    }
+    expect(bad).toEqual([]);
+  });
+});
+
+// ── v18.17.0 (I): the pass that keeps what it placed ─────────────────────────
+// A save on a day the Optimiser owns holds every placed, unlocked party whose
+// tables still suit it, places the rest, and takes a fresh pass instead only
+// when that seats more. Measured over generated days in REFACTOR_LOG v18.17.0;
+// these are the rules, one case each.
+describe("applyOptKeep: keep unless it costs a seat", () => {
+  const tbl = (out, id) => out.find((b) => b.id === id).tables;
+
+  it("a new booking is placed around the day, and nobody else moves", () => {
+    // Placed where a fresh pass would not put them: 2 on table 4, 2 on 9.
+    const day = [mk({ id: "a", time: "19:00", tables: ["4"] }), mk({ id: "b", time: "19:00", tables: ["9"] })];
+    const fresh = applyOpt(day.concat([mk({ id: "n", time: "19:00" })]), D, []);
+    expect(tbl(fresh, "a")).not.toEqual(["4"]);                // what a save did until v18.17.0
+    const out = applyOptKeep(day.concat([mk({ id: "n", time: "19:00" })]), D, []);
+    expect([tbl(out, "a"), tbl(out, "b")]).toEqual([["4"], ["9"]]);
+    expect(tbl(out, "n")).toHaveLength(1);
+    expect(verifyClean(out, D)).toBe(true);
+  });
+
+  it("gives back exactly the lock flag each held booking had: absent stays absent", () => {
+    const a = mk({ id: "a", time: "19:00", tables: ["4"] });
+    delete a._locked;
+    const out = applyOptKeep([a, mk({ id: "b", time: "19:00", tables: ["9"] })], D, []);
+    expect(Object.prototype.hasOwnProperty.call(out[0], "_locked")).toBe(false);
+    expect(out[1]._locked).toBe(false);
+    expect(out[0]._conflict).toBe(false);
+  });
+
+  it("lets go of tables that stopped suiting the party", () => {
+    const at = (o) => mk(Object.assign({ time: "19:00" }, o));
+    const day = [
+      at({ id: "small", size: 4, tables: ["4"] }),                         // too few seats
+      at({ id: "zone", preference: "indoor", tables: ["3"] }),             // outside the zone it asked for
+      at({ id: "pref", preferredTables: ["7"], tables: ["8"] }),           // its preferred table is free
+      at({ id: "waste", tables: ["11", "12"] }),                           // one table would do
+      at({ id: "gone", tables: ["99"] }),                                  // a table the layout does not have
+      at({ id: "c1", tables: ["1"] }), at({ id: "c2", tables: ["1"], time: "19:30" }), // a clash: both go back
+    ];
+    const out = applyOptKeep(day, D, []);
+    expect(comboCap(tbl(out, "small"))).toBeGreaterThanOrEqual(4);
+    expect(isIn(tbl(out, "zone")[0])).toBe(true);
+    expect(tbl(out, "pref")).toEqual(["7"]);
+    expect(tbl(out, "waste")).toHaveLength(1);
+    expect(tbl(out, "gone")).not.toEqual(["99"]);
+    expect(verifyClean(out, D)).toBe(true);
+  });
+
+  it("a block on a held party's table sends it back to the pass", () => {
+    const day = [mk({ id: "a", time: "19:00", tables: ["4"] })];
+    const blocks = [{ id: "k", date: D, tableId: "4", from: "18:00", to: "22:00" }];
+    expect(tbl(applyOptKeep(day, D, blocks), "a")).not.toEqual(["4"]);
+  });
+
+  it("never touches a locked, seated or finished party", () => {
+    const day = [
+      mk({ id: "l", time: "19:00", tables: ["4"], _locked: true }),
+      mk({ id: "s", time: "19:00", tables: ["5"], status: "seated" }),
+      mk({ id: "c", time: "19:00", tables: ["6"], status: "completed" }),
+      mk({ id: "x", time: "19:00", tables: ["7"], status: "cancelled" }),
+    ];
+    const out = applyOptKeep(day, D, []);
+    expect(out.map((b) => b.tables)).toEqual([["4"], ["5"], ["6"], ["7"]]);
+  });
+
+  it("when holding everyone leaves a party out and a fresh pass seats them all, the fresh pass wins", () => {
+    // Two on the four-seat 9; every pair of joined tables broken by a party of two.
+    const busy = ["1", "3", "5", "6", "8", "10", "11", "13"].map((t) => mk({ id: "p" + t, time: "19:00", tables: [t] }));
+    const day = busy.concat([mk({ id: "two", time: "19:00", tables: ["9"] }), mk({ id: "four", time: "19:00", size: 4 })]);
+    const out = applyOptKeep(day, D, []);
+    expect(tbl(out, "four")).toEqual(["9"]);
+    expect(tbl(out, "two")).toHaveLength(1);
+    expect(out.filter((b) => !b.tables.length)).toEqual([]);
+    expect(out).toEqual(applyOpt(day, D, []));
+  });
+
+  // /code-review: one pass was not always a day the next pass leaves alone. It
+  // places a party around the others as they stood BEFORE it, so its own result
+  // could hold a party `_keepsTables` turns down (beside its preferred table,
+  // freed by a later step), and the next save, about anything, moved that party.
+  // Measured over 3,622 generated days: 48 where a second pass moved somebody,
+  // 0 now. With `KEEP_PASSES` at 1 this test fails, on days 14 and 33.
+  it("what a save writes, the next save leaves alone (generated days)", () => {
+    let a = 11;   // a seed whose first 60 days hold two the single pass got wrong (14 and 33)
+    const rnd = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    const pick = (x) => x[Math.floor(rnd() * x.length)];
+    const ids = ALL_TABLES.map((t) => t.id), combos = VALID_COMBOS.map((c) => c.ids);
+    const times = ["18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00"];
+    const key = (l) => l.map((b) => b.id + ":" + b.tables.slice().sort().join("+")).join(" ");
+    const unplaced = (l) => l.filter((b) => !b.tables.length).length;
+    const moved = [];
+    for (let n = 0; n < 60; n++) {
+      const day = [];
+      const count = 3 + Math.floor(rnd() * 11);
+      for (let i = 0; i < count; i++) {
+        const o = { id: "b" + String(i).padStart(2, "0"), time: pick(times), size: pick([2, 2, 2, 2, 3, 4, 4, 5, 6]), duration: pick([90, 90, 120]), preference: pick(["auto", "auto", "auto", "indoor", "outdoor"]) };
+        if (rnd() < 0.15) o.preferredTables = rnd() < 0.6 ? [pick(ids)] : pick(combos).slice();
+        if (rnd() < 0.1) Object.assign(o, { _locked: true, _manual: true, tables: rnd() < 0.7 ? [pick(ids)] : pick(combos).slice() });
+        day.push(mk(o));
+      }
+      // A day the Optimiser placed, then one action: a new party, one gone, one re-timed.
+      let s0 = applyOpt(day, D, []);
+      const act = rnd();
+      if (act < 0.4) s0 = s0.concat([mk({ id: "new", time: pick(times), size: pick([2, 3, 4]) })]);
+      else if (act < 0.7) s0 = s0.slice(1);
+      else s0 = s0.map((b, i) => (i === 0 && !b._locked ? Object.assign({}, b, { time: pick(times), tables: [] }) : b));
+      const s1 = applyOptKeep(s0, D, []);
+      if (key(applyOptKeep(s1, D, [])) !== key(s1)) moved.push(n);
+      // And the repeat costs nobody a seat a fresh pass would have found.
+      expect(unplaced(s1), "day " + n).toBeLessThanOrEqual(unplaced(applyOpt(s0, D, [])));
+    }
+    expect(moved).toEqual([]);
+  });
+
+  it("a save on a day the Optimiser owns keeps; Reshuffle is still a fresh pass", () => {
+    const day = [mk({ id: "a", time: "19:00", tables: ["4"] })];
+    expect(tbl(bookingsAfterAction(day, D, [], null, false, true), "a")).toEqual(["4"]);
+    expect(tbl(applyOpt(day, D, []), "a")).not.toEqual(["4"]);
+    const ma = stripComments(readFileSync(new URL("../src/lib/manual-assign.js", import.meta.url), "utf8")).join("\n");
+    // /code-review: both of Reshuffle's passes, the plain one and the unlocking
+    // one, and nowhere in the file the pass that keeps.
+    expect(ma).toContain("return {out:applyOpt(synced,viewDate,tableBlocks),kicked:[]};");
+    expect(ma).toContain("const out=applyOpt(base,viewDate,tableBlocks);");
+    expect(ma).not.toContain("applyOptKeep");
+  });
+
+  it("the preview of an unchanged edit starts on its tables, as the save keeps them; a changed one does not", () => {
+    const day = [mk({ id: "e", time: "19:00", tables: ["4"] })];
+    expect(trialFits(day, D, "19:00", 2, "auto", 90, [], "e", [], false)).toEqual(["4"]);
+    expect(trialFits(day, D, "19:30", 2, "auto", 90, [], "e", [], false)).not.toEqual(["4"]);
+    const locked = [mk({ id: "e", time: "19:00", tables: ["4"], _locked: true })];
+    expect(trialFits(locked, D, "19:00", 2, "auto", 90, [], "e", [], false)).not.toEqual(["4"]);
+  });
+});
+
+// v18.17.0 (I): "Tables re-optimised." is a claim about the write. With the pass
+// keeping the day, most saves move nobody else, and then the toast says so.
+describe("movedOthers: what the save toast may claim", () => {
+  const a = mk({ id: "a", tables: ["4"] }), b = mk({ id: "b", tables: ["5"] });
+  it("is false when only the parties acted on changed tables", () => {
+    expect(movedOthers([a, b], [Object.assign({}, a, { tables: ["1"] }), b], ["a"])).toBe(false);
+  });
+  it("is true when anybody else's tables changed, in any order", () => {
+    expect(movedOthers([a, b], [Object.assign({}, a, { tables: ["1"] }), Object.assign({}, b, { tables: ["5"] })], [])).toBe(true);
+    expect(movedOthers([a, b], [Object.assign({}, b, { tables: ["2"] }), a], ["a"])).toBe(true);
+    expect(movedOthers([a, b], [b, Object.assign({}, a, { tables: ["4"] })], [])).toBe(false);
+  });
+  it("a booking added or removed is not a move", () => {
+    expect(movedOthers([a], [a, b], [])).toBe(false);
+    expect(movedOthers([a, b], [a], [])).toBe(false);
+  });
+  it("and the two sentences it chooses between", () => {
+    expect(savedToast(null, true)).toBe("Tables re-optimised.");
+    expect(savedToast("saved", true)).toBe("Booking saved.");
+  });
+});
+

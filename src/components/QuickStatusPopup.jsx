@@ -27,10 +27,10 @@
 
 import { useEffect, useRef } from "react";
 import { S, STATUS_BTN_BG, BLOCK_INK, BTN, R, T, FW, IC } from "../lib/constants";
-import { seatingClosed } from "../lib/booking-logic";
+import { seatingClosed, unlockOffered } from "../lib/booking-logic";
 import { useArmAfterRelease } from "../hooks/useArmAfterRelease";
-import { NoShowIcon, StatusIcon, TrashIcon } from "./Icons";
-import { mkDangerBtn, PopupShell, useModalPresence } from "./atoms";
+import { LockIcon, NoShowIcon, StatusIcon, TrashIcon } from "./Icons";
+import { mkBtn, mkDangerBtn, PopupShell, useModalPresence } from "./atoms";
 
 // v18.2.0: two optional props, both for the List card's ⋯ — the first surface
 // to open this card with a CLICK rather than a hold.
@@ -54,7 +54,7 @@ import { mkDangerBtn, PopupShell, useModalPresence } from "./atoms";
 //   omitNoShow — the opener shows No show itself, so this card does not.
 // The timeline and the plan pass neither: their block and table carry no
 // status buttons, so this card is the only place those actions live.
-export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, onStatus, onNoShow, onClose, onDelete = null, startArmed = false, omitStatus = null, omitNoShow = false }) {
+export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, onStatus, onNoShow, onClose, onDelete = null, onUnlock = null, startArmed = false, omitStatus = null, omitNoShow = false }) {
   // v17.16.12: this popup opens at 400ms INTO a hold, centred on the viewport,
   // so the finger that opened it is sitting on the card it just conjured. Until
   // that finger lifts, every control here is inert — see useArmAfterRelease for
@@ -188,6 +188,26 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
             }}
           >
             <NoShowIcon size={IC.control} />No show
+          </button>
+        ) : null}
+        {/* v18.17.0 (A): Unlock, for a booking a drag or an Assign locked to its
+            tables (`unlockOffered`; never a seated party). A quiet button: it
+            neither commits a status nor destroys anything, and it can be undone.
+            The padlock is the flag's own mark, so the two read as one thing. */}
+        {onUnlock && unlockOffered(booking) ? (
+          <button
+            className="mgt-hover-scale"
+            style={mkBtn({ fontSize: T.lead, fontWeight: FW.bold, padding: "10px 18px", minHeight: 44, flex: "1 1 auto", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 })}
+            title="Let the optimiser move this booking again"
+            onClick={() => {
+              if (!armed || leaving) return;
+              skipExit();
+              handBack();
+              onUnlock(booking.id);
+              onClose();
+            }}
+          >
+            <LockIcon size={IC.control} />Unlock
           </button>
         ) : null}
         {onDelete ? (

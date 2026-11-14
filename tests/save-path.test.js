@@ -627,7 +627,9 @@ describe("Save — an edit on a day the optimiser owns", () => {
       }
     `);
   });
-  it("notes only, on a table the optimiser would not choose: any save re-places it", () => {
+  // v18.17.0 (I): until then any save re-placed it (4 → 1). The pass keeps a
+  // party where its tables still suit it (`applyOptKeep`).
+  it("notes only, on a table the optimiser would not choose: it stays there", () => {
     const b1 = bk("b1", { tables: ["4"] });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { notes: "window seat" }) })).toMatchInlineSnapshot(`
       {
@@ -647,7 +649,6 @@ describe("Save — an edit on a day the optimiser owns", () => {
               "b1": {
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: notes updated"}]",
                 "notes": """ → "window seat"",
-                "tables": "["4"] → ["1"]",
               },
             },
           },
@@ -689,7 +690,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onLanded","replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
+          "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
@@ -720,7 +721,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onLanded","replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
+          "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-15")",
@@ -785,7 +786,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
+          "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
@@ -814,7 +815,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
+          "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
@@ -896,7 +897,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
-          "flash(null, "Seated outdoor: indoor was full.")",
+          "flash("saved", "Seated outdoor: indoor was full.")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
@@ -918,6 +919,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       }
     `);
   });
+  // v18.17.0 (I): revived, it keeps its table while that still suits it (was 4 → 1).
   it("a cancelled booking revived", () => {
     const b1 = bk("b1", { tables: ["4"], status: "cancelled" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "confirmed" }) })).toMatchInlineSnapshot(`
@@ -938,7 +940,6 @@ describe("Save — an edit on a day the optimiser owns", () => {
               "b1": {
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: status cancelled→confirmed"}]",
                 "status": ""cancelled" → "confirmed"",
-                "tables": "["4"] → ["1"]",
               },
             },
           },
@@ -954,7 +955,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
+          "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
@@ -1058,13 +1059,16 @@ describe("Save — an edit on a day the optimiser owns", () => {
       }
     `);
   });
+  // v18.17.0 (I): still refused. With everyone held it does not fit, and a fresh
+  // pass would seat it only by unseating Guest f13: one party out either way, and
+  // a tie keeps the held day, so the refusal is the no-tables one (it named f13).
   it("moved into a full evening it would push somebody off", () => {
     const b1 = bk("b1", { time: "18:00", tables: ["1"] });
     expect(runSave({ bookings: fullDay(T, "20:00", false).concat([b1]), editId: "b1", form: draftOf(b1, { time: "20:00" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
-          "setError("Not enough capacity — this change would displace 1 existing booking: Guest f13.")",
+          "setError("No tables available at this time — see suggestions below.")",
         ],
         "guard": "ready",
       }
@@ -1282,7 +1286,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onLanded","replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
+          "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
@@ -1305,7 +1309,9 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
       }
     `);
   });
-  it("…and before the cutoff, with the optimiser on, the whole day is re-placed", () => {
+  // v18.17.0 (I): only the edited party is placed again (b2 stayed on 5; it was
+  // moved to 1), so the Undo covers one booking.
+  it("…and before the cutoff, with the optimiser on, the edited party is placed again", () => {
     const b1 = bk("b1", { date: TODAY, time: "20:30", tables: ["4"] });
     const b2 = bk("b2", { date: TODAY, time: "20:30", tables: ["5"] });
     expect(runSave({ at: TODAY + "T12:00:00", autoOptimizer: true, bookings: [b1, b2], editId: "b1", form: draftOf(b1, { time: "21:00" }) })).toMatchInlineSnapshot(`
@@ -1314,8 +1320,8 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onLanded","replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
-          "armUndo(["b1","b2"], "b1", "edit", false)",
+          "flash("saved", "")",
+          "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
           "wa.draftMovedReply("b1", {"date":"2026-10-07","time":"21:00","from":{"date":"2026-10-07","time":"20:30"}})",
@@ -1328,11 +1334,8 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
               "b1": {
                 "history": "[] → [{"at":"2026-10-07T11:00:00.000Z","by":"staff@mgt.test","action":"edited: time 20:30→21:00"}]",
                 "scheduledTime": ""20:30" → "21:00"",
-                "tables": "["4"] → ["2"]",
+                "tables": "["4"] → ["1"]",
                 "time": ""20:30" → "21:00"",
-              },
-              "b2": {
-                "tables": "["5"] → ["1"]",
               },
             },
           },
@@ -1648,7 +1651,7 @@ describe("Save — seating, completing and walking back (today)", () => {
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
+          "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
@@ -1679,7 +1682,7 @@ describe("Save — seating, completing and walking back (today)", () => {
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
+          "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
@@ -1738,7 +1741,7 @@ describe("Save — seating, completing and walking back (today)", () => {
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
+          "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
@@ -1767,7 +1770,7 @@ describe("Save — seating, completing and walking back (today)", () => {
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onLanded","replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
+          "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
@@ -1957,7 +1960,7 @@ describe("Save — tables somebody chose by hand", () => {
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
+          "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
@@ -1987,7 +1990,7 @@ describe("Save — tables somebody chose by hand", () => {
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
+          "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
@@ -2055,7 +2058,7 @@ describe("Save — a new booking", () => {
         "calls": [
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
-          "flash(null, "")",
+          "flash("saved", "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
           "wa.completeDraftAccept("muyfzww04xjv", null)",
@@ -2079,7 +2082,7 @@ describe("Save — a new booking", () => {
         "calls": [
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
-          "flash(null, "")",
+          "flash("saved", "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
           "wa.completeDraftAccept("muyfzww04xjv", null)",
@@ -2103,7 +2106,7 @@ describe("Save — a new booking", () => {
         "calls": [
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
-          "flash(null, "")",
+          "flash("saved", "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
           "wa.completeDraftAccept("muyfzww04xjv", null)",
@@ -2132,12 +2135,14 @@ describe("Save — a new booking", () => {
       }
     `);
   });
+  // v18.17.0 (I): still refused; the tie between the held day and a fresh pass
+  // that unseats Guest f13 keeps the held day, so it is the no-table refusal.
   it("a party that would push somebody else off", () => {
     expect(runSave({ bookings: fullDay(T, "20:00", false), form: newDraft({ name: "Ana", size: 3 }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
-          "setError("Not enough capacity — adding this booking would displace 1 existing booking: Guest f13.")",
+          "setError("Could not assign a table — try manual assignment.")",
         ],
         "guard": "ready",
       }
@@ -2150,7 +2155,7 @@ describe("Save — a new booking", () => {
         "calls": [
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
-          "flash(null, "")",
+          "flash("saved", "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
           "wa.completeDraftAccept("muyfzww04xjv", null)",
@@ -2177,7 +2182,7 @@ describe("Save — a new booking", () => {
         "calls": [
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
-          "flash(null, "")",
+          "flash("saved", "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
           "wa.completeDraftAccept("muyfzww04xjv", null)",
@@ -2201,7 +2206,7 @@ describe("Save — a new booking", () => {
         "calls": [
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
-          "flash(null, "")",
+          "flash("saved", "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
           "addRule({"id":"muyfzww09v3q","startDate":"2026-10-14","name":"Weekly","phone":"+34 600 000 001","size":2,"weekday":3,"time":"20:00","preference":"auto","notes":"usual table"})",
@@ -2265,7 +2270,7 @@ describe("Save — a new booking", () => {
         "calls": [
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
-          "flash(null, "")",
+          "flash("saved", "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
           "wa.completeDraftAccept("muyfzww04xjv", null)",
@@ -2293,7 +2298,7 @@ describe("Save — a new booking", () => {
         "calls": [
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
-          "flash(null, "")",
+          "flash("saved", "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
           "wa.completeDraftAccept("muyfzww04xjv", null)",
@@ -2347,7 +2352,7 @@ describe("Save — a new booking", () => {
         "calls": [
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
-          "flash(null, "Seated outdoor: indoor was full.")",
+          "flash("saved", "Seated outdoor: indoor was full.")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
           "wa.completeDraftAccept("muyfzww04xjv", null)",
@@ -2376,7 +2381,7 @@ describe("Save — a new booking", () => {
           "setErrorField(null)",
           "holdWaitlistEntry("w9")",
           "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
-          "flash(null, "")",
+          "flash("saved", "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
           "removeFromWaitlist("w9")",
@@ -2451,7 +2456,7 @@ describe("Save — a new booking", () => {
         "calls": [
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
-          "flash(null, "")",
+          "flash("saved", "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
           "wa.completeDraftAccept("muyfzww04xjv", null)",
@@ -2476,7 +2481,7 @@ describe("Save — a new booking", () => {
         "calls": [
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
-          "flash(null, "")",
+          "flash("saved", "")",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
           "wa.completeDraftAccept("muyfzww04xjv", null)",
@@ -2568,7 +2573,7 @@ describe("Save — tags", () => {
         "calls": [
           "setErrorField(null)",
           "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
-          "flash(null, "")",
+          "flash("saved", "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
           "wa.completeDraftAccept("muyfzww04xjv", null)",

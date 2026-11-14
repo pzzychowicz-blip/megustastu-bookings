@@ -15,6 +15,7 @@
 //   indoorTint, onToggleIndoorTint                          Tint indoor tables on the Timeline
 //   cellBook, onToggleCellBook                              Tap an empty cell to book, on the Timeline
 //   vibrateOnDrag, onToggleVibrate                          Vibrate on drag (lib/haptics.js)
+//   dragHold, onSetDragHold                                 Drag hold (lib/drag-hold.js), v18.17.0
 //   split, focusedPane, setFocusedPane, applySplit,
 //   fitTimeline, confirmSplit, swapSides, toggleSplitDir,
 //   exitSplit, setSplitRatio, splitSideBySideOk             Split View
@@ -34,6 +35,7 @@ import { useState, useRef, useEffect } from "react";
 import { VIEW_ORDER, SPLIT_DIVIDER_PX } from "../lib/constants";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "../lib/serviceWorker";
 import { readVibrate, setVibrate } from "../lib/haptics";
+import { readDragHold, setDragHold } from "../lib/drag-hold";
 import { useThemeMode } from "./useThemeMode";
 import { PREF_SPEC, PREF_NAMES, readPrefValue, prefLocalValue } from "./useUserPrefs";
 
@@ -296,6 +298,13 @@ export function useShellPrefs({
     const next=!vibrateOnDrag;
     setVibrate(next);
     setVibrateOnDrag(next);
+  }
+  // v18.17.0 (H): Drag hold, per device like Vibrate on drag. The block reads
+  // the stored value itself when it sets its timer; this state is for Settings.
+  const [dragHold,setDragHoldState]=useState(readDragHold);
+  function onSetDragHold(id){
+    setDragHold(id);
+    setDragHoldState(readDragHold());
   }
   const [largeText,setLargeText]=useState(readLargeText);
   function onToggleLargeText(){
@@ -601,6 +610,7 @@ export function useShellPrefs({
     indoorTint, onToggleIndoorTint,
     cellBook, onToggleCellBook,
     vibrateOnDrag, onToggleVibrate,
+    dragHold, onSetDragHold,
     split, focusedPane, setFocusedPane, applySplit, fitTimeline,
     confirmSplit, swapSides, toggleSplitDir, exitSplit, setSplitRatio,
     splitSideBySideOk, shellFixed,

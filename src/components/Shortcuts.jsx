@@ -69,8 +69,8 @@ const OWN_SECTIONS = {
     { keys: ["A"],        label: "Accept draft, else toggle Needs action" },
     { keys: ["D"],        label: "Dismiss draft" },
     { keys: ["C"],        label: "Focus the reply box" },
-    { keys: ["/"],        label: "Focus search" },
-    { keys: ["⌫"],        label: "Archive (Inbox; selection in select mode)" },
+    { keys: ["/"],        label: "Open search" },
+    { keys: ["H"],        label: "Archive (Inbox; selection in select mode)" },
     { keys: ["R"],        label: "Restore (Archived; selection in select mode)" },
   ]},
   "More popover (Week / Month)": { title: "More popover (Week / Month)", rows: [
