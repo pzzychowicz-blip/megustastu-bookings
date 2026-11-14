@@ -3613,7 +3613,11 @@ describe("applyOptKeep: keep unless it costs a seat", () => {
     expect(tbl(bookingsAfterAction(day, D, [], null, false, true), "a")).toEqual(["4"]);
     expect(tbl(applyOpt(day, D, []), "a")).not.toEqual(["4"]);
     const ma = stripComments(readFileSync(new URL("../src/lib/manual-assign.js", import.meta.url), "utf8")).join("\n");
-    expect(ma).toContain("return applyOpt(base,viewDate,tableBlocks);");
+    // /code-review: both of Reshuffle's passes, the plain one and the unlocking
+    // one, and nowhere in the file the pass that keeps.
+    expect(ma).toContain("return {out:applyOpt(synced,viewDate,tableBlocks),kicked:[]};");
+    expect(ma).toContain("const out=applyOpt(base,viewDate,tableBlocks);");
+    expect(ma).not.toContain("applyOptKeep");
   });
 
   it("the preview of an unchanged edit starts on its tables, as the save keeps them; a changed one does not", () => {

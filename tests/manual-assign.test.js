@@ -11,6 +11,7 @@ import { planAssign, planReassign, planReshuffle, planUnlock, lockedOn, swapSlot
 import { todayStr, addDays } from "../src/lib/day.js";
 import { appCode } from "./app-source.js";
 import { unlockOffered } from "../src/lib/booking-logic.js";
+import { ALL_TABLES } from "../src/lib/constants.js";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
@@ -354,6 +355,18 @@ describe("planReshuffle: a seated party running over", () => {
 // A drag, an Assign and a walk-in all lock a booking to its tables, and the only
 // way out was the edit form's Clear. Unlock hands the booking back to the
 // optimiser in one tap, through `saveMove`, so it can be undone.
+// /code-review: a FULL 19:00, one party per table and each the size of its table,
+// except one two-top, which holds a party of five put there by hand and locked.
+// The optimiser would never seat five at it, and every other table is taken: the
+// case where taking a lock off costs somebody a table.
+const fullDay = () => {
+  const placed = planReshuffle({ viewDate: D, tableBlocks: [], today: TODAY, nowMins: 600 })
+    .transform(ALL_TABLES.map((t, i) => bk("f" + i, "19:00", t.capacity, [])));
+  const out = placed.find((b) => b.tables.length === 1 && ALL_TABLES.find((t) => t.id === b.tables[0]).capacity === 2);
+  return placed.filter((b) => b.id !== out.id).concat([bk("big", "19:00", 5, out.tables.slice(), { _locked: true, _manual: true })]);
+};
+const seatedCount = (list) => list.filter((b) => b.tables.length > 0).length;
+
 describe("unlockOffered: who can be unlocked", () => {
   it("a locked booking that has not sat down", () => {
     expect(unlockOffered(bk("a", "19:00", 2, ["3"], { _locked: true, _manual: true }))).toBe(true);
@@ -440,6 +453,30 @@ describe("planUnlock: the lock comes off and the day is handed back", () => {
     // A booking that has gone is the other report's question (`goneRefusal`).
     expect(plan.replayRefusal([])).toBe(null);
   });
+
+  it("refuses when the party would have no table without its lock, in the saves' sentence", () => {
+    const list = fullDay();
+    expect(seatedCount(list)).toBe(list.length);
+    expect(unlock(list, "big")).toEqual({ refuse: "Not enough capacity — unlocking BIG would displace 1 existing booking: BIG." });
+  });
+
+  it("the same day with the Optimiser off: nothing moves, so the lock comes off", () => {
+    const list = fullDay().map((b) => Object.assign({}, b, { date: TODAY }));
+    const plan = unlock(list, "big", { autoOptimizer: false });
+    expect(plan.refuse).toBe(undefined);
+    const out = plan.transform(list);
+    expect(byId(out, "big")).toMatchObject({ _locked: false, tables: byId(list, "big").tables });
+    expect(seatedCount(out)).toBe(list.length);
+  });
+
+  it("a replay on a day that filled up meanwhile writes nothing, and says so", () => {
+    const list = [bk("big", "19:00", 5, ["3"], { _locked: true, _manual: true })];
+    const plan = unlock(list, "big");
+    expect(plan.refuse).toBe(undefined);
+    const full = fullDay();
+    expect(plan.transform(full)).toBe(full);
+    expect(plan.replayRefusal(full)).toBe("The unlock of BIG was not saved: the day changed on another device.");
+  });
 });
 
 describe("Unlock: the doors", () => {
@@ -504,6 +541,34 @@ describe("planReshuffle: Reshuffle and unlock N", () => {
     const out = run(true).transform(list);
     expect(byId(out, "sat")).toMatchObject({ tables: ["12"], _locked: true });
     expect(byId(out, "far")).toEqual(list[2]);
+  });
+
+  // /code-review: measured on a full 19:00, the freed party of five took a
+  // joined set and a party of two that had a table was left without one, under
+  // "Tables re-optimised, 1 unlocked.".
+  it("with unlock, refuses when taking the locks off would cost a party its table", () => {
+    const full = fullDay();
+    const plan = planReshuffle({ viewDate: D, tableBlocks: [], today: TODAY, nowMins: 600, unlock: true, bookings: full, user: "u@x", stamp });
+    expect(plan.transform).toBe(undefined);
+    expect(plan.refuse).toMatch(/^Not enough capacity — unlocking would displace 1 existing booking: /);
+  });
+
+  it("the plain Reshuffle on that day is not refused and unseats nobody", () => {
+    const full = fullDay();
+    const plan = planReshuffle({ viewDate: D, tableBlocks: [], today: TODAY, nowMins: 600, bookings: full });
+    expect(plan.refuse).toBe(undefined);
+    const out = plan.transform(full);
+    expect(seatedCount(out)).toBe(full.length);
+    expect(byId(out, "big")._locked).toBe(true);
+  });
+
+  it("a replay of an unlocking Reshuffle on a day that filled up writes nothing", () => {
+    const full = fullDay();
+    expect(run(true).transform(full)).toBe(full);
+  });
+
+  it("App shows the refusal and dispatches nothing", () => {
+    expect(appCode()).toContain("if(plan.refuse){flashRefusal(plan.refuse);return;}\n    saveMove(plan.transform,null,\"reshuffle\",plan.done,");
   });
 
   it("only the literal true unlocks: Enter on the confirm passes nothing", () => {

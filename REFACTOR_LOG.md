@@ -41333,3 +41333,15 @@ Five findings. Two confirmed and fixed, each in its own commit; one a stale-note
   lock (C), and returns the list as it was. The plan also brings `replayRefusal`, which `saveMove` asks after "the booking has gone", so
   such a replay is dropped with "The unlock of … was not saved: the day changed on another device." and not landed as "unlocked".
   `tests/manual-assign.test.js`.
+- **Unlock, and "Reshuffle and unlock N", could cost a party its table** (`planUnlock`, `planReshuffle`). A lock can hold a party where
+  the optimiser would never put it: five at a two-top, tables joined by hand. Measured on a full 19:00 (one party per table, a locked five
+  on a two-top), a day the Optimiser owns: Unlock handed the table back, the pass found nowhere for the five, and it ended with no table
+  under "BIG unlocked."; "Reshuffle and unlock 1" seated the five on a joined set and left a party of two, which had a table, without one,
+  under "Tables re-optimised, 1 unlocked.". The plain Reshuffle on the same day unseats nobody. Both now ask the saves' own question,
+  `displacedBy(before, after, date, null)` (exported from `lib/booking-save.js` with `displaceRefusal`; no `id`, because the booking being
+  unlocked must keep a table too), and refuse in the saves' sentence: "Not enough capacity — unlocking BIG would displace 1 existing
+  booking: BIG.". Asked at the press and again in the transform, which then returns the list as it was, so a replay on a day that filled
+  up meanwhile writes nothing. Unlock asks it only where it hands tables back: with the Optimiser off nothing moves. **A departure to
+  overrule (no question could be asked in the ship run):** refusing is the conservative reading of "never costs a seat", the rule (I) was
+  chosen on and the one a drop and both saves already keep; the alternative is to let it happen and say so in the toast.
+  `tests/manual-assign.test.js` (the full day is its `fullDay()`).

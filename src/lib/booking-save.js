@@ -84,13 +84,16 @@ export function releaseSwapped(b,affected){
 // Those differ only by a swap's release, and a swap comes with tables picked by
 // hand, when neither save asks this.
 // v18.3.4 (/code-review): written out twice, in the two saves.
-function displacedBy(before,fin,date,id){
+// v18.17.0 (/code-review): exported, with `displaceRefusal`, for Unlock and
+// "Reshuffle and unlock" (lib/manual-assign.js), which ask it with no `id`: the
+// booking being unlocked is one of the parties that must keep a table.
+export function displacedBy(before,fin,date,id){
   const prevAssigned=before.filter(function(b){return b.date===date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==id;});
   const displaced=fin.filter(function(b){return b.id!==id&&b.date===date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
   return displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
 }
 // The refusal, with `what` naming the save: "this change" or "adding this booking".
-function displaceRefusal(what,kicked){
+export function displaceRefusal(what,kicked){
   return "Not enough capacity — "+what+" would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".";
 }
 

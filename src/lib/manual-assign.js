@@ -31,7 +31,7 @@
 // `stamp(action, user)` builds a history entry. App passes nothing and gets
 // `histEntry`; a test passes its own so the result has no clock in it.
 import { bookingsAfterAction, optimizerActiveFor, histEntry as defaultHistEntry, toMins, findFreeSlot, applyOpt, syncLiveDurations, unlockOffered } from "./booking-logic.js";
-import { releaseSwapped, memoByPrev } from "./booking-save.js";
+import { releaseSwapped, memoByPrev, displacedBy, displaceRefusal } from "./booking-save.js";
 import { getDur } from "./booking-fields.js";
 import { moveSentence } from "./delete-undo.js";
 
@@ -154,7 +154,7 @@ export function planReassign(ctx){
 // says: that is what the button is for, and it is only offered while the switch
 // is off.
 //
-//   planReshuffle(ctx) → { transform, done }
+//   planReshuffle(ctx) → { refuse } | { transform, done }
 //   ctx: {viewDate, tableBlocks, today, nowMins, unlock?, bookings?, user?, stamp?}
 //
 // It was `applyOpt(list, viewDate, tableBlocks)` written out in App, the one
@@ -177,13 +177,32 @@ export function planReshuffle(ctx){
   const unlock=ctx.unlock===true;
   const histEntry=ctx.stamp||defaultHistEntry;
   const n=unlock?lockedOn(ctx.bookings,viewDate):0;
-  return {done:n>0?"Tables re-optimised, "+n+" unlocked.":"Tables re-optimised.",transform:function(list){
+  // /code-review: `kicked` is who the UNLOCKING pass leaves without a table that
+  // had one (`displacedBy`, the saves' own question). A lock can hold a party
+  // where the optimiser would never put it (five at a two-top, tables joined by
+  // hand), and on a full evening the freed party then takes a set from somebody
+  // else, or gets none: measured, a party of two lost its table to an unlocked
+  // five while the pill read "Tables re-optimised, 1 unlocked.". A plain
+  // Reshuffle keeps the locks and is not asked this.
+  const run=memoByPrev(function(list){
     const synced=syncLiveDurations(list,today,nowMins);
-    const base=!unlock?synced:synced.map(function(b){
+    if(!unlock) return {out:applyOpt(synced,viewDate,tableBlocks),kicked:[]};
+    const base=synced.map(function(b){
       if(!b||b.date!==viewDate||!unlockOffered(b)) return b;
       return Object.assign({},releaseSwapped(b,[{id:b.id,tables:[]}]),{history:(b.history||[]).concat([histEntry("unlocked by Reshuffle",user)])});
     });
-    return applyOpt(base,viewDate,tableBlocks);
+    const out=applyOpt(base,viewDate,tableBlocks);
+    return {out:out,kicked:displacedBy(synced,out,viewDate,null)};
+  });
+  // Refused at the press, in the saves' sentence. The transform asks again, for
+  // a replay on a day that has changed since: it then writes nothing.
+  if(unlock&&ctx.bookings){
+    const kicked=run(ctx.bookings).kicked;
+    if(kicked.length) return {refuse:displaceRefusal("unlocking",kicked)};
+  }
+  return {done:n>0?"Tables re-optimised, "+n+" unlocked.":"Tables re-optimised.",transform:function(list){
+    const r=run(list);
+    return r.kicked.length?list:r.out;
   }};
 }
 
@@ -220,25 +239,39 @@ export function planUnlock(ctx){
   // the pass (which keeps every placed party whose tables still suit it) would
   // leave it where the lock put it. With the Optimiser off it keeps them.
   const handBack=optimizerActiveFor(date,autoOptimizer);
-  // /code-review: asked of the list being WRITTEN, not the plan's snapshot (a
-  // held write replays on a fresh list, as Reassign's lock is read off the row,
-  // C): the booking is still one Unlock is offered for. Replayed over a booking
-  // another device had seated meanwhile, this handed a SEATED party's tables
-  // back and the pass, which never places a seated party, left it with none
-  // (measured); a completed one lost its record the same way. The list then
-  // comes back as it was, the same array, and nothing is written.
-  const transform=memoByPrev(function(list){
+  // /code-review, two questions asked of the list being WRITTEN, not the plan's
+  // snapshot (a held write replays on a fresh list, as Reassign's lock is read
+  // off the row, C):
+  //   - the booking is still one Unlock is offered for. Replayed over a booking
+  //     another device had seated meanwhile, this handed a SEATED party's tables
+  //     back and the pass, which never places a seated party, left it with none
+  //     (measured); a completed one lost its record the same way.
+  //   - nobody loses a table by it (`displacedBy`, the saves' own question). A
+  //     lock can hold a party where the optimiser would never put it (five at a
+  //     two-top, tables joined by hand); handed back on a full evening it got no
+  //     table and the toast said only "unlocked" (measured). Asked only where
+  //     the tables are handed back: with the Optimiser off nothing moves.
+  // Either way the list comes back as it was, the same array, and nothing is written.
+  const trial=memoByPrev(function(list){
     const cur=list.find(function(b){return b.id===id;});
-    if(!cur||!unlockOffered(cur)) return list;
+    if(!cur||!unlockOffered(cur)) return {out:list,kicked:[]};
     const updated=list.map(function(b){
       if(b.id!==id) return b;
       // `releaseSwapped`: the booking comes back unlocked and not hand-placed,
       // the one way this app writes that, keeping every table it is not handing back.
       return Object.assign({},releaseSwapped(b,[{id:id,tables:handBack?(b.tables||[]):[]}]),{history:(b.history||[]).concat([histEntry("unlocked: the optimiser may move it",user)])});
     });
-    return bookingsAfterAction(updated,date,tableBlocks,null,false,autoOptimizer);
+    const out=bookingsAfterAction(updated,date,tableBlocks,null,false,autoOptimizer);
+    return {out:out,kicked:handBack?displacedBy(list,out,date,null):[]};
   });
-  const after=transform(ctx.bookings).find(function(b){return b.id===id;});
+  const transform=function(list){
+    const r=trial(list);
+    return r.kicked.length?list:r.out;
+  };
+  // Refused at the press, in the saves' sentence.
+  const first=trial(ctx.bookings);
+  if(first.kicked.length) return {refuse:displaceRefusal("unlocking "+target.name,first.kicked)};
+  const after=first.out.find(function(b){return b.id===id;});
   const was=(target.tables||[]).slice().sort().join("|");
   const now=((after&&after.tables)||[]).slice().sort().join("|");
   const lead=target.name+" unlocked"+(now&&now!==was?", now on "+after.tables.join("+"):"");

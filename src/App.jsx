@@ -2465,7 +2465,11 @@ export function BookingApp({uid}){
   // (B): `unlock` is the confirm's second button, "Reshuffle and unlock N": the
   // day's locked, unseated bookings are handed back first. Only the literal true,
   // so Enter on the confirm (`K.forceReshuffle()`) is the plain one.
-  function forceReshuffle(unlock){const plan=planReshuffle({viewDate:viewDate,tableBlocks:tableBlocks,today:today,nowMins:nowMins,unlock:unlock===true,bookings:bookings,user:getUser()});saveMove(plan.transform,null,"reshuffle",plan.done,function(){flash("unmoved");});}
+  function forceReshuffle(unlock){const plan=planReshuffle({viewDate:viewDate,tableBlocks:tableBlocks,today:today,nowMins:nowMins,unlock:unlock===true,bookings:bookings,user:getUser()});
+    // /code-review: "Reshuffle and unlock" is refused when taking the locks off
+    // would leave a party without a table. The plain Reshuffle never is.
+    if(plan.refuse){flashRefusal(plan.refuse);return;}
+    saveMove(plan.transform,null,"reshuffle",plan.done,function(){flash("unmoved");});}
   // v18.5.1 (#17): the Overlap banner's Reassign. WHICH tables, and the four
   // refusals, are `planReassign` (lib/manual-assign.js).
   // v18.17.0 (K): a refusal is the refusal toast. It went to `setError`, the
