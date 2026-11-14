@@ -614,6 +614,9 @@ export function BookingFormModal({
       // above was taught to agree with) has teeth ONLY on the optimiser-OFF
       // path — today, after the cutoff. On every other date the greedy re-run
       // overrides both of them, and `optimizerActiveFor` is true for all of it.
+      // v18.17.0 (I): the pass is `applyOptKeep` now, which holds a placed party
+      // whose tables still suit it. It still answers for those dates, and the
+      // preview still asks `trialFits`, which runs that same pass.
       //
       // Measured session 9, replayed as a test: a cancelled 19:00 booking on 5A,
       // revived with nothing else touched. `tablesFreeFor` says 5A is still free

@@ -41345,3 +41345,7 @@ Five findings. Two confirmed and fixed, each in its own commit; one a stale-note
   overrule (no question could be asked in the ship run):** refusing is the conservative reading of "never costs a seat", the rule (I) was
   chosen on and the one a drop and both saves already keep; the alternative is to let it happen and say so in the toast.
   `tests/manual-assign.test.js` (the full day is its `fullDay()`).
+- **Three notes still described what this version changed.** GLOSSARY's drag-and-drop row said touch arms at ~800ms, beside its own
+  Drag hold row; it names the setting now. Two code comments (`applyEdit` in `lib/booking-save.js`, the form's `optOwns` note in
+  `BookingFormModal.jsx`) said a save on an optimising day is a greedy re-run of the whole date: each has a dated line saying the pass
+  is `applyOptKeep`, and that their conclusion (the pass decides there, `keepsWindowTables` does not) stands. No code changed.

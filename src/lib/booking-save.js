@@ -398,6 +398,10 @@ export function applyEdit(input){
   // each other is not either of them agreeing with the pass that
   // overrides both. The preview says the same thing in `optOwns`
   // (BookingFormModal) and now this side says it too.
+  // v18.17.0 (I): that branch is `applyOptKeep` now, not a greedy re-run of the
+  // whole day: it holds a placed party whose tables still suit it. The
+  // conclusion is unchanged (on those dates the pass decides, and
+  // `keepsWindowTables` does not), but the pass now usually agrees with it.
   const winStart=toMins(saveTime);
   const keepsWindowTables=(recheck&&!needsR&&!mt.length&&!pinned)
     ? tablesFreeFor(bookings,f.date,editId,(orig&&orig.tables)||[],winStart,winStart+saveDur,tableBlocks)
