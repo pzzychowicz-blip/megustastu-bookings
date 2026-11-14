@@ -31,7 +31,7 @@
 // `stamp(action, user)` builds a history entry. App passes nothing and gets
 // `histEntry`; a test passes its own so the result has no clock in it.
 import { bookingsAfterAction, optimizerActiveFor, histEntry as defaultHistEntry, toMins, findFreeSlot, applyOpt, syncLiveDurations, unlockOffered } from "./booking-logic.js";
-import { releaseSwapped } from "./booking-save.js";
+import { releaseSwapped, memoByPrev } from "./booking-save.js";
 import { getDur } from "./booking-fields.js";
 import { moveSentence } from "./delete-undo.js";
 
@@ -197,7 +197,7 @@ function seatedStays(b){return b.name+" is seated — a seated party stays at it
 // drag, or the edit form's Clear on the Tables row. Locks only accumulated, and
 // each one is a table the optimiser has to work around.
 //
-//   planUnlock(ctx) → { refuse } | { transform, done, lead }
+//   planUnlock(ctx) → { refuse } | { transform, done, lead, replayRefusal }
 //   ctx: {id, bookings, tableBlocks, autoOptimizer, user, stamp?}
 //
 // The booking loses `_locked` and `_manual`, and its own day goes through
@@ -220,8 +220,16 @@ export function planUnlock(ctx){
   // the pass (which keeps every placed party whose tables still suit it) would
   // leave it where the lock put it. With the Optimiser off it keeps them.
   const handBack=optimizerActiveFor(date,autoOptimizer);
-  const transform=function(list){
-    if(!list.some(function(b){return b.id===id;})) return list;
+  // /code-review: asked of the list being WRITTEN, not the plan's snapshot (a
+  // held write replays on a fresh list, as Reassign's lock is read off the row,
+  // C): the booking is still one Unlock is offered for. Replayed over a booking
+  // another device had seated meanwhile, this handed a SEATED party's tables
+  // back and the pass, which never places a seated party, left it with none
+  // (measured); a completed one lost its record the same way. The list then
+  // comes back as it was, the same array, and nothing is written.
+  const transform=memoByPrev(function(list){
+    const cur=list.find(function(b){return b.id===id;});
+    if(!cur||!unlockOffered(cur)) return list;
     const updated=list.map(function(b){
       if(b.id!==id) return b;
       // `releaseSwapped`: the booking comes back unlocked and not hand-placed,
@@ -229,10 +237,16 @@ export function planUnlock(ctx){
       return Object.assign({},releaseSwapped(b,[{id:id,tables:handBack?(b.tables||[]):[]}]),{history:(b.history||[]).concat([histEntry("unlocked: the optimiser may move it",user)])});
     });
     return bookingsAfterAction(updated,date,tableBlocks,null,false,autoOptimizer);
-  };
+  });
   const after=transform(ctx.bookings).find(function(b){return b.id===id;});
   const was=(target.tables||[]).slice().sort().join("|");
   const now=((after&&after.tables)||[]).slice().sort().join("|");
   const lead=target.name+" unlocked"+(now&&now!==was?", now on "+after.tables.join("+"):"");
-  return {transform:transform,lead:lead,done:lead+".",moved:[]};
+  // A replay that would write nothing is dropped and said (`saveBookings`'
+  // report), not landed as "unlocked". A booking that has gone is `goneReport`'s.
+  const replayRefusal=function(prev){
+    if(!(prev||[]).some(function(b){return b.id===id;})) return null;
+    return transform(prev)===prev?"The unlock of "+target.name+" was not saved: the day changed on another device.":null;
+  };
+  return {transform:transform,lead:lead,done:lead+".",moved:[],replayRefusal:replayRefusal};
 }

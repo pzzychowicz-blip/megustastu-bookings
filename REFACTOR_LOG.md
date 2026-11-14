@@ -41320,3 +41320,16 @@ search: the field opens to 126px with Needs action beside it and Select folded; 
 
 **A side effect, kept (Patryk, 2026-11-14):** the search box was `mkInp`'s 44px beside 36px buttons; as a 36px circle opening into a 36px
 field, the inbox's title row is 8px shorter, which goes to the list and the conversation. He chose to keep it.
+
+### /code-review fixes (the ship run, 2026-11-14, over the whole branch)
+
+Five findings. Two confirmed and fixed, each in its own commit; one a stale-notes fix; two left as questions in `ROADMAP.md`.
+
+- **A replayed Unlock emptied a seated party's tables** (`planUnlock`, `lib/manual-assign.js`). The transform decided who may be unlocked
+  from the plan's snapshot. A held write replays on a fresh list, and over a booking another device had seated meanwhile it handed the
+  tables back; the pass never places a seated party, so it was left seated with none (measured with the plan made on a confirmed booking
+  and run on the seated one: `tables: []`, `_conflict: true`). A completed booking lost its table record the same way, and one already
+  unlocked was taken off its table and placed again. The transform now asks `unlockOffered` of the row it writes, as Reassign reads its
+  lock (C), and returns the list as it was. The plan also brings `replayRefusal`, which `saveMove` asks after "the booking has gone", so
+  such a replay is dropped with "The unlock of … was not saved: the day changed on another device." and not landed as "unlocked".
+  `tests/manual-assign.test.js`.

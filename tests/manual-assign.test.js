@@ -417,10 +417,38 @@ describe("planUnlock: the lock comes off and the day is handed back", () => {
     const other = [bk("b", "19:00", 2, home)];
     expect(unlock(list, "a").transform(other)).toBe(other);
   });
+
+  // /code-review: the plan's snapshot said "locked, confirmed"; the row being
+  // written may say otherwise by the time a held write replays. Handing back a
+  // seated party's tables left it seated with none.
+  it("a replay over a booking that was seated, finished or unlocked meanwhile writes nothing", () => {
+    const list = [bk("a", "19:00", 2, away, { _locked: true, _manual: true }), bk("b", "19:00", 2, home)];
+    const plan = unlock(list, "a");
+    for (const change of [{ status: "seated" }, { status: "completed" }, { status: "cancelled" }, { _locked: false, _manual: false, tables: ["7"] }]) {
+      const fresh = [Object.assign({}, list[0], change), list[1]];
+      expect(plan.transform(fresh), JSON.stringify(change)).toBe(fresh);
+      expect(plan.replayRefusal(fresh), JSON.stringify(change)).toBe("The unlock of A was not saved: the day changed on another device.");
+    }
+  });
+
+  it("a replay over the same booking, still locked, goes ahead and is not refused", () => {
+    const list = [bk("a", "19:00", 2, away, { _locked: true, _manual: true })];
+    const plan = unlock(list, "a");
+    const fresh = [Object.assign({}, list[0], { notes: "window" })];
+    expect(plan.replayRefusal(fresh)).toBe(null);
+    expect(byId(plan.transform(fresh), "a")).toMatchObject({ _locked: false, tables: home, notes: "window" });
+    // A booking that has gone is the other report's question (`goneRefusal`).
+    expect(plan.replayRefusal([])).toBe(null);
+  });
 });
 
 describe("Unlock: the doors", () => {
   const src = (f) => stripComments(readFileSync(new URL("../src/components/" + f, import.meta.url), "utf8")).join("\n");
+  it("saveMove asks a plan's own replay question after \"the booking has gone\"", () => {
+    const app = appCode();
+    expect(app).toContain("return {replayRefusal:function(prev){return (gone&&gone(prev))||plan.replayRefusal(prev);}};");
+    expect(app).toContain("}},planReplay(id,plan)));");
+  });
   it("App's unlockBooking is the gate, the plan and saveMove", () => {
     const app = appCode();
     expect(app).toMatch(/function unlockBooking\(id\)\{if\(refused\("bookingAssign"\)\)return;/);

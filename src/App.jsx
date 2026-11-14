@@ -2531,6 +2531,15 @@ export function BookingApp({uid}){
   // says so (" · reply drafted", or that the guest's window is closed). A landing
   // too late for the pill still drafts, and says it in the toast slot instead.
   function draftMoved(id,slot){return slot?movedReplyWords(wa.draftMovedReply(id,slot)):null;}
+  // v18.17.0 (/code-review): a plan may bring its own question for a REPLAY
+  // (`planUnlock`: the booking was seated, or the day filled, on another device
+  // while the write was held). Asked after "the booking has gone", whose report
+  // it takes the place of in `saveMove`.
+  function planReplay(id,plan){
+    if(!plan||!plan.replayRefusal) return {};
+    const gone=id==null?null:goneRefusal(id,bookings);
+    return {replayRefusal:function(prev){return (gone&&gone(prev))||plan.replayRefusal(prev);}};
+  }
   function saveMove(transform,id,kind,sentence,quiet,plan){
     const move=withUndoDelta(transform,undoDelta);
     return saveBookings(move.transform,false,Object.assign(id==null?{}:goneReport(id),{onLanded:function(){
@@ -2540,7 +2549,7 @@ export function BookingApp({uid}){
       const said=plan&&plan.retime?draftMoved(id,movedSlot(delta.find(byId),move.post().find(byId))):null;
       if(move.age()<=(generalSettings.undoSecs||10)*1000) armUndo(delta,id,kind,false,landedSentence(plan,sentence,delta,move.post(),id)+(said?" · "+said.pill:""));
       else if(said) flashDragMsg(said.toast,said.good);
-    }}));
+    }},planReplay(id,plan)));
   }
   // v18.4.5 (#17): WHAT a drop does is `planDrop` (lib/drop-plan.js), which
   // returns its conclusion. App keeps the gate and the two side effects.
