@@ -2476,7 +2476,11 @@ export function BookingApp({uid}){
   // booking form's error line, and Reassign is pressed on the Overlap banner with
   // no form open, so "No alternative tables available" showed nowhere and the
   // button read as broken (measured on DEV, 18.16.0).
-  function reassignBooking(id){
+  // (/code-review, Patryk 2026-11-14): it asks `bookingAssign`, as the drop,
+  // Assign and Unlock do. It never had: an account that could not drag or
+  // unlock a booking could move it from the Overlap banner, and since (C) a
+  // locked one too.
+  function reassignBooking(id){if(refused("bookingAssign"))return;
     const plan=planReassign({id:id,bookings:bookings,liveBookings:liveBookings,tableBlocks:tableBlocks,getUser:getUser});
     if(plan.refuse){flashRefusal(plan.refuse);return;}
     const ok=saveBookings(plan.transform,false,goneReport(id));

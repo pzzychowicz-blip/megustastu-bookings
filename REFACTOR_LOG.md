@@ -41349,3 +41349,8 @@ Five findings. Two confirmed and fixed, each in its own commit; one a stale-note
   Drag hold row; it names the setting now. Two code comments (`applyEdit` in `lib/booking-save.js`, the form's `optOwns` note in
   `BookingFormModal.jsx`) said a save on an optimising day is a greedy re-run of the whole date: each has a dated line saying the pass
   is `applyOptKeep`, and that their conclusion (the pass decides there, `keepsWindowTables` does not) stands. No code changed.
+- **Reassign asked no permission** (`reassignBooking`, App). The Overlap banner's Reassign moves a booking's tables and had no
+  `refused("bookingAssign")` gate, while the drop, Assign and this version's Unlock all have it; and since (C) it moves a LOCKED booking,
+  so an account that could neither drag nor unlock one could still move it there. It asks `bookingAssign` now, first, with the app's
+  usual refusal toast. Open in the hand-off note as Patryk's call; he took it in the ship run ("fix everything here").
+  `tests/manual-assign.test.js`.

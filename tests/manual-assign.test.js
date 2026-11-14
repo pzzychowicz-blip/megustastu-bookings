@@ -486,6 +486,11 @@ describe("Unlock: the doors", () => {
     expect(app).toContain("return {replayRefusal:function(prev){return (gone&&gone(prev))||plan.replayRefusal(prev);}};");
     expect(app).toContain("}},planReplay(id,plan)));");
   });
+  // /code-review: Reassign moves a booking's tables and asked nothing; since (C)
+  // it moves a locked one, which Unlock and a drag refuse without the capability.
+  it("App's reassignBooking asks bookingAssign before the plan", () => {
+    expect(appCode()).toMatch(/function reassignBooking\(id\)\{if\(refused\("bookingAssign"\)\)return;\s+const plan=planReassign\(/);
+  });
   it("App's unlockBooking is the gate, the plan and saveMove", () => {
     const app = appCode();
     expect(app).toMatch(/function unlockBooking\(id\)\{if\(refused\("bookingAssign"\)\)return;/);
