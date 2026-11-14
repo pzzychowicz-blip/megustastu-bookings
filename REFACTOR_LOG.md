@@ -41323,7 +41323,8 @@ field, the inbox's title row is 8px shorter, which goes to the list and the conv
 
 ### /code-review fixes (the ship run, 2026-11-14, over the whole branch)
 
-Five findings. Two confirmed and fixed, each in its own commit; one a stale-notes fix; two left as questions in `ROADMAP.md`.
+Five findings, each fixed in its own commit. Nothing was added to `ROADMAP.md`: two of them were first headed there as questions (the
+Reassign gate, the pass that does not settle) and Patryk, mid-run, said to fix everything here.
 
 - **A replayed Unlock emptied a seated party's tables** (`planUnlock`, `lib/manual-assign.js`). The transform decided who may be unlocked
   from the plan's snapshot. A held write replays on a fresh list, and over a booking another device had seated meanwhile it handed the
@@ -41354,3 +41355,14 @@ Five findings. Two confirmed and fixed, each in its own commit; one a stale-note
   so an account that could neither drag nor unlock one could still move it there. It asks `bookingAssign` now, first, with the app's
   usual refusal toast. Open in the hand-off note as Patryk's call; he took it in the ship run ("fix everything here").
   `tests/manual-assign.test.js`.
+- **What a save wrote, the next save could move** (`applyOptKeep`, I). One keep-pass places a party around the others as they stood
+  BEFORE it, so its own result could hold a party `_keepsTables` turns down: one beside its preferred table, which a later step of the
+  pass had freed, or a three on two joined tables with the four-top's holder now free for the swap rule. The next save, about anything,
+  then moved that party. Measured over 3,622 generated days (a third with arbitrary starting tables, 676 overbooked): a second pass moved
+  somebody on 48, always settling there, never in a cycle. The pass now repeats until it would move nobody (`KEEP_PASSES`, 4 at most), so
+  this save makes that move and its toast (`movedOthers`) can say so. A day with nobody open after a pass (everybody held, nobody
+  unplaced) is settled by construction and costs one more hold check and no pass; the fresh pass reads nothing a keep-pass changes, so it
+  is computed once at most. Measured after, on the same days: 0 where a second call moves anybody, 0 clashes, 0 borrowed locks left
+  behind, 0 with fewer parties seated than a fresh pass, and the result differs from the single pass's on exactly those 48. Time over the
+  run: 22.4s against 21.9s (+2.6%). `trialFits` runs the same function, so the form's preview still shows the save's tables.
+  `tests/booking-logic.test.js` ("what a save writes, the next save leaves alone", 60 seeded days, two of which fail with one pass).

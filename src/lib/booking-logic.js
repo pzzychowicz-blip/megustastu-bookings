@@ -1272,8 +1272,10 @@ function _keepsTables(b,others){
 function _unplacedOn(list,date){
   return list.filter(function(b){return b.date===date&&isActive(b)&&!(b.tables||[]).length;}).length;
 }
-export function applyOptKeep(bookings,date,blocks){
-  var placed=bookings.filter(function(b){return b&&b.date===date&&b.time&&(b.tables||[]).length>0&&(b.status==="completed"||isActive(b));});
+// Who the pass holds on `list`, and how many of the day's parties are still
+// `open`: active, unlocked and not held, so the pass would place them (again).
+function _heldOn(list,date,blocks){
+  var placed=list.filter(function(b){return b&&b.date===date&&b.time&&(b.tables||[]).length>0&&(b.status==="completed"||isActive(b));});
   var base=blocks?getBlockSlots(blocks,date):[];
   var slotOf=function(b){return {tables:b.tables,s:toMins(b.time),e:bookEnd(b)};};
   var held={};
@@ -1282,11 +1284,16 @@ export function applyOptKeep(bookings,date,blocks){
     var others=base.concat(placed.filter(function(x){return x.id!==b.id;}).map(slotOf));
     if(_keepsTables(b,others)) held[b.id]=true;
   });
+  var open=list.filter(function(b){return b&&b.date===date&&b.time&&isActive(b)&&!isLocked(b)&&!held[b.id];}).length;
+  return {held:held,open:open};
+}
+// One pass: the held keep their tables, the rest are placed around them.
+function _keepPass(list,date,blocks,held,freshOf){
   // The hold borrows the lock for one pass. What goes back is exactly what the
   // booking had: a `false` written where the key was absent would be a change
   // on every save (and `undefined` would make the write throw).
   var orig={};
-  var marked=bookings.map(function(b){if(!held[b.id]) return b;orig[b.id]=b;return Object.assign({},b,{_locked:true});});
+  var marked=list.map(function(b){if(!held[b.id]) return b;orig[b.id]=b;return Object.assign({},b,{_locked:true});});
   var kept=applyOpt(marked,date,blocks).map(function(b){
     if(!held[b.id]) return b;
     var o=Object.assign({},b);
@@ -1295,8 +1302,41 @@ export function applyOptKeep(bookings,date,blocks){
   });
   var lost=_unplacedOn(kept,date);
   if(!lost) return kept;
-  var fresh=applyOpt(bookings,date,blocks);
+  var fresh=freshOf();
   return _unplacedOn(fresh,date)<lost?fresh:kept;
+}
+function _sameTablesOn(a,b,date){
+  return a.length===b.length&&a.every(function(x,i){return x.date!==date||_tableKey(x.tables)===_tableKey(b[i].tables);});
+}
+// /code-review: the pass is repeated until it would move nobody, so what a
+// save writes is a day the NEXT save leaves alone. One pass was not always that.
+// It places a party around the others as they stood before it, and its own
+// result can hold somebody `_keepsTables` turns down: a party beside its
+// preferred table, which a later step of the pass had freed, or a three at two
+// joined tables with the four-top's holder now free to swap. The next save,
+// about anything, then moved that party (measured: 13 of 1,500 generated days
+// the Optimiser had placed, after one action; all settled on the second pass,
+// none cycled). Now this save makes that move, and its toast can say so.
+//
+// A day with nobody `open` after a pass is settled by construction (everybody
+// is held, so the next pass is the identity), which is the usual case and costs
+// one more hold check, no pass. The fresh pass reads nothing a keep-pass
+// changes (an unlocked party's tables), so it is computed once at most.
+// `KEEP_PASSES` bounds a day that would not settle: it then returns the last pass, which is
+// what one pass returned before.
+var KEEP_PASSES=4;
+export function applyOptKeep(bookings,date,blocks){
+  var fresh=null;
+  var freshOf=function(){if(!fresh) fresh=applyOpt(bookings,date,blocks);return fresh;};
+  var cur=_keepPass(bookings,date,blocks,_heldOn(bookings,date,blocks).held,freshOf);
+  for(var i=1;i<KEEP_PASSES;i++){
+    var h=_heldOn(cur,date,blocks);
+    if(!h.open) return cur;
+    var next=_keepPass(cur,date,blocks,h.held,freshOf);
+    if(_sameTablesOn(cur,next,date)) return cur;
+    cur=next;
+  }
+  return cur;
 }
 
 // ── Optimizer-OFF helpers ─────────────────────────────────────────────────────
