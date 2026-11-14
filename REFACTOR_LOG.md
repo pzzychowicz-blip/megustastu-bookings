@@ -41366,3 +41366,10 @@ Reassign gate, the pass that does not settle) and Patryk, mid-run, said to fix e
   behind, 0 with fewer parties seated than a fresh pass, and the result differs from the single pass's on exactly those 48. Time over the
   run: 22.4s against 21.9s (+2.6%). `trialFits` runs the same function, so the form's preview still shows the save's tables.
   `tests/booking-logic.test.js` ("what a save writes, the next save leaves alone", 60 seeded days, two of which fail with one pass).
+
+Checked live on DEV after the fixes (localhost, 18.17.0): the app loads with no console error, the Reshuffle confirm opens, and a plain
+Reshuffle lands as "Tables re-optimised." with its Undo. The two refusals are held by their tests; neither was raised by hand (it takes a
+full evening with a hand-placed party the optimiser cannot seat).
+
+Gate on the last fix: main entry 479.00 kB, gzip 141.65 kB (141.39 before the run) · Tests 4681 passed (4669 before) · Lint 63 problems
+(0 errors, 63 warnings) · style invariants OK. No rule changed and nothing stored changed shape (`SCHEMA` stays).
