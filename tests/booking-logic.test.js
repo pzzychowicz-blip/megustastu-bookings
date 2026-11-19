@@ -19,7 +19,7 @@ import {
   lateState, lateMins, freeingSoon, daySummary, rangeStats,
   verifyClean, findConflicts, findClashes, canAssign, getBusy, getBlockSlots, isReadableBlock,
   findBest, findFreeSlot, applyOpt, optimise, bookingsAfterAction,
-  applySeatedShift, rankCombosContaining, comboExistsFor,
+  applySeatedShift, rankCombosContaining, comboExistsFor, fewestWithin,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
   stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId, mergeSpans,
   sanitizeBlock, sanitizeBlocks,
@@ -802,6 +802,60 @@ describe("rankCombosContaining / comboExistsFor (drag-drop contracts)", () => {
     expect(r[0].ids).toContain("9");
     expect(r[0].cap).toBeGreaterThanOrEqual(8);
     expect(r[0].cap - 8).toBeLessThanOrEqual(4);
+  });
+});
+
+// v18.18.0: what a drag's swap gives each party of the other's set (lib/drop-plan.js).
+// Read off the layout, so no test names a combination.
+describe("fewestWithin (a swap's trim)", () => {
+  const cap = (id) => ALL_TABLES.find((t) => t.id === id).capacity;
+  const order = (id) => ALL_TABLES.findIndex((t) => t.id === id);
+  // A joined pair whose two tables each seat a party of 2.
+  const pair = VALID_COMBOS.find((c) => c.ids.length === 2 && c.ids.every((id) => cap(id) >= 2)).ids;
+  // A set of three with a pair inside that seats more than any one of its tables.
+  const three = VALID_COMBOS.find((c) => c.ids.length === 3 && VALID_COMBOS.some((p) => p.ids.length === 2
+    && p.ids.every((id) => c.ids.includes(id)) && p.cap > Math.max(...c.ids.map(cap))));
+
+  it("the fixtures exist in the layout", () => {
+    expect(pair).toBeTruthy();
+    expect(three).toBeTruthy();
+  });
+
+  it("one table that seats the party, never the pair", () => {
+    const got = fewestWithin(pair, 2, []);
+    expect(got).toHaveLength(1);
+    expect(pair).toContain(got[0]);
+  });
+
+  it("the row the party was dropped on wins a tie", () => {
+    expect(fewestWithin(pair, 2, [pair[1]])).toEqual([pair[1]]);
+    expect(fewestWithin(pair, 2, [pair[0]])).toEqual([pair[0]]);
+  });
+
+  it("with no row to prefer, the layout's order decides, however the set is stored", () => {
+    const first = pair.slice().sort((a, b) => order(a) - order(b))[0];
+    expect(fewestWithin(pair, 2, [])).toEqual([first]);
+    expect(fewestWithin(pair.slice().reverse(), 2, [])).toEqual([first]);
+  });
+
+  it("a party no one table seats takes a pair inside the set, not all three", () => {
+    const size = Math.max(...three.ids.map(cap)) + 1;
+    const got = fewestWithin(three.ids, size, []);
+    expect(got).toHaveLength(2);
+    expect(got.every((id) => three.ids.includes(id))).toBe(true);
+    expect(comboCapBest(got)).toBeGreaterThanOrEqual(size);
+  });
+
+  it("a set nothing smaller can seat comes back as it was, in its own order", () => {
+    const whole = VALID_COMBOS.find((c) => c.ids.length === 2 && c.ids.every((id) => cap(id) < c.cap));
+    const stored = whole.ids.slice().reverse();
+    expect(fewestWithin(stored, whole.cap, [])).toEqual(stored);
+  });
+
+  it("one table, or none, is left alone", () => {
+    expect(fewestWithin(["9"], 8, [])).toEqual(["9"]);
+    expect(fewestWithin([], 2, [])).toEqual([]);
+    expect(fewestWithin(undefined, 2)).toEqual([]);
   });
 });
 

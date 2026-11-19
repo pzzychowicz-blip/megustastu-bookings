@@ -791,6 +791,34 @@ export function rankCombosContaining(tableId,size){
       return a.ids.join("|")<b.ids.join("|")?-1:1;
     });
 }
+// v18.18.0 (Patryk): the fewest tables INSIDE `set` that seat `size` — one table
+// that does, else a declared combo all of whose tables are in the set — for a
+// drag's swap (lib/drop-plan.js, `swapOf`). A swap traded the two parties' whole
+// sets, so a party of 1 dropped on row 1 next to a party of 4 on 1+2 took both
+// tables, and nothing ever gave one back: the dragged party is locked, and the
+// swap runs no optimiser pass.
+//   Ties: the most tables in `prefer` (the row the party was dropped on), then the
+// fewest seats, then the drop's own combo preference (`_comboPriKey`), then the
+// layout's table order, so two devices trim alike. A set where nothing smaller
+// seats the party comes back as it is, which is what the swap wrote before.
+export function fewestWithin(set,size,prefer){
+  const ids=(set||[]).slice(),want=prefer||[];
+  if(ids.length<2) return ids;
+  const order=function(id){const i=ALL_TABLES.findIndex(function(t){return t.id===id;});return i<0?ALL_TABLES.length:i;};
+  const fits=ALL_TABLES.filter(function(t){return ids.includes(t.id)&&t.capacity>=size;}).map(function(t){return {ids:[t.id],cap:t.capacity,pri:0};})
+    .concat(VALID_COMBOS.filter(function(c){return c.cap>=size&&c.ids.every(function(id){return ids.includes(id);});}).map(function(c){return {ids:c.ids.slice(),cap:c.cap,pri:_comboPriKey(c)};}));
+  if(!fits.length) return ids;
+  const inPrefer=function(f){return f.ids.filter(function(id){return want.includes(id);}).length;};
+  const first=function(f){return Math.min.apply(null,f.ids.map(order));};
+  fits.sort(function(a,b){
+    if(a.ids.length!==b.ids.length) return a.ids.length-b.ids.length;
+    if(inPrefer(a)!==inPrefer(b)) return inPrefer(b)-inPrefer(a);
+    if(a.cap!==b.cap) return a.cap-b.cap;
+    if(a.pri!==b.pri) return a.pri-b.pri;
+    return first(a)-first(b);
+  });
+  return fits[0].ids.length<ids.length?fits[0].ids:ids;
+}
 
 // ── Best-table finders ────────────────────────────────────────────────────────
 export function findBest(size,pref,s,e,slots){

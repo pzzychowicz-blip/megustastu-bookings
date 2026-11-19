@@ -66,7 +66,7 @@
 import { ALL_TABLES, KITCHEN_TABLE_LIMIT } from "./constants.js";
 import {
   isActive, toMins, occupancyEnd, getBlockSlots, getBusy, overlaps,
-  rankCombosContaining, comboExistsFor, comboCapBest, canAssign,
+  rankCombosContaining, comboExistsFor, comboCapBest, canAssign, fewestWithin,
   bookingsAfterAction, optimizerActiveFor, histEntry as defaultHistEntry,
   getKitchenLoad, plannedDuration,
 } from "./booking-logic.js";
@@ -167,12 +167,18 @@ function dropSite(ctx){
 // Can the one party in the way simply trade tables with the dragged one? Also
 // cheap: capacity both ways and two `canAssign`s.
 // → null | {other,newSrc,newOther}
+// v18.18.0 (Patryk): each side takes only the tables it NEEDS of the other's set
+// (`fewestWithin`, booking-logic.js), the dragged party the row it was dropped on
+// first. Trading whole sets sat a party of 1 on 1+2 because the party of 4 it
+// swapped with had been there, and the table it did not need stayed taken. The
+// trimmed sets are inside the whole ones, so a swap is offered where it was before
+// and the checks below run on what will be written.
 function swapOf(site,nowMins,today){
   const cur=site.cur,size=site.size,s=site.s,e=site.e,occ=site.occ;
   if(!(occ.length===1&&cur.length>0&&occ[0].status!=="seated")) return null;
   const other=occ[0];
-  const newSrc=(other.tables||[]).slice(),newOther=cur.slice();
   const otherSize=other.size||2;
+  const newSrc=fewestWithin(other.tables||[],size,site.desired),newOther=fewestWithin(cur,otherSize,[]);
   if(!(comboCapBest(newSrc)>=size&&comboCapBest(newOther)>=otherSize)) return null;
   const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins,today),os+1);
   const slots=site.dayActive.filter(function(b){return b.id!==other.id&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};}).concat(site.blockSlots);

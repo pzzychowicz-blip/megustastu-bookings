@@ -41373,3 +41373,36 @@ full evening with a hand-placed party the optimiser cannot seat).
 
 Gate on the last fix: main entry 479.00 kB, gzip 141.65 kB (141.39 before the run) · Tests 4681 passed (4669 before) · Lint 63 problems
 (0 errors, 63 warnings) · style invariants OK. No rule changed and nothing stored changed shape (`SCHEMA` stays).
+
+## v18.18.0 — a swap that seats each party only where it needs, the day's notes in the Summary, four interface fixes, the switch's wording, and a description on every control
+
+**Date:** 2026-11-19 · **Branch:** `feat/v18.18.0-summary-notes-and-swap`
+
+**Why:** Patryk sent seven points on 2026-11-19, the day Part A of the table-priorities plan went live on PROD (a settings change he
+made himself). Six are this version's work, decided with him in three rounds of questions; the plan is
+`/Users/patrykzychowicz/.claude/plans/users-patrykzychowicz-desktop-megustast-swift-zebra.md`. He also put Part B and Part 2 of
+`MGT_Bookings_Table_Priorities_and_Hover_Descriptions_Plan_2026-11-19.md` (context folder) into this version. **Behavioural change:
+yes**, each commit below.
+
+### Commit 1 — a swap gives each party only the tables it needs
+
+- **The report:** on 19.11 Patryk dragged Noel (party of 1, on table 9) onto row 1 or 2, where Seba (party of 4) sat on 1+2, and Noel
+  ended up on two tables. **Measured** with node against the real `lib/drop-plan.js` before the fix, Optimiser on and off: Noel onto
+  row 1 or row 2 gave Noel `1+2` and Seba `9`, and Seba dragged onto 9 gave Noel `1+2` too. The row hint said "Swaps with Seba".
+- **Why only the swap:** `swapOf` traded the two parties' WHOLE sets (`newSrc = other.tables`, `newOther = cur`), the v17.0.0 rule
+  "ONE overlapping booking = swap full table sets", set before a party of 1 could trade with a party of 4 on joined tables. A plain
+  move and a displacement give a party of 1 only the dropped table (its first candidate is that table, which seats 2). The swap runs
+  no optimiser pass and the dragged party is locked, so nothing ever gave the second table back.
+- **The fix (Patryk: "only what it needs"):** `fewestWithin(set, size, prefer)` (`lib/booking-logic.js`, beside
+  `rankCombosContaining`) is the fewest tables inside a set that seat a party: one table that does, else a declared combo inside the
+  set; ties to the dropped row (`prefer`), then the fewest seats, then the drop's combo preference, then the layout's order; a set
+  nothing smaller can seat comes back as it is. `swapOf` gives the dragged party `fewestWithin(other's set, its size, the dropped
+  row)` and the other party `fewestWithin(the dragged party's set, its size)`, and runs the same capacity and `canAssign` checks on
+  those. The trimmed sets are inside the whole ones, so a swap is offered exactly where it was, and the history lines and the hint read
+  what is written.
+- **Measured after**, the same six drags: Noel onto row 1 → Noel `1`, Seba `9`; onto row 2 → `2` / `9`; Seba onto 9 → `9` / Noel `1`;
+  the same with the Optimiser off; every day `verifyClean`. Two parties that each need their whole set still trade whole sets.
+
+`tests/drop-plan.test.js` (both rows of a joined pair, the reverse drag, a whole-set trade, and 400 generated days with parties on
+joined sets: every swap leaves both parties inside the set they traded for, seated, on the fewest tables that seat them. With the old
+`swapOf` put back, three of these fail.) `tests/booking-logic.test.js` (`fewestWithin`, read off the layout).
