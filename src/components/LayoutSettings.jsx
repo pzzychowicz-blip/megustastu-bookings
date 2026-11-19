@@ -17,7 +17,7 @@ import { AlertPanel, AlertRow } from "./AlertPanel";
 import { contiguousRuns, comboKey, activePickRules, PICK_RULES_MAX, R, T, FW, H, IC } from "../lib/constants";
 import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon, TrashIcon } from "./Icons";
 import { todayStr } from "../lib/day";
-import { countLabel } from "../lib/booking-logic";
+import { countLabel, joinFirstMatters } from "../lib/booking-logic";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
 // v17.8.0: was a private copy of the byte-identical style in Settings.jsx.
@@ -873,14 +873,23 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         subtitle="Which tables the optimiser picks first, per party size. Shared across all devices."
         summary={priBands.length + (priBands.length === 1 ? " size rule · " : " size rules · ") + priRules.length + (priRules.length === 1 ? " combo rule" : " combo rules")}
       >
-        <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginBottom: 10 }}>
+        <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginBottom: 6 }}>
           Rules are checked top to bottom — the first match wins. A party size with no rule gets the smallest free table (or best combo) that fits.
+        </div>
+        {/* v18.18.0 (Patryk, the Table priorities plan's Part B): the order inside
+            one rule, which `findBest` follows. "Avoid last" would be wrong with the
+            switch off, where an Avoid table comes BEFORE joined tables (measured),
+            so the sentence says what is true either way. */}
+        <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginBottom: 10 }}>
+          Inside a rule: Prefer first, then joined tables or the other single tables, in the order the switch sets. Avoid tables are the last single tables tried.
         </div>
 
         {/* ── Party-size rules (bands) ── */}
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Party-size rules · {priBands.length}</div>
         {priBands.map(function (b, i) {
           const zm = zoneMode(b);
+          // v18.18.0: the switch cannot change this rule's tables (joinFirstMatters).
+          const switchIdle = !joinFirstMatters(b, tables);
           return (
             <div key={i} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)", marginTop: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -923,10 +932,24 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     out of the live page, not by reading this file: on the page
                     the repetition is one string printed three times, and in
                     the source it is one string inside a `.map`. */}
-                <Toggle label={bandName(b, i) + ": try joined tables before single tables"}
+                {/* v18.18.0 (Patryk, Part B): "other" single tables, because Prefer
+                    comes first whatever the switch says; the name still leads with
+                    the band's (tests/a11y.test.js) and holds the words on screen. */}
+                <Toggle label={bandName(b, i) + ": then try joined tables before other single tables"}
                   on={!!b.combosFirst} onClick={function () { setBand(i, { combosFirst: !b.combosFirst }); }} />
-                <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)" }}>Try joined tables before single tables</span>
+                <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)" }}>Then try joined tables before other single tables</span>
               </div>
+              {/* v18.18.0 (Patryk, Part B): said only where it is true, that no table
+                  outside Prefer seats the rule's smallest party, so the switch changes
+                  nothing (held to findBest by tests/booking-logic.test.js). It eases
+                  in and out as Prefer or the sizes change. */}
+              <Reveal show={switchIdle}>
+                {switchIdle ? (
+                  <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", paddingTop: 4, paddingLeft: 56 /* @canvas the switch's 48 and the row's gap of 8: the note starts under the switch's words */ }}>
+                    No table outside Prefer seats {b.min}, so this changes nothing here.
+                  </div>
+                ) : null}
+              </Reveal>
             </div>
           );
         })}

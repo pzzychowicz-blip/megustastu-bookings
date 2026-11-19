@@ -864,6 +864,23 @@ export function findBest(size,pref,s,e,slots){
   if(co.length) return co[0].ids;
   return null;
 }
+// v18.18.0 (Patryk, the Table priorities plan's Part B): can a size rule's switch,
+// "Then try joined tables before other single tables" (`combosFirst`), change what
+// `findBest` above picks? Only if a table OUTSIDE the rule's Prefer list seats the
+// rule's smallest party. A preferred table that fails step 1 failed the very tests
+// a single must pass there (it seats the party, its zone is allowed, it is free), so
+// it is never among the other singles; and a table too small for the smallest party
+// is too small for every party the rule covers. With no other single in play, both
+// orders reach the same joined tables, or none. An Avoid table counts: it is a single
+// the switch orders against joined tables (with the switch off it comes BEFORE them,
+// measured). True does not promise a difference (no joined tables may be free); false
+// is a promise, held over generated layouts and days by tests/booking-logic.test.js.
+// `tables` is the layout's `{id, capacity}` list: Settings passes the stored one.
+export function joinFirstMatters(band,tables){
+  const prefer=(band&&Array.isArray(band.prefer))?band.prefer:[];
+  const min=band&&Number.isFinite(band.min)?band.min:1;
+  return (tables||[]).some(function(t){return prefer.indexOf(t.id)<0&&(Number(t.capacity)||0)>=min;});
+}
 export function findBestAny(size,s,e,slots){
   var r=findBest(size,"outdoor",s,e,slots)||findBest(size,"indoor",s,e,slots);
   if(r) return r;

@@ -41576,3 +41576,38 @@ positioned for it, the dot in `currentColor` and no `dotRed` left; and a new cas
 `tests/turn-chevron.test.js`: the three draw `TurnChevron` with their own `open` and none draws the still `ChevronDownIcon`, the menu's
 trigger as a function of `open`, and the upward picker's half turn. `tests/conversation-menu.test.js`: the trigger pin moved to the new
 form.
+
+### Commit 7 — Part B: the size rule's switch says what it does, and where it changes nothing
+
+- **What (Patryk, 2026-11-19, the Table priorities plan's Part B):** in Settings › Layout › Table priorities a size rule's switch read
+  "Try joined tables before single tables", but Prefer comes first whatever it says. In the restaurant's layout table 9 is the only
+  single that seats more than 2, so on the old "Party of 3 to 4" (Prefer 9) the switch could change nothing, which is why a party of
+  4 kept getting 9. Part A, his settings change, is live on PROD; this is the wording.
+- **How:**
+  - `joinFirstMatters(band, tables)` beside `findBest`: true only if a table outside the rule's Prefer list seats its smallest party.
+    A preferred table that fails `findBest`'s first step fails the same tests a single must pass, and a table too small for the
+    smallest party is too small for every party the rule covers.
+  - The switch reads **"Then try joined tables before other single tables"**; its name is the band's, then those words (the band
+    still leads, which `tests/a11y.test.js` holds).
+  - Under it, eased in and out (`Reveal`): **"No table outside Prefer seats 3, so this changes nothing here."** where
+    `joinFirstMatters` is false on the stored tables, starting under the switch's words.
+  - Above the rules: **"Inside a rule: Prefer first, then joined tables or the other single tables, in the order the switch sets.
+    Avoid tables are the last single tables tried."**
+- **One decision made with him (2026-11-19):** the plan's sentence ended "…Avoid last". Measured with the real `findBest`: with the
+  switch off an Avoid table is tried **before** joined tables, because the single-table step falls back to an avoided table before
+  joined tables are reached (a Party-of-4 rule with Avoid 9 seats a 4 on 9 on an empty day; with the switch on, on 1+2). He chose the
+  wording that is true both ways. The Optimiser is unchanged.
+- **Part A on DEV was already there** (read, not written): "Party of 3 to 3" with Prefer 9 and the switch on, "Party of 4 to 4" with
+  the switch on, the swap rule kept. DEV also holds a second "Party of 2 to 2" rule after the 3-rule, empty and switched off; the
+  first rule that covers a size wins, so it never applies. Left as it is.
+- **Measured on DEV** (the rig; the edits stayed in the page's cache, dropped in the socket) at 1280×800 and 998×507: the note on
+  "Party of 3 to 3" only, its text starting exactly where the switch's words do (336 and 336, 195 and 195). Taking 9 out of that rule's
+  Prefer folds it away over about half a second (22 to 26 frames in between), and putting 9 back eases it in. Chrome computes each
+  switch's name as "size rule 3, party of 3 to 3: then try joined tables before other single tables".
+
+`tests/booking-logic.test.js`: `joinFirstMatters` on the restaurant's layout (the shipped rule, Part A's two, an Avoid table, no
+single that seats 5); an Avoid table before joined tables with the switch off and after them with it on; **the agreement**: over 200
+generated layouts, rules and days, wherever it says false (121 rules), `findBest` picks the same tables with the switch on and off in
+all 4,338 cases, and where it says true the switch changes 690 of them, so the comparison can see a difference. Three wrong versions
+(Avoid tables left out, the largest party read for the smallest, always false) each fail it. And Settings asks it on the stored
+tables, with the new words.
