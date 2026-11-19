@@ -792,10 +792,13 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
 // the pixel, hence the @canvas mark. Inline in App the same literal passed
 // check:style unseen: the rule reads only the FIRST `padding:` on a line, and
 // that line's first was the button's own, on the scale.
-export function CountBadge({ n, background, float = false, srText, plus = false }) {
+// `id` (v18.18.0) is for a control whose `aria-label` silences its contents, the
+// inbox's Needs action: it points `aria-describedby` here, and only while the
+// count shows, since at zero there is no element to point at.
+export function CountBadge({ n, background, float = false, srText, plus = false, id }) {
   if (!(typeof n === "number" && n > 0)) return null;
   return (
-    <span style={Object.assign({
+    <span id={id} style={Object.assign({
       minWidth: 18, height: 18, padding: "0 5px",   /* @canvas */ borderRadius: R.pill,
       background, color: "var(--text-on-accent)", fontSize: T.small, fontWeight: FW.bold,
       display: "inline-flex", alignItems: "center", justifyContent: "center",

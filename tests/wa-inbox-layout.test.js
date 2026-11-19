@@ -166,13 +166,23 @@ describe("W5 — the phone's inbox", () => {
 
   // v18.16.0 (follow-up): one row with the mark left a phone no width for the
   // words, so the filter became its dot there; v18.17.0 (Patryk) made it the dot
-  // at every width, named by the words, and the row's red dot only while the open
-  // list holds something it would find.
-  it("Needs action is its dot alone at every width, and keeps its name", () => {
+  // at every width, named by the words. v18.18.0 (Patryk): the count of the open
+  // list's conversations that need a response takes the red, on the WhatsApp
+  // button's badge, and the dot is the button's ink.
+  it("Needs action is its dot at every width, keeps its name, and counts what it would find", () => {
     expect(Inbox).toContain('aria-label="Needs action"');
     expect(Inbox).not.toContain('"Needs action" : null}</button>');
-    expect(Inbox).toContain("const dotRed = !needsAction && conversations.some((c) => inTab(c, tab) && isActionable(c));");
-    expect(Inbox).toContain('backgroundColor: dotRed ? "var(--wa-unread-dot)" : "currentColor", boxShadow: dotRed ? "var(--wa-unread-ring)" : "none"');
+    expect(Inbox).toContain("const actionCount = conversations.filter((c) => inTab(c, tab) && isActionable(c)).length;");
+    expect(Inbox).toContain('<CountBadge n={actionCount} float background="var(--wa-unread-dot)" srText={actionCount === 1 ? "needs a response" : "need a response"} id={actionCountId} />');
+    expect(Inbox).toContain('style={{ position: "relative", flexShrink: 0, background: needsAction ?');
+    expect(Inbox).toContain('backgroundColor: "currentColor", flexShrink: 0');
+    expect(Inbox).not.toContain("dotRed");
+  });
+  // The name silences the contents, so the count is the description, and only
+  // while the badge is there to be pointed at.
+  it("hands the count to a screen reader as the button's description", () => {
+    expect(Inbox).toContain("aria-describedby={actionCount ? actionCountId : undefined}");
+    expect(Inbox).toContain("const actionCountId = useId();");
   });
 
   // v18.17.0 (Patryk): Archive is H, where it was Backspace, and the sheet says so.

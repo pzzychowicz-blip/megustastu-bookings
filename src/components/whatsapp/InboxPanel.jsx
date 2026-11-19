@@ -21,7 +21,7 @@
 // Blur budget: Overlay's scrim blur(8) + the panel's blur(16) = 2 (≤4 holds;
 // the Templates sub-modal adds 2 more only while open).
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useId } from "react";
 import { useWinW } from "../../hooks/useWinW";
 import { useWinH } from "../../hooks/useWinH";
 import { useShortViewport } from "../../hooks/useShortViewport";
@@ -33,7 +33,7 @@ import { TemplatesEditor } from "./TemplatesEditor";
 import { ConversationMenu } from "./ConversationMenu";
 import { SelectIcon, FlaskIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
 import { CloseIcon, EditIcon, TrashIcon, ChevronDownIcon, SearchIcon } from "../Icons";
-import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Presence, Reveal, RowSlot, InlineAlert, MODAL_TITLE_ATTR } from "../atoms";
+import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Presence, Reveal, RowSlot, InlineAlert, CountBadge, MODAL_TITLE_ATTR } from "../atoms";
 import { disconnectSentence } from "../../lib/wa-coexist";
 import { BTN, R, T, FW, M, IC, H, SP } from "../../lib/constants";
 // v18.2.0 /code-review: "3 selected", "Delete 3 conversations?" keep their count and word together.
@@ -68,7 +68,7 @@ function isActionable(c) {
 }
 
 // Whether a conversation belongs to a tab ("inbox" or "archived"). One rule for
-// the leaves-the-tab effect and the Needs action dot (/code-review: it was
+// the leaves-the-tab effect and the Needs action count (/code-review: it was
 // written out in both).
 function inTab(c, which) {
   return which === "archived" ? !!c.archived : !c.archived;
@@ -157,6 +157,8 @@ export function InboxPanel({
 }) {
   const winW = useWinW();
   const twoPane = winW >= INBOX_TWO_PANE_BREAKPOINT;
+  // v18.18.0: the Needs action badge, which the button's description points at.
+  const actionCountId = useId();
   // Short screens (tablet): collapse the draft card to a one-line bar + the
   // composer template chips behind a button so the message thread stays readable.
   const winH = useWinH();
@@ -623,8 +625,9 @@ export function InboxPanel({
   const showFilters = twoPane || !activeKey;
   // Select and Needs action stand beside the search unless a phone needs their room for it.
   const beside = twoPane || !searchShown;
-  // The Needs action dot is red while the open list holds something it would find.
-  const dotRed = !needsAction && conversations.some((c) => inTab(c, tab) && isActionable(c));
+  // v18.18.0 (Patryk): how many of the open list's conversations need a response,
+  // on the button as the WhatsApp button's badge. It stays while the filter is on.
+  const actionCount = conversations.filter((c) => inTab(c, tab) && isActionable(c)).length;
   const filterControls = (
     <>
       {/* v17.15.6's aria-pressed rule, reaching the module at the 17.16.12
@@ -652,29 +655,34 @@ export function InboxPanel({
       ><SelectIcon size={IC.chrome} /></button>) : null}</RowSlot>
       {/* v18.17.0 (Patryk): an icon on every screen, where two panes had the
           words beside it. The icon is the list's own: the dot a conversation
-          that needs answering carries on its row (ConversationRow), red with
-          its ring, so the filter and what it finds wear one mark. Red only while
-          the open list holds a conversation the filter would show (Patryk), so
-          red means pressing it finds something; otherwise the button's grey.
-          On the green of the pressed filter it is the button's ink (white).
-          Named by the words it no longer shows; `aria-pressed` carries the
-          state, the name stays still (the note above). While it is ON it does
-          not fold for a phone's search (/code-review): it is the only thing
-          on screen saying the list is narrowed, and the search's own rule is
-          that a filter in force stays in view. */}
+          that needs answering carries on its row (ConversationRow), so the
+          filter and what it finds wear one mark. Named by the words it no longer
+          shows; `aria-pressed` carries the state, the name stays still (the
+          note above). While it is ON it does not fold for a phone's search
+          (/code-review): it is the only thing on screen saying the list is
+          narrowed, and the search's own rule is that a filter in force stays
+          in view.
+          v18.18.0 (Patryk): the count takes the red, on the WhatsApp button's
+          badge at the corner, and the dot is the button's ink (grey, white on
+          the pressed green), where v18.17.0 turned the dot itself red. The badge
+          is gone at 0. The name silences the contents, so the count reaches a
+          screen reader as the description ("3 need a response", "1 needs a
+          response", the crash trail's agreement), only while it shows. */}
       <RowSlot show={beside || needsAction} gap={SP.base} speed="reveal">{beside || needsAction ? (
       <button
         onClick={() => setNeedsAction((v) => !v)}
         aria-pressed={needsAction}
         aria-label="Needs action"
+        aria-describedby={actionCount ? actionCountId : undefined}
         // No "(A)" here (/code-review): A accepts an open draft first and is
         // this filter only when none is waiting, which a tooltip cannot say.
         title="Show only conversations that need a response"
         className="mgt-hover-scale mgt-press"
-        style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "background-color " + M.tap + ", color " + M.tap + ", border-color " + M.tap + ", transform " + M.tap }}
+        style={{ position: "relative", flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "background-color " + M.tap + ", color " + M.tap + ", border-color " + M.tap + ", transform " + M.tap }}
       >{/* A real 8px dot, not a text ● (the device NotificationStrip uses for a
-           section with no icon), and the row's exact one: same size, fill and ring. */}
-        <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: dotRed ? "var(--wa-unread-dot)" : "currentColor", boxShadow: dotRed ? "var(--wa-unread-ring)" : "none", flexShrink: 0, transition: "background-color " + M.tap + ", box-shadow " + M.tap }} /></button>) : null}</RowSlot>
+           section with no icon), the row's size and shape, in the button's ink. */}
+        <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "currentColor", flexShrink: 0 }} />
+        <CountBadge n={actionCount} float background="var(--wa-unread-dot)" srText={actionCount === 1 ? "needs a response" : "need a response"} id={actionCountId} /></button>) : null}</RowSlot>
       {/* v18.17.0 (Patryk): search is a magnifier until it is wanted. Pressed
           (or "/"), the field opens out of the icon to the right, to 90% of the
           room the row leaves it, and closes back into it along the same path,

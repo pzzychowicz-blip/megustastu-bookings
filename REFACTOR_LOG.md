@@ -41518,3 +41518,38 @@ pins moved to the new shape: `tests/save-path.test.js` (`noCode`, a `toContain`,
 `tests/app-width-fit.test.js` (new): the key and its one stored value, a stored width that does not decide it, `onSetAppWidth`
 turning it off and both shortcuts reaching it, the stored width on screen when it goes off with none, no database write, App's
 `maxWidth` and `shellW`, `fitAppWidth`'s numbers, and the switch with the stepper folding under it.
+
+### Commit 5 — the Needs action count
+
+- **What (Patryk, item 4):** the inbox's **Needs action** button carries a count, as the WhatsApp button does: how many of the open
+  list's conversations need a response, on the same red badge at its corner. His decision (2026-11-19): **the badge takes the red, and
+  the dot is the button's ink** (grey, white on the pressed green), where v18.17.0 turned the dot itself red while the list held
+  something it would find. The badge stays while the filter is on and is gone at none.
+- **How:** `actionCount` replaces `dotRed`, counted with the list's own two predicates (`inTab`, `isActionable`), so with no search
+  typed it is the number of rows the filter leaves. The badge is `CountBadge` with `float` and `--wa-unread-dot`, the WhatsApp
+  button's pair, already in `tests/contrast.test.js` in both themes; the button became `position: relative` for it. The name stays
+  "Needs action" (pinned), and an `aria-label` silences what the button holds, so the count reaches a screen reader as the button's
+  **description**: `CountBadge` takes an `id`, and the button points `aria-describedby` at it only while it shows (at none there is no
+  element, and a reference to an absent id is a broken one). Its words agree with the number, "1 needs a response", "9 need a
+  response", as the crash trail's do (`newCrashesWord`).
+- **Measured on DEV through the rig** (writes dropped in the socket: only presence, and the two local-cache updates below). DEV holds
+  10 conversations in the Inbox and 7 in Archived. At 998×507 (the tablet), 1280×800, 900×700 (the narrowest two panes), 820×1180
+  (an iPad upright, one pane) and 375×812:
+  - the badge read **9** in the Inbox and **5** in Archived, and turning the filter on left **9** and **5** rows;
+  - nothing clips it: no ancestor's box cuts it, and a hit test at its four edges and its centre finds the badge;
+  - Chrome computes the name "Needs action" (from `aria-label`), the description "9 need a response" ("5 need a response" in
+    Archived), and pressed false and true;
+  - the dot is the button's ink: rgb(90, 100, 116) off and white on in Light, rgb(166, 166, 172) and white in Dark (through
+    `?theme=dark`: the account's synced theme overrides a local key, so the first "dark" run had measured Light);
+  - on a phone, opening the search with the filter off still folds Needs action away, and Escape brings it back. With the filter on it
+    stays, its badge 3px from the field at their closest and about 4px from the field's focus ring at the badge's height; magnified,
+    the two do not touch.
+  - **One and none**, staged in the page's local cache only (every Inbox conversation but one muted; the updates never left the
+    socket): the badge read 1 and the description "1 needs a response"; with all ten muted the badge and the `aria-describedby` were
+    gone and the dot stayed grey.
+- **Seen, not changed:** while the count shows, the description is the count and the `title` ("Show only conversations that need a
+  response") is not read, because the accessible description takes `aria-describedby` before `title`; at none Chrome reads the title.
+  The name and the count say what the title says.
+
+`tests/wa-inbox-layout.test.js`: the `dotRed` pins became the count line, the badge with its fill, words and `id`, the button
+positioned for it, the dot in `currentColor` and no `dotRed` left; and a new case for the description and the id.
