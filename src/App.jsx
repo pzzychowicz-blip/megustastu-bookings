@@ -1486,6 +1486,7 @@ export function BookingApp({uid}){
   const {
     themePref,isDark,onToggleDark,onToggleAutoTheme,
     appWidth,onSetAppWidth,
+    appWidthFit,onToggleAppWidthFit,
     reduceMotion,onToggleReduceMotion,
     planGestures,onTogglePlanGestures,
     planAvail,onTogglePlanAvail,
@@ -4076,7 +4077,7 @@ export function BookingApp({uid}){
            whereas normally that lift just bleeds to the window edge. It was
            only ever belt-and-braces: html+body are already overflow:hidden in
            this mode (see the body effect above), so nothing can scroll here. */
-        shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}
+        shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidthFit?"none":appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600). v18.18.0: none while Fit to screen is on, the default on every device. */}
           {/* v17.14.0: the skip link. v17.12.0 added the landmarks, which are the
               programmatic bypass and cost nothing visually; this is the one for
               sighted keyboard users, in an app that is explicitly keyboard-driven
@@ -4433,6 +4434,8 @@ export function BookingApp({uid}){
             onToggleAutoTheme={onToggleAutoTheme}
             appWidth={appWidth}
             onSetAppWidth={onSetAppWidth}
+            appWidthFit={appWidthFit}
+            onToggleAppWidthFit={onToggleAppWidthFit}
             reduceMotion={reduceMotion}
             onToggleReduceMotion={onToggleReduceMotion}
             swEnabled={swEnabled}

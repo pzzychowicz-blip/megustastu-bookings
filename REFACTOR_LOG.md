@@ -41490,3 +41490,31 @@ slot), and `tests/guest-tags.test.js` (the seventh surface; App hands the tag ma
 `tests/menu-room.test.js` (`menuRoomAbove` on the measured numbers, `clipBox`'s two stops, the `transitionend` listener, and the
 refusal: a row of its own, `above`, no `exclude`, `onPickCode`), `tests/country-menu.test.js` (the two pairs, `MENU_UP`), and two
 pins moved to the new shape: `tests/save-path.test.js` (`noCode`, a `toContain`, no snapshot moved) and `tests/stretched-chips.test.js`.
+
+### Commit 4 — Fit to screen
+
+- **What (Patryk, item 3):** on a new device the app should fill the screen. Settings › App › **Fit to screen**, on by default on
+  every device, including one that already set a width (his decision, 2026-11-19): that width is kept and comes back when the switch
+  is turned off. The App width stepper folds away under it (`Reveal`) while it is on.
+- **How:** `useShellPrefs` reads `appWidthFit` from its own key, `mgt-appwidth-fit`, stored only as `"0"` (the indoor tint's shape),
+  so `mgt-appwidth` never decides it. While it is on, App draws the shell with no `maxWidth`; the `appWidth` the hook returns is the
+  window's, rounded down to 50 within 900–2400 (`fitAppWidth`), so ⇧+ / ⇧− step from what is seen; and `shellW`, the width Split
+  View divides, is the window. **`onSetAppWidth` turns it off**, so the stepper and both shortcuts do (`lib/shortcuts.js` is
+  unchanged). Turned off with no width stored, it stores the width on screen: `readAppWidth`'s own default is the screen less 300px,
+  which would have shrunk the app by 300px at the tap.
+- **Measured on DEV** (998×507 touch, 1280×800, 1920×1080; writes dropped in the socket): with both keys cleared the shell is
+  966 / 1248 / 1888 wide, 16px from each edge, and follows a resize (300px wider, 300px wider). With `mgt-appwidth` = 1000 stored it
+  still fills. The switch off gives 1000 (140px and 460px margins) and shows the stepper at 1000; on again it fills, and the 1000
+  stays stored. Shift+minus from fit gives 1200 at 1280 (1250 − 50) and 1850 at 1920, with the switch off. The rightmost lifted
+  control, the connection dot, reaches 1265.4 of 1280 when hovered (×1.08), inside the gutter.
+- **Checked, not changed:** with Lock navigation on, `<main>`'s hover-lift gutter (`marginInline: -4%` with `paddingInline: 4%`,
+  v17.5.0) now reaches 34px past each edge of a 1280 window (8px at an app width of 1200; inside the old default's 150px margins it
+  never did). That shell's html and body are `overflow: hidden` and `<main>` is `overflowX: hidden`, so nothing scrolls sideways,
+  and the List cards the gutter was made for stopped lifting in v17.9.1. With Lock navigation off nothing reaches past the window:
+  the scroll width is 1280 of 1280 and `window.scrollX` stays 0, in the Timeline and the List.
+- **Split View** divides the window while fit is on. On the tablet any stored width of 998 or more already gave a `shellW` of 998,
+  so side by side is decided exactly as before; a desktop whose stored width was narrower than its window now divides the wider shell.
+
+`tests/app-width-fit.test.js` (new): the key and its one stored value, a stored width that does not decide it, `onSetAppWidth`
+turning it off and both shortcuts reaching it, the stored width on screen when it goes off with none, no database write, App's
+`maxWidth` and `shellW`, `fitAppWidth`'s numbers, and the switch with the stepper folding under it.
