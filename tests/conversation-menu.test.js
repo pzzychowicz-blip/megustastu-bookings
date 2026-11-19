@@ -137,7 +137,8 @@ describe("how it moves", () => {
 describe("one menu, two triggers: the ⋯ and the inbox's mark", () => {
   const Inbox = read("components/whatsapp/InboxPanel.jsx");
   it("a trigger of its own is drawn in place of the ⋯, in its own style", () => {
-    expect(Menu).toContain("{trigger ? trigger : (");
+    // v18.18.0: or a function of `open`, so the mark's chevron can turn with the menu.
+    expect(Menu).toContain('{trigger ? (typeof trigger === "function" ? trigger(open) : trigger) : (');
     expect(Menu).toContain("style={trigger ? triggerStyle : mkBtn(");
   });
   it("from the left edge, it grows from its left corner", () => {

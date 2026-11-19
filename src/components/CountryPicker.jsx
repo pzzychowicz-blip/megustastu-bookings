@@ -37,8 +37,8 @@
 import { useState, useRef, useEffect, useId } from "react";
 import { S, T, FW, SP, IC, EXIT_MS } from "../lib/constants";
 import { afterFrame } from "../lib/after-frame";
-import { mkInp } from "./atoms";
-import { ChevronDownIcon, CheckIcon } from "./Icons";
+import { mkInp, TurnChevron } from "./atoms";
+import { CheckIcon } from "./Icons";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
 import { useMenuRoom } from "../hooks/useMenuRoom";
 import { COUNTRIES, countryByIso, flagOf, dialLabel, matchesCountry } from "../lib/phone-countries";
@@ -60,6 +60,8 @@ const POP_UP = { in: "mgt-pop-up-in", out: "mgt-pop-up-out", origin: "bottom lef
 // child, so still the first stop for Tab and a screen reader) drawn at the bottom.
 const MENU_UP = { top: "auto", bottom: "100%", marginTop: 0, marginBottom: SP.tight, flexDirection: "column-reverse" };
 const SEARCH_EDGE = "1px solid var(--border-soft)";
+// `above`: the chevron starts pointing up, at the list it opens, and turns down.
+const CHEVRON_UP = { transform: "rotate(180deg)" };
 
 // `label` turns the pill into an ACTION ("+ Add country") rather than a
 // readout of the current choice: Settings' pinned-list editor picks a country
@@ -178,7 +180,10 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
           <span aria-hidden="true">{flagOf(cur.iso)}</span>
           <span>{dialLabel(cur)}</span>
         </> : <span style={{ color: "var(--field-prompt)" }}>Code</span>}
-        <span aria-hidden="true" style={{ color: S.muted, display: "flex" }}><ChevronDownIcon size={IC.inline} /></span>
+        {/* v18.18.0 (Patryk): the chevron turns as the list opens, and back. It
+            points where the list will appear and away once it is open, so an
+            `above` picker's starts pointing up (the outer turn) and turns down. */}
+        <span aria-hidden="true" style={Object.assign({ color: S.muted, display: "flex" }, above ? CHEVRON_UP : null)}><TurnChevron open={open} flip size={IC.inline} /></span>
       </button>
       {open || leaving ? (
         <div ref={menuRef} key={opens} className={open ? pop.in : pop.out} inert={!open} style={Object.assign({}, AC_MENU, { transformOrigin: pop.origin, display: "flex", flexDirection: "column", overflowY: "hidden", maxHeight: MENU_TALL }, above ? MENU_UP : null)}>

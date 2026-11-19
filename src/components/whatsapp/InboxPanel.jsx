@@ -32,8 +32,8 @@ import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
 import { ConversationMenu } from "./ConversationMenu";
 import { SelectIcon, FlaskIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
-import { CloseIcon, EditIcon, TrashIcon, ChevronDownIcon, SearchIcon } from "../Icons";
-import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Presence, Reveal, RowSlot, InlineAlert, CountBadge, MODAL_TITLE_ATTR } from "../atoms";
+import { CloseIcon, EditIcon, TrashIcon, SearchIcon } from "../Icons";
+import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Presence, Reveal, RowSlot, InlineAlert, CountBadge, TurnChevron, MODAL_TITLE_ATTR } from "../atoms";
 import { disconnectSentence } from "../../lib/wa-coexist";
 import { BTN, R, T, FW, M, IC, H, SP } from "../../lib/constants";
 // v18.2.0 /code-review: "3 selected", "Delete 3 conversations?" keep their count and word together.
@@ -588,7 +588,8 @@ export function InboxPanel({
       label="WhatsApp menu"
       align="left"
       triggerStyle={mkSolidBtn("var(--wa-green)", MARK_BTN)}
-      trigger={
+      // A function of the menu's `open` (v18.18.0), so the chevron can turn with it.
+      trigger={(open) => (
         <>
           WhatsApp
           {/* Which list is open, opening sideways like the count beside it: swapped
@@ -609,9 +610,11 @@ export function InboxPanel({
           <Reveal horizontal show={unreadCount > 0}>
             {unreadCount > 0 ? <span style={MARK_COUNT}>{unreadCount}<span className="mgt-sr-only"> unread</span></span> : null}
           </Reveal>
-          <span aria-hidden="true" style={{ display: "flex", marginLeft: SP.tight }}><ChevronDownIcon size={IC.inline} /></span>
+          {/* v18.18.0 (Patryk): it turns up as the menu opens and back as it
+              closes, the Summary's chevron, where it stood still. */}
+          <span aria-hidden="true" style={{ display: "flex", marginLeft: SP.tight }}><TurnChevron open={open} flip size={IC.inline} /></span>
         </>
-      }
+      )}
     />
   );
 

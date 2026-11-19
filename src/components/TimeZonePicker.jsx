@@ -22,8 +22,8 @@
 import { useState, useRef, useEffect, useId, useMemo } from "react";
 import { S, T, FW, SP, IC, EXIT_MS } from "../lib/constants";
 import { afterFrame } from "../lib/after-frame";
-import { mkInp } from "./atoms";
-import { ChevronDownIcon, CheckIcon } from "./Icons";
+import { mkInp, TurnChevron } from "./atoms";
+import { CheckIcon } from "./Icons";
 import { acRowHandlersFor, AC_MENU, AC_ROW } from "../hooks/useAcRow";
 import { useMenuRoom } from "../hooks/useMenuRoom";
 import { zoneList, zoneName, offsetLabel, matchesZone } from "../lib/time-zones";
@@ -135,7 +135,8 @@ export function TimeZonePicker({ value, onPick, ariaLabel = "Time zone", style }
       >
         <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{shown}</span>
         {offset ? <span style={{ color: S.muted }}>{offset}</span> : null}
-        <span aria-hidden="true" style={{ color: S.muted, display: "flex" }}><ChevronDownIcon size={IC.inline} /></span>
+        {/* v18.18.0 (Patryk): the chevron turns up as the list opens, and back. */}
+        <span aria-hidden="true" style={{ color: S.muted, display: "flex" }}><TurnChevron open={open} flip size={IC.inline} /></span>
       </button>
       {open || leaving ? (
         <div ref={menuRef} key={opens} className={open ? "mgt-pop-in" : "mgt-pop-out"} inert={!open} style={Object.assign({}, AC_MENU, { transformOrigin: "top left", display: "flex", flexDirection: "column", overflowY: "hidden", maxHeight: MENU_TALL })}>

@@ -41553,3 +41553,26 @@ turning it off and both shortcuts reaching it, the stored width on screen when i
 
 `tests/wa-inbox-layout.test.js`: the `dotRed` pins became the count line, the badge with its fill, words and `id`, the button
 positioned for it, the dot in `currentColor` and no `dotRed` left; and a new case for the description and the id.
+
+### Commit 6 — chevrons that turn
+
+- **What (Patryk, item 5):** three ▾ stood still while their lists opened: the inbox's WhatsApp mark, the phone field's country-code
+  picker and Settings' time-zone picker. Each now turns up as its list opens and back as it closes, the Summary's `TurnChevron`
+  (`flip`, on `M.move`), and keeps its colour (the pickers' muted ink, the mark's white).
+- **One decision made with him (2026-11-19):** "Other code…" opens upward (commit 3), so its chevron **starts pointing up and turns
+  down** as the list opens. Every chevron in the app points toward its list at rest and away once it is open, and this keeps that
+  true; it is also the usual drop-up convention. It is a half turn on the chevron's wrapper (`CHEVRON_UP`), so `TurnChevron` is
+  unchanged.
+- **How:** the mark's menu owns `open`, so `ConversationMenu`'s `trigger` may now be a function of it, and the mark passes one. Both
+  pickers own `open` already.
+- **Measured on DEV** (the rig: the chevron's rotation sampled every frame through an open and a close; writes dropped in the socket)
+  at 1280×800, 998×507 and 375×812 (the time-zone picker at the first two, where Settings is): every one turns 0° → 180° and back in
+  about 190–200ms with 9 to 12 frames in between (`M.move` is 240ms). "Other code…" rests at 180°, pointing up, and turns to 360°,
+  pointing down, and back. Escape closes the mark's menu and leaves the inbox open, and closes the refusal's list and leaves the
+  refusal. **With Reduce animations** (`data-motion="reduce"`) each one snaps in a single frame both ways, and **with the device
+  asking for reduced motion** it snaps too, because a transform is not among the properties that keep their short cross-fade there.
+  The zone was left as it was (no pick).
+
+`tests/turn-chevron.test.js`: the three draw `TurnChevron` with their own `open` and none draws the still `ChevronDownIcon`, the menu's
+trigger as a function of `open`, and the upward picker's half turn. `tests/conversation-menu.test.js`: the trigger pin moved to the new
+form.

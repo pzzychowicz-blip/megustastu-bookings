@@ -36,3 +36,24 @@ describe("a disclosure's chevron", () => {
     });
   });
 });
+
+// v18.18.0 (Patryk, item 5): three chevrons that stood still while their lists
+// opened, the inbox's WhatsApp mark and the two pickers. Each turns with its own
+// `open`, and none of them draws the still mark any more.
+describe("a list's chevron", () => {
+  const src = (name) => sources.find(([path]) => path.endsWith("/" + name + ".jsx"))[1];
+  it("turns on the inbox's WhatsApp mark, the country-code picker and the time-zone picker", () => {
+    ["whatsapp/InboxPanel", "CountryPicker", "TimeZonePicker"].forEach((name) => {
+      expect(src(name), name).toContain("<TurnChevron open={open} flip size={IC.inline} />");
+      expect(src(name), name).not.toContain("<ChevronDownIcon");
+    });
+  });
+  it("on the mark, reads the menu's own state: the menu's trigger may be a function of `open`", () => {
+    expect(src("whatsapp/ConversationMenu")).toContain('{trigger ? (typeof trigger === "function" ? trigger(open) : trigger) : (');
+    expect(src("whatsapp/InboxPanel")).toContain("trigger={(open) => (");
+  });
+  it("on a picker that opens upward, starts pointing up and turns down", () => {
+    expect(src("CountryPicker")).toContain('const CHEVRON_UP = { transform: "rotate(180deg)" };');
+    expect(src("CountryPicker")).toContain('style={Object.assign({ color: S.muted, display: "flex" }, above ? CHEVRON_UP : null)}><TurnChevron open={open} flip size={IC.inline} />');
+  });
+});
