@@ -1300,6 +1300,13 @@ html[data-holding] * {
 @keyframes mgt-pop-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-4px) scale(.97); } }
 .mgt-pop-in  { animation: mgt-pop-in var(--t-move) var(--ease-out) both; }
 .mgt-pop-out { animation: mgt-pop-out var(--t-move) var(--ease-in) both; }
+/* v18.18.0: the same pair for a popover that opens UPWARD from its trigger
+   (CountryPicker's `above`, the phone refusal's "Other code..."). The trigger is
+   below it, so "toward the trigger" is 4px down. */
+@keyframes mgt-pop-up-in  { from { opacity: 0; transform: translateY(4px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes mgt-pop-up-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(4px) scale(.97); } }
+.mgt-pop-up-in  { animation: mgt-pop-up-in var(--t-move) var(--ease-out) both; }
+.mgt-pop-up-out { animation: mgt-pop-up-out var(--t-move) var(--ease-in) both; }
 .mgt-sheet-in  { animation: mgt-sheet-in var(--t-move) var(--ease-out) both; }
 .mgt-sheet-out { animation: mgt-sheet-out var(--t-move) var(--ease-in) both; }
 

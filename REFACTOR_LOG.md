@@ -41438,3 +41438,55 @@ joined sets: every swap leaves both parties inside the set they traded for, seat
 
 `tests/day-notes.test.js` (which bookings, the order, the line, the Summary reading `dayNotes`, the props App passes, and the scrolling
 slot), and `tests/guest-tags.test.js` (the seventh surface; App hands the tag map to six views now).
+
+### Commit 3 — "Other code…" in the phone refusal
+
+- **What (Patryk, item 2):** under the pinned codes in "Choose the country code for this phone number.", a last button, **Other code…**,
+  opens the whole country list. A pick there does what a code's tap does (`onPickCode`, App's `pickPhoneCode`, unchanged): it writes
+  the code, and the refused save carries on. With no pins it stands alone under the sentence.
+- **Three decisions made with him first (2026-11-19)**, all three after measuring:
+  - **A row of its own, as wide as the codes.** The plan had it as the grid's last cell (`codeColumns(codes.length + 1)`). Measured on
+    DEV at 998×507 with the six default pins, the words need 137.4px (17px medium, the chevron, its gap and padding) and a code's
+    cell is 78.7px (101px on a phone), so it overflowed. The codes keep `codeColumns(codes.length)`.
+  - **The list opens upward, with its search box at the bottom, beside the button.** Under the refusal there is only the Save row, and
+    `useMenuRoom` measured only below. The menu shrinks to its rows as you search, so a box at the top would move under the typing.
+  - **Every country is in it, the pinned ones too** (the plan had `exclude={pinnedCountries}`): someone who missed Spain's button
+    finds Spain by typing, where the plan's list said "No country matches".
+- **How:** `CountryPicker` takes `above`. The menu hangs from the wrapper's top (`bottom: 100%`), draws its search box last with
+  `column-reverse` (the box stays the first stop in the DOM), and rises on a new pair, `mgt-pop-up-in` / `-out`, the popover pair
+  turned over: it starts 4px below its rest and shrinks to the bottom corner. `useMenuRoom(menuRef, open, tall, above)` measures the
+  room over the anchor with `menuRoomAbove`, up to the top of the box that clips the menu (`clipBox`: the nearest ancestor with any
+  overflow but `visible`, stopping at a fixed box; on the tablet the form's card, `overflow: hidden`; on a phone's sheet none, so
+  the screen's top). `scrollPort` would not do: it knows only `auto` and `scroll` and walks past the card. **No floor going up:**
+  below, a menu taller than its room runs under the footer, where scrolling the form still reaches it; above, what runs past the
+  card's top is cut off with nothing to scroll.
+- **A defect found while measuring, fixed here:** on the tablet at 289px tall (the keyboard as Android takes it), the list's top ran
+  4px past the card's top. The keyboard's measure had run before the footer's `tight` padding eased 16 → 6. With the form's body
+  down to its padding, that ease lifts the refusal's button 10px and changes no box's size, so no observer saw it. `useMenuRoom`
+  now measures again at every `transitionend` inside its port, in both directions. After: 6px inside the card at 289 and at 231.
+- **Measured on DEV through the rig** (writes dropped in the socket; only presence writes were dropped, no booking):
+
+  | Size | Button | List | max-height | Rows seen |
+  |---|---|---|---|---|
+  | 998×507, the tablet | 300.6–340.6, 502 wide | 31.6–296.6, 6.3px under the card's top | 263 | 5 |
+  | 998×289, keyboard up | 147.5–187.5 | 20.5–143.5 | 121 | 2 |
+  | 998×231, keyboard up | 144.6–184.6 | 17.6–140.6 | 121 | 2 (1½ visible) |
+  | 998×231, no pins | 98.6–138.6 | 17.6–94.6 | 75 | 1, the rows scroll |
+  | 375×812 | 555–595, 315 wide | 229–551 | 320 (full) | 7 |
+  | 375×470, keyboard up | 219–259 | 12–215 | 201 | 4 |
+  | 1280×800 | 579–619 | 253–575 | 320 (full) | 7 |
+
+  At every size the search box took the focus and sat 13px over the button, "48" left one row, Poland, Escape closed the list
+  alone (the refusal stayed, focus back on Other code…), and picking Poland set the picker to "Poland +48" and re-ran the save,
+  which went on to its next check ("Could not assign a table" on DEV's evening). The accessible name is "Other code…", from its
+  contents, `haspopup` listbox, `expanded` false and true. Sampled per frame, the list rises 4px → 0 and fades in over ~240ms, and
+  leaves the same way over ~260ms, then unmounts.
+- **Seen, not changed:** with the keyboard up on the tablet the footer is taller than the card and the Save row is cut off below it.
+  That was already so with the codes alone: before this commit, at 231, the 208px footer sat under the body's 48px of padding in a
+  208px card, its last 49px cut off. Here it happens only while the list is open, and a pick carries the save on by itself. The list lets the form behind it show faintly through its rows. The
+  phone field's own list, which opens downward, does exactly the same (compared side by side at 375×812), so it is how these menus
+  already render.
+
+`tests/menu-room.test.js` (`menuRoomAbove` on the measured numbers, `clipBox`'s two stops, the `transitionend` listener, and the
+refusal: a row of its own, `above`, no `exclude`, `onPickCode`), `tests/country-menu.test.js` (the two pairs, `MENU_UP`), and two
+pins moved to the new shape: `tests/save-path.test.js` (`noCode`, a `toContain`, no snapshot moved) and `tests/stretched-chips.test.js`.

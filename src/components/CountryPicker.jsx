@@ -26,6 +26,13 @@
 // Rows use `useAcRow`, the booking form's tap-vs-scroll handling, so a swipe
 // through the list scrolls it rather than picking whichever country the
 // finger landed on.
+//
+// ── Opening upward (v18.18.0) ────────────────────────────────────────────────
+// `above` hangs the menu from the pill's TOP, for a pill with nothing under it but
+// the Save row: the phone refusal's "Other code…", in the booking form's footer.
+// `useMenuRoom` then measures the room over the pill. The search box sits at the
+// menu's BOTTOM, beside the pill (Patryk, 2026-11-19): the menu shrinks to its rows
+// as the search narrows them, so a box at the top would move under the typing.
 
 import { useState, useRef, useEffect, useId } from "react";
 import { S, T, FW, SP, IC, EXIT_MS } from "../lib/constants";
@@ -45,10 +52,19 @@ const HEAD = {
   textTransform: "uppercase", letterSpacing: "0.04em",
 };
 
+// Each way of opening has its pair, which starts 4px toward the pill and shrinks back
+// to it from the corner beside it (index.css, the popover pair's note).
+const POP = { in: "mgt-pop-in", out: "mgt-pop-out", origin: "top left" };
+const POP_UP = { in: "mgt-pop-up-in", out: "mgt-pop-up-out", origin: "bottom left" };
+// `above`: AC_MENU's `top: 100%` and margin turned over, and the search box (the first
+// child, so still the first stop for Tab and a screen reader) drawn at the bottom.
+const MENU_UP = { top: "auto", bottom: "100%", marginTop: 0, marginBottom: SP.tight, flexDirection: "column-reverse" };
+const SEARCH_EDGE = "1px solid var(--border-soft)";
+
 // `label` turns the pill into an ACTION ("+ Add country") rather than a
 // readout of the current choice: Settings' pinned-list editor picks a country
 // to add, and has no "current" one to show. Its name is then the label itself.
-export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Country code", label, style, disabled = false }) {
+export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Country code", label, style, disabled = false, above = false }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
@@ -69,7 +85,8 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
   const uid = useId();
   const acRow = useAcRow();
   const cur = countryByIso(iso);
-  useMenuRoom(menuRef, open, MENU_TALL);
+  useMenuRoom(menuRef, open, MENU_TALL, above);
+  const pop = above ? POP_UP : POP;
 
   // The rows on screen, in order. Unfiltered: pinned first, then every country
   // (a pinned one appears in both, as in every phone app — the long list is
@@ -164,8 +181,8 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
         <span aria-hidden="true" style={{ color: S.muted, display: "flex" }}><ChevronDownIcon size={IC.inline} /></span>
       </button>
       {open || leaving ? (
-        <div ref={menuRef} key={opens} className={open ? "mgt-pop-in" : "mgt-pop-out"} inert={!open} style={Object.assign({}, AC_MENU, { transformOrigin: "top left", display: "flex", flexDirection: "column", overflowY: "hidden", maxHeight: MENU_TALL })}>
-          <div style={{ padding: SP.base, borderBottom: "1px solid var(--border-soft)", flexShrink: 0 }}>
+        <div ref={menuRef} key={opens} className={open ? pop.in : pop.out} inert={!open} style={Object.assign({}, AC_MENU, { transformOrigin: pop.origin, display: "flex", flexDirection: "column", overflowY: "hidden", maxHeight: MENU_TALL }, above ? MENU_UP : null)}>
+          <div style={Object.assign({ padding: SP.base, flexShrink: 0 }, above ? { borderTop: SEARCH_EDGE } : { borderBottom: SEARCH_EDGE })}>
             <input
               autoFocus
               className="mgt-hover-scale"

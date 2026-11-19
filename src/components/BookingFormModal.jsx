@@ -84,6 +84,8 @@ import { useAcRow, AC_ROW } from "../hooks/useAcRow";
 import { AcMenu } from "./AcMenu";
 import { VoucherPicker } from "./VoucherPicker";
 import { PhoneField } from "./PhoneField";
+// v18.18.0: the phone refusal's "Other code…".
+import { CountryPicker } from "./CountryPicker";
 // v18.0.0 session 8 (item 2b): a recognised guest's own open vouchers, plus the
 // two predicates the "carried from" note is derived with.
 import { guestOpenVouchers, normalizeCode, isUnsettled } from "../lib/vouchers";
@@ -102,6 +104,9 @@ import { TagChips } from "./TagChips";
 // a hard CI gate. Only one modal is ever mounted at a time, so a fixed id
 // cannot collide; useId() would be the answer if that stopped being true.
 const FORM_ERROR_ID = "mgt-form-error";
+// v18.18.0: the phone refusal's "Other code…" pill, a row as wide as the codes above
+// it and as tall as they are, its words at the left and the ▾ at the right.
+const OTHER_CODE = { width: "100%", height: H.control, padding: "0 12px", justifyContent: "space-between" };
 // v18.14.0 (correction 29, Patryk): every status the form's row can offer, in the
 // order `statusTargets` offers them, so each keeps its place and eases out and in.
 const STATUS_ROW = ["confirmed", "seated", "completed", "cancelled", "pending"];
@@ -957,9 +962,18 @@ export function BookingFormModal({
   // v18.14.0 (correction 3): the codes run edge to edge under the sentence, in
   // equal cells, a grid because a phone's six are 3 + 3 (`codeColumns`). A phone's
   // 2px less padding a side is what keeps the sentence on one line at 375.
-  const codes=error===NO_CODE_REFUSAL?pinnedCodes(pinnedCountries):[];
+  // v18.18.0 (Patryk): and a last button, "Other code…", for a code no pinned one
+  // gives. It opens the whole list, every country included (someone who missed
+  // Spain's button still finds Spain by typing), and a pick there is a button's tap:
+  // `onPickCode`. A row of its own, as wide as the codes: its words need ~137px and a
+  // code's cell is 79 on the tablet with the six pinned by default (measured). The
+  // list opens UPWARD, because under the refusal there is only the Save row. With no
+  // pins it stands alone under the sentence.
+  const noCode=error===NO_CODE_REFUSAL;
+  const codes=noCode?pinnedCodes(pinnedCountries):[];
+  const codeGrid=codes.length?<div style={{display:"grid",gridTemplateColumns:"repeat("+codeColumns(codes.length,isMobile)+",1fr)",gap:SP.snug}}>{codes.map(function(c){return <TimeChip key={c.iso} time={c.iso} label={c.label} onPick={onPickCode} style={{minHeight:H.control,padding:"0 8px"}} />;})}</div>:null;
   const errorEl=<div role="alert"><Reveal show={!!error}>{error?
-    <InlineAlert id={FORM_ERROR_ID} style={{marginBottom:14,rowGap:SP.snug,...(codes.length&&isMobile?{padding:"10px 12px"}:null)}} below={codes.length?<div style={{display:"grid",gridTemplateColumns:"repeat("+codeColumns(codes.length,isMobile)+",1fr)",gap:SP.snug}}>{codes.map(function(c){return <TimeChip key={c.iso} time={c.iso} label={c.label} onPick={onPickCode} style={{minHeight:H.control,padding:"0 8px"}} />;})}</div>:null}>{error}</InlineAlert>
+    <InlineAlert id={FORM_ERROR_ID} style={{marginBottom:14,rowGap:SP.snug,...(noCode&&isMobile?{padding:"10px 12px"}:null)}} below={noCode?<div style={{display:"flex",flexDirection:"column",gap:SP.snug}}>{codeGrid}<div style={{position:"relative"}}><CountryPicker label="Other code…" above onPick={onPickCode} style={OTHER_CODE} /></div></div>:null}>{error}</InlineAlert>
   :null}</Reveal></div>;
   // Gated on `error` as well as the field name, so the id handed to
   // aria-describedby can only ever name an element that is on screen.

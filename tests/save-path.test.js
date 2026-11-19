@@ -3167,6 +3167,8 @@ describe("a tapped country code resumes the door that was refused", () => {
 
   it("the form offers the codes on that refusal alone", () => {
     const FORM = read("src/components/BookingFormModal.jsx");
-    expect(FORM).toContain("const codes=error===NO_CODE_REFUSAL?pinnedCodes(pinnedCountries):[];");
+    // v18.18.0: and "Other code…" with them, on the same condition.
+    expect(FORM).toContain("const noCode=error===NO_CODE_REFUSAL;");
+    expect(FORM).toContain("const codes=noCode?pinnedCodes(pinnedCountries):[];");
   });
 });
