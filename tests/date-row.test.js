@@ -90,7 +90,9 @@ describe("the Summary breaks its own line where the date row expects it to", () 
 // row by 174px at 998 × 507, and all of that stood empty under the date controls.
 describe("the Summary's opened body is its own row under the date row", () => {
   it("portals into App's slot, and renders in place when there is none", () => {
-    expect(Summary).toMatch(/\{bodySlot \? createPortal\(body, bodySlot\) : body\}/);
+    // v18.18.0: what goes there is `placed`, the body inside its `fit` scroller.
+    expect(Summary).toMatch(/\{bodySlot \? createPortal\(placed, bodySlot\) : placed\}/);
+    expect(Summary).toMatch(/const placed = <div ref=\{scrollRef\} style=\{fit \? FIT_SCROLL : undefined\}>\{body\}<\/div>;/);
   });
 
   it("is a state ref, so the first render with a slot draws the portal at all", () => {
@@ -100,7 +102,8 @@ describe("the Summary's opened body is its own row under the date row", () => {
 
   it("the slot follows the date row, and is as inert as the row it came from", () => {
     const close = App.indexOf("{summaryPanel}</div>");
-    const slot = App.indexOf("<div ref={setSummaryBodySlot} inert={anyModal} style={{flexShrink:0}} />");
+    // v18.18.0: a column that may shrink in the pinned layout (tests/day-notes.test.js).
+    const slot = App.indexOf("<div ref={setSummaryBodySlot} inert={anyModal} style={shellFixed?SUMMARY_SLOT_FIT:{flexShrink:0}} />");
     expect(close).toBeGreaterThan(-1);
     expect(slot).toBeGreaterThan(close);
     expect(App.slice(close, slot), "nothing but the row's close between them").not.toMatch(/<[a-zA-Z]/);

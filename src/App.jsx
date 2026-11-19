@@ -567,6 +567,15 @@ const GEAR_BTN=Object.assign({},CHROME_BTN,{position:"relative"});
 // 58px this constant is centred against — and drops below them otherwise.
 const DATE_CTRL_DROP=9;
 
+// v18.18.0 (Patryk): in the pinned layout the Summary's opened body stops at the
+// bottom of the screen and scrolls inside. Its slot is a column that may shrink
+// to whatever the date row leaves, and the Summary's own scroller (`fit`) is the
+// flex item in it that shrinks with it. `<main>` grows from a zero basis, so it
+// gives way first: while a tall panel is open the view below has no height, and
+// it comes back as the panel closes. Before this the slot never shrank, and on
+// the tablet a day with notes put Print and More 63px below the screen.
+const SUMMARY_SLOT_FIT={flexShrink:1,minHeight:0,display:"flex",flexDirection:"column"};
+
 // ── Console boot banner ──────────────────────────────────────────────────────
 // Logs ownership/version when the app loads. Visible to anyone opening DevTools.
 console.log(
@@ -3884,6 +3893,10 @@ export function BookingApp({uid}){
     layoutSig={layout}
     unplacedCount={unplacedItems.length}
     currency={generalSettings.currency}
+    guestTags={guestTags}
+    tagList={tagList}
+    onEdit={VA.onEdit}
+    fit={shellFixed}
     onToggle={VA.onSummaryToggle}
     onOpenWeek={VA.onOpenWeek}
     onPrint={VA.onPrint}
@@ -4235,7 +4248,7 @@ export function BookingApp({uid}){
               gone — both buttons moved up into the header row above, each to the
               thing it acts on (see CHROME_BTN). The pair was created to give all
               three views ONE copy of these controls, and that still holds: the
-              header is no less shared than the date-nav row was. */}</div><div ref={setSummaryBodySlot} inert={anyModal} style={{flexShrink:0}} />{/* v17.5.0: in the fixed shell everything from here down lives in ONE
+              header is no less shared than the date-nav row was. */}</div><div ref={setSummaryBodySlot} inert={anyModal} style={shellFixed?SUMMARY_SLOT_FIT:{flexShrink:0}} />{/* v17.5.0: in the fixed shell everything from here down lives in ONE
             scroll region, so the two rows above stay pinned. The banners scroll
             away with the content — they're the pinning scope Patryk chose, and
             several open at once (a 3+ row late banner) would eat the viewport.

@@ -507,11 +507,17 @@ describe("what a screen shows for a booking: bookingTags and tagLine", () => {
     expect(tagLine(null)).toBe("");
   });
   it("each surface that shows a booking's tags reads them through bookingTags", () => {
-    // The six Patryk chose (2026-10-08). A surface that stops showing tags, or
-    // starts reading them its own way, fails here.
+    // The six Patryk chose (2026-10-08), and the Summary's notes (v18.18.0). A
+    // surface that stops showing tags, or starts reading them its own way, fails
+    // here.
     const src = (n) => stripComments(readFileSync(fileURLToPath(new URL("../src/components/" + n, import.meta.url)), "utf8")).join("\n");
     expect(src("ListView.jsx")).toContain("bookingTags(b, guestTags, tagList)");
     expect(src("DaySheet.jsx")).toContain("tagLine(bookingTags(b, guestTags, tagList))");
+    // v18.18.0, the seventh: the opened Summary's notes list, through
+    // `dayNotes` (lib/day-notes.js), which composes the day sheet's line.
+    expect(src("Summary.jsx")).toContain("dayNotes(bookings, date, guestTags, tagList)");
+    expect(stripComments(readFileSync(fileURLToPath(new URL("../src/lib/day-notes.js", import.meta.url)), "utf8")).join("\n"))
+      .toContain("tagLine(bookingTags(b, guestTags, tagList))");
     const timeline = src("TimelineView.jsx");
     expect((timeline.match(/tags=\{tagLine\(bookingTags\(b, guestTags, tagList\)\)\}/g) || []).length).toBe(2);   // a placed block, an unplaced one
     // The spoken form turns EVERY " · " into a comma. `replace(" · ", ", ")`
@@ -647,7 +653,7 @@ describe("App is wired to it", () => {
   });
   it("one tag map is made in App and handed to each view", () => {
     expect((app.match(/guestTagMap\(/g) || []).length).toBe(1);
-    expect((app.match(/guestTags=\{guestTags\}/g) || []).length).toBe(5);   // timeline, list, day sheet, settings, Find a booking (v18.5.1)
+    expect((app.match(/guestTags=\{guestTags\}/g) || []).length).toBe(6);   // timeline, list, day sheet, settings, Find a booking (v18.5.1), the Summary's notes (v18.18.0)
   });
   it("the edit is handed the tag list, for the occasion tag's name", () => {
     const call = app.slice(app.indexOf("applyEdit({"));

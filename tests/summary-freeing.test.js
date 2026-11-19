@@ -12,7 +12,10 @@ const Summary = stripComments(readFileSync(join(dirname(fileURLToPath(import.met
 
 describe("the freeing-soon list", () => {
   it("imports the List card's badge rather than drawing its own", () => {
-    expect(Summary).toMatch(/import \{ mkBtn, Reveal, TBadge, TurnChevron \} from "\.\/atoms";/);
+    // v18.18.0: the notes list added the size ring and the text measure to the
+    // same import; the badge is still the atom's.
+    expect(Summary).toMatch(/import \{[^}]*\bTBadge\b[^}]*\} from "\.\/atoms";/);
+    expect(Summary).not.toMatch(/function TBadge\b/);
   });
 
   it("renders one TBadge per table of each entry", () => {

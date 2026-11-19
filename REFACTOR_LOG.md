@@ -41406,3 +41406,35 @@ yes**, each commit below.
 `tests/drop-plan.test.js` (both rows of a joined pair, the reverse drag, a whole-set trade, and 400 generated days with parties on
 joined sets: every swap leaves both parties inside the set they traded for, seated, on the fewest tables that seat them. With the old
 `swapOf` put back, three of these fail.) `tests/booking-logic.test.js` (`fewestWithin`, read off the layout).
+
+### Commit 2 — the day's notes in the opened Summary
+
+- **What (Patryk, item 1):** the opened Summary now starts with **Notes (N)**: every booking of the viewed day with a note or a tag,
+  each with the booking it belongs to, and a tap on a row opens that booking in the edit form (`VA.onEdit`). His answers: tags and
+  notes, every booking that has either; cancelled ones out and finished ones in (the printed day sheet's set); first in the panel.
+  `lib/day-notes.js`'s `dayNotes` decides which bookings, the order (the BOOKED time, `scheduledTime || time`, then id) and the line,
+  which is the day sheet's Notes cell: `tagLine(bookingTags(…))` in bold, then the note. A note that is only whitespace is no note.
+- **Columns (Patryk, on the first draft: "align vertically in columns … for reference alignment in ListView"):** time · name · size ·
+  tables · the note, the order he picked from two (the size after the name, as on the List card, the block and the day sheet), and
+  the size as the List's ring (his pick over "2 guests"). Each column is the widest of its kind in the list, measured in the cell's
+  own font (`textWidth`, Find a booking's pattern); the name is capped at 160px and wraps. The note sits on a 200px basis, so on a phone
+  it takes a line of its own under the name, in every row at once. **Measured on DEV** (a day staged on 2027-03-11, nine notes among
+  thirteen bookings): every row's cells start at one x per column at 998×507 (44 · 94 · 190 · 220 · 310) and at 1280×800, and at
+  375×812 the note starts at 90 in every row. The ring's own rim (0.55 white, for a saturated block) was invisible on the row, so it
+  takes the List card's `--chip-neutral-border`, as the List does. The row's name is its text, read by Chrome as
+  "13:00 Marta Gil 2 guests table 1 Window seat if possible" (`Accessibility.getPartialAXTree`: contents, with the `title`
+  "Open Marta Gil's booking" as its description): the ring and the badges show bare numbers, so a hidden "2 guests" and "table"
+  ride beside them.
+- **A defect the first draft brought, measured before anything else was decided:** with Lock navigation on, the body's slot never
+  shrank, so a day with notes pushed the panel past the screen: Print and More 63px below it at 998×507 and the phone's past its
+  bottom too, out of reach. Patryk chose "the panel scrolls" over a notes list scrolling on its own: in the pinned layout the slot is
+  a column that may shrink (`SUMMARY_SLOT_FIT`) and the Summary wraps its body in a scroller (`fit`, `FIT_SCROLL`) that shrinks with
+  it, notes in full and first, while `<main>` gives way until the panel closes. The scroller wraps the `Reveal` rather than being it:
+  a `Reveal` made a flex item would size its `fr` row against its own flexed height and lag the room it opens. It pads its sides by
+  the card's shadow reach and takes it back, and a new day opens at its top. **Measured after**: scrolled to its end, Print sits at
+  446–478 of 507 on the tablet, 729–761 of 812 on the phone and 713–745 of 800 on the desktop; the body still eases both ways (the
+  slot's height sampled per frame); a tap on Lena Vogel's row opened her booking at all three sizes and Escape closed it. With Lock navigation off nothing scrolls inside and the page does, as before (998×507: the wrapper unstyled, the page 1501px tall, Print reached by scrolling it). Both themes
+  checked by screenshot. Lock navigation was already on for the DEV account; the staged bookings were deleted afterwards.
+
+`tests/day-notes.test.js` (which bookings, the order, the line, the Summary reading `dayNotes`, the props App passes, and the scrolling
+slot), and `tests/guest-tags.test.js` (the seventh surface; App hands the tag map to six views now).
