@@ -86,6 +86,7 @@ export function TableGrid({ selected, toggle, busy, seatedBusy, swapBusy }) {
                 <button
                   key={t.id}
                   onClick={() => toggle(t.id)}
+                  title={isSel ? "Leave out table " + t.id : blocked ? "Table " + t.id + " is taken then, so it cannot be picked" : "Pick table " + t.id + (isBusyT ? ", moving its party elsewhere" : "")}
                   // v17.8.0: a blocked cell is inert but NOT `disabled`, so the
                   // universal button press-scale would animate a tap that does
                   // nothing. .mgt-nopress opts it out, for the same reason the

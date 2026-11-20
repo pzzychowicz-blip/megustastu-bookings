@@ -29,6 +29,7 @@ import { BTN, S, R, T, FW, SP } from "../lib/constants";
 import { guestsLabel } from "../lib/booking-logic";
 import { Overlay, TBadge, mkBtn } from "./atoms";
 import { TagRow } from "./TagChips";
+import { keyHint } from "../lib/shortcuts";
 
 export function SeatNoteModal({ note, onClose }) {
   if (!note) return null;
@@ -39,6 +40,7 @@ export function SeatNoteModal({ note, onClose }) {
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
         onClick={onClose}
+        title={"Close the note; the party stays seated" + keyHint("close")}
       >Done</button>
     </div>
   );

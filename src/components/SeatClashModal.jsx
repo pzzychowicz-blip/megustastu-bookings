@@ -25,6 +25,7 @@
 
 import { S, T, FW, SP, BTN } from "../lib/constants";
 import { Overlay, TBadge, mkBtn, mkSolidBtn } from "./atoms";
+import { keyHint } from "../lib/shortcuts";
 
 export function SeatClashModal({ clash, onComplete, onAnyway, onBack }) {
   if (!clash) return null;
@@ -35,16 +36,19 @@ export function SeatClashModal({ clash, onComplete, onAnyway, onBack }) {
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
         onClick={onBack}
+        title={"Seat nobody; nothing changes" + keyHint("close")}
       >Back</button>
       <button
         className="mgt-hover-scale mgt-press"
         style={mkSolidBtn(BTN.orange, { minHeight: 44, padding: "10px 18px" })}
         onClick={onAnyway}
+        title="Seat the party while the others are still seated, sharing the tables"
       >Seat anyway</button>
       <button
         className="mgt-hover-scale mgt-press"
         style={mkSolidBtn(S.accent, { minHeight: 44, padding: "10px 18px" })}
         onClick={onComplete}
+        title="Mark the parties still seated there as completed, then seat this one"
       >Complete them &amp; seat</button>
     </div>
   );

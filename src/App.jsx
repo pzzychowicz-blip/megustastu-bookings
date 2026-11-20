@@ -3976,8 +3976,10 @@ export function BookingApp({uid}){
   const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay /* @static-height one sentence, worked out when it opens, and two buttons */ onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
         style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
+        title={"Keep the booking"+keyHint("close")}
         onClick={function(){setConfirmDel(null);}}>Back</button><button
         onClick={function(){if(armSettled())delBooking(confirmDel);}}
+        title={"Delete the booking"+keyHint("confirm")}
         className="mgt-hover-scale"
         style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{deleteWords(delBooked,generalSettings.undoSecs||10,autoOptimizer)}</div></Overlay>:null}</ModalPresence>;
 
@@ -4006,10 +4008,12 @@ export function BookingApp({uid}){
   };
   const discardModal=<div style={{position:"relative",zIndex:260}}><ModalPresence show={!!confirmDiscard}>{confirmDiscard?<Overlay /* @static-height one sentence out of DISCARD_BODY, fixed for the life of one open */ onClose={function(){setConfirmDiscard(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         onClick={function(){if(armSettled())doDiscard();}}
+        title="Throw the changes away and close"
         className="mgt-hover-scale"
         style={mkDangerConfirm()}>Discard</button><button
         className="mgt-hover-scale"
         style={mkSolidBtn(S.accent)}
+        title={"Go back to the changes, still unsaved"+keyHint("close")}
         onClick={function(){setConfirmDiscard(null);}}>Keep editing</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Unsaved changes</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{(DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet.")+" Discarding can't be undone."}</div></Overlay>:null}</ModalPresence></div>;
 
   const manualModal=<ModalPresence show={!!manualBooking}>{manualBooking?<ManualModal
@@ -4385,17 +4389,22 @@ export function BookingApp({uid}){
           onClose={requestCloseBlock} />:null}</ModalPresence><ModalPresence show={!!confirmCancel}>{confirmCancel?<Overlay /* @static-height one sentence, worked out when it opens, and three buttons */ onClose={function(){setConfirmCancel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
+              title={"Keep the booking as it is"+keyHint("close")}
               onClick={function(){setConfirmCancel(null);}}>Back</button><button
               onClick={function(){if(!armSettled())return;doCancelBooking(confirmCancel,true);setShowForm(false);}}
+              title="Cancel the booking as a no-show, which counts against the guest's number"
               className="mgt-hover-scale"
               style={mkSolidBtn(BTN.orange,{display:"inline-flex",alignItems:"center",gap:6})}><NoShowIcon size={IC.control} />No show</button><button
               onClick={function(){if(!armSettled())return;doCancelBooking(confirmCancel,false);setShowForm(false);}}
+              title="Cancel the booking, freeing its tables"
               className="mgt-hover-scale"
               style={mkSolidBtn(BLOCK_BG.cancelled)}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{cancelWords(cancelBooked,autoOptimizer)}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay /* @static-height one sentence, computed when it opens and not after */ onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
+              title={"Go back without saving, to change the time"+keyHint("close")}
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
+              title={"Save anyway, with the kitchen this busy"+keyHint("confirm")}
               className="mgt-hover-scale"
               style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,todayStr(),t,d,null);return countLabel(l.starts,"booking","bookings")+" with "+guestsLabel(l.guests);})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return countLabel(l.starts,"booking","bookings")+" with "+guestsLabel(l.guests);})())+" starting at this time. Go back to pick another time, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!voucherAsk}>{voucherAsk&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]?<VoucherRedeemModal
               voucher={vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]}
@@ -4407,8 +4416,10 @@ export function BookingApp({uid}){
               onClose={function(){setVoucherAsk(null);}} />:null}</ModalPresence><ModalPresence show={!!voucherBack}>{voucherBack&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherBack.id;})||{}).voucherCode)]?<Overlay /* @static-height two fixed sentences and two buttons */ onClose={function(){setVoucherBack(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
+              title="Leave the amount spent from the voucher"
               onClick={function(){settleVoucherBack(false);}}>Keep redeemed</button><button
               onClick={function(){settleVoucherBack(true);}}
+              title="Put the amount this visit used back on the voucher"
               className="mgt-hover-scale"
               style={mkSolidBtn(S.accent)}>Restore to voucher</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Restore the voucher?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{(function(){
               const b=bookings.find(function(x){return x.id===voucherBack.id;})||{};
@@ -4419,11 +4430,14 @@ export function BookingApp({uid}){
             })()}</div><div style={{fontSize: T.small,color:S.sub}}>{voucherBack.from==="delete"?"Restoring puts the balance back. Keeping it redeemed leaves the amount spent against a booking that will no longer exist. The booking is deleted either way.":"Restoring puts the balance back and removes this visit from the voucher’s history. Keeping it redeemed leaves the record as it is."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!seatNote}>{seatNote?<SeatNoteModal note={seatNote} onClose={function(){setSeatNote(null);}} />:null}</ModalPresence><ModalPresence show={!!seatClash}>{seatClash?<SeatClashModal clash={seatClash} onComplete={seatAfterClearing} onAnyway={seatAnyway} onBack={function(){setSeatClash(null);}} />:null}</ModalPresence><ModalPresence show={!!voucherCarry}>{voucherCarry?<VoucherCarryModal carry={voucherCarry} currency={generalSettings.currency} onMove={doVoucherCarry} onNotNow={function(){setVoucherCarry(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height its sentences and buttons are set when it opens and it is up for one decision */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
+              title={"Leave every booking where it is"+keyHint("close")}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button>{/* v18.17.0 (B): offered only when the day has locks to take off. */}{reshuffleLocked>0?<button
               onClick={function(){if(!armSettled())return;setConfirmReshuffle(false);forceReshuffle(true);}}
+              title="Take the locks off the day's locked bookings, then re-seat every unlocked booking"
               className="mgt-hover-scale"
               style={mkSolidBtn(BTN.orange)}>{"Reshuffle and unlock "+reshuffleLocked}</button>:null}<button
               onClick={function(){if(!armSettled())return;setConfirmReshuffle(false);forceReshuffle();}}
+              title={"Re-seat the day's unlocked bookings; locked and seated ones stay"+keyHint("confirm")}
               className="mgt-hover-scale"
               style={mkSolidBtn(BTN.orange)}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:reshuffleLocked>0?8:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div>{reshuffleLocked>0?<div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{countLabel(reshuffleLocked,"booking is locked","bookings are locked")+" to tables. Reshuffle does not move a locked booking, unless you unlock it here."}</div>:null}</Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
         // legend row or by pressing `?` anywhere no modal is open.
@@ -4545,8 +4559,10 @@ export function BookingApp({uid}){
         confirmReminderDel?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReminderDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
+              title={"Keep the reminder"+keyHint("close")}
               onClick={function(){setConfirmReminderDel(null);}}>Back</button><button
               onClick={function(){if(armSettled())doDeleteReminder(confirmReminderDel);}}
+              title={"Delete the reminder for good"+keyHint("confirm")}
               className="mgt-hover-scale"
               style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete reminder?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
         reminderEditor?<ReminderEditor

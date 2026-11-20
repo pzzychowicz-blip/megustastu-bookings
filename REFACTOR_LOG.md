@@ -41716,3 +41716,33 @@ every call.
   numbers: covers, busy hours and tables (S)") and days, Find a booking's field, result and Done ("Close Find a booking (Esc)"),
   the history's Close and an empty day's New booking ("Make a new booking (N)"; a future day offers no Walk-in). The waitlist
   ghost and the cell marker were not on screen; their source is read by the tests above and Rule 14.
+
+### Commit 11 — Part 2, batch 4: forms, pickers and the confirm dialogs
+
+- **What:** a hover description on every control of the booking form (its fields, steppers, Tables row, status buttons, History,
+  Book again, Delete, Save pending, Back, Save booking and Save&confirm, the guest chips, and the phone refusal's country codes and
+  "Other code…"), the phone field, the walk-in form, the availability line, Duration's Reset, the table picker and its grid, the
+  preferred-tables picker, the block editor, the special-day editor, Print, the waitlist, the voucher field, the seat clash and
+  seat note, the voucher redeem and carry prompts, and App's confirms (delete, discard, cancel with No show, kitchen, voucher back,
+  reshuffle and its unlock, reminder delete). **Rule 14: 340 → 235.** App's Settings Close and the inbox's two confirms stay for
+  batches 5 and 6.
+- **`CountryPicker` takes `description` and joined `DESCRIBED_ATOMS`** (Patryk): its pill reads differently at each of its three
+  callers, so Rule 14 asks every call site. Settings' pinned-countries picker is one of them, so it is described here, a batch
+  early. `tests/style-check.test.js`'s list of atoms gained it; `tests/menu-room.test.js` pins the "Other code…" tag whole, and
+  takes its `description`.
+- **A key is named only where the modal answers it**, read from `modal-keys.js`: Esc on every Back, Close, Cancel and Done whose
+  modal has an `escapeAction`, Enter only on the actions `enterAction` runs (the form's Save, the walk-in's Seat, the table
+  picker's Assign, Delete, the kitchen's Confirm, Reshuffle, the reminder's Delete). The block editor, the special day and the
+  voucher prompt have no Enter, so their buttons name none. The form's keys come from its own rows: Assign (A), Preferred (P),
+  Clear (C), History (H), Book again (B); the table picker's Swap busy (S) and Clear (C).
+- **One existing title rewritten:** History read "History (4)", and now says what it opens with its count and key ("Show who
+  changed this booking and when, 4 entries (H)"); the `aria-label` keeps the name.
+- **Pins kept by placement, not by editing the test:** the availability line's `TimeChip` takes `description` after its `style`
+  (`tests/stretched-chips.test.js`), and the voucher field's Attach and Remove carry `title` before `aria-label`
+  (`tests/voucher-picker.test.js`, which reads 260 characters from the label to the auto margin).
+- **Measured on DEV** (reloaded, read from the live DOM): the edit form, every field and button ("Save the booking and close the
+  form (Enter)", "Choose the tables for this booking by hand (A)"); the table picker over it (Swap busy's switch, a taken table's
+  "Table 3 is taken then, so it cannot be picked"); the walk-in; the delete confirm from the List's ⋯ ("Delete the booking
+  (Enter)", "Keep the booking (Esc)"); Print (whose hour steppers were reworded on reading: "the printed timeline's first hour");
+  the special day; and the waitlist ("Take Test 4 off the waitlist (asks for a second tap)"). The block editor, the seat clash and
+  note, the kitchen, the voucher prompts and the reshuffle confirm were not opened; they are read from source and by Rule 14.

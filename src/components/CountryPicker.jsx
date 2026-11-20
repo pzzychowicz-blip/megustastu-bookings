@@ -66,7 +66,11 @@ const CHEVRON_UP = { transform: "rotate(180deg)" };
 // `label` turns the pill into an ACTION ("+ Add country") rather than a
 // readout of the current choice: Settings' pinned-list editor picks a country
 // to add, and has no "current" one to show. Its name is then the label itself.
-export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Country code", label, style, disabled = false, above = false }) {
+// v18.18.0 (Part 2 batch 3–4, Patryk): `description` is the pill's hover
+// description, as on the atoms that draw a control. It differs per caller (the
+// phone field, the refusal's "Other code…", Settings' pinned countries), so it
+// has no default, and check:style Rule 14 asks every call site for it.
+export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Country code", label, description, style, disabled = false, above = false }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
@@ -164,6 +168,7 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={label ? undefined : ariaLabel + ": " + (cur ? cur.name + " " + dialLabel(cur) : "none")}
+        title={description}
         onClick={function () { if (open) close(false); else openList(); }}
         style={Object.assign({}, mkInp(), {
           width: "auto", flexShrink: 0, display: "flex", alignItems: "center", gap: SP.snug,
@@ -195,6 +200,7 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
               onChange={function (e) { setQ(e.target.value); setActive(0); }}
               onKeyDown={onKey}
               placeholder="Search country or code"
+              title="Type part of a country's name, or its code"
               /* v18.14.2: a country's name is no word to correct. Typing "pol"
                  on an iPad with a Polish keyboard raised iOS's "Pół" bubble,
                  which stayed on the screen after the form had closed. */
@@ -225,6 +231,7 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
                     data-idx={i}
                     role="option"
                     aria-selected={!!sel}
+                    title={"Use " + r.c.name + "'s code, " + dialLabel(r.c)}
                     className="mgt-ac-row"
                     {...acRow(function () { pick(r.c); })}
                     onMouseEnter={function () { setActive(i); }}

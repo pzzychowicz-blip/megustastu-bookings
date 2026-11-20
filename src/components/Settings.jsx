@@ -326,7 +326,7 @@ function PinnedCountriesSetting({ gs, onSave }) {
         {/* The list of countries to ADD leaves out the ones already pinned —
             offering Spain twice would let the second tap do nothing. */}
         <div style={{ position: "relative", width: 280 /* @canvas wide enough for a country name in the list */ }}>
-          <CountryPicker label={full ? "Up to " + MAX_PINNED + " countries" : "+ Add country"} disabled={full} exclude={list}
+          <CountryPicker label={full ? "Up to " + MAX_PINNED + " countries" : "+ Add country"} description="Pin a country's code to the top of every phone field's list" disabled={full} exclude={list}
             onPick={(iso) => { if (list.indexOf(iso) < 0) onSave({ pinnedCountries: list.concat(iso) }); }}
             style={{ height: H.chip, padding: "0 12px", fontSize: T.body }} />
         </div>

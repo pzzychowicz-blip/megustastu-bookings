@@ -122,7 +122,9 @@ describe("the hook", () => {
 describe("the phone refusal's Other code…", () => {
   it("opens upward, with every country, and hands its pick to onPickCode", () => {
     const tag = form.slice(form.indexOf('<CountryPicker label="Other code…"'));
-    expect(tag.slice(0, tag.indexOf("/>"))).toBe('<CountryPicker label="Other code…" above onPick={onPickCode} style={OTHER_CODE} ');
+    // v18.18.0 (Part 2 batch 4): and its hover description, which CountryPicker
+    // asks every call site for (check:style Rule 14).
+    expect(tag.slice(0, tag.indexOf("/>"))).toBe('<CountryPicker label="Other code…" description="Choose another country\'s code for the number, and try again" above onPick={onPickCode} style={OTHER_CODE} ');
   });
   it("is a row of its own under the codes, its menu as wide as the row", () => {
     expect(form).toContain('{codeGrid}<div style={{position:"relative"}}><CountryPicker label="Other code…"');

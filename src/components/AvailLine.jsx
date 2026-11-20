@@ -94,7 +94,7 @@ export function AvailLine({ text, warn, sugg, onTapTime, onAddToWaitlist, checki
           {times.length > 0 ? (
             <span onMouseDown={function (e) { e.preventDefault(); }} style={{ display: "flex", flexWrap: "wrap", flex: "1 1 auto", gap: SP.tight }}>
               {times.map(function (t) {
-                return <TimeChip key={t} time={t} onPick={onTapTime} style={{ flex: "1 1 0", minHeight: H.control, padding: "0 6px" }} />;
+                return <TimeChip key={t} time={t} onPick={onTapTime} style={{ flex: "1 1 0", minHeight: H.control, padding: "0 6px" }} description={"Change the time to " + t + ", when a table is free"} />;
               })}
             </span>
           ) : null}
@@ -103,6 +103,7 @@ export function AvailLine({ text, warn, sugg, onTapTime, onAddToWaitlist, checki
               className="mgt-hover-scale"
               /* v17.10.0: pending amber — the waitlist's colour, see App's badge. */
               style={mkBtn({ flex: wrapped ? "1 1 100%" : "1 1 auto", fontSize: T.body, background: BLOCK_BG.pending, minHeight: H.control, padding: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 })}
+              title="Put this party on the waitlist, to be told when a table is free"
               onClick={function () { onAddToWaitlist(); }}><WaitIcon size={IC.control} />Add to waitlist</button>
           ) : null}
         </span>

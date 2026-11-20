@@ -25,6 +25,7 @@ import { BTN, S, T, FW } from "../lib/constants";
 import { Overlay, mkBtn, mkSolidBtn } from "./atoms";
 import { formatCode, money } from "../lib/vouchers";
 import { formatDay } from "../lib/day";
+import { keyHint } from "../lib/shortcuts";
 
 // "Fri 18.09 at 20:00" — the weekday is what staff actually navigate by. The
 // house date since v18.2.0 (the design critique, C1: `formatDay`), where this
@@ -40,12 +41,14 @@ export function VoucherCarryModal({ carry, currency = "€", onMove, onNotNow })
       <button
         type="button"
         onClick={onNotNow}
+        title={"Leave the voucher open with its balance, to attach by hand later" + keyHint("close")}
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
       >Not now</button>
       <button
         type="button"
         onClick={onMove}
+        title="Attach the voucher to the guest's next booking; it is spent when that one is completed"
         className="mgt-hover-scale mgt-press"
         style={mkSolidBtn(S.accent, { minHeight: 44, padding: "10px 18px" })}
       >Move it</button>

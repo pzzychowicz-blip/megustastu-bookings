@@ -39,6 +39,7 @@ import { AlertPanel, AlertRow } from "./AlertPanel";
 import { SwapIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
 import { sameDraft } from "../lib/drafts";
+import { keyHint } from "../lib/shortcuts";
 
 export function ManualModal({ booking, bookings, onSave, onClose, onDirty, titleText, blocks = [] }) {
   // v18.2.0: seeded with the tables the layout HAS. A booking reaching this
@@ -227,12 +228,14 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         className="mgt-hover-scale"
         style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
         onClick={onClose}
+        title={"Close the table picker, asking first if a table was picked" + keyHint("close")}
       >
         Back
       </button>
       <button
         disabled={!ok}
         onClick={() => { if (ok) onSave(selected, true, isSwapping ? affectedBookings : null); }}
+        title={(isSwapping ? "Give the party these tables, moving the parties on them elsewhere" : "Give the party these tables, and keep them there") + keyHint("confirm")}
         className="mgt-hover-scale"
         style={mkSolidBtn(ok ? (isSwapping ? BTN.orange : S.accent) : "var(--btn-disabled)", {
           cursor: ok ? "pointer" : "not-allowed",
@@ -271,6 +274,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         </div>
         <Toggle
           label="Swap busy"
+          description={"Let a table that is taken be chosen, moving its party elsewhere" + keyHint("manualSwap")}
           on={swapBusy}
           onClick={() => {
             const next = !swapBusy;
@@ -308,6 +312,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
               className="mgt-hover-scale mgt-press"
               style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.quiet })}
               onClick={() => setSelected([])}
+              title={"Clear the tables picked, to pick again" + keyHint("manualClear")}
             >
               Clear
             </button>
