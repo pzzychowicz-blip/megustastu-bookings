@@ -41374,7 +41374,7 @@ full evening with a hand-placed party the optimiser cannot seat).
 Gate on the last fix: main entry 479.00 kB, gzip 141.65 kB (141.39 before the run) · Tests 4681 passed (4669 before) · Lint 63 problems
 (0 errors, 63 warnings) · style invariants OK. No rule changed and nothing stored changed shape (`SCHEMA` stays).
 
-## v18.18.0 — a swap that seats each party only where it needs, the day's notes in the Summary, four interface fixes, the switch's wording, a description on every control, and Reshuffle on every day ahead
+## v18.18.0 — a swap that seats each party only where it needs, the day's notes in the Summary, four interface fixes, the switch's wording, a description on every control, Reshuffle on every day ahead, and buttons that keep their side
 
 **Date:** 2026-11-19 · **Branch:** `feat/v18.18.0-summary-notes-and-swap`
 
@@ -41963,3 +41963,78 @@ every call.
   there wears the orange only while it would help); `src/components/CLAUDE.md` (OptimiserControls, the Summary's
   `showOptimiser`); `src/lib/CLAUDE.md` (`reshuffleOffer`, and why it lives in `booking-logic.js`); `src/CLAUDE.md`
   (the hook-order line).
+
+### Commit 17 — buttons keep their side on the tablet and the phone: the main screen and the banners
+
+- **What (Patryk, 2026-11-20):** a button that sits at the right on a big screen stays at the right on the tablet and
+  the phone, "as much as possible", for muscle memory. He called it a preference, not a rule, so there is no
+  `check:style` rule for it, and no new motion. The phone's bottom bar stays as his v18.2.0 choice left it. This commit
+  covers the main screen and the notification strip; commit 18 the modals, forms, Settings and the inbox. DESIGN.md has
+  a new passage, "A control keeps its side".
+- **The pattern:** a row's trailing controls become ONE group with `marginLeft: "auto"`, in place of
+  `justify-content: space-between`. With a sentence on a content basis (`flex: "1 1 auto"`) taking every spare pixel of
+  a single line, the two give the same layout. Once the sentence needs the whole row and the buttons wrap under it,
+  `space-between` spreads two buttons to the two edges and starts a lone one at the left. A group wraps as one and
+  keeps the right.
+- **Six banners, one change each:** Running late (No show and ✕; the `Presence` that eases No show stays inside the
+  group), Overlap (Reassign, ✕), Clash (Assign, ✕), Not on the grid (Assign), Unsettled (Settle), Table free (Book, ✕).
+- **The survey**, with the headless rig on this worktree (:5179): Daniel Prieto staged running late and Irene Campos on
+  a table that does not exist (99), both restored afterwards.
+
+  | Row | 1440 × 900 | 998 × 507 | 375 × 812 before | 375 × 812 after |
+  |---|---|---|---|---|
+  | Running late | one line, buttons right | one line, buttons right | No show at the left, ✕ at the right, 164px apart | both at the right, 8px apart, flush with the edge |
+  | Not on the grid | one line, Assign right | one line, Assign right | Assign at the left, 144px short of the edge | Assign flush with the right edge |
+
+  At 1440 and 998 the readings are the same before and after. Overlap, Clash, Unsettled and Table free were not
+  staged; they have the same row (a `1 1 auto` sentence, then the buttons) and got the same change, read from source.
+- **Left alone, read from source:** the reminder rows, Couldn't load and Tables could be reshuffled have zero-basis
+  sentences (`flex: 1`), so their buttons never leave the line; Couldn't save already puts its buttons in a
+  `marginLeft:auto` group; the Timeline toolbar's zoom group is v18.14.2's fix; Plan's legend has no right-hand group;
+  the opened Summary's actions row is `flex-end` with the Optimiser group `marginRight: "auto"`, so both sides hold.
+- **The compact header** (`toolbarFolded`, 998 × 507): Follow and zoom sat after the name (`marginRight:"auto"`), on
+  the left, where every larger screen shows them at the right of the Timeline card. On today the header's controls take
+  a line of their own, and v18.4.0 gave that line's left edge to the switcher (Patryk), so two readings of "keep the
+  side" disagree there. Measured:
+
+  | | today, Timeline (two rows) | a later day (one row) |
+  |---|---|---|
+  | before | Follow 180–256 and zoom 260–460 on the name's row; switcher 18–205 on row 2 | zoom 180–380 after the name; switcher 459–645 |
+  | D, the right end of the name's row (my recommendation) | Follow 703–779, zoom 783–982; switcher stays at 18 | zoom 249–449, right before the switcher |
+  | A, first among the controls, before Timeline/List/Plan | Follow 16–92, zoom 96–295 lead row 2; switcher 303–490 | zoom 251–451, right before the switcher |
+
+  Patryk chose A, told that on today it moves the switcher 285px off the left edge his v18.4.0 rule gave it. List, and
+  the actions (Walk-in 653, Find 904–940), are the same in all three.
+- **The fold: a `Reveal` held to its end.** In the new place the group's LEFT edge is the one that moves, because the
+  row holds the switcher still. Held to its start, as every horizontal Reveal was, the group slid toward the switcher
+  as it folded ("+" 415 → 547). `Reveal` takes `end` (`atoms.jsx`), and it took two alignments. In a flex row the
+  Reveal's box is a flex item, so its width resolves first, f × W mid-fold, and the grid then sizes its `fr` track
+  against that width, f × f × W, at the box's start: paused 117ms into a fold, the box was 28px and its track 4px.
+  With the inner track's `flex-end` alone the "+" dipped 46px and came back (the gap is (f − f²) × W, W/4 at its
+  peak). With the outer grid's `justifyContent: "end"` too, it held at x 415 in all 81 frames of a fold and an unfold.
+- **And a box that keeps it from squeezing.** Sampled on "+" alone, a `flexShrink: 0` box around the group read as
+  doing nothing, and I took it out. "+" sits on the pinned edge, so it could not have shown anything. Sampling every
+  button on a later day: without the box, "· Whole day" (a nested Reveal, minimum width 0) gave up 68px as the track narrowed and
+  "−" slid 251 → 320 while "+" held; with it, "−" 251–252, the level button 119px wide and "+" 415 in every frame, both
+  ways. The box is back, pinned, and the trap is in the `mgt-measurement-traps` skill. HEAD squeezed the same way:
+  its "+" moved 344 → 275 in the fold, with the group held to its start.
+- **On today** the header goes from two rows to one as the group folds, and back as it opens, so the controls change
+  line once each way (to List after ~105ms, back to Timeline after ~305ms). Each change shows one frame between the
+  two layouts, `useSharesLine` deciding the actions' `marginLeft:auto` from the previous frame's layout: Follow at
+  125 for one frame going to List, "+" still at 415 on row 2 for one frame coming back. Within each line the group holds
+  still, apart from a 4px settle (Follow 12 → 16 over two frames) as the last of the unfold lands on row 2. HEAD
+  measured the same one-frame step with the switcher, at (415,14) and (459,58). Opacity and width ease both ways on
+  both days.
+- **Unchanged at 1440 × 900 and 375 × 812:** `toolbarFolded` is false there, so the Reveal never mounts (0 inline grids
+  in the header, counted on today and a later day), and Follow and zoom stay in the Timeline card.
+- **Pins:** new in `tests/compact-shell.test.js`, the Reveal first in the header's controls group, before
+  `<ViewSwitcher`, with its `flexShrink:0` box (and the old `marginRight:"auto"` placement gone), and `end`'s two
+  alignments in `atoms.jsx`. **Test edits:** `tests/leaving-order.test.js` pins the whole `Reveal` signature, which
+  `end` joins; `tests/mobile-bar.test.js` found the controls block by `><ViewSwitcher` right after its tag, which the
+  Reveal now comes before, so it is anchored on the tag itself. What it checks is unchanged: no flex basis, and
+  `justifyContent:"flex-end",flexGrow:1`.
+- **Docs:** DESIGN.md ("A control keeps its side", and The compact layout's "What moves"); GLOSSARY (the compact
+  layout row); `src/components/CLAUDE.md` (`Reveal`'s `end`); the `mgt-measurement-traps` skill (a position read on
+  the edge you pinned).
+- **Gate:** 490.38 kB / 145.31 kB gz (from 489.95) · 4789 tests (from 4787) · lint 63 problems (0 errors, 63
+  warnings) · style OK, hover descriptions 0 of ceiling 0.

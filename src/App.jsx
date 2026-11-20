@@ -4147,9 +4147,16 @@ export function BookingApp({uid}){
               style={GEAR_BTN}><CogIcon size={IC.chrome} /><CountBadge n={crashes.count} plus={crashes.more} float background="var(--app-danger-solid)" /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile||compact?T.title:T.display,fontWeight: FW.bold,margin:0,whiteSpace:compact?"nowrap":undefined}}>{generalSettings.restaurantName}</h1>{compact?null:<div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{/* v18.2.0: separators. The double spaces between the three facts were
                 collapsed by HTML to one, so it read "4 indoor 9 outdoor 13:00 -
                 22:00" — one run of numbers (the design critique). A middle dot
-                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))+(viewHours.special?" · "+(viewHours.note||"special day"):"")}</div>}</div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div>{/* v18.14.0 (H7): Follow and zoom on a short screen, after the
-              name (`marginRight` keeps them there), easing out with the Timeline
-              when the view changes. */}<Reveal horizontal speed="move" show={toolbarFolded} style={{marginRight:"auto"}}>{toolbarFolded?<TimelineZoomControls zoom={timelineZoom} setZoom={VA.onSetZoom} maxZoom={tlSettings.maxZoom} followZoom={tlSettings.followZoom} followNow={followNow} setFollowNow={setFollowNow} isToday={viewDate===todayStr()} />:null}</Reveal><div ref={headCtrlRef} style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",justifyContent:"flex-end",flexGrow:1,minWidth:0}}><ViewSwitcher
+                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))+(viewHours.special?" · "+(viewHours.note||"special day"):"")}</div>}</div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div><div ref={headCtrlRef} style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",justifyContent:"flex-end",flexGrow:1,minWidth:0}}>{/* v18.14.0 (H7): Follow and zoom on a short screen, easing out with the
+              Timeline when the view changes. v18.18.0 (Patryk): first in this group,
+              before Timeline/List/Plan, as on a big screen they sit on the right. He
+              chose it knowing that where the group takes a line of its own (today,
+              998 x 507) it leads that line and the switcher moves off its left edge.
+              `end`: the switcher holds still and the group's LEFT edge folds, so the
+              buttons stay put and the edge wipes them (atoms.jsx, Reveal). The
+              `flexShrink: 0` box keeps the fold from squeezing them first: without
+              it "· Whole day" (a Reveal, minimum width 0) gave up its 68px and "−"
+              slid 69px right, measured at 998 x 507. */}<Reveal horizontal end speed="move" show={toolbarFolded}>{toolbarFolded?<div style={{flexShrink:0}}><TimelineZoomControls zoom={timelineZoom} setZoom={VA.onSetZoom} maxZoom={tlSettings.maxZoom} followZoom={tlSettings.followZoom} followNow={followNow} setFollowNow={setFollowNow} isToday={viewDate===todayStr()} /></div>:null}</Reveal><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}

@@ -78,24 +78,29 @@ export function ClashBanner({ pairs, bookings, onAssign, onDismiss, swapKey }) {
     const laterWho = later.name || "(no name)";
     const msg = firstWho + " (" + first.time + ") and " + laterWho + " (" + later.time + ") are both on " + where + ".";
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: "var(--danger-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{msg}</span>
-        <button
-          onClick={function () { onAssign(later.id); }}
-          title={"Choose other tables for " + laterWho + " by hand"}
-          className="mgt-hover-scale"
-          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.tables })}>{"Assign " + laterWho}</button>
-        <button
-          onClick={function () { onDismiss(rowId); }}
-          title={"Hide this warning about " + firstWho + " and " + laterWho}
-          /* v17.15.6: the PAIR, matching `clashRowId`'s own identity — a clash
-             is about two parties, and dismissing "Pau vs Rita" must read
-             differently from "Rita vs a third party", which is the very
-             distinction the dismissal Set is keyed on. See LateBanner for the
-             rule; the Assign button needs nothing, its visible text is a name. */
-          aria-label={"Dismiss the double-booking warning for " + firstWho + " and " + laterWho}
-          className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.quiet })}><CloseIcon size={IC.control} /></button>
+        {/* v18.18.0 (Patryk): the buttons are ONE group, so where the sentence takes
+            the row and they wrap under it, they keep the right together (DESIGN.md,
+            "A control keeps its side"). `space-between` left a lone one at the left. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+          <button
+            onClick={function () { onAssign(later.id); }}
+            title={"Choose other tables for " + laterWho + " by hand"}
+            className="mgt-hover-scale"
+            style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.tables })}>{"Assign " + laterWho}</button>
+          <button
+            onClick={function () { onDismiss(rowId); }}
+            title={"Hide this warning about " + firstWho + " and " + laterWho}
+            /* v17.15.6: the PAIR, matching `clashRowId`'s own identity — a clash
+               is about two parties, and dismissing "Pau vs Rita" must read
+               differently from "Rita vs a third party", which is the very
+               distinction the dismissal Set is keyed on. See LateBanner for the
+               rule; the Assign button needs nothing, its visible text is a name. */
+            aria-label={"Dismiss the double-booking warning for " + firstWho + " and " + laterWho}
+            className="mgt-hover-scale mgt-press"
+            style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.quiet })}><CloseIcon size={IC.control} /></button>
+        </div>
       </div>
     );
   }

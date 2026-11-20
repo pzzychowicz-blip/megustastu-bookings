@@ -2023,9 +2023,14 @@ the first table row from 253px down to 162, which is 5 tables on opening instead
   top of the header's buttons under it. 8px did, on the tablet's installed app and
   not in its Chrome tab, which has no strip. At 998 × 507 the 4px cost no table row.
 - **What moves, on a lone Timeline only** (`toolbarFolded`): Follow and zoom into the
-  header, after the name, on a horizontal `Reveal` so they leave and return with the
-  view. Optimiser and Reshuffle into the opened Summary, left of its own actions. In
-  a split each pane keeps its own toolbar.
+  header, first among its controls, right before Timeline / List / Plan (v18.18.0; after
+  the name until then, which put them on the opposite side from every larger screen).
+  They ride a horizontal `Reveal` held to its `end`, so they leave and return with the
+  view and stay still while their left edge folds. Where the controls take a line of
+  their own (today, at 998 × 507) Follow and zoom lead that line, and the switcher
+  moves 285px off the left edge v18.4.0 gave it: Patryk chose that knowing it.
+  Optimiser and Reshuffle go into the opened Summary, left of its own actions, the
+  side they have in the toolbar. In a split each pane keeps its own toolbar.
 - **The inbox gets the same treatment (correction 9, Patryk):** a conversation is
   there to be read. At 998 × 507 the title bar, the filter row and a header that
   wrapped left the message no height at all, with a draft open. So with two panes
@@ -2037,6 +2042,27 @@ the first table row from 253px down to 162, which is 5 tables on opening instead
   it is the half nobody reaches for mid-service.
 - **It is a breakpoint, not a transition**, like `isMobile`. A screen does not change
   height in service, and on Android the keyboard can only flip it behind a modal.
+
+### A control keeps its side (v18.18.0)
+A button that sits at the right on a large screen stays at the right on the tablet and
+the phone, as far as the room allows, and the same for the left. Patryk asked for it on
+2026-11-20 for muscle memory: whoever learned No show at the right of the row on one
+screen reaches to the right on the next. **It is a preference, not a rule**, so
+`check:style` does not hold it, and a layout that cannot keep a side may give it up.
+
+- **The pattern: the trailing controls are ONE group with `marginLeft: "auto"`.** On
+  one line that is the layout `justify-content: space-between` gives. Once the row
+  wraps it is not: `space-between` puts a lone item at the START of its line, and
+  buttons placed one by one after a sentence each land wherever the wrap leaves them.
+  A group wraps as one and keeps the right. If the group can wrap inside itself, give
+  it `justifyContent: "flex-end"` too.
+- **Measured on the banners at 375 × 812 (commit 17):** Running late put No show at
+  the left and its ✕ at the right, 164px apart, and Not on the grid put Assign at the
+  left. After, both groups end at the row's right edge, 8px between the buttons. At
+  998 and 1440 nothing moved, because those rows never wrapped there.
+- **Two places that give it up:** the phone's bottom bar, which holds Walk-in and
+  + New where a thumb reaches them (v18.2.0, Patryk's choice), and the switcher's left
+  edge on the compact header, which Follow and zoom take (The compact layout, above).
 
 ### Press feedback — universal, opt-OUT (v17.8.0)
 Every `button` dips to `scale(0.96)` on `:active`; `.mgt-hover-scale` buttons dip

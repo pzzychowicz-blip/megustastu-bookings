@@ -1187,7 +1187,7 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // screen reader's attention. One attribute does all three, where the WA list's
 // departing row needed `pointer-events`, a `tabIndex` and a click guard, and
 // was still announced. A real boolean, for App's `anyModal` reason.
-export function Reveal({ show, children, style, horizontal = false, speed = "reveal", presentational = false, inert = false }) {
+export function Reveal({ show, children, style, horizontal = false, end = false, speed = "reveal", presentational = false, inert = false }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [mounted, setMounted] = useState(show === true);
@@ -1264,14 +1264,33 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
   // wrappers draw; the state still drives a re-open.
   const isOpen = show && open;
   const isRevealed = show && revealed;
+  // v18.18.0: `end` holds a horizontal Reveal's content to its END edge, for one
+  // whose START edge is the one that moves: a group right before the controls it
+  // sits beside, which a right-anchored row holds still (the header's Follow and
+  // zoom). It takes TWO alignments, because the fraction is applied twice. In a
+  // flex row the outer box is a flex item, so its width resolves to a definite
+  // f x W mid-fold, and the grid then sizes its `fr` track against THAT width,
+  // f x f x W, at the box's start. Measured at 998 x 507, 117ms into the fold:
+  // the box 28px wide, its track 4px. The inner track's `flex-end` puts the
+  // content at the track's end, and the outer's `end` puts the track at the
+  // box's end. With both, the zoom group's "+" held at x 415 in every frame,
+  // folding and unfolding. With only the first it dipped 46px left and came
+  // back (the gap peaks at W/4, f = 1/2); with neither it slid 132px right,
+  // toward the switcher.
+  // Neither stops content that CAN shrink from shrinking: the inner track is a
+  // flex row, so as it narrows a child gives up whatever it can before the clip
+  // hides anything. The zoom group's "· Whole day" is a Reveal of minimum width
+  // 0, and gave up 68px, which moved "−" 69px with "+" still. So the header puts
+  // the group in a `flexShrink: 0` box. Read every edge: the end you pin cannot
+  // move, so it cannot show a squeeze.
   const track = horizontal
-    ? { display: "inline-grid", gridTemplateColumns: isOpen ? "1fr" : "0fr", transition: "grid-template-columns " + ease + ", opacity " + ease }
+    ? { display: "inline-grid", gridTemplateColumns: isOpen ? "1fr" : "0fr", justifyContent: end ? "end" : undefined, transition: "grid-template-columns " + ease + ", opacity " + ease }
     : { display: "grid", gridTemplateRows: isOpen ? "1fr" : "0fr", transition: "grid-template-rows " + ease + ", opacity " + ease };
   // v16.1.1: the horizontal inner track is a flex box (align-items:center) so the
   // revealed child is vertically centred without an inherited-font line-box strut
   // dropping it below its flex-row siblings (the timeline chip-vs-name misalign).
   const innerStyle = horizontal
-    ? { overflow: isRevealed ? "visible" : "hidden", minWidth: 0, minHeight: 0, display: "flex", alignItems: "center" }
+    ? { overflow: isRevealed ? "visible" : "hidden", minWidth: 0, minHeight: 0, display: "flex", alignItems: "center", justifyContent: end ? "flex-end" : undefined }
     // `minWidth: 0` is the horizontal counterpart of the `minHeight: 0` beside
     // it, and it is load-bearing: the inner track is a GRID ITEM, whose default
     // `min-width: auto` resolves to its content's MIN-CONTENT width. Wrap

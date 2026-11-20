@@ -52,11 +52,15 @@ describe("the connection dot on a phone", () => {
 });
 
 // v18.4.0 (Patryk): on a line of their own the controls split, the view
-// switcher left and the actions with the dot right.
+// switcher left and the actions with the dot right. v18.18.0 commit 17
+// (Patryk): on the compact Timeline, Follow and zoom lead that line, before the
+// switcher (compact-shell.test.js pins the order).
 describe("the header's controls on their own line", () => {
   it("is measured, and never by changing the block's flex basis", () => {
     expect(App).toMatch(/const headCtrlOwnLine=useSharesLine\(headerRef,headTitleRef,headCtrlRef\)\.same===false;/);
-    const block = App.match(/<div ref=\{headCtrlRef\} style=\{\{([^}]*)\}\}><ViewSwitcher/);
+    // Anchored on the block's own tag since v18.18.0 commit 17; it was anchored on
+    // `><ViewSwitcher`, which the zoom group's Reveal now comes before.
+    const block = App.match(/<div ref=\{headCtrlRef\} style=\{\{([^}]*)\}\}>/);
     expect(block, "the controls block").not.toBeNull();
     // A basis of 100% would keep the block on its own line for good.
     expect(block[1]).not.toMatch(/flexBasis|flex:/);

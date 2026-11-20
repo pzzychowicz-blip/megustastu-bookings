@@ -47,13 +47,18 @@ export function UnplacedBanner({ items, onAssign, swapKey }) {
     const size = Number(b.size) || 2;
     const msg = who + " (" + b.time + ", " + guestsLabel(size) + ") — " + unplacedPhrase(u) + ".";
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: "var(--danger-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{msg}</span>
-        <button
-          onClick={function () { onAssign(b.id); }}
-          title={"Choose tables for " + who + " by hand"}
-          className="mgt-hover-scale"
-          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.tables })}>{"Assign " + who}</button>
+        {/* v18.18.0 (Patryk): where the sentence takes the row and the button wraps
+            under it, it keeps the right (DESIGN.md, "A control keeps its side").
+            `space-between` left it at the left. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+          <button
+            onClick={function () { onAssign(b.id); }}
+            title={"Choose tables for " + who + " by hand"}
+            className="mgt-hover-scale"
+            style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.tables })}>{"Assign " + who}</button>
+        </div>
       </div>
     );
   }

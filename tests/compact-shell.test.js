@@ -61,6 +61,26 @@ describe("the toolbar has one home at a time", () => {
   it("keeps Follow and zoom on the right when they wrap to a line of their own", () => {
     expect(Timeline).toContain('<div style={{ marginLeft: "auto" }}>{zoomBtns}</div>');
   });
+  // v18.18.0 commit 17 (Patryk): on the folded header they lead the controls,
+  // right before Timeline/List/Plan, where after the name they sat on the left
+  // of a screen that shows them on the right everywhere else.
+  it("puts Follow and zoom first in the header's controls, before Timeline/List/Plan", () => {
+    const group = App.slice(App.indexOf("ref={headCtrlRef}"), App.indexOf("<ViewSwitcher"));
+    expect(group).toContain('<Reveal horizontal end speed="move" show={toolbarFolded}>');
+    // The box that keeps the fold from squeezing "· Whole day" first (measured:
+    // without it "−" slid 69px while "+" held).
+    expect(group).toContain("{toolbarFolded?<div style={{flexShrink:0}}><TimelineZoomControls ");
+    expect(App).not.toContain('show={toolbarFolded} style={{marginRight:"auto"}}');
+  });
+  // The group's LEFT edge is the one that folds there, so the Reveal holds its
+  // content to the end, and that takes two alignments: in a flex row the box's
+  // width resolves first, and the grid then applies the fraction to it again
+  // (measured: a 28px box, a 4px track). Either one alone and the buttons move.
+  it("a Reveal held to its end aligns its track AND its content there", () => {
+    const atoms = read("components/atoms.jsx");
+    expect(atoms).toContain('justifyContent: end ? "end" : undefined');
+    expect(atoms).toContain('justifyContent: end ? "flex-end" : undefined');
+  });
   it("the Summary takes scalars and stable functions, never an element (its memo)", () => {
     expect(App).not.toMatch(/optimiser=\{</i);
     expect(SummarySrc).toMatch(/<OptimiserControls autoOptimizer=\{autoOptimizer\}/);

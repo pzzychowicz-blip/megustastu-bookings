@@ -52,26 +52,31 @@ export function UnsettledBanner({ bookings, vouchersByCode, currency = "€", on
     const who = b.name || "(no name)";
     const left = v ? remainingOf(v) : 0;
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: "var(--warn-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>
           {who + " (" + b.time + ") completed with voucher " + formatCode(code)
             + " still unrecorded — " + money(left, currency) + " on it."}
         </span>
-        <button
-          onClick={function () { onOpen(b.id); }}
-          title="Say how much of the voucher the bill used"
-          className="mgt-hover-scale"
-          // The visible text LEADS and the disambiguator follows (v17.15.4):
-          // "Settle" is what a voice-control user can say, and the name is what
-          // tells sixty rows apart.
-          // v18.2.0 phase 58 (round 3's V-5): the NAME is in the accessible name
-          // only. On screen it read "Settle Unsettled Probe" (163px), where the
-          // strip's other rows say "Book" or "No show" and the sentence beside
-          // the button already names the party.
-          aria-label={"Settle " + who + "'s voucher"}
-          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>
-          Settle
-        </button>
+        {/* v18.18.0 (Patryk): where the sentence takes the row and the button wraps
+            under it, it keeps the right (DESIGN.md, "A control keeps its side").
+            `space-between` left it at the left. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+          <button
+            onClick={function () { onOpen(b.id); }}
+            title="Say how much of the voucher the bill used"
+            className="mgt-hover-scale"
+            // The visible text LEADS and the disambiguator follows (v17.15.4):
+            // "Settle" is what a voice-control user can say, and the name is what
+            // tells sixty rows apart.
+            // v18.2.0 phase 58 (round 3's V-5): the NAME is in the accessible name
+            // only. On screen it read "Settle Unsettled Probe" (163px), where the
+            // strip's other rows say "Book" or "No show" and the sentence beside
+            // the button already names the party.
+            aria-label={"Settle " + who + "'s voucher"}
+            style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>
+            Settle
+          </button>
+        </div>
       </div>
     );
   }

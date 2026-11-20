@@ -50,22 +50,27 @@ export function LateBanner({ lateMap, bookings, nowMins, today = "", onNoShow, o
     // voice-control user saying what they can read.
     const who = b.name || "(no name)";
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: "var(--warn-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{b.name + " (" + b.time + ") — " + countLabel(lateMins(b, nowMins, today), "min") + " late"}</span>
-        <Presence show={offerNoShow} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span">
+        {/* v18.18.0 (Patryk): the buttons are ONE group, so where the sentence takes
+            the row and they wrap under it, they keep the right together (DESIGN.md,
+            "A control keeps its side"). `space-between` left a lone one at the left. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+          <Presence show={offerNoShow} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span">
+            <button
+              onClick={function () { onNoShow(id); }}
+              aria-label={"No show (" + who + ")"}
+              title={"Cancel " + who + "'s booking as a no-show"}
+              className="mgt-hover-scale"
+              style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange, display: "inline-flex", alignItems: "center", gap: 6 })}><NoShowIcon size={IC.control} />No show</button>
+          </Presence>
           <button
-            onClick={function () { onNoShow(id); }}
-            aria-label={"No show (" + who + ")"}
-            title={"Cancel " + who + "'s booking as a no-show"}
-            className="mgt-hover-scale"
-            style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange, display: "inline-flex", alignItems: "center", gap: 6 })}><NoShowIcon size={IC.control} />No show</button>
-        </Presence>
-        <button
-          onClick={function () { onDismiss(id); }}
-          aria-label={"Dismiss the running-late alert for " + who}
-          title={"Hide this alert for " + who}
-          className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.quiet })}><CloseIcon size={IC.control} /></button>
+            onClick={function () { onDismiss(id); }}
+            aria-label={"Dismiss the running-late alert for " + who}
+            title={"Hide this alert for " + who}
+            className="mgt-hover-scale mgt-press"
+            style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.quiet })}><CloseIcon size={IC.control} /></button>
+        </div>
       </div>
     );
   }
