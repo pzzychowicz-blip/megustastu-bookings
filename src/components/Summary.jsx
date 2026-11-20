@@ -19,15 +19,17 @@
 //
 // v14.6.0.
 
-import { useMemo, memo } from "react";
+import { useMemo, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
-import { daySummary, countLabel, depositSummary, depositParts } from "../lib/booking-logic";
+import { daySummary, countLabel, depositSummary, depositParts, guestsLabel } from "../lib/booking-logic";
 import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC, SP, H } from "../lib/constants";
-import { mkBtn, Reveal, TBadge, TurnChevron } from "./atoms";
+import { dayNotes } from "../lib/day-notes";
+import { mkBtn, Reveal, TBadge, SizeRing, TurnChevron, textWidth } from "./atoms";
 import { OptimiserControls } from "./OptimiserControls";
 // v17.9.0: the local `hh` was one of six copies of this label — see lib/time-grid.js.
 import { hourLabel as hh } from "../lib/time-grid";
 import { PrintIcon } from "./Icons";
+import { keyHint } from "../lib/shortcuts";
 function coversLabel(n){ return countLabel(n, "cover", "covers"); }
 function bookingsLabel(n){ return countLabel(n, "booking", "bookings"); }
 
@@ -58,11 +60,148 @@ function FreeingEntry({ f }) {
   );
 }
 
+// ── The day's notes (v18.18.0, Patryk) ───────────────────────────────────────
+// First in the opened panel: every booking of the day with a note or a tag,
+// each with the booking it belongs to, and a tap on one opens that booking.
+// Which bookings, in what order and what each says are `dayNotes`
+// (lib/day-notes.js); the note is the day sheet's Notes cell (`DaySheet.jsx`),
+// the tags in bold, then the note.
+//
+// COLUMNS (Patryk, 2026-11-19: "align vertically in columns the time, name of
+// the guest, tables, number of guests", the List as the reference): time ·
+// name · size · tables · the note, the size right after the name as on the List
+// card, the timeline block and the day sheet, and the size as the List's ring.
+// Each column is as wide as the widest of its kind in the list, measured in the
+// font it is drawn in (`textWidth`, Find a booking's `widest`), so every row's
+// cells start at the same x and a short list leaves no gap. The name is capped
+// at NOTE_NAME_CAP and wraps inside it, never clipped (the List's rule). The
+// note fills the rest; where that is under NOTE_MIN (a phone) it takes a line
+// of its own under the name, and with the same widths in every row it does so
+// in every row, so the columns still line up. The time stays its own column on
+// both. The cells sit on one BASELINE, so the time, the name, the ring's number,
+// the badges' ids and the note's first line read as one line of text.
+//
+// Each row is a button whose text is its name (no `aria-label`, so the visible
+// text is what a screen reader and a voice-control user both have). The ring
+// and the badges show bare numbers, so a hidden word goes with each ("2
+// guests", "table 1"), and `title` says what a tap does. It takes the tint, not
+// the lift: a lift would be clipped when the panel scrolls (src/CLAUDE.md), and
+// the press dip slid a row this wide inward (Find a booking's reason).
+const NOTE_TIME_FONT = { fontWeight: FW.bold, fontSize: T.body };
+const NOTE_NAME_FONT = { fontWeight: FW.semi, fontSize: T.body };
+// TBadge's own font, and what its box adds to the id: 10px of padding and a
+// 1px border each side (atoms.jsx).
+const NOTE_BADGE_FONT = { fontWeight: FW.semi, fontSize: T.body };
+const NOTE_BADGE_EDGE = 22;
+const NOTE_NAME_CAP = 160;
+const NOTE_COL_GAP = SP.wide;
+const NOTE_MIN = 200;
+const NO_NAME = "(no name)";
+// The columns' widths for this list, or `{}` (each cell its natural width)
+// with no canvas: a test importing this file. The font stack is read from
+// <body> once, as the List's `nameWidth` does: it never changes, and the panel
+// re-renders with every booking change.
+let noteFamily = null;
+function noteColumns(notes) {
+  if (typeof document === "undefined") return {};
+  if (!noteFamily) noteFamily = getComputedStyle(document.body).fontFamily;
+  const w = function (s, f) { return textWidth(s, f.fontWeight, f.fontSize + "px", noteFamily); };
+  let time = 0, name = 0, tables = 0;
+  notes.forEach(function (n) {
+    time = Math.max(time, w(n.time, NOTE_TIME_FONT));
+    name = Math.max(name, w(n.name || NO_NAME, NOTE_NAME_FONT));
+    tables = Math.max(tables, n.tables.reduce(function (sum, id, i) {
+      return sum + w(String(id), NOTE_BADGE_FONT) + NOTE_BADGE_EDGE + (i ? SP.tight : 0);
+    }, 0));
+  });
+  return { time: time || undefined, name: name ? Math.min(NOTE_NAME_CAP, name) : undefined, tables: tables || undefined };
+}
+function NotesList({ notes, onEdit }) {
+  const cols = noteColumns(notes);
+  return (
+    <div style={{ marginBottom: SP.wide }}>
+      <div style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: SP.snug }}>
+        {"Notes "}<span style={{ fontWeight: FW.regular, color: "var(--text-muted)" }}>{"(" + notes.length + ")"}</span>
+      </div>
+      {notes.map(function (n, i) {
+        return <NoteRow key={n.id} n={n} cols={cols} last={i === notes.length - 1} onEdit={onEdit} />;
+      })}
+    </div>
+  );
+}
+function NoteRow({ n, cols, last, onEdit }) {
+  return (
+    <button /* @no-lift a row as wide as the panel, which scrolls when it is taller than the screen: .mgt-ac-row tints it through --row-bg */
+      type="button"
+      onClick={function () { onEdit(n.booking); }}
+      title={"Open " + (n.name ? n.name + "'s booking" : "this booking")}
+      className="mgt-ac-row mgt-nopress"
+      style={{
+        display: "flex", alignItems: "baseline", columnGap: NOTE_COL_GAP,
+        width: "100%", boxSizing: "border-box", textAlign: "left",
+        padding: "8px 12px", marginBottom: last ? 0 : SP.snug, cursor: "pointer",
+        "--row-bg": "var(--bg-input)", "--row-bg-hover": "var(--bg-hover-card)",
+        border: "1px solid var(--border-soft)", borderRadius: R.inset,
+        fontSize: T.body, color: "var(--text-primary)"
+      }}>
+      <span style={{ ...NOTE_TIME_FONT, width: cols.time, flexShrink: 0 }}>{n.time}</span>
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "baseline", columnGap: NOTE_COL_GAP, rowGap: SP.tight }}>
+        <span style={{ ...NOTE_NAME_FONT, flex: cols.name ? "0 1 " + cols.name + "px" : "0 1 auto", minWidth: 0, overflowWrap: "anywhere" }}>{n.name || NO_NAME}</span>
+        <span style={{ flexShrink: 0 }}>
+          {/* The List card's rim: the ring's own 0.55 white is measured
+              against a saturated block and all but vanishes on a card. */}
+          <span aria-hidden="true"><SizeRing n={n.size} rim="var(--chip-neutral-border)" /></span>
+          <span className="mgt-sr-only">{guestsLabel(n.size)}</span>
+        </span>
+        <span style={{ width: cols.tables, flexShrink: 0, display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: SP.tight }}>
+          {n.tables.length ? <span className="mgt-sr-only">{n.tables.length > 1 ? "tables" : "table"}</span> : null}
+          {n.tables.map(function (t) { return <TBadge key={t} id={t} />; })}
+        </span>
+        <span style={{ flex: "1 1 " + NOTE_MIN + "px", minWidth: 0, color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
+          {n.tags ? <span style={{ fontWeight: FW.bold, color: "var(--text-primary)" }}>{n.tags}</span> : null}
+          {n.tags && n.note ? " — " : ""}
+          {n.note}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+// v18.18.0 (Patryk): in the pinned layout (Lock navigation, Split View) the
+// opened body stops at the bottom of the screen and scrolls inside, notes first
+// and in full, and the view below gives way while it is open. App makes its slot
+// a column that may shrink (`fit` is its `shellFixed`); this is the scroller in
+// it, a flex item that shrinks with it (a scroll container's minimum height is
+// 0). It wraps the Reveal, so the Reveal stays a plain block and eases exactly
+// as before: made a flex item itself, its `fr` row would be sized against its
+// own flexed height and the card would lag the space it opens.
+//
+// The scroller clips what it holds, the card's shadow (`--shadow-soft`, a 12px
+// blur) included, so it pads both sides by that reach and takes it back with
+// negative margins: the card keeps its place and its side shadows. Above the
+// card the shadow now stops at the card's own top edge, the one place a gutter
+// would have to reach into the date row. Measured on the tablet: Print and More
+// were 63px below the screen without it.
+const SHADOW_REACH = SP.wide;
+const FIT_SCROLL = {
+  flex: "0 1 auto", minHeight: 0, overflowY: "auto",
+  paddingLeft: SHADOW_REACH, paddingRight: SHADOW_REACH,
+  marginLeft: -SHADOW_REACH, marginRight: -SHADOW_REACH
+};
+
 // v17.1.0 perf: React.memo — Summary sits in the always-visible date-nav row,
 // so it used to re-render on every BookingApp render. Function props are App's
 // stable VA wrappers; hoursSig/layoutSig are identity-only props that bust the
 // memo on an hours/layout edit (hoursFor + TOTAL_SEATS are live bindings).
-export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, unplacedCount = 0, currency, onToggle, onOpenWeek, onPrint, onSpecialHours, compact = false, showOptimiser = false, autoOptimizer = true, setAutoOptimizer, onReshuffle , bodySlot = null}) {
+//
+// v18.18.0: `guestTags` is App's `guestTagMap` memo and `tagList` its state,
+// so both change only with what they read; `onEdit` is `VA.onEdit`; `fit` is a
+// boolean.
+export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, unplacedCount = 0, currency, onToggle, onOpenWeek, onPrint, onSpecialHours, compact = false, showOptimiser = false, reshuffleLit = false, autoOptimizer = true, setAutoOptimizer, onReshuffle , bodySlot = null, guestTags = null, tagList = null, onEdit = null, fit = false}) {
+  // v18.18.0: another day opens at its top, its notes first, rather than
+  // wherever the last day's panel was scrolled to.
+  const scrollRef = useRef(null);
+  useEffect(function () { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [date]);
   // v17.1.0 perf: Summary lives in the always-visible date-nav row, so this
   // used to walk all bookings on EVERY BookingApp render; memoized.
   const s = useMemo(() => daySummary(bookings, date, splitHour), [bookings, date, splitHour]);
@@ -72,6 +211,9 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
   // is a scalar prop (settings/general), so the memo sees a change of it.
   const dep = useMemo(() => depositSummary(bookings, date), [bookings, date]);
   const depParts = depositParts(dep, currency || "€");
+  // v18.18.0: the day's notes, listed first in the opened body. Only with a
+  // way to open a booking: a row that could not would be a button doing nothing.
+  const notes = useMemo(() => (onEdit ? dayNotes(bookings, date, guestTags, tagList) : []), [onEdit, bookings, date, guestTags, tagList]);
   // v15.0.0: per-weekday hours. The Afternoon/Evening split is ONE global value, so
   // on a day whose window excludes it (or a closed day) the two shift chips are
   // meaningless — hide them and show only the hourly bars. Read hoursFor(date) so
@@ -98,6 +240,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
         background: "var(--bg-soft)", border: "1px solid var(--border-soft)",
         borderRadius: R.card, boxShadow: "var(--shadow-soft)"
       }}>
+        {notes.length ? <NotesList notes={notes} onEdit={onEdit} /> : null}
         {hasData ? (
           <div>
             {showShifts ? (
@@ -164,7 +307,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                 keep their places at the right. */}
             {showOptimiser ? (
               <div style={{ marginRight: "auto" }}>
-                <OptimiserControls autoOptimizer={autoOptimizer} setAutoOptimizer={setAutoOptimizer} onReshuffle={onReshuffle} />
+                <OptimiserControls autoOptimizer={autoOptimizer} setAutoOptimizer={setAutoOptimizer} onReshuffle={onReshuffle} isToday={isToday} lit={reshuffleLit} />
               </div>
             ) : null}
             {/* v18.10.0: this date's own hours — a special day (closed, or
@@ -174,19 +317,21 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
             {onSpecialHours ? (
               <button
                 onClick={onSpecialHours}
+                title="Give this day hours of its own, or close it"
                 className="mgt-hover-scale mgt-press"
                 style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.quiet })}>Hours for this day</button>
             ) : null}
             {onPrint ? (
               <button
                 onClick={onPrint}
+                title="Print the day sheet, the timeline or both"
                 className="mgt-hover-scale mgt-press"
                 style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.quiet, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={IC.control} />Print</button>
             ) : null}
             {onOpenWeek ? (
               <button
                 onClick={onOpenWeek}
-                title="Week & month at a glance (M)"
+                title={"See the week and the month at a glance, with their numbers" + keyHint("more")}
                 className="mgt-hover-scale mgt-press"
                 style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.quiet })}>More</button>
             ) : null}
@@ -195,6 +340,9 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
       </div>
     </Reveal>
   );
+  // v18.18.0: always this wrapper, so turning Lock navigation on or off changes
+  // a style and never remounts the Reveal inside it.
+  const placed = <div ref={scrollRef} style={fit ? FIT_SCROLL : undefined}>{body}</div>;
 
   return (
     <>
@@ -232,6 +380,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
         <button /* @no-lift pre-existing, not reviewed for v18.0.0 */
           onClick={onToggle}
           aria-expanded={open}
+          title={"Show or hide the day's numbers and notes" + keyHint("summary")}
           /* v18.4.0 (Patryk): no press dip, Collapsible's reason: this button
              is the width of the headline, and at 96% its text slid inward and
              back on every tap. The panel's own tint answers the press. */
@@ -312,6 +461,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
           <button /* @no-lift pre-existing, not reviewed for v18.0.0 */
             onClick={onToggle}
             aria-label={open ? "Collapse summary" : "Expand summary"}
+            title={"Show or hide the day's numbers and notes" + keyHint("summary")}
             style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: T.small, color: "var(--text-muted)", fontWeight: FW.bold, flexShrink: 0,
               /* v17.8.0: was padding "4px 2px", giving a 13x21px hit area — the
                  smallest target in the app, on the control that opens the day's
@@ -323,7 +473,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
         </div>
       </div>
     </div>
-    {bodySlot ? createPortal(body, bodySlot) : body}
+    {bodySlot ? createPortal(placed, bodySlot) : placed}
     </>
   );
 });
@@ -334,7 +484,7 @@ function ShiftChip({ label, covers, count }) {
     <div style={{
       flex: "1 1 160px", minWidth: 150,
       padding: "8px 12px",
-      background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset
+      background: "var(--bg-input)", border: "1px solid var(--border-soft)", borderRadius: R.inset
     }}>
       <div style={{ fontSize: T.small, fontWeight: FW.medium, color: "var(--text-muted)", marginBottom: 2 }}>{label}</div>
       <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)" }}>{coversLabel(covers)}</div>

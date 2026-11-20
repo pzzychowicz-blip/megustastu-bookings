@@ -9,10 +9,11 @@
 // one per outcome, each asserting what is ASKED or what is WRITTEN.
 import { describe, it, expect, vi } from "vitest";
 import { planDelete, planUndo, planCustomerDelete, withUndoDelta, movedNames, moveSentence, landedSentence, deleteWords, cancelWords } from "../src/lib/delete-undo.js";
-import { undoSnapshots } from "../src/lib/booking-logic.js";
+import { undoSnapshots, syncLiveDurations, sanitize } from "../src/lib/booking-logic.js";
+import { planReshuffle } from "../src/lib/manual-assign.js";
 import { guestTagMap, guestTagsOf } from "../src/lib/customers.js";
 import { sanitizeVoucher } from "../src/lib/vouchers.js";
-import { todayStr } from "../src/lib/day.js";
+import { todayStr, addDays } from "../src/lib/day.js";
 import { appCode } from "./app-source.js";
 
 const TODAY = todayStr();
@@ -191,6 +192,100 @@ describe("planUndo", () => {
     const T = tomorrow.toISOString().slice(0, 10);
     const plan = undo({ snapshots: [bk("x", "13:00", ["1"], { date: T })], primaryId: "elsewhere", kind: "edit" });
     expect(plan.date).toBe(T);
+  });
+});
+
+// ── v18.18.0 commit 16: a Reshuffle is always taken back by Undo ─────────────
+// Reshuffle now runs on today and every later day, whatever the Optimiser switch
+// says (Patryk: "Make sure the Reshuffle run can be reverted by Undo"). Each case
+// runs App's own pipeline end to end: `planReshuffle`, the write through
+// `withUndoDelta` with App's `undoDelta` (the prev side synced first), and the
+// Undo through `planUndo`, which restores the snapshots verbatim, with no
+// Optimiser pass (that is what makes it safe on a day the Optimiser owns). The
+// fixtures go through `sanitize`, the shape every stored booking is read in: a
+// hand-made row lacks the flags a pass writes, and they would read as moves.
+describe("a Reshuffle, undone", () => {
+  const D = addDays(TODAY, 2);
+  const NOW = 600;
+  const stored = (id, time, size, tables, extra) => sanitize(Object.assign(
+    { id, name: id.toUpperCase(), date: D, time, size, duration: 90, status: "confirmed", tables, history: [] }, extra || {}));
+  const asMap = (list) => Object.fromEntries(list.map((b) => [b.id, b]));
+  // saveMove's write and armUndo's info, then undoLastAction's plan.
+  function reshuffleThenUndo(list, ctx) {
+    const nowMins = (ctx && ctx.nowMins) || NOW;
+    const plan = planReshuffle(Object.assign({ viewDate: D, tableBlocks: [], today: TODAY, nowMins, bookings: list, user: "u@x", stamp }, ctx || {}));
+    const move = withUndoDelta(plan.transform, (prev, post) => undoSnapshots(syncLiveDurations(prev, TODAY, nowMins), post));
+    const post = move.transform(list);
+    const delta = move.delta();
+    const undo = planUndo({ info: delta.length ? { snapshots: delta, primaryId: null, kind: "reshuffle" } : null, getUser: () => "u@x", nowMins, stamp });
+    return { plan, post, delta, undo, back: undo ? undo.transform(post) : null };
+  }
+  // Four parties a keep pass left where they were put: each moves on a fresh pass.
+  const scattered = () => [
+    stored("a", "19:00", 2, ["13"]), stored("b", "19:00", 2, ["12"]),
+    stored("c", "19:00", 4, ["10", "11"]), stored("d", "20:00", 2, ["9"]),
+  ];
+
+  it("a later day: every party moved, and Undo puts every one back as it was", () => {
+    const list = scattered();
+    const r = reshuffleThenUndo(list);
+    expect(r.delta.map((b) => b.id).sort()).toEqual(["a", "b", "c", "d"]);
+    const before = asMap(list);
+    r.post.forEach((b) => expect(b.tables.join("+"), b.id).not.toBe(before[b.id].tables.join("+")));
+    expect(asMap(r.back)).toEqual(asMap(list));
+  });
+
+  it("the Undo takes the view back to the reshuffled day, from wherever it is pressed", () => {
+    expect(reshuffleThenUndo(scattered()).undo.date).toBe(D);
+  });
+
+  it("Reshuffle and unlock: the tables, the lock, the hand-placed flag and the history all come back", () => {
+    const list = [stored("drag", "19:00", 2, ["13"], { _locked: true, _manual: true })].concat(scattered().slice(1));
+    const r = reshuffleThenUndo(list, { unlock: true });
+    const freed = r.post.find((b) => b.id === "drag");
+    expect(freed._locked).toBe(false);
+    expect(freed.history).toEqual([{ action: "unlocked by Reshuffle", by: "u@x" }]);
+    const back = asMap(r.back).drag;
+    expect(back).toEqual(list[0]);
+    expect(back.history).toEqual([]);
+    expect(asMap(r.back)).toEqual(asMap(list));
+  });
+
+  it("today: a seated party running over is not in the Undo, and everyone else comes back", () => {
+    const nowMins = 15 * 60 + 20;
+    const T = planReshuffle({ viewDate: TODAY, tableBlocks: [], today: TODAY, nowMins: 600 })
+      .transform([stored("x", "15:15", 2, [], { date: TODAY })])[0].tables;
+    const list = [
+      stored("sat", "13:00", 2, T, { date: TODAY, status: "seated" }),   // booked to 14:30
+      stored("next", "15:15", 2, ["9"], { date: TODAY }),
+      stored("n2", "15:15", 2, ["13"], { date: TODAY }),
+    ];
+    const r = reshuffleThenUndo(list, { viewDate: TODAY, nowMins });
+    expect(r.delta.map((b) => b.id).sort()).toEqual(["n2", "next"]);
+    expect(r.undo.date).toBe(TODAY);
+    // Every write syncs a seated party's live duration, the Undo's too: what comes
+    // back is the day as the screen showed it before the press.
+    expect(asMap(r.back)).toEqual(asMap(syncLiveDurations(list, TODAY, nowMins)));
+    expect(asMap(r.back).sat.tables).toEqual(T);
+  });
+
+  it("a day with nothing to gain moves nobody, so there is no Undo to offer", () => {
+    const settled = reshuffleThenUndo(scattered()).post;
+    const r = reshuffleThenUndo(settled);
+    expect(r.delta).toEqual([]);
+    expect(r.undo).toBe(null);
+  });
+
+  it("a held Reshuffle that replays on a fresher list undoes to the fresher list", () => {
+    const list = scattered();
+    const plan = planReshuffle({ viewDate: D, tableBlocks: [], today: TODAY, nowMins: NOW, bookings: list, user: "u@x", stamp });
+    const move = withUndoDelta(plan.transform, (prev, post) => undoSnapshots(syncLiveDurations(prev, TODAY, NOW), post));
+    move.transform(list);
+    // Meanwhile another device put b on table 11 by hand and locked it.
+    const fresh = list.map((b) => (b.id === "b" ? Object.assign({}, b, { tables: ["11"], _manual: true, _locked: true }) : b));
+    const post = move.transform(fresh);
+    const back = planUndo({ info: { snapshots: move.delta(), primaryId: null, kind: "reshuffle" }, getUser: () => "u@x", nowMins: NOW, stamp }).transform(post);
+    expect(asMap(back)).toEqual(asMap(fresh));
   });
 });
 

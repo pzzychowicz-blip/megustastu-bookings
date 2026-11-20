@@ -1133,6 +1133,11 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         role={leaving ? undefined : "button"}
         tabIndex={leaving ? -1 : 0}
         aria-label={leaving ? undefined : a11yLabel}
+        /* v18.18.0 (Part 2 batch 3): the hover description. This wrapper is
+           most of the block, so its title is what a resting mouse finds, and
+           the innermost title wins: it carries the tags the outer `title`
+           shows, or they would be seen only over the rail's edges. */
+        title={leaving ? undefined : "Open " + (b.name || "(no name)") + "'s booking to edit it; right-click for its status, drag to move it" + (tags ? " · " + tags : "")}
         onKeyDown={leaving ? undefined : (e) => {
           if (e.key !== "Enter" && e.key !== " ") return;
           e.preventDefault();
@@ -1239,7 +1244,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         type="button"
         tabIndex={leaving ? -1 : undefined}
         onClick={leaving ? undefined : (e) => { e.stopPropagation(); onManual(b.id); }}
-        title="Assign tables"
+        title={"Choose tables for " + (b.name || "(no name)") + " by hand"}
         aria-label={"Assign tables for " + b.name}
         style={{
           padding: "0 6px", cursor: "pointer", position: "relative",
@@ -1598,9 +1603,12 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
       onClick={leaving ? undefined : () => onBook(g.id)}
       /* v18.2.0 phase 43 (C2): the hover title says "25 guests", as the
          spoken label above it does — it said "(25)", which phase 38's sweep
-         for "pax" could not see. */
-      title={"Waiting: " + g.name + ", " + guestsLabel(g.size) + ", at " + g.time
-        + (g.resh ? " — fits after re-optimising" : "") + ". Tap to book."}
+         for "pax" could not see.
+         v18.18.0 (Part 2 batch 3, Patryk): rewritten to the hover rules, a
+         verb first and no full stop. It read "Waiting: …. Tap to book.", and
+         a tooltip is a mouse's. */
+      title={"Book " + g.name + " from the waitlist: " + guestsLabel(g.size) + ", at " + g.time
+        + (g.resh ? ", fits after re-optimising" : "")}
       style={{
         // Geometry, radius, border, shadow: TimelineBlock's, verbatim.
         position: "absolute", top: 3, height: (sz.rowH - 8) + "px",
@@ -1778,6 +1786,7 @@ function CellMarker({ ref, sz, totalMins, onOpen }) {
         tabIndex={-1}
         aria-hidden={shown ? undefined : true}
         aria-label={"New booking, table " + cell.tableId + ", " + cell.time}
+        title={"Start a new booking at table " + cell.tableId + ", " + cell.time}
         onClick={() => { setShown(false); onOpen(cell.tableId, cell.time); }}
         style={{
           position: "absolute", top: 0, height: "100%",
@@ -1854,6 +1863,12 @@ export const TimelineView = memo(function TimelineView({
   onDropPreview = null, // v18.14.0 (H5): what a drop on a row would do (App's previewDrop)
   onDropCheck = null,   // v18.14.0 (correction 17): the same, with the real plan (App's checkDrop)
   onReshuffle = () => {},
+  // v18.18.0 commit 16: App's `reshuffleOffer`, as two SCALARS for React.memo.
+  // `reshuffleOn` draws Reshuffle (today and every later day, never a past one),
+  // `reshuffleLit` paints it orange (today with the Optimiser off, or while the
+  // "Tables could be reshuffled" check fires).
+  reshuffleOn = false,
+  reshuffleLit = false,
   // v17.6.0: separation between bookings, in minutes (0 = feature off). A SCALAR
   // from App rather than the TURN_BUFFER live binding, because React.memo cannot
   // see a live binding — the same reason hoursSig/layoutSig exist.
@@ -2959,8 +2974,10 @@ export const TimelineView = memo(function TimelineView({
       zoom={zoom} setZoom={setZoom} maxZoom={maxZoom} followZoom={followZoom}
       followNow={followNow} setFollowNow={setFollowNow} isToday={isToday} />
   );
-  const optBtns = isToday ? (
-    <OptimiserControls autoOptimizer={autoOptimizer} setAutoOptimizer={setAutoOptimizer} onReshuffle={onReshuffle} />
+  // v18.18.0 commit 16: on today and every later day (App decides, `reshuffleOn`);
+  // the Optimiser toggle inside it is today's alone.
+  const optBtns = reshuffleOn ? (
+    <OptimiserControls autoOptimizer={autoOptimizer} setAutoOptimizer={setAutoOptimizer} onReshuffle={onReshuffle} isToday={isToday} lit={reshuffleLit} />
   ) : null;
 
   // ── Legend chips (status colours + indoor/outdoor + blocked) ─────────────

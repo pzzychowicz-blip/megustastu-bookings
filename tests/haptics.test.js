@@ -88,6 +88,6 @@ describe("where it is wired", () => {
     expect(toggle).not.toMatch(/saveUserPrefs/);
     const settings = code("components/Settings.jsx");
     expect(settings).toMatch(/\{canVibrate\(\) \? \(/);
-    expect(settings).toMatch(/<Toggle label="Vibrate on drag" on=\{vibrateOnDrag\} onClick=\{onToggleVibrate\} \/>/);
+    expect(settings).toMatch(/<Toggle label="Vibrate on drag" description="[^"]+" on=\{vibrateOnDrag\} onClick=\{onToggleVibrate\} \/>/);
   });
 });

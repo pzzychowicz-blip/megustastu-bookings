@@ -792,10 +792,13 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
 // the pixel, hence the @canvas mark. Inline in App the same literal passed
 // check:style unseen: the rule reads only the FIRST `padding:` on a line, and
 // that line's first was the button's own, on the scale.
-export function CountBadge({ n, background, float = false, srText, plus = false }) {
+// `id` (v18.18.0) is for a control whose `aria-label` silences its contents, the
+// inbox's Needs action: it points `aria-describedby` here, and only while the
+// count shows, since at zero there is no element to point at.
+export function CountBadge({ n, background, float = false, srText, plus = false, id }) {
   if (!(typeof n === "number" && n > 0)) return null;
   return (
-    <span style={Object.assign({
+    <span id={id} style={Object.assign({
       minWidth: 18, height: 18, padding: "0 5px",   /* @canvas */ borderRadius: R.pill,
       background, color: "var(--text-on-accent)", fontSize: T.small, fontWeight: FW.bold,
       display: "inline-flex", alignItems: "center", justifyContent: "center",
@@ -1066,6 +1069,7 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
       <button /* @no-lift .mgt-ac-row carries its own hover treatment via --row-bg */
         type="button"
         aria-expanded={open}
+        title={typeof title === "string" ? "Show or hide the " + title + " section" : undefined}
         /* v18.4.0 (Patryk): `mgt-nopress`. The header is a button element, so the
            universal press dip shrank a row hundreds of px wide to 96% and its
            title slid inward and back on every tap ("the text looks sharp").
@@ -1183,7 +1187,7 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // screen reader's attention. One attribute does all three, where the WA list's
 // departing row needed `pointer-events`, a `tabIndex` and a click guard, and
 // was still announced. A real boolean, for App's `anyModal` reason.
-export function Reveal({ show, children, style, horizontal = false, speed = "reveal", presentational = false, inert = false }) {
+export function Reveal({ show, children, style, horizontal = false, end = false, speed = "reveal", presentational = false, inert = false }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [mounted, setMounted] = useState(show === true);
@@ -1260,14 +1264,33 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
   // wrappers draw; the state still drives a re-open.
   const isOpen = show && open;
   const isRevealed = show && revealed;
+  // v18.18.0: `end` holds a horizontal Reveal's content to its END edge, for one
+  // whose START edge is the one that moves: a group right before the controls it
+  // sits beside, which a right-anchored row holds still (the header's Follow and
+  // zoom). It takes TWO alignments, because the fraction is applied twice. In a
+  // flex row the outer box is a flex item, so its width resolves to a definite
+  // f x W mid-fold, and the grid then sizes its `fr` track against THAT width,
+  // f x f x W, at the box's start. Measured at 998 x 507, 117ms into the fold:
+  // the box 28px wide, its track 4px. The inner track's `flex-end` puts the
+  // content at the track's end, and the outer's `end` puts the track at the
+  // box's end. With both, the zoom group's "+" held at x 415 in every frame,
+  // folding and unfolding. With only the first it dipped 46px left and came
+  // back (the gap peaks at W/4, f = 1/2); with neither it slid 132px right,
+  // toward the switcher.
+  // Neither stops content that CAN shrink from shrinking: the inner track is a
+  // flex row, so as it narrows a child gives up whatever it can before the clip
+  // hides anything. The zoom group's "· Whole day" is a Reveal of minimum width
+  // 0, and gave up 68px, which moved "−" 69px with "+" still. So the header puts
+  // the group in a `flexShrink: 0` box. Read every edge: the end you pin cannot
+  // move, so it cannot show a squeeze.
   const track = horizontal
-    ? { display: "inline-grid", gridTemplateColumns: isOpen ? "1fr" : "0fr", transition: "grid-template-columns " + ease + ", opacity " + ease }
+    ? { display: "inline-grid", gridTemplateColumns: isOpen ? "1fr" : "0fr", justifyContent: end ? "end" : undefined, transition: "grid-template-columns " + ease + ", opacity " + ease }
     : { display: "grid", gridTemplateRows: isOpen ? "1fr" : "0fr", transition: "grid-template-rows " + ease + ", opacity " + ease };
   // v16.1.1: the horizontal inner track is a flex box (align-items:center) so the
   // revealed child is vertically centred without an inherited-font line-box strut
   // dropping it below its flex-row siblings (the timeline chip-vs-name misalign).
   const innerStyle = horizontal
-    ? { overflow: isRevealed ? "visible" : "hidden", minWidth: 0, minHeight: 0, display: "flex", alignItems: "center" }
+    ? { overflow: isRevealed ? "visible" : "hidden", minWidth: 0, minHeight: 0, display: "flex", alignItems: "center", justifyContent: end ? "flex-end" : undefined }
     // `minWidth: 0` is the horizontal counterpart of the `minHeight: 0` beside
     // it, and it is load-bearing: the inner track is a GRID ITEM, whose default
     // `min-width: auto` resolves to its content's MIN-CONTENT width. Wrap
@@ -2420,7 +2443,13 @@ export function SmallTag({ label, style }) {
 // ("Active" / "Inactive") makes one control read as two. It has no default: a
 // default here would be a silent twenty-first answer to a question every call
 // site has to answer for itself, which is `ModalTitle`'s `background` lesson.
-export function Toggle({ on, onClick, label, disabled = false }) {
+//
+// `description` (v18.18.0, Part 2) is its hover tooltip, the switch's `title`:
+// what turning it on does, a verb first ("Show the Summary panel open when the
+// app starts"). No default, for `label`'s reason; check:style Rule 14 fails a
+// call site without one. It never states the switch's state — `aria-checked`
+// says that, and a tooltip that read "On" would be wrong half the time.
+export function Toggle({ on, onClick, label, description, disabled = false }) {
   return (
     <button
       onClick={onClick}
@@ -2433,6 +2462,7 @@ export function Toggle({ on, onClick, label, disabled = false }) {
       role="switch"
       aria-checked={!!on}
       aria-label={label}
+      title={description}
       className="mgt-hover-scale"
       style={{
         width: 48, height: 26,   /* @canvas */ borderRadius: R.pill,
@@ -2521,7 +2551,11 @@ export function Kbd({ k }) {
 // where a browser has none); a tap on the input keeps its native behaviour.
 // `weekdayShort` is "" for exactly what the input refuses to display, so a blank
 // date — Book Again opens with one — shows no weekday either.
-export function DateField({ value, onChange, style, inputProps }) {
+//
+// `description` (v18.18.0, Part 2) is the hover tooltip, on the pill AND the
+// input: the pill's weekday and padding are the control too, and a tooltip is
+// read from the element under the mouse. What the date is for, a verb first.
+export function DateField({ value, onChange, style, inputProps, description }) {
   const inputRef = useRef(null);
   const wd = weekdayShort(value);
   // v18.0.0 session 8: read-only is read off `inputProps` rather than taken as
@@ -2538,6 +2572,7 @@ export function DateField({ value, onChange, style, inputProps }) {
   return (
     <div
       className="mgt-hover-scale mgt-datefield"
+      title={description}
       onClick={ro ? undefined : openPicker}
       style={Object.assign({ display: "flex", alignItems: "center", gap: SP.snug, cursor: ro ? "default" : "pointer" }, style)}
     >
@@ -2548,6 +2583,7 @@ export function DateField({ value, onChange, style, inputProps }) {
         type="date"
         value={value}
         onChange={onChange}
+        title={description}
         {...inputProps}
         style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", color: "inherit", font: "inherit", padding: SP.none, margin: SP.none, boxShadow: "none" }}
       />
@@ -2597,7 +2633,11 @@ export function DateField({ value, onChange, style, inputProps }) {
 // mkInp already produces, so a SearchField and a DateField still line up on one
 // row. Sizing by what a mistake COSTS (the v17.9.0 rule) puts this well under
 // the 44px floor: a mis-tap here costs retyping a word.
-export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, style }) {
+//
+// `description` (v18.18.0, Part 2) is the field's hover tooltip: what the search
+// looks through, a verb first ("Search guests by name, phone or tag"). The ✕
+// carries its own.
+export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, description, style }) {
   const base = mkInp();
   const has = String(value == null ? "" : value).length > 0;
   // The ✕ unmounts the moment it does its job, so whatever had focus goes with
@@ -2639,6 +2679,7 @@ export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, 
         value={value}
         onChange={onChange}
         aria-label={ariaLabel}
+        title={description}
         placeholder={placeholder}
         style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", color: "inherit", font: "inherit", padding: SP.none, margin: SP.none, boxShadow: "none" }}
       />
@@ -2651,6 +2692,7 @@ export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, 
             if (ownRef.current) ownRef.current.focus();
           }}
           aria-label="Clear search"
+          title="Empty the search box"
           style={{
             flexShrink: 0, display: "grid", placeItems: "center",
             width: H.chip, height: H.chip, padding: SP.none,

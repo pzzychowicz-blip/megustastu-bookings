@@ -26,9 +26,14 @@ import { useRef, useEffect } from "react";
 import { BTN, T, IC, H } from "../lib/constants";
 import { mkBtn, Presence, SEG_TRACK, segStyle } from "./atoms";
 import { beginHold } from "../lib/holdSelection";
+import { keyHint } from "../lib/shortcuts";
 import { CloseIcon, SplitSideIcon, SplitStackIcon, SwapIcon } from "./Icons";
 
 const ORD = ["timeline", "list", "plan"];
+// v18.18.0 (Part 2): each button's hover description and the shortcut row that
+// names its key. The split gesture is added only where it works.
+const VIEW_WORD = { timeline: "Timeline: the day as rows of tables", list: "List: the day's bookings as cards", plan: "Plan: the floor at a chosen time" };
+const VIEW_KEY = { timeline: keyHint("viewTimeline"), list: keyHint("viewList"), plan: keyHint("viewPlan") };
 const HOLD_MS = 450;
 const MOVE_CANCEL_PX = 8;
 
@@ -140,7 +145,7 @@ export function ViewSwitcher({
           onPointerCancel={clearPress}
           aria-pressed={isActive(v)}
           aria-current={isFocusedPaneView(v) ? "true" : undefined}
-          title={gesturesOn ? "Right-click or hold to add to a split view" : undefined}
+          title={gesturesOn ? "Show the " + VIEW_WORD[v] + "; right-click or hold to add it to a split view" + VIEW_KEY[v] : "Show the " + VIEW_WORD[v] + VIEW_KEY[v]}
           style={Object.assign(
             segStyle(isActive(v)),
             { textTransform: "capitalize", minHeight: H.chrome, padding: "6px 14px" },

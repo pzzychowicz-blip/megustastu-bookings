@@ -37,17 +37,24 @@ export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
     // Reassign button below needs nothing — `w.next` is the incoming party's
     // name, so its VISIBLE text already differs per row.
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: rowTxt, fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{msg}</span>
-        <button
-          onClick={function () { onReassign(w.nextId); }}
-          className="mgt-hover-scale"
-          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>{"Reassign " + w.next}</button>
-        <button
-          onClick={function () { onDismiss(id); }}
-          aria-label={"Dismiss the overstay warning for " + (sb.name || "(no name)")}
-          className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.quiet })}><CloseIcon size={IC.control} /></button>
+        {/* v18.18.0 (Patryk): the buttons are ONE group, so where the sentence takes
+            the row and they wrap under it, they keep the right together (DESIGN.md,
+            "A control keeps its side"). `space-between` left a lone one at the left. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+          <button
+            onClick={function () { onReassign(w.nextId); }}
+            title={"Move " + w.next + " to tables that are free when they arrive"}
+            className="mgt-hover-scale"
+            style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>{"Reassign " + w.next}</button>
+          <button
+            onClick={function () { onDismiss(id); }}
+            aria-label={"Dismiss the overstay warning for " + (sb.name || "(no name)")}
+            title={"Hide this warning for " + (sb.name || "(no name)")}
+            className="mgt-hover-scale mgt-press"
+            style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.quiet })}><CloseIcon size={IC.control} /></button>
+        </div>
       </div>
     );
   }

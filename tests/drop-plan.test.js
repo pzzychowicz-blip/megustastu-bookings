@@ -13,8 +13,8 @@ import { fileURLToPath } from "node:url";
 import { planDrop, dropPreview, dropCheck, planRetime, retimePreview, retimeCheck } from "../src/lib/drop-plan.js";
 import { releaseSwapped } from "../src/lib/booking-save.js";
 import { movedNames, planUndo, landedSentence, retimeLabel, retimeSentence } from "../src/lib/delete-undo.js";
-import { ALL_TABLES, KITCHEN_TABLE_LIMIT, hoursFor } from "../src/lib/constants.js";
-import { comboCapBest, undoSnapshots, lastStartMins, toTime, toMins, verifyClean } from "../src/lib/booking-logic.js";
+import { ALL_TABLES, VALID_COMBOS, KITCHEN_TABLE_LIMIT, hoursFor } from "../src/lib/constants.js";
+import { comboCapBest, fewestWithin, undoSnapshots, lastStartMins, toTime, toMins, verifyClean } from "../src/lib/booking-logic.js";
 import { todayStr, addDays } from "../src/lib/day.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { appCode } from "./app-source.js";
@@ -146,6 +146,95 @@ describe("planDrop: one party in the way", () => {
       .map((t, i) => bk("x" + i, "19:00", 2, [t], { _manual: true, _locked: true }));
     const list = [bk("a", "19:00", 2, []), bk("b", "19:00", 2, ["4"])].concat(others);
     expect(drop(list, "a", "4")).toEqual({ refuse: "Can't re-seat the parties there without stranding one — use Manual assign." });
+  });
+});
+
+// v18.18.0 (Patryk, 2026-11-19): a swap traded the two parties' WHOLE sets, so Noel
+// (1, on 9) dropped on row 1 beside Seba (4, on 1+2) sat on 1+2 alone, and the
+// table Noel did not need stayed taken. Each side now takes only what it needs of
+// the other's set (`fewestWithin`), the dragged party the row it was dropped on.
+describe("planDrop: a swap gives each party only the tables it needs (v18.18.0)", () => {
+  // The joined set a party of 4 takes at row 3, and a single table that seats 4
+  // apart from it, so the test names no combination.
+  const PAIR = byId(drop([bk("p", "19:00", 4, ["8"])], "p", "3").transform([bk("p", "19:00", 4, ["8"])]), "p").tables;
+  const BIG = ALL_TABLES.find((t) => t.capacity >= 4 && !PAIR.includes(t.id)).id;
+  const day = () => [bk("a", "19:00", 1, [BIG], { name: "Noel" }), bk("b", "19:00", 4, PAIR, { name: "Seba" })];
+  const ctx = (list, id, targetId) => ({ id, targetId, liveBookings: list, bookings: list, viewDate: D, nowMins: 600, today: TODAY, tableBlocks: [], autoOptimizer: true });
+
+  it("the fixture: a joined set, and a single table that seats the four", () => {
+    expect(PAIR.length).toBe(2);
+    expect(PAIR).not.toContain(BIG);
+  });
+
+  it("the party of 1 takes only the row it was dropped on, and the 4 takes its table", () => {
+    PAIR.forEach((row) => {
+      const list = day();
+      const plan = drop(list, "a", row);
+      expect(plan.done).toBe("Noel and Seba — tables swapped.");
+      const out = plan.transform(list);
+      expect(byId(out, "a").tables).toEqual([row]);
+      expect(byId(out, "b").tables).toEqual([BIG]);
+      expect(byId(out, "a").history[0].action).toBe("swapped tables with Seba (" + BIG + " → " + row + ")");
+      expect(byId(out, "b").history[0].action).toBe("swapped tables with Noel (" + PAIR.join("+") + " → " + BIG + ")");
+      // The other row of the pair is nobody's now.
+      const freed = PAIR.find((t) => t !== row);
+      expect(out.some((b) => (b.tables || []).includes(freed))).toBe(false);
+      expect(verifyClean(out, D)).toBe(true);
+    });
+  });
+
+  it("the row says it is a swap before the release, as it did", () => {
+    const list = day();
+    expect(dropPreview(ctx(list, "a", PAIR[0]))).toEqual({ tone: "warn", text: "Swaps with Seba" });
+    expect(dropCheck(ctx(list, "a", PAIR[0]))).toEqual({ tone: "warn", text: "Swaps with Seba" });
+  });
+
+  it("dragged the other way, the party of 1 is left one table of the pair, not both", () => {
+    const list = day();
+    const out = drop(list, "b", BIG).transform(list);
+    expect(byId(out, "b").tables).toEqual([BIG]);
+    expect(byId(out, "a").tables).toHaveLength(1);
+    expect(PAIR).toContain(byId(out, "a").tables[0]);
+  });
+
+  it("two parties that each need their whole set still trade whole sets", () => {
+    const list = [bk("a", "19:00", 4, [BIG]), bk("b", "19:00", 4, PAIR)];
+    const out = drop(list, "a", PAIR[0]).transform(list);
+    expect(byId(out, "a").tables).toEqual(PAIR);
+    expect(byId(out, "b").tables).toEqual([BIG]);
+  });
+
+  // Generated days with parties on joined sets, which the agreement test's days never
+  // hold. Whatever a swap writes, neither party keeps a table it does not need.
+  it("over generated days, every swap leaves both parties on the fewest tables that seat them", () => {
+    const ids = ALL_TABLES.map((t) => t.id);
+    const joined = VALID_COMBOS.filter((c) => c.ids.length <= 3).map((c) => c.ids);
+    let x = 4099;
+    const r = () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; };
+    const pick = (a) => a[Math.floor(r() * a.length)];
+    let swaps = 0, trimmed = 0;
+    for (let n = 0; n < 400; n++) {
+      const list = Array.from({ length: 2 + Math.floor(r() * 4) }, (_, i) => bk("b" + i,
+        pick(["19:00", "19:15", "19:30"]), 1 + Math.floor(r() * 6), r() < 0.5 ? pick(joined).slice() : [pick(ids)]));
+      const id = pick(list).id, targetId = pick(ids);
+      const plan = drop(list, id, targetId);
+      if (!plan || !plan.done || !/tables swapped/.test(plan.done)) continue;
+      swaps++;
+      const out = plan.transform(list);
+      // A swap writes a history line on its two parties and on nobody else.
+      const moved = out.filter((b) => b.history.length > 0);
+      expect(moved).toHaveLength(2);
+      moved.forEach((b) => {
+        // What this party had to choose from: the other party's set as it was.
+        const from = byId(list, moved.find((o) => o.id !== b.id).id).tables;
+        expect(b.tables.every((t) => from.includes(t)), "inside the set it traded for").toBe(true);
+        expect(comboCapBest(b.tables), "seats the party").toBeGreaterThanOrEqual(b.size);
+        expect(fewestWithin(b.tables, b.size).length, "nothing smaller inside seats it").toBe(b.tables.length);
+        if (b.tables.length < from.length) trimmed++;
+      });
+    }
+    expect(swaps, "swaps reached").toBeGreaterThan(20);
+    expect(trimmed, "a swap that trims reached").toBeGreaterThan(0);
   });
 });
 

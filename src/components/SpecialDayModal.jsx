@@ -22,6 +22,7 @@ import { hourLabel } from "../lib/time-grid";
 import { countLabel } from "../lib/booking-logic";
 import { specialDayRefusal, affectedBookings, clampHours, rangeLabel, SPECIAL_NOTE_MAX } from "../lib/special-days";
 import { markArmed, armSettled } from "../lib/arm-guard";
+import { keyHint } from "../lib/shortcuts";
 import { Overlay, ModalTitle, Section, Fld, DateField, InlineAlert, Reveal, AutoHeight, SEG_TRACK, segStyle, mkBtn, mkSolidBtn, mkDangerBtn, mkInp, mkSel } from "./atoms";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { ClosedIcon, TrashIcon } from "./Icons";
@@ -82,6 +83,7 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
         <button
           className="mgt-hover-scale"
           style={mkDangerBtn({ minHeight: H.touch, padding: "10px 18px", marginRight: "auto" })}
+          title={armed ? "Remove this special day: the dates go back to their weekday's hours" : "Remove this special day (asks for a second tap)"}
           onClick={() => {
             if (!armed) { markArmed(); setArmed(true); return; }
             if (!armSettled()) return;
@@ -94,11 +96,13 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
         className="mgt-hover-scale"
         style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: BTN.quiet })}
         onClick={() => onClose(false)}
+        title={"Close without saving, asking first if anything changed" + keyHint("close")}
       >Cancel</button>
       <button
         className="mgt-hover-scale"
         style={mkSolidBtn("var(--accent)")}
         onClick={save}
+        title="Save these hours for the dates; bookings already made on them are kept"
       >{saveLabel}</button>
     </div>
   );
@@ -112,11 +116,11 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
       <Section>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
           <Fld label="From">{(fid) => (
-            <DateField value={draft.from} onChange={(e) => change({ from: e.target.value })}
+            <DateField value={draft.from} onChange={(e) => change({ from: e.target.value })} description="The first day these hours apply"
               style={mkInp()} inputProps={{ id: fid, min: today }} />
           )}</Fld>
           <Fld label="To">{(fid) => (
-            <DateField value={draft.to} onChange={(e) => change({ to: e.target.value })}
+            <DateField value={draft.to} onChange={(e) => change({ to: e.target.value })} description="The last day these hours apply; the same as From for one day"
               style={mkInp()} inputProps={{ id: fid, min: draft.from || today }} />
           )}</Fld>
         </div>
@@ -125,7 +129,7 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
         <Fld label="Hours">
           <div role="group" aria-label="Closed or open" style={{ ...SEG_TRACK, alignSelf: "flex-start", marginBottom: 10 }}>
             {[[true, "Closed"], [false, "Open"]].map(([v, lbl]) => (
-              <button key={lbl} type="button" className="mgt-hover-scale" aria-pressed={draft.closed === v}
+              <button key={lbl} type="button" className="mgt-hover-scale" title={v ? "Close the restaurant on these dates" : "Open on these dates, with the hours below"} aria-pressed={draft.closed === v}
                 onClick={() => change({ closed: v })}
                 style={{ ...segStyle(draft.closed === v), padding: "6px 16px", minHeight: H.chrome }}>{lbl}</button>
             ))}
@@ -134,13 +138,13 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
               <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: T.body, color: S.muted }}>
                 Opens
-                <select value={draft.open} onChange={(e) => change({ open: Number(e.target.value) })} className="mgt-hover-scale" style={mkSel()}>
+                <select value={draft.open} onChange={(e) => change({ open: Number(e.target.value) })} title="The hour the restaurant opens on these dates" className="mgt-hover-scale" style={mkSel()}>
                   {OPEN_HOURS.map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
                 </select>
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: T.body, color: S.muted }}>
                 Closes
-                <select value={draft.close} onChange={(e) => change({ close: Number(e.target.value) })} className="mgt-hover-scale" style={mkSel()}>
+                <select value={draft.close} onChange={(e) => change({ close: Number(e.target.value) })} title="The hour the restaurant closes on these dates" className="mgt-hover-scale" style={mkSel()}>
                   {Array.from({ length: 25 - draft.open }, (_, i) => draft.open + 1 + i).map((h) => <option key={h} value={h}>{closeLabel(h)}</option>)}
                 </select>
               </label>
@@ -153,6 +157,7 @@ export function SpecialDayModal({ initial, exceptions, bookings, today, onSave, 
           <input id={fid} type="text" value={draft.note || ""} maxLength={SPECIAL_NOTE_MAX}
             placeholder="e.g. Christmas, private event" enterKeyHint="done"
             onChange={(e) => change({ note: e.target.value })}
+            title="Why these dates differ; shown with the day's hours"
             className="mgt-hover-scale" style={mkInp()} />
         )}</Fld>
       </Section>

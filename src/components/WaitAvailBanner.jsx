@@ -41,18 +41,25 @@ export function WaitAvailBanner({ entries, availability, onBook, onDismiss, }) {
     // is exactly the case a waitlist produces.
     const who = w.name || "(no name)";
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: "var(--success-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{who + " · " + guestsLabel(w.size) + " — table free" + (avail && avail.time ? " · " + avail.time : "")}</span>
-        <button
-          onClick={function () { onBook(w); }}
-          aria-label={"Book (" + who + ", " + guestsLabel(w.size) + ")"}
-          className="mgt-hover-scale"
-          style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: "var(--app-walkin)" })}>Book</button>
-        <button
-          onClick={function () { onDismiss(id); }}
-          aria-label={"Dismiss the table-free alert for " + who}
-          className="mgt-hover-scale mgt-press"
-          style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.quiet })}><CloseIcon size={IC.control} /></button>
+        {/* v18.18.0 (Patryk): the buttons are ONE group, so where the sentence takes
+            the row and they wrap under it, they keep the right together (DESIGN.md,
+            "A control keeps its side"). `space-between` left a lone one at the left. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+          <button
+            onClick={function () { onBook(w); }}
+            aria-label={"Book (" + who + ", " + guestsLabel(w.size) + ")"}
+            title={"Open a booking for " + who + " on the free table"}
+            className="mgt-hover-scale"
+            style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: "var(--app-walkin)" })}>Book</button>
+          <button
+            onClick={function () { onDismiss(id); }}
+            aria-label={"Dismiss the table-free alert for " + who}
+            title={"Hide this alert for " + who}
+            className="mgt-hover-scale mgt-press"
+            style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.quiet })}><CloseIcon size={IC.control} /></button>
+        </div>
       </div>
     );
   }

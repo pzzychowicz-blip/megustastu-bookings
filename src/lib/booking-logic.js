@@ -791,6 +791,34 @@ export function rankCombosContaining(tableId,size){
       return a.ids.join("|")<b.ids.join("|")?-1:1;
     });
 }
+// v18.18.0 (Patryk): the fewest tables INSIDE `set` that seat `size` — one table
+// that does, else a declared combo all of whose tables are in the set — for a
+// drag's swap (lib/drop-plan.js, `swapOf`). A swap traded the two parties' whole
+// sets, so a party of 1 dropped on row 1 next to a party of 4 on 1+2 took both
+// tables, and nothing ever gave one back: the dragged party is locked, and the
+// swap runs no optimiser pass.
+//   Ties: the most tables in `prefer` (the row the party was dropped on), then the
+// fewest seats, then the drop's own combo preference (`_comboPriKey`), then the
+// layout's table order, so two devices trim alike. A set where nothing smaller
+// seats the party comes back as it is, which is what the swap wrote before.
+export function fewestWithin(set,size,prefer){
+  const ids=(set||[]).slice(),want=prefer||[];
+  if(ids.length<2) return ids;
+  const order=function(id){const i=ALL_TABLES.findIndex(function(t){return t.id===id;});return i<0?ALL_TABLES.length:i;};
+  const fits=ALL_TABLES.filter(function(t){return ids.includes(t.id)&&t.capacity>=size;}).map(function(t){return {ids:[t.id],cap:t.capacity,pri:0};})
+    .concat(VALID_COMBOS.filter(function(c){return c.cap>=size&&c.ids.every(function(id){return ids.includes(id);});}).map(function(c){return {ids:c.ids.slice(),cap:c.cap,pri:_comboPriKey(c)};}));
+  if(!fits.length) return ids;
+  const inPrefer=function(f){return f.ids.filter(function(id){return want.includes(id);}).length;};
+  const first=function(f){return Math.min.apply(null,f.ids.map(order));};
+  fits.sort(function(a,b){
+    if(a.ids.length!==b.ids.length) return a.ids.length-b.ids.length;
+    if(inPrefer(a)!==inPrefer(b)) return inPrefer(b)-inPrefer(a);
+    if(a.cap!==b.cap) return a.cap-b.cap;
+    if(a.pri!==b.pri) return a.pri-b.pri;
+    return first(a)-first(b);
+  });
+  return fits[0].ids.length<ids.length?fits[0].ids:ids;
+}
 
 // ── Best-table finders ────────────────────────────────────────────────────────
 export function findBest(size,pref,s,e,slots){
@@ -835,6 +863,23 @@ export function findBest(size,pref,s,e,slots){
   var st2=bandSingle();if(st2) return st2;
   if(co.length) return co[0].ids;
   return null;
+}
+// v18.18.0 (Patryk, the Table priorities plan's Part B): can a size rule's switch,
+// "Then try joined tables before other single tables" (`combosFirst`), change what
+// `findBest` above picks? Only if a table OUTSIDE the rule's Prefer list seats the
+// rule's smallest party. A preferred table that fails step 1 failed the very tests
+// a single must pass there (it seats the party, its zone is allowed, it is free), so
+// it is never among the other singles; and a table too small for the smallest party
+// is too small for every party the rule covers. With no other single in play, both
+// orders reach the same joined tables, or none. An Avoid table counts: it is a single
+// the switch orders against joined tables (with the switch off it comes BEFORE them,
+// measured). True does not promise a difference (no joined tables may be free); false
+// is a promise, held over generated layouts and days by tests/booking-logic.test.js.
+// `tables` is the layout's `{id, capacity}` list: Settings passes the stored one.
+export function joinFirstMatters(band,tables){
+  const prefer=(band&&Array.isArray(band.prefer))?band.prefer:[];
+  const min=band&&Number.isFinite(band.min)?band.min:1;
+  return (tables||[]).some(function(t){return prefer.indexOf(t.id)<0&&(Number(t.capacity)||0)>=min;});
 }
 export function findBestAny(size,s,e,slots){
   var r=findBest(size,"outdoor",s,e,slots)||findBest(size,"indoor",s,e,slots);
@@ -1346,6 +1391,30 @@ export function optimizerActiveFor(date,autoOptimizerState){
   var today=todayStr();
   if(date===today&&autoOptimizerState===false) return false;
   return true;
+}
+// ── reshuffleOffer: where the Reshuffle button shows, and when it is orange ──
+// v18.18.0 commit 16 (Patryk). Since v18.17.0 the Optimiser keeps the day
+// (`applyOptKeep`): on every later day, and on today with the switch ON, a save
+// places only its own party, so the day drifts from the best fit and a fresh
+// pass happens only through Reshuffle (`planReshuffle`, manual-assign.js). So the
+// button is offered on today and every later day, whatever the switch says. A
+// past day's service is over, and it is offered nothing there.
+//
+//   reshuffleOffer({viewDate, today, autoOptimizer, suggest}) → null | { lit }
+//
+// `lit` is the orange: today with the Optimiser off (the only way the day gets
+// optimised then, orange as it always was), or `suggest`, App's "Tables could
+// be reshuffled" check with the Settings switch on. Dismissing the notice does
+// not reach this: it hides the notice for the day and the button stays orange.
+// Grey otherwise. Dates are "YYYY-MM-DD", so they compare as strings.
+// It lives here, beside `optimizerActiveFor` and `unlockOffered`, because the R
+// key asks it too (lib/shortcuts.js), and shortcuts.js already imports this file:
+// importing manual-assign.js there moved ~21 kB out of the entry, and the 10 kB
+// `customers` chunk with it, into the shared `atoms` chunk (measured, v18.18.0).
+// The weight did not change; the entry's size is a number the ship run compares.
+export function reshuffleOffer(o){
+  if(!o||typeof o.viewDate!=="string"||typeof o.today!=="string"||o.viewDate<o.today) return null;
+  return {lit:(o.viewDate===o.today&&o.autoOptimizer===false)||o.suggest===true};
 }
 // v17.16.2 (CT-2B-02): was `b.date===today`, which no-op'd across midnight so a
 // party seated 23:30 stopped accruing at 00:00. The filter is replaced by, not

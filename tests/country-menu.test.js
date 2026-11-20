@@ -13,8 +13,17 @@ const src = stripComments(readFileSync("src/components/CountryPicker.jsx", "utf8
 
 describe("the country menu", () => {
   it("uses the pair for a popover anchored to its trigger, from the corner under the pill", () => {
-    expect(src).toContain('className={open ? "mgt-pop-in" : "mgt-pop-out"}');
-    expect(src).toContain('transformOrigin: "top left"');
+    expect(src).toContain('const POP = { in: "mgt-pop-in", out: "mgt-pop-out", origin: "top left" };');
+    expect(src).toContain("className={open ? pop.in : pop.out}");
+    expect(src).toContain("transformOrigin: pop.origin");
+  });
+  // v18.18.0: opening upward (the phone refusal's "Other code…"), the pill is under
+  // the menu, so the pair starts 4px DOWN and shrinks to the bottom corner.
+  it("opening upward, takes the pair turned over, from the corner over the pill", () => {
+    expect(src).toContain('const POP_UP = { in: "mgt-pop-up-in", out: "mgt-pop-up-out", origin: "bottom left" };');
+    expect(src).toContain("const pop = above ? POP_UP : POP;");
+    expect(src).toContain('const MENU_UP = { top: "auto", bottom: "100%", marginTop: 0, marginBottom: SP.tight, flexDirection: "column-reverse" };');
+    expect(src).toContain("above ? MENU_UP : null");
   });
   it("mounts in the commit that opens it, which Presence would not", () => {
     expect(src).toContain("{open || leaving ? (");
@@ -35,7 +44,7 @@ describe("the country menu", () => {
   // Measured: reopened 80ms into the exit, focus stayed on the pill and typing "bel"
   // reached nothing, because `autoFocus` runs at a mount and that node never left.
   it("is a new menu for every open, so the search box takes the focus on a reopen too", () => {
-    expect(src).toContain('<div ref={menuRef} key={opens} className={open ? "mgt-pop-in" : "mgt-pop-out"}');
+    expect(src).toContain("<div ref={menuRef} key={opens} className={open ? pop.in : pop.out}");
     expect(src).toContain("autoFocus");
     const open = src.slice(src.indexOf("function openList("));
     expect(open.indexOf("setOpens(")).toBeGreaterThan(-1);

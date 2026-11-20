@@ -30,6 +30,7 @@ import { S, BTN, R, T, FW, IC, H, TIMELINE_TABLES } from "../lib/constants";
 import { hourLabel } from "../lib/time-grid";
 import { ChevronLeftIcon, ChevronRightIcon } from "./Icons";
 import { todayStr, addDays, isReadableDate, formatDay } from "../lib/day";
+import { keyHint } from "../lib/shortcuts";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];   // week-list rows
 const WDS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];          // month-grid header
@@ -94,7 +95,24 @@ function sameMonth(a, b){
 // --bg-input, half-transparent over a translucent sheet, so the page behind the
 // modal showed through and the timeline's orange blocks tinted days amber —
 // measured, days 18–20 and 25–27 amber over the Timeline, grey over the List.
+// v18.18.0 (Part 2 batch 3): the mode buttons' hover descriptions, built once
+// here because `keyHint` takes a string literal (tests/shortcuts.test.js), and
+// `modeBtn` is handed the mode as a variable.
+const MODE_TITLE = {
+  week: "Show the week, a day to a row" + keyHint("moreWeek"),
+  month: "Show the month as a calendar, shaded by covers" + keyHint("moreMonth"),
+  stats: "Show the month's numbers: covers, busy hours and tables" + keyHint("moreStats"),
+};
+
 const CELL = "var(--bg-cal-cell)";
+// v18.18.0 commit 19 (Patryk): every cell's edge is EDGE, the hairline DESIGN.md
+// gives a surface inside a near-opaque sheet. It was --border-input, a white
+// rim, and v18.14.0 raised the desktop card to 98% white: a cell measured
+// 1.01:1 against the card from 600px up, so on a desktop or tablet the week's
+// rows and the month's grid were not there, while the phone's grey sheet
+// (1.09:1) kept them. --border-soft is 1.30:1 on the card, the edge every
+// Section on that card already has, and 1.18:1 on the phone's sheet.
+const EDGE = "var(--border-soft)";
 // The busiest in-month day's shading (the accent at up to 30%), shared by the
 // cells and the key under them so the key cannot describe a different scale.
 const HEAT = 0.3;
@@ -186,6 +204,7 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
       <button
         onClick={function(){ switchMode(m); }}
         className="mgt-hover-scale"
+        title={MODE_TITLE[m]}
         aria-pressed={active}
         style={{ ...segStyle(active), padding: "6px 18px", minHeight: H.compact }}
       >
@@ -196,13 +215,15 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
 
   // ── Footer (mode-aware nav) ──
   const footer = (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+    // v18.18.0 (Patryk): Close keeps the right if the row wraps (DESIGN.md, "A
+    // control keeps its side"); `space-between` would start it on the left.
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <button onClick={function(){ isWeek ? goWeek(-1) : goMonth(-1); }} aria-label={isWeek ? "Previous week" : "Previous month"} title={isWeek ? "Previous week" : "Previous month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.quiet })} ><ChevronLeftIcon size={IC.chrome} /></button>
-        <button onClick={goToday} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "6px 14px", background: BTN.today })}>{isWeek ? "This week" : "This month"}</button>
-        <button onClick={function(){ isWeek ? goWeek(1) : goMonth(1); }} aria-label={isWeek ? "Next week" : "Next month"} title={isWeek ? "Next week" : "Next month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.quiet })} ><ChevronRightIcon size={IC.chrome} /></button>
+        <button onClick={function(){ isWeek ? goWeek(-1) : goMonth(-1); }} aria-label={isWeek ? "Previous week" : "Previous month"} title={isWeek ? "Show the week before" : "Show the month before"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.quiet })} ><ChevronLeftIcon size={IC.chrome} /></button>
+        <button onClick={goToday} title={(isWeek ? "Go back to this week" : "Go back to this month") + keyHint("moreToday")} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "6px 14px", background: BTN.today })}>{isWeek ? "This week" : "This month"}</button>
+        <button onClick={function(){ isWeek ? goWeek(1) : goMonth(1); }} aria-label={isWeek ? "Next week" : "Next month"} title={isWeek ? "Show the week after" : "Show the month after"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.quiet })} ><ChevronRightIcon size={IC.chrome} /></button>
       </div>
-      <button onClick={onClose} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: BTN.quiet })}>Close</button>
+      <button onClick={onClose} title={"Close More and stay on this day" + keyHint("close")} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: BTN.quiet, marginLeft: "auto" })}>Close</button>
     </div>
   );
 
@@ -263,6 +284,7 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
             <button /* @no-lift a day row as wide as the card: .mgt-ac-row tints it through --row-bg */
               key={r.date}
               onClick={function(){ onPick(r.date); }}
+              title={"Go to " + formatDay(r.date) + " and close More"}
               // v18.4.0 (Patryk): a wide row takes the tint and neither the lift nor the press dip (DESIGN.md, Press feedback).
               className="mgt-ac-row mgt-nopress"
               style={{
@@ -270,7 +292,7 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
                 padding: "10px 12px", borderRadius: R.inset, cursor: "pointer",
                 width: "100%", boxSizing: "border-box", textAlign: "left",
                 "--row-bg": CELL, "--row-bg-hover": "var(--bg-hover-card)",
-                border: "1px solid " + (isFocused || isSel ? "var(--accent)" : "var(--border-input)"),
+                border: "1px solid " + (isFocused || isSel ? "var(--accent)" : EDGE),
                 boxShadow: isFocused ? "0 0 0 2px var(--accent)" : "none"
               }}
             >
@@ -313,7 +335,7 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
     // columns the top three span two each and the bottom two span three.
     const stat = function(val, label, color, i){
       return (
-        <div key={label} style={{ gridColumn: isMobile ? (i < 3 ? "span 2" : "span 3") : "auto", minWidth: 0, padding: "8px 10px", background: CELL, border: "1px solid var(--border-input)", borderRadius: R.inset }}>
+        <div key={label} style={{ gridColumn: isMobile ? (i < 3 ? "span 2" : "span 3") : "auto", minWidth: 0, padding: "8px 10px", background: CELL, border: "1px solid " + EDGE, borderRadius: R.inset }}>
           <div style={{ fontSize: T.title, fontWeight: FW.bold, color: color || "var(--text-primary)" }}>{val}</div>
           <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>{label}</div>
         </div>
@@ -391,13 +413,14 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
                   <button
                     key={c.date}
                     onClick={function(){ onPick(c.date); }}
+                    title={"Go to " + formatDay(c.date) + " and close More"}
                     className="mgt-hover-scale"
                     style={{
                       position: "relative", overflow: "hidden",
                       minHeight: 54,   /* @canvas */ padding: "6px 4px 4px", borderRadius: R.inset, cursor: "pointer",
                       boxSizing: "border-box", textAlign: "center",
                       background: CELL,
-                      border: "1px solid " + (isFocused || isSel ? "var(--accent)" : "var(--border-input)"),
+                      border: "1px solid " + (isFocused || isSel ? "var(--accent)" : EDGE),
                       boxShadow: isFocused ? "0 0 0 2px var(--accent)" : "none"
                     }}
                   >
@@ -423,7 +446,7 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
             cells draw: the accent at up to HEAT (30%) over the cell. */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10, fontSize: T.small, color: "var(--text-muted)" }}>
           <span>Fewer covers</span>
-          <span aria-hidden="true" style={{ width: 64, height: 8, borderRadius: 4,   /* @canvas */ border: "1px solid var(--border-input)", background: "linear-gradient(to right, " + CELL + ", color-mix(in srgb, var(--accent) " + (HEAT * 100) + "%, " + CELL + "))" }} />
+          <span aria-hidden="true" style={{ width: 64, height: 8, borderRadius: 4,   /* @canvas */ border: "1px solid " + EDGE, background: "linear-gradient(to right, " + CELL + ", color-mix(in srgb, var(--accent) " + (HEAT * 100) + "%, " + CELL + "))" }} />
           <span>More</span>
         </div>
       </div>

@@ -107,6 +107,20 @@ describe("the buttons he kept solid", () => {
   });
 });
 
+// v18.18.0 commit 16 (Patryk): Reshuffle shows on every day ahead, so it is quiet
+// at rest and wears the orange only while pressing it would help (today with the
+// Optimiser off, or while the "Tables could be reshuffled" check fires). The fill
+// goes inside the call, so the grey brings its own ink, and the flip between the
+// two eases as one change through the shared transition below.
+describe("Reshuffle: grey, and orange while it would help", () => {
+  it("one fill ternary, inside mkBtn, on a button that carries the shared transition", () => {
+    const c = code("components/OptimiserControls.jsx");
+    expect(c).toContain("style={mkBtn({ minHeight: 36, padding: \"4px 12px\", fontSize: T.small, background: lit ? BTN.orange : BTN.quiet })}");
+    const btn = c.slice(c.lastIndexOf("<button", c.indexOf("background: lit ? BTN.orange : BTN.quiet")));
+    expect(btn.slice(0, btn.indexOf(">"))).toContain('className="mgt-hover-scale"');
+  });
+});
+
 describe("a flip between quiet and solid eases as one change", () => {
   const css = read("index.css");
   const rule = css.slice(css.indexOf(".mgt-hover-scale, .mgt-press {"));

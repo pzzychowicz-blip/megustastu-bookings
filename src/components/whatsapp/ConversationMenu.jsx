@@ -78,7 +78,9 @@ function RowBadge({ n, fill }) {
 // a choice (`menuitemradio`), its icon slot the tick. `busy` says the work one of
 // them started is still running: the ⋯ shows it, so the answer can be waited for
 // with the menu shut. `trigger`, `triggerStyle`, `label` and `align` are the
-// header's mark's (above); without them this is the ⋯.
+// header's mark's (above); without them this is the ⋯. `trigger` may be a function
+// of `open` (v18.18.0), so the content can show the menu's state: the mark's
+// chevron turns as the menu opens and back as it closes.
 export function ConversationMenu({ items, busy = false, trigger = null, triggerStyle = null, label = "More actions", align = "right" }) {
   const [open, setOpen] = useState(false);
   const [byKey, setByKey] = useState(false);
@@ -141,7 +143,7 @@ export function ConversationMenu({ items, busy = false, trigger = null, triggerS
         className="mgt-hover-scale mgt-press"
         style={trigger ? triggerStyle : mkBtn({ background: BTN.quiet, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 })}
       >
-        {trigger ? trigger : (
+        {trigger ? (typeof trigger === "function" ? trigger(open) : trigger) : (
           /* Stacked in one grid cell, so the two marks cross-fade in place. The arrow
              stays mounted and paused, which costs nothing at opacity 0, and a fade
              reverses from where it is if the answer comes back quickly. */

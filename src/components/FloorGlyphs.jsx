@@ -45,7 +45,7 @@ export function chairPositions(entry){
 // passes a fill/stroke transition so an occupancy change fades like the
 // timeline's Seated→Completed overlay, on `M.status` (--t-status, --ease-out);
 // the reduce-motion kill-switch in index.css still zeroes it via !important).
-export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDasharray, labelSuffix = "", chairFill = "var(--bg-stepper)", ariaLabel, children, onPointerDown, onClick, onContextMenu, style, shapeStyle }){
+export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDasharray, labelSuffix = "", chairFill = "var(--bg-stepper)", ariaLabel, description, children, onPointerDown, onClick, onContextMenu, style, shapeStyle }){
   const w = entry.w, h = entry.shape === "rect" ? entry.h : entry.w;
   const t = TBL[isIn(id) ? "ind" : "out"];
   const label = id + labelSuffix;
@@ -71,6 +71,11 @@ export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDas
   // because only the caller knows whether the table is free, blocked or holding
   // a party — the glyph itself knows a table id and a rectangle.
   const activatable = !!onClick;
+  // v18.18.0 (Part 2 batch 3): `description` is the hover description. An SVG
+  // element has no `title` attribute; a <title> child, FIRST inside the <g>
+  // (check:style Rule 14 reads it there, so nothing may sit before it), is
+  // what the browser shows. The caller writes it, as it writes `ariaLabel`:
+  // only the caller knows what a press on the table does there.
   return (
     <g transform={"translate(" + entry.x + "," + entry.y + ") rotate(" + (entry.rot || 0) + ")"}
       className={live ? "mgt-glyph" : undefined}
@@ -98,6 +103,7 @@ export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDas
       onMouseDown={activatable ? function(e){ e.preventDefault(); } : undefined}
       onPointerDown={onPointerDown} onClick={onClick} onContextMenu={onContextMenu}
       style={{ cursor: onPointerDown ? "grab" : (onClick ? "pointer" : "default"), ...style }}>
+      <title>{description || ("Table " + label)}</title>
       {chairPositions(entry).map(function(c, i){
         return <circle key={i} cx={c.cx} cy={c.cy} r={6} fill={chairFill} stroke="var(--fp-chair-outline)" strokeWidth={1.5} />;
       })}

@@ -39,6 +39,7 @@ import { AlertPanel, AlertRow } from "./AlertPanel";
 import { SwapIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
 import { sameDraft } from "../lib/drafts";
+import { keyHint } from "../lib/shortcuts";
 
 export function ManualModal({ booking, bookings, onSave, onClose, onDirty, titleText, blocks = [] }) {
   // v18.2.0: seeded with the tables the layout HAS. A booking reaching this
@@ -227,12 +228,14 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         className="mgt-hover-scale"
         style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
         onClick={onClose}
+        title={"Close the table picker, asking first if a table was picked" + keyHint("close")}
       >
         Back
       </button>
       <button
         disabled={!ok}
         onClick={() => { if (ok) onSave(selected, true, isSwapping ? affectedBookings : null); }}
+        title={(isSwapping ? "Give the party these tables, moving the parties on them elsewhere" : "Give the party these tables, and keep them there") + keyHint("confirm")}
         className="mgt-hover-scale"
         style={mkSolidBtn(ok ? (isSwapping ? BTN.orange : S.accent) : "var(--btn-disabled)", {
           cursor: ok ? "pointer" : "not-allowed",
@@ -271,6 +274,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         </div>
         <Toggle
           label="Swap busy"
+          description={"Let a table that is taken be chosen, moving its party elsewhere" + keyHint("manualSwap")}
           on={swapBusy}
           onClick={() => {
             const next = !swapBusy;
@@ -286,13 +290,17 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         marginBottom: 14, padding: "12px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
         border: "1px solid " + (conflict ? "var(--danger-border)" : ok ? "var(--suggest-border)" : "var(--border-soft)"),
-        display: "flex", alignItems: "center", justifyContent: "space-between",
+        // v18.18.0 (Patryk): Clear keeps the right where a long selection wraps
+        // it under the summary (DESIGN.md, "A control keeps its side"). It is a
+        // RowSlot, whose own margin cancels the gap, so the summary takes the
+        // slack (`marginRight: "auto"`) and the row packs to its end.
+        display: "flex", alignItems: "center", justifyContent: "flex-end",
         gap: 8, flexWrap: "wrap",
         boxShadow: "var(--shadow-card)"
       }}>
         {/* v18.14.0 (correction 35, Patryk): as tall as Clear, because a horizontal
             fold cannot ease the row's height, which stepped 6px at both ends of it. */}
-        <div style={{ minHeight: H.control, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <div style={{ minHeight: H.control, display: "flex", flexDirection: "column", justifyContent: "center", marginRight: "auto" }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>
             {"Selected: " + (selected.length ? selected.join(" + ") : "none")}
           </div>
@@ -308,6 +316,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
               className="mgt-hover-scale mgt-press"
               style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.quiet })}
               onClick={() => setSelected([])}
+              title={"Clear the tables picked, to pick again" + keyHint("manualClear")}
             >
               Clear
             </button>

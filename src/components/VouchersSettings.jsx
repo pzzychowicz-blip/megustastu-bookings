@@ -127,7 +127,7 @@ function CopyBtn({ code }) {
         type="button"
         onClick={doCopy}
         aria-label={(done ? "Copied voucher " : "Copy voucher ") + text}
-        title={done ? "Copied" : "Copy the number"}
+        title={done ? "Copied" : "Copy voucher " + text + "'s number"}
         className="mgt-hover-scale"
         style={mkBtn({
           padding: SP.none, minHeight: H.compact, width: H.compact,
@@ -187,6 +187,7 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
           // correct before: their meaning is in this name.
           aria-label={"Voucher " + formatCode(v.code) + ", " + STATE_LABEL[state] + ", " + money(remainingOf(v), currency) + " left"}
           onClick={onToggle}
+          title={"Show or hide voucher " + formatCode(v.code) + "'s details and history"}
           // Making an element focusable makes the browser scroll it into view
           // on MOUSEDOWN, so it moves out from under the finger between press
           // and release and the click is lost (measured up to 297px on a List
@@ -286,6 +287,7 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
             type="button"
             onClick={function (e) { e.stopPropagation(); onVoid(v.code, state !== "void"); }}
             aria-label={(state === "void" ? "Reinstate" : "Void") + " voucher " + formatCode(v.code)}
+            title={state === "void" ? "Make voucher " + formatCode(v.code) + " usable again" : "Void voucher " + formatCode(v.code) + ", so it can no longer be used"}
             className="mgt-hover-scale"
             style={state === "void" ? mkBtn({ fontSize: T.body, minHeight: 36, background: BTN.quiet }) : mkDangerBtn({ fontSize: T.body, minHeight: 36 })}>
             {state === "void" ? "Reinstate voucher" : "Void voucher"}
@@ -308,6 +310,7 @@ function FilterBtn({ id, label, active, onPick }) {
       // A control that paints itself selected with a fill must say so, or its
       // state is colour alone (v17.15.6).
       aria-pressed={active}
+      title={id === "all" ? "Show every voucher" : "Show only " + label.toLowerCase() + " vouchers"}
       className="mgt-hover-scale"
       style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: active ? "var(--accent)" : BTN.quiet })}>
       {label}
@@ -416,21 +419,21 @@ export function VouchersTabContent({
             <Fld label={"Amount (" + currency + ")"} invalid={issueErrField === "value"} describedBy={ISSUE_ERROR_ID}>{function (fid, attrs) {
               return <input id={fid} {...attrs} type="number" min={0} step={5} inputMode="decimal" value={amount}
                 onChange={function (e) { setAmount(e.target.value); }}
-                placeholder="e.g. 50" className="mgt-hover-scale" style={mkInp()} />;
+                placeholder="e.g. 50" title="What the voucher is worth" className="mgt-hover-scale" style={mkInp()} />;
             }}</Fld>
           </div>
           <div style={{ flex: "2 1 200px", minWidth: 0 }}>
             <Fld label="Number (leave blank to generate)" invalid={issueErrField === "code"} describedBy={ISSUE_ERROR_ID}>{function (fid, attrs) {
               return <input id={fid} {...attrs} type="text" value={manualCode}
                 onChange={function (e) { setManualCode(e.target.value); }}
-                placeholder="from a printed book" autoCapitalize="characters" className="mgt-hover-scale" style={mkInp()} />;
+                placeholder="from a printed book" autoCapitalize="characters" title="The number printed on a voucher from a book; leave it empty and the app makes one" className="mgt-hover-scale" style={mkInp()} />;
             }}</Fld>
           </div>
         </div>
 
         <Fld label="Notes (optional)">{function (fid) {
           return <input id={fid} type="text" value={notes} onChange={function (e) { setNotes(e.target.value); }}
-            placeholder="Birthday gift for Ana" className="mgt-hover-scale" style={mkInp()} />;
+            placeholder="Birthday gift for Ana" title="A note about who the voucher is for, found by Search" className="mgt-hover-scale" style={mkInp()} />;
         }}</Fld>
 
         <div style={{ fontSize: T.micro, color: S.muted, marginBottom: 8 }}>
@@ -439,6 +442,7 @@ export function VouchersTabContent({
         </div>
 
         <button type="button" onClick={doIssue}
+          title="Issue the voucher with this value and number"
           className="mgt-hover-scale"
           style={mkBtn({ fontSize: T.body, minHeight: 40, background: "var(--accent)" })}>Issue voucher</button>
 
@@ -474,6 +478,7 @@ export function VouchersTabContent({
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button type="button"
             aria-label="Fewer months"
+            title="Make a new voucher valid for one month less"
             disabled={atMin}
             className={atMin ? undefined : "mgt-hover-scale"}
             onClick={function () { onSaveDefaults({ expiryMonths: voucherDefaults.expiryMonths - 1 }); }}
@@ -485,6 +490,7 @@ export function VouchersTabContent({
           </span>
           <button type="button"
             aria-label="More months"
+            title="Make a new voucher valid for one month more"
             disabled={atMax}
             className={atMax ? undefined : "mgt-hover-scale"}
             onClick={function () { onSaveDefaults({ expiryMonths: voucherDefaults.expiryMonths + 1 }); }}
@@ -511,6 +517,7 @@ export function VouchersTabContent({
           onChange={function (e) { setQuery(e.target.value); }}
           onClear={function () { setQuery(""); }}
           ariaLabel="Search vouchers by number or note"
+          description="Find a voucher by its number or its note"
           placeholder="Search by number or note…"
           style={{ marginBottom: SP.base }}
         />

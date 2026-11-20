@@ -19,7 +19,7 @@ import {
   lateState, lateMins, freeingSoon, daySummary, rangeStats,
   verifyClean, findConflicts, findClashes, canAssign, getBusy, getBlockSlots, isReadableBlock,
   findBest, findFreeSlot, applyOpt, optimise, bookingsAfterAction,
-  applySeatedShift, rankCombosContaining, comboExistsFor,
+  applySeatedShift, rankCombosContaining, comboExistsFor, fewestWithin,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
   stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId, mergeSpans,
   sanitizeBlock, sanitizeBlocks,
@@ -30,6 +30,7 @@ import {
   unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
   tablesFreeFor, trialFits, enteredPhone, kitchenRelevant, savedToast, lastStartMins,
   optimizerActiveFor, earliestOffer, findTimes, findKitchenFriendlyTimes, applyOptKeep, movedOthers,
+  joinFirstMatters,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, VALID_COMBOS, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -802,6 +803,60 @@ describe("rankCombosContaining / comboExistsFor (drag-drop contracts)", () => {
     expect(r[0].ids).toContain("9");
     expect(r[0].cap).toBeGreaterThanOrEqual(8);
     expect(r[0].cap - 8).toBeLessThanOrEqual(4);
+  });
+});
+
+// v18.18.0: what a drag's swap gives each party of the other's set (lib/drop-plan.js).
+// Read off the layout, so no test names a combination.
+describe("fewestWithin (a swap's trim)", () => {
+  const cap = (id) => ALL_TABLES.find((t) => t.id === id).capacity;
+  const order = (id) => ALL_TABLES.findIndex((t) => t.id === id);
+  // A joined pair whose two tables each seat a party of 2.
+  const pair = VALID_COMBOS.find((c) => c.ids.length === 2 && c.ids.every((id) => cap(id) >= 2)).ids;
+  // A set of three with a pair inside that seats more than any one of its tables.
+  const three = VALID_COMBOS.find((c) => c.ids.length === 3 && VALID_COMBOS.some((p) => p.ids.length === 2
+    && p.ids.every((id) => c.ids.includes(id)) && p.cap > Math.max(...c.ids.map(cap))));
+
+  it("the fixtures exist in the layout", () => {
+    expect(pair).toBeTruthy();
+    expect(three).toBeTruthy();
+  });
+
+  it("one table that seats the party, never the pair", () => {
+    const got = fewestWithin(pair, 2, []);
+    expect(got).toHaveLength(1);
+    expect(pair).toContain(got[0]);
+  });
+
+  it("the row the party was dropped on wins a tie", () => {
+    expect(fewestWithin(pair, 2, [pair[1]])).toEqual([pair[1]]);
+    expect(fewestWithin(pair, 2, [pair[0]])).toEqual([pair[0]]);
+  });
+
+  it("with no row to prefer, the layout's order decides, however the set is stored", () => {
+    const first = pair.slice().sort((a, b) => order(a) - order(b))[0];
+    expect(fewestWithin(pair, 2, [])).toEqual([first]);
+    expect(fewestWithin(pair.slice().reverse(), 2, [])).toEqual([first]);
+  });
+
+  it("a party no one table seats takes a pair inside the set, not all three", () => {
+    const size = Math.max(...three.ids.map(cap)) + 1;
+    const got = fewestWithin(three.ids, size, []);
+    expect(got).toHaveLength(2);
+    expect(got.every((id) => three.ids.includes(id))).toBe(true);
+    expect(comboCapBest(got)).toBeGreaterThanOrEqual(size);
+  });
+
+  it("a set nothing smaller can seat comes back as it was, in its own order", () => {
+    const whole = VALID_COMBOS.find((c) => c.ids.length === 2 && c.ids.every((id) => cap(id) < c.cap));
+    const stored = whole.ids.slice().reverse();
+    expect(fewestWithin(stored, whole.cap, [])).toEqual(stored);
+  });
+
+  it("one table, or none, is left alone", () => {
+    expect(fewestWithin(["9"], 8, [])).toEqual(["9"]);
+    expect(fewestWithin([], 2, [])).toEqual([]);
+    expect(fewestWithin(undefined, 2)).toEqual([]);
   });
 });
 
@@ -3689,3 +3744,97 @@ describe("movedOthers: what the save toast may claim", () => {
   });
 });
 
+// ── joinFirstMatters (v18.18.0, the Table priorities plan's Part B) ──────────
+// Under a size rule's switch Settings says "No table outside Prefer seats N, so
+// this changes nothing here." when this is false. That sentence is a promise about
+// `findBest`, so it is held to `findBest` itself.
+describe("joinFirstMatters", () => {
+  afterEach(() => setLayout(DEFAULT_LAYOUT));
+
+  it("is false only where nothing outside Prefer seats the rule's smallest party (the restaurant's layout)", () => {
+    // Tables 1–13, and 9 is the only single that seats more than 2.
+    const tables = DEFAULT_LAYOUT.tables;
+    expect(joinFirstMatters({ min: 3, max: 4, prefer: ["9"], avoid: [] }, tables)).toBe(false);   // the shipped rule
+    expect(joinFirstMatters({ min: 3, max: 3, prefer: ["9"], avoid: [] }, tables)).toBe(false);   // Part A's party of 3
+    expect(joinFirstMatters({ min: 4, max: 4, prefer: [], avoid: [] }, tables)).toBe(true);       // Part A's party of 4: 9 is outside Prefer
+    expect(joinFirstMatters({ min: 3, max: 4, prefer: [], avoid: ["9"] }, tables)).toBe(true);    // an Avoid table is a single the switch orders
+    expect(joinFirstMatters({ min: 2, max: 2, prefer: [], avoid: ["9"] }, tables)).toBe(true);
+    expect(joinFirstMatters({ min: 5, max: 8, prefer: [], avoid: [] }, tables)).toBe(false);      // no single seats 5
+    expect(joinFirstMatters({ min: 3, max: 4 }, tables)).toBe(true);                              // no Prefer list: every table is outside it
+  });
+
+  // With the switch OFF an Avoid table comes before joined tables, and with it ON
+  // after them (measured for the plan; Settings' order sentence says so).
+  it("an Avoid table is tried before joined tables with the switch off, and after them with it on", () => {
+    const placed = (combosFirst) => {
+      // The restaurant's priorities with one size rule, so its combo preferences (1+2 first for a 4) stay.
+      setLayout(Object.assign({}, DEFAULT_LAYOUT, { priorities: Object.assign({}, DEFAULT_LAYOUT.priorities, { bands: [{ min: 4, max: 4, prefer: [], avoid: ["9"], zoneOrder: [], combosFirst }] }) }));
+      return findBest(4, "auto", 780, 870, []);
+    };
+    expect(placed(false)).toEqual(["9"]);
+    expect(placed(true)).toEqual(["1", "2"]);
+  });
+
+  it("is what Settings asks, on the stored tables, and the switch says what it does", () => {
+    const src = stripComments(readFileSync(new URL("../src/components/LayoutSettings.jsx", import.meta.url), "utf8")).join("\n");
+    expect(src).toContain("const switchIdle = !joinFirstMatters(b, tables);");
+    expect(src).toContain("<Reveal show={switchIdle}>");
+    expect(src).toContain("No table outside Prefer seats {b.min}, so this changes nothing here.");
+    expect(src).toContain('<Toggle label={bandName(b, i) + ": then try joined tables before other single tables"}');
+    expect(src).toContain(">Then try joined tables before other single tables</span>");
+    expect(src).toContain("Inside a rule: Prefer first, then joined tables or the other single tables, in the order the switch sets. Avoid tables are the last single tables tried.");
+  });
+
+  it("agrees with findBest: where it says false, the switch never changes the tables (generated layouts and days)", () => {
+    let a = 7;
+    const rnd = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    const pick = (x) => x[Math.floor(rnd() * x.length)];
+    const shuffle = (x) => { const y = x.slice(); for (let i = y.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [y[i], y[j]] = [y[j], y[i]]; } return y; };
+    let held = 0, differed = 0, falses = 0;
+    for (let n = 0; n < 200; n++) {
+      // A layout: 4 to 9 tables of 1 to 6 seats in two zones, joined in runs.
+      const count = 4 + Math.floor(rnd() * 6);
+      const tables = Array.from({ length: count }, (_, i) => ({ id: "t" + (i + 1), capacity: 1 + Math.floor(rnd() * 6), zone: rnd() < 0.6 ? "outdoor" : "indoor" }));
+      const ids = tables.map((t) => t.id);
+      const joinGroups = [];
+      for (let i = 0; i < ids.length;) { const len = 1 + Math.floor(rnd() * 4); if (len > 1 && i + 1 < ids.length) joinGroups.push(ids.slice(i, i + len)); i += len; }
+      // A rule. Half the time Prefer holds every table that seats the smallest
+      // party (where the answer can be false), else a few tables at random.
+      const min = 1 + Math.floor(rnd() * 6), max = min + Math.floor(rnd() * 3);
+      const seatsMin = tables.filter((t) => t.capacity >= min).map((t) => t.id);
+      const prefer = rnd() < 0.5
+        ? shuffle(seatsMin).concat(shuffle(ids.filter((id) => !seatsMin.includes(id))).slice(0, Math.floor(rnd() * 2)))
+        : shuffle(ids).slice(0, Math.floor(rnd() * 3));
+      const avoid = shuffle(ids.filter((id) => !prefer.includes(id))).slice(0, Math.floor(rnd() * 3));
+      const band = { min, max, prefer, avoid, zoneOrder: pick([[], ["indoor", "outdoor"], ["outdoor", "indoor"]]) };
+      const matters = joinFirstMatters(band, tables);
+      if (!matters) falses++;
+      // Days: parties holding a table, or two of a join group, at quarter hours.
+      const asks = [];
+      for (let d = 0; d < 6; d++) {
+        const slots = [];
+        for (let p = Math.floor(rnd() * count); p > 0; p--) {
+          const s = 780 + 15 * Math.floor(rnd() * 12);
+          slots.push({ tables: joinGroups.length && rnd() < 0.3 ? pick(joinGroups).slice(0, 2) : [pick(ids)], s, e: s + 90 });
+        }
+        for (let size = min; size <= max; size++) {
+          for (const pref of ["auto", "indoor", "outdoor"]) { const s = 780 + 15 * Math.floor(rnd() * 12); asks.push([size, pref, s, s + 90, slots]); }
+        }
+      }
+      const answers = (combosFirst) => {
+        setLayout(Object.assign({}, DEFAULT_LAYOUT, { tables, joinGroups, comboCaps: {}, megaCombos: [], priorities: { v: 1, bands: [Object.assign({}, band, { combosFirst })] } }));
+        return asks.map((q) => findBest.apply(null, q));
+      };
+      const on = answers(true), off = answers(false);
+      asks.forEach((q, i) => {
+        if (!matters) { expect(on[i], JSON.stringify({ n, size: q[0], pref: q[1], band, tables })).toEqual(off[i]); held++; }
+        else if (JSON.stringify(on[i]) !== JSON.stringify(off[i])) differed++;
+      });
+    }
+    // The promise was put to the test, not skipped, and the comparison can see a
+    // difference: where the answer is true the switch does change some tables.
+    expect(falses).toBeGreaterThan(60);
+    expect(held).toBeGreaterThan(1500);
+    expect(differed).toBeGreaterThan(100);
+  });
+});

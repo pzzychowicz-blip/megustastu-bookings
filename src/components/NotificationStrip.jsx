@@ -302,6 +302,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null, s
         onClick={function () { setOpen(!open); }}
         aria-expanded={open}
         aria-label={open ? "Collapse notifications" : "Expand notifications"}
+        title="Show or hide every notification for this day"
         // No press-scale: this is a full-width strip header, and a 0.96 dip on
         // something that spans the viewport reads as the page flinching.
         /* v17.9.1 (Patryk): the lid takes the shared row tint. It spans the

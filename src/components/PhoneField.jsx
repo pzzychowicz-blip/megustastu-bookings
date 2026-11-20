@@ -147,7 +147,7 @@ export function PhoneField({ value, onChange, pinned, inputProps, children, plac
 
   return (
     <div style={{ position: "relative", display: "flex", gap: SP.snug, alignItems: "center" }}>
-      <CountryPicker iso={iso} onPick={onPick} pinned={pinned} ariaLabel="Country code" />
+      <CountryPicker iso={iso} onPick={onPick} pinned={pinned} ariaLabel="Country code" description="Choose the country code of the guest's phone number" />
       <input
         type="tel"
         inputMode="tel"
@@ -158,6 +158,7 @@ export function PhoneField({ value, onChange, pinned, inputProps, children, plac
            "+3" must give way to the number the form will save (/code-review). */
         value={raw !== null && !value ? raw : national}
         onChange={onNumber}
+        title="The guest's phone number without its code; typing suggests guests who have booked before"
         placeholder={placeholder}
         className="mgt-hover-scale"
         {...boxProps}

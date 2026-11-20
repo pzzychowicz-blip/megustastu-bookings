@@ -36,7 +36,7 @@ import {
   histEntry,
   statusOrder,
   getKitchenLoad,
-  optimizerActiveFor, syncLiveDurations, bookingsAfterAction,
+  optimizerActiveFor, reshuffleOffer, syncLiveDurations, bookingsAfterAction,
   checkInefficent, findClashes, clashRowId,
   nowTime, newBookingTime,
   lateState, freeingSoon,
@@ -72,6 +72,7 @@ import { dueOccurrences, withOccurrences } from "./lib/recurring";
 import { planDelete, planUndo, planCustomerDelete, withUndoDelta, landedSentence, deleteWords, cancelWords } from "./lib/delete-undo";
 import { CONFIRM_MODALS, markArmed, armSettled } from "./lib/arm-guard";
 import { afterIdle } from "./lib/after-frame";
+import { keyHint } from "./lib/shortcuts";
 import { planSettle, settleEffects, carryTransform } from "./lib/voucher-settle";
 import { useSchemaGate } from "./hooks/useSchemaGate";
 import UpdateRequired from "./components/UpdateRequired";
@@ -458,7 +459,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.17.0"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.18.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -566,6 +567,15 @@ const GEAR_BTN=Object.assign({},CHROME_BTN,{position:"relative"});
 // it sits beside the controls only when its collapsed card is one line — the
 // 58px this constant is centred against — and drops below them otherwise.
 const DATE_CTRL_DROP=9;
+
+// v18.18.0 (Patryk): in the pinned layout the Summary's opened body stops at the
+// bottom of the screen and scrolls inside. Its slot is a column that may shrink
+// to whatever the date row leaves, and the Summary's own scroller (`fit`) is the
+// flex item in it that shrinks with it. `<main>` grows from a zero basis, so it
+// gives way first: while a tall panel is open the view below has no height, and
+// it comes back as the panel closes. Before this the slot never shrank, and on
+// the tablet a day with notes put Print and More 63px below the screen.
+const SUMMARY_SLOT_FIT={flexShrink:1,minHeight:0,display:"flex",flexDirection:"column"};
 
 // ── Console boot banner ──────────────────────────────────────────────────────
 // Logs ownership/version when the app loads. Visible to anyone opening DevTools.
@@ -1477,6 +1487,7 @@ export function BookingApp({uid}){
   const {
     themePref,isDark,onToggleDark,onToggleAutoTheme,
     appWidth,onSetAppWidth,
+    appWidthFit,onToggleAppWidthFit,
     reduceMotion,onToggleReduceMotion,
     planGestures,onTogglePlanGestures,
     planAvail,onTogglePlanAvail,
@@ -2458,6 +2469,12 @@ export function BookingApp({uid}){
     setConfirmKitchen(null);doSave();
   }
 
+  // v18.18.0 commit 15: the ONE door to the Reshuffle confirm. Reshuffle moves
+  // every unlocked party of the day, so it asks what a drag, Assign and Unlock
+  // ask, at the press and before the confirm opens. Every way in calls this:
+  // the button on the Timeline and in the Summary (`VA.onReshuffle`), the
+  // "Tables could be reshuffled" notice, and R. It never had a check at all.
+  function openReshuffle(){if(refused("bookingAssign"))return;setConfirmReshuffle(true);}
   // v18.14.0 (H5): undoable, through `saveMove`. Nothing moved means no pill, so
   // the toast still answers the press.
   // v18.17.0 (D): WHAT it writes is `planReshuffle` (lib/manual-assign.js), which
@@ -2734,7 +2751,7 @@ export function BookingApp({uid}){
     setManualTarget:setManualTarget,
     showPrefPicker:showPrefPicker,setShowPrefPicker:setShowPrefPicker,
     confirmDel:confirmDel,setConfirmDel:setConfirmDel,
-    setConfirmReshuffle:setConfirmReshuffle,
+    setConfirmReshuffle:setConfirmReshuffle,openReshuffle:openReshuffle,
     setConfirmCancel:setConfirmCancel,
     confirmKitchen:confirmKitchen,setConfirmKitchen:setConfirmKitchen,
     setVoucherAsk:setVoucherAsk,
@@ -3176,7 +3193,18 @@ export function BookingApp({uid}){
   // v18.17.0 (B): how many of the viewed day's bookings a plain Reshuffle will
   // leave where they are, for the confirm. Asked only while it is open.
   const reshuffleLocked=confirmReshuffle?lockedOn(bookings,viewDate):0;
-  const ineffShow=!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer)&&bookingDefaults.reshuffleSuggestEnabled;
+  // v18.18.0 commit 16: the "Tables could be reshuffled" check, as both the
+  // notice and the Reshuffle button's orange read it. Today and later days only:
+  // a past day's service is over, and neither is offered there (it could show on
+  // one, since `optimizerActiveFor` is true for every day but today-OFF).
+  const suggestOn=!!(inefficient&&optimizerActiveFor(viewDate,autoOptimizer)&&bookingDefaults.reshuffleSuggestEnabled&&viewDate>=today);
+  const ineffShow=!reshuffled&&suggestOn&&dismissedIneff!==viewDate;
+  // Where the button shows and whether it is orange: `reshuffleOffer`
+  // (lib/booking-logic.js; never manual-assign.js, see its note). Dismissing
+  // the notice does not grey it (Patryk).
+  // `todayStr()`, not `today`: handing `today` to any call during render made
+  // the React Compiler give up on BookingApp (21 errors, measured; src/CLAUDE.md).
+  const reshuffleBtn=reshuffleOffer({viewDate:viewDate,today:todayStr(),autoOptimizer:autoOptimizer,suggest:suggestOn});
   // Overlap warnings banner — shows when one or more seated guests are overstaying
   // into the start time of a booking on the same table (one-tap Reassign per row).
   // v17.0.0 round 7: converted to the Running-late (LateBanner) pattern —
@@ -3450,7 +3478,11 @@ export function BookingApp({uid}){
       onDiscardParked:discardParked,
       ineffShow:ineffShow,
       onDismissIneff:function(){setDismissedIneff(viewDate);},
-      onReshuffle:function(){setConfirmReshuffle(true);},
+      // v18.18.0 commit 15: through the ref, not `openReshuffle` itself. Bare or
+      // wrapped in a closure here, in a call made during render, it made the React
+      // Compiler give up on all of BookingApp (21 preserve-manual-memoization
+      // errors, measured); read off `viewActionsRef` at the tap, it did not.
+      onReshuffle:function(){viewActionsRef.current.openReshuffle();},
       // v17.8.0 strip audit: two notices that were living elsewhere. The load
       // failure was a floating toast (persistent + unrecoverable, so the wrong
       // layer); the closed-day notice was drawn twice, inside TimelineView and
@@ -3643,7 +3675,7 @@ export function BookingApp({uid}){
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only the code's own change resumes; the door is read from its ref, and both doors read the form from formRef
   useEffect(function(){const door=resumeDoorRef.current;if(!door)return;resumeDoorRef.current=null;if(door==="waitlist") addFormToWaitlist();else doSave();},[form.phone]);
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,newAtCell,openEdit,updateStatus,doCancelBooking,unlockBooking,dropOnTable,previewDrop,checkDrop,retimeBooking,previewRetime,checkRetime,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
+  viewActionsRef.current={openNew,newAtCell,openEdit,updateStatus,doCancelBooking,unlockBooking,dropOnTable,previewDrop,checkDrop,retimeBooking,previewRetime,checkRetime,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,openReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -3661,7 +3693,7 @@ export function BookingApp({uid}){
       onManual:function(id){R.current.setManualTarget(id);},
       onBlock:function(id){R.current.setBlockTarget(id);},
       onDelete:function(id){R.current.requestDelete(id);},
-      onReshuffle:function(){R.current.setConfirmReshuffle(true);},
+      onReshuffle:function(){R.current.openReshuffle();},
       onNew:function(){R.current.openNew();},
       onNewAt:function(tableId,time){R.current.newAtCell(tableId,time);},
       onToggleFinished:function(next){R.current.toggleShowFinished(next);},
@@ -3782,6 +3814,8 @@ export function BookingApp({uid}){
     autoOptimizer={autoOptimizer}
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={VA.onReshuffle}
+    reshuffleOn={!!reshuffleBtn}
+    reshuffleLit={!!reshuffleBtn&&reshuffleBtn.lit}
     toolbarFolded={toolbarFolded}
     largeText={largeText}
     indoorTint={indoorTint}
@@ -3884,12 +3918,17 @@ export function BookingApp({uid}){
     layoutSig={layout}
     unplacedCount={unplacedItems.length}
     currency={generalSettings.currency}
+    guestTags={guestTags}
+    tagList={tagList}
+    onEdit={VA.onEdit}
+    fit={shellFixed}
     onToggle={VA.onSummaryToggle}
     onOpenWeek={VA.onOpenWeek}
     onPrint={VA.onPrint}
     onSpecialHours={can("hoursEdit")?VA.onSpecialHours:null}
     compact={compact}
-    showOptimiser={toolbarFolded&&viewDate===todayStr()}
+    showOptimiser={toolbarFolded&&!!reshuffleBtn}
+    reshuffleLit={!!reshuffleBtn&&reshuffleBtn.lit}
     autoOptimizer={autoOptimizer}
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={VA.onReshuffle} />;
@@ -3961,8 +4000,10 @@ export function BookingApp({uid}){
   const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay /* @static-height one sentence, worked out when it opens, and two buttons */ onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
         style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
+        title={"Keep the booking"+keyHint("close")}
         onClick={function(){setConfirmDel(null);}}>Back</button><button
         onClick={function(){if(armSettled())delBooking(confirmDel);}}
+        title={"Delete the booking"+keyHint("confirm")}
         className="mgt-hover-scale"
         style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{deleteWords(delBooked,generalSettings.undoSecs||10,autoOptimizer)}</div></Overlay>:null}</ModalPresence>;
 
@@ -3991,10 +4032,12 @@ export function BookingApp({uid}){
   };
   const discardModal=<div style={{position:"relative",zIndex:260}}><ModalPresence show={!!confirmDiscard}>{confirmDiscard?<Overlay /* @static-height one sentence out of DISCARD_BODY, fixed for the life of one open */ onClose={function(){setConfirmDiscard(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         onClick={function(){if(armSettled())doDiscard();}}
+        title="Throw the changes away and close"
         className="mgt-hover-scale"
         style={mkDangerConfirm()}>Discard</button><button
         className="mgt-hover-scale"
         style={mkSolidBtn(S.accent)}
+        title={"Go back to the changes, still unsaved"+keyHint("close")}
         onClick={function(){setConfirmDiscard(null);}}>Keep editing</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Unsaved changes</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{(DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet.")+" Discarding can't be undone."}</div></Overlay>:null}</ModalPresence></div>;
 
   const manualModal=<ModalPresence show={!!manualBooking}>{manualBooking?<ManualModal
@@ -4063,7 +4106,7 @@ export function BookingApp({uid}){
            whereas normally that lift just bleeds to the window edge. It was
            only ever belt-and-braces: html+body are already overflow:hidden in
            this mode (see the body effect above), so nothing can scroll here. */
-        shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600) */}
+        shellFixed?{height:"100dvh",display:"flex",flexDirection:"column"}:{minHeight:"100dvh"})}><div style={Object.assign({maxWidth:appWidthFit?"none":appWidth,margin:"0 auto"},shellFixed?{flex:1,minHeight:0,width:"100%",display:"flex",flexDirection:"column"}:null)}>{/* v17.0.0 correction: adjustable per-device width (Settings→General; was fixed 1000, then 1600). v18.18.0: none while Fit to screen is on, the default on every device. */}
           {/* v17.14.0: the skip link. v17.12.0 added the landmarks, which are the
               programmatic bypass and cost nothing visually; this is the one for
               sighted keyboard users, in an app that is explicitly keyboard-driven
@@ -4087,7 +4130,7 @@ export function BookingApp({uid}){
               It is deliberately outside <header>, so `inert` while a modal is
               open does not reach it — a skip link inside an inert subtree is
               silently unfocusable, the same trap as a live region in one. */}
-          <a className="mgt-skip" href="#mgt-main">Skip to bookings</a><header
+          <a className="mgt-skip" href="#mgt-main" title="Jump past the header to the bookings">Skip to bookings</a><header
           /* v17.12.0: `inert` while a modal is open — see the <main> note below. */
           inert={anyModal}
           ref={headerRef}
@@ -4099,15 +4142,22 @@ export function BookingApp({uid}){
               On a phone the block is the whole first row and ends with the
               connection dot (phase 79). */}<div ref={headTitleRef} style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:isMobile?"1 1 100%":undefined}}><button
               onClick={function(){setShowSettings(true);}}
-              title={"Settings & keyboard shortcuts"+(crashWord?" · "+crashWord:"")}
+              title={(crashWord?crashWord+" · ":"")+"Open Settings and the keyboard shortcuts"+keyHint("help")}
               aria-label={"Settings & keyboard shortcuts"+(crashWord?", "+crashWord:"")}
               className="mgt-hover-scale"
               style={GEAR_BTN}><CogIcon size={IC.chrome} /><CountBadge n={crashes.count} plus={crashes.more} float background="var(--app-danger-solid)" /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile||compact?T.title:T.display,fontWeight: FW.bold,margin:0,whiteSpace:compact?"nowrap":undefined}}>{generalSettings.restaurantName}</h1>{compact?null:<div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{/* v18.2.0: separators. The double spaces between the three facts were
                 collapsed by HTML to one, so it read "4 indoor 9 outdoor 13:00 -
                 22:00" — one run of numbers (the design critique). A middle dot
-                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))+(viewHours.special?" · "+(viewHours.note||"special day"):"")}</div>}</div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div>{/* v18.14.0 (H7): Follow and zoom on a short screen, after the
-              name (`marginRight` keeps them there), easing out with the Timeline
-              when the view changes. */}<Reveal horizontal speed="move" show={toolbarFolded} style={{marginRight:"auto"}}>{toolbarFolded?<TimelineZoomControls zoom={timelineZoom} setZoom={VA.onSetZoom} maxZoom={tlSettings.maxZoom} followZoom={tlSettings.followZoom} followNow={followNow} setFollowNow={setFollowNow} isToday={viewDate===todayStr()} />:null}</Reveal><div ref={headCtrlRef} style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",justifyContent:"flex-end",flexGrow:1,minWidth:0}}><ViewSwitcher
+                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))+(viewHours.special?" · "+(viewHours.note||"special day"):"")}</div>}</div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div><div ref={headCtrlRef} style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",justifyContent:"flex-end",flexGrow:1,minWidth:0}}>{/* v18.14.0 (H7): Follow and zoom on a short screen, easing out with the
+              Timeline when the view changes. v18.18.0 (Patryk): first in this group,
+              before Timeline/List/Plan, as on a big screen they sit on the right. He
+              chose it knowing that where the group takes a line of its own (today,
+              998 x 507) it leads that line and the switcher moves off its left edge.
+              `end`: the switcher holds still and the group's LEFT edge folds, so the
+              buttons stay put and the edge wipes them (atoms.jsx, Reveal). The
+              `flexShrink: 0` box keeps the fold from squeezing them first: without
+              it "· Whole day" (a Reveal, minimum width 0) gave up its 68px and "−"
+              slid 69px right, measured at 998 x 507. */}<Reveal horizontal end speed="move" show={toolbarFolded}>{toolbarFolded?<div style={{flexShrink:0}}><TimelineZoomControls zoom={timelineZoom} setZoom={VA.onSetZoom} maxZoom={tlSettings.maxZoom} followZoom={tlSettings.followZoom} followNow={followNow} setFollowNow={setFollowNow} isToday={viewDate===todayStr()} /></div>:null}</Reveal><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -4127,9 +4177,11 @@ export function BookingApp({uid}){
               chose the bar. Tablet and desktop are unchanged. */}{isMobile?null:<><button
               onClick={openWalkin}
               className="mgt-hover-scale"
+              title={"Seat a party that came in without a booking"+keyHint("walkin")}
               style={mkSolidBtn("var(--app-walkin)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>Walk-in</button><button
               onClick={openNew}
               className="mgt-hover-scale"
+              title={"Make a new booking"+keyHint("newBooking")}
               style={mkSolidBtn("var(--app-new)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>+ New</button></>}{/* v18.0.0 phase 5: the WA entry point is gated on the MODULE, not on
               WA_SANDBOX. Same guarantee — the module ships off, so a build on PROD
               Firebase (including a main-project Vercel preview of this branch) reads
@@ -4138,13 +4190,13 @@ export function BookingApp({uid}){
             {whatsappOn?<button
               onClick={function(){setShowInbox(true);}}
               className="mgt-hover-scale"
-              title="WhatsApp inbox (I)"
+              title={"Open the WhatsApp inbox"+keyHint("inbox")}
               style={mkSolidBtn("var(--wa-green)",{position:"relative",padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>WhatsApp<CountBadge n={wa.unreadCount} float background="var(--wa-unread-dot)" /></button>:null}{/* v17.9.0 (Patryk): Find-a-booking moved here from the date-nav
               toolbar, between "+ New" and the dot. Searching is an ACTION, and
               this is the row of them — it reads as the counterpart to adding a
               booking rather than as view chrome. */}<button
               onClick={function(){setShowSearch(true);}}
-              title="Find a booking"
+              title={"Find a booking on any date, by name, phone or tag"+keyHint("find")}
               aria-label="Find a booking"
               className="mgt-hover-scale"
               style={CHROME_BTN}><SearchIcon size={IC.chrome} /></button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
@@ -4158,9 +4210,11 @@ export function BookingApp({uid}){
             style={MOBILE_BAR}><button
               onClick={openWalkin}
               className="mgt-hover-scale"
+              title="Seat a party that came in without a booking"
               style={mkSolidBtn("var(--app-walkin)",{flex:1,fontSize: T.body})}>Walk-in</button><button
               onClick={openNew}
               className="mgt-hover-scale"
+              title="Make a new booking"
               style={mkSolidBtn("var(--app-new)",{flex:1,fontSize: T.body})}>+ New</button></div>:null}</header><div
           /* v17.9.0 (Patryk): the date controls are 40px and the collapsed
              Summary card beside them is 58, so `flex-start` left them sitting
@@ -4183,18 +4237,19 @@ export function BookingApp({uid}){
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.quiet})}
               aria-label="Previous day"
-              title="Previous day (←)"
+              title={"Go to the day before"+keyHint("prevDay")}
               ><ChevronLeftIcon size={IC.chrome} /></button><button
               onClick={function(){goToDate(stepDate(viewDate,1));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.quiet})}
               aria-label="Next day"
-              title="Next day (→)"
+              title={"Go to the day after"+keyHint("nextDay")}
               ><ChevronRightIcon size={IC.chrome} /></button><DateField
               /* v18.0.0 session 7: the weekday inside the pill ("Fri
                  11/09/2026"). The pill's look moved onto DateField's wrapper
                  unchanged; the input's own name rides in inputProps. */
               inputProps={{"aria-label":"Viewed date"}}
+              description="Pick the day to show"
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
               style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:dateCtrlMotion}}>{clockNote?<span
@@ -4204,13 +4259,14 @@ export function BookingApp({uid}){
               style={{display:"inline-flex",alignItems:"center",minHeight:H.control,fontSize: T.small,fontWeight: FW.semi,color:"var(--text-secondary)",whiteSpace:"nowrap"}}>{clockNote}</span>:null}<Presence show={viewDate!==todayStr()} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
               onClick={function(){goToDate(todayStr());}}
               className="mgt-hover-scale"
+              title={"Go back to today"+keyHint("today")}
               style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence>{/* v16.0.0: waitlist badge — lives in the Today slot (to Today's right when
               Today is visible); the flex:1 Summary sibling absorbs the width change.
               Orange = a table currently fits someone waiting; slate = just waiting. */}
             <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
               onClick={function(){setShowWaitlist(true);}}
               aria-label={"Waitlist — "+countLabel(dayWaiting.length,"waiting")+(dayWaitAvail?", a table is free now":"")}
-              title={"Waitlist — "+countLabel(dayWaiting.length,"waiting")+(dayWaitAvail?", a table is free now":"")}
+              title={"Open the day's waitlist"+(dayWaitAvail?": a table is free for someone waiting":"")}
               className="mgt-hover-scale"
               /* v17.10.0: the waitlist wears the PENDING amber, not the burnt
                  orange it shared with No show / Reassign / Reshuffle / the swap
@@ -4235,7 +4291,7 @@ export function BookingApp({uid}){
               gone — both buttons moved up into the header row above, each to the
               thing it acts on (see CHROME_BTN). The pair was created to give all
               three views ONE copy of these controls, and that still holds: the
-              header is no less shared than the date-nav row was. */}</div><div ref={setSummaryBodySlot} inert={anyModal} style={{flexShrink:0}} />{/* v17.5.0: in the fixed shell everything from here down lives in ONE
+              header is no less shared than the date-nav row was. */}</div><div ref={setSummaryBodySlot} inert={anyModal} style={shellFixed?SUMMARY_SLOT_FIT:{flexShrink:0}} />{/* v17.5.0: in the fixed shell everything from here down lives in ONE
             scroll region, so the two rows above stay pinned. The banners scroll
             away with the content — they're the pinning scope Patryk chose, and
             several open at once (a 3+ row late banner) would eat the viewport.
@@ -4364,17 +4420,22 @@ export function BookingApp({uid}){
           onClose={requestCloseBlock} />:null}</ModalPresence><ModalPresence show={!!confirmCancel}>{confirmCancel?<Overlay /* @static-height one sentence, worked out when it opens, and three buttons */ onClose={function(){setConfirmCancel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
+              title={"Keep the booking as it is"+keyHint("close")}
               onClick={function(){setConfirmCancel(null);}}>Back</button><button
               onClick={function(){if(!armSettled())return;doCancelBooking(confirmCancel,true);setShowForm(false);}}
+              title="Cancel the booking as a no-show, which counts against the guest's number"
               className="mgt-hover-scale"
               style={mkSolidBtn(BTN.orange,{display:"inline-flex",alignItems:"center",gap:6})}><NoShowIcon size={IC.control} />No show</button><button
               onClick={function(){if(!armSettled())return;doCancelBooking(confirmCancel,false);setShowForm(false);}}
+              title="Cancel the booking, freeing its tables"
               className="mgt-hover-scale"
               style={mkSolidBtn(BLOCK_BG.cancelled)}>Cancel booking</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Cancel booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{cancelWords(cancelBooked,autoOptimizer)}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmKitchen}>{confirmKitchen?<Overlay /* @static-height one sentence, computed when it opens and not after */ onClose={function(){setConfirmKitchen(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
+              title={"Go back without saving, to change the time"+keyHint("close")}
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
+              title={"Save anyway, with the kitchen this busy"+keyHint("confirm")}
               className="mgt-hover-scale"
               style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,todayStr(),t,d,null);return countLabel(l.starts,"booking","bookings")+" with "+guestsLabel(l.guests);})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return countLabel(l.starts,"booking","bookings")+" with "+guestsLabel(l.guests);})())+" starting at this time. Go back to pick another time, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!voucherAsk}>{voucherAsk&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]?<VoucherRedeemModal
               voucher={vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]}
@@ -4386,8 +4447,10 @@ export function BookingApp({uid}){
               onClose={function(){setVoucherAsk(null);}} />:null}</ModalPresence><ModalPresence show={!!voucherBack}>{voucherBack&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherBack.id;})||{}).voucherCode)]?<Overlay /* @static-height two fixed sentences and two buttons */ onClose={function(){setVoucherBack(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
+              title="Leave the amount spent from the voucher"
               onClick={function(){settleVoucherBack(false);}}>Keep redeemed</button><button
               onClick={function(){settleVoucherBack(true);}}
+              title="Put the amount this visit used back on the voucher"
               className="mgt-hover-scale"
               style={mkSolidBtn(S.accent)}>Restore to voucher</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Restore the voucher?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{(function(){
               const b=bookings.find(function(x){return x.id===voucherBack.id;})||{};
@@ -4398,19 +4461,24 @@ export function BookingApp({uid}){
             })()}</div><div style={{fontSize: T.small,color:S.sub}}>{voucherBack.from==="delete"?"Restoring puts the balance back. Keeping it redeemed leaves the amount spent against a booking that will no longer exist. The booking is deleted either way.":"Restoring puts the balance back and removes this visit from the voucher’s history. Keeping it redeemed leaves the record as it is."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!seatNote}>{seatNote?<SeatNoteModal note={seatNote} onClose={function(){setSeatNote(null);}} />:null}</ModalPresence><ModalPresence show={!!seatClash}>{seatClash?<SeatClashModal clash={seatClash} onComplete={seatAfterClearing} onAnyway={seatAnyway} onBack={function(){setSeatClash(null);}} />:null}</ModalPresence><ModalPresence show={!!voucherCarry}>{voucherCarry?<VoucherCarryModal carry={voucherCarry} currency={generalSettings.currency} onMove={doVoucherCarry} onNotNow={function(){setVoucherCarry(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height its sentences and buttons are set when it opens and it is up for one decision */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
+              title={"Leave every booking where it is"+keyHint("close")}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button>{/* v18.17.0 (B): offered only when the day has locks to take off. */}{reshuffleLocked>0?<button
               onClick={function(){if(!armSettled())return;setConfirmReshuffle(false);forceReshuffle(true);}}
+              title="Take the locks off the day's locked bookings, then re-seat every unlocked booking"
               className="mgt-hover-scale"
               style={mkSolidBtn(BTN.orange)}>{"Reshuffle and unlock "+reshuffleLocked}</button>:null}<button
               onClick={function(){if(!armSettled())return;setConfirmReshuffle(false);forceReshuffle();}}
+              title={"Re-seat the day's unlocked bookings; locked and seated ones stay"+keyHint("confirm")}
               className="mgt-hover-scale"
-              style={mkSolidBtn(BTN.orange)}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:reshuffleLocked>0?8:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div>{reshuffleLocked>0?<div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{countLabel(reshuffleLocked,"booking is locked","bookings are locked")+" to tables. Reshuffle does not move a locked booking, unless you unlock it here."}</div>:null}</Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
+              style={mkSolidBtn(BTN.orange)}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>{/* v18.18.0 commit 16: away from today it names the day, and the seated
+              sentence is today's alone, the one day that can have seated parties. */}{"Reshuffle all bookings"+(viewDate===today?"":" on "+formatDay(viewDate))+"?"}</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:reshuffleLocked>0?8:18}}>{"Confirmed bookings may be moved to different tables to improve efficiency."+(viewDate===today?" Seated bookings will not be moved.":"")}</div>{reshuffleLocked>0?<div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{countLabel(reshuffleLocked,"booking is locked","bookings are locked")+" to tables. Reshuffle does not move a locked booking, unless you unlock it here."}</div>:null}</Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.
         showSettings?<Overlay /* @static-height the tab body eases inside SettingsContent's own AutoHeight watch={cur} */ onClose={requestCloseSettings} maxWidth={SETTINGS_CARD_W} anchor="top" footer={<div style={{display:"flex",justifyContent:"flex-end"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"8px 18px",background:BTN.quiet})}
+              title={"Close Settings, asking first if a box holds an unsaved change"+keyHint("close")}
               onClick={requestCloseSettings}>Close</button></div>}><ModalTitle background="var(--app-btn-grey-strong)">Settings</ModalTitle><Suspense fallback={null}><SettingsContent
             appVersion={__APP_SIGNATURE__.version}
             onDirty={setSettingsDirty}
@@ -4420,6 +4488,8 @@ export function BookingApp({uid}){
             onToggleAutoTheme={onToggleAutoTheme}
             appWidth={appWidth}
             onSetAppWidth={onSetAppWidth}
+            appWidthFit={appWidthFit}
+            onToggleAppWidthFit={onToggleAppWidthFit}
             reduceMotion={reduceMotion}
             onToggleReduceMotion={onToggleReduceMotion}
             swEnabled={swEnabled}
@@ -4522,8 +4592,10 @@ export function BookingApp({uid}){
         confirmReminderDel?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReminderDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
+              title={"Keep the reminder"+keyHint("close")}
               onClick={function(){setConfirmReminderDel(null);}}>Back</button><button
               onClick={function(){if(armSettled())doDeleteReminder(confirmReminderDel);}}
+              title={"Delete the reminder for good"+keyHint("confirm")}
               className="mgt-hover-scale"
               style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete reminder?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
         reminderEditor?<ReminderEditor
@@ -4589,16 +4661,20 @@ export function BookingApp({uid}){
           const bk=conv&&conv.acceptedBookingId?bookings.find(function(b){return b.id===conv.acceptedBookingId;}):null;
           return <Overlay /* @static-height one sentence, chosen from the linked booking when it opens and not after */ onClose={function(){setConfirmArchive(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
+              title={"Keep the conversation where it is"+keyHint("close")}
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmArchive(null);}}>Back</button><button
               onClick={function(){if(!armSettled())return;wa.doArchive(confirmArchive);setConfirmArchive(null);}}
+              title={"Archive the conversation"+(bk?", leaving its booking as it is":"")}
               className="mgt-hover-scale"
               style={mkSolidBtn(BTN.orange,{minHeight:H.touch})}>Archive anyway</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Archive conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{bk?("This conversation is linked to a booking on "+formatDay(bk.date)+" at "+bk.time+". Archiving won't cancel the booking."):"Archive this conversation?"}</div></Overlay>;
         })():null}{confirmDeleteConv?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmDeleteConv(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
+              title={"Keep the conversation"+keyHint("close")}
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmDeleteConv(null);}}>Back</button><button
               onClick={function(){if(armSettled())wa.doDeleteConversation(confirmDeleteConv);}}
+              title="Delete the conversation and its messages for good"
               className="mgt-hover-scale"
               style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
           ctx={{waSettings:waSettings,conversations:wa.conversations,messagesMap:wa.messagesMap,watchMessages:wa.watchMessages,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.simAppendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend,patchMessage:wa.patchMessage,contacts:wa.contacts,waLink:wa.waLink,simSetContacts:wa.simSetContacts}}

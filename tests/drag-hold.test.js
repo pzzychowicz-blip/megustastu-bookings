@@ -75,7 +75,8 @@ describe("where it is wired", () => {
   });
   it("Settings → App offers the three as one named group, the chosen one pressed", () => {
     const settings = code("components/Settings.jsx");
-    expect(settings).toContain('<div role="group" aria-label="Drag hold" style={{ ...SEG_TRACK, flexShrink: 0 }}>');
+    // v18.18.0 commit 18: `marginLeft: "auto"`, so it keeps the right where the row wraps.
+    expect(settings).toContain('<div role="group" aria-label="Drag hold" style={{ ...SEG_TRACK, flexShrink: 0, marginLeft: "auto" }}>');
     expect(settings).toMatch(/aria-pressed=\{on\}\s+onClick=\{function \(\) \{ if \(!on\) onSetDragHold\(h\.id\); \}\}/);
     expect(settings).toContain("dragHold={dragHold} onSetDragHold={onSetDragHold} />;");
     const app = appCode();

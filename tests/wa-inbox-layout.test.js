@@ -19,7 +19,9 @@ const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("
 const Draft = read("components/whatsapp/DraftCard.jsx");
 const Inbox = read("components/whatsapp/InboxPanel.jsx");
 const Composer = read("components/whatsapp/ReplyComposer.jsx");
-const Shortcuts = read("components/Shortcuts.jsx");
+// v18.18.0: the inbox's keys are data in lib/shortcuts.js (`OWN_SHORTCUT_SECTIONS`),
+// which the Shortcuts tab and the hover descriptions both read.
+const Shortcuts = read("lib/shortcuts.js");
 const View = read("components/whatsapp/ConversationView.jsx");
 const Row = read("components/whatsapp/ConversationRow.jsx");
 
@@ -52,19 +54,19 @@ describe("W1 — the draft bar never hides what it asks you to accept", () => {
 describe("W2 — two jobs, two names, two marks", () => {
   it("the header's button edits the templates, under the edit pencil", () => {
     // v18.16.0 (follow-up): a row of the WHATSAPP mark's menu, word and pencil.
-    expect(Inbox).toContain('{ id: "templates", label: "Edit templates", icon: EditIcon, rule: !onOpenSim, title: "Edit templates (T)",');
+    expect(Inbox).toContain('{ id: "templates", label: "Edit templates", icon: EditIcon, rule: !onOpenSim, title: "Edit the quick-reply templates" + keyHint("inboxTemplates"),');
     expect(Inbox).not.toMatch(/title="Templates"/);
   });
 
   it("the composer's button inserts one, under the document mark", () => {
-    expect(Composer).toMatch(/aria-label="Insert template"\s*title="Insert template \(E\)"/);
+    expect(Composer).toMatch(/aria-label="Insert template"\s*title=\{"Show or hide the templates to put into this reply" \+ keyHint\("inboxInsert"\)\}/);
     expect(Composer).toMatch(/><TemplatesIcon size=\{IC\.chrome\} \/><\/button>/);
     expect(Composer).not.toMatch(/title="Templates"/);
   });
 
   it("the keyboard list uses the same two names", () => {
-    expect(Shortcuts).toMatch(/\{ keys: \["T"\],\s*label: "Edit templates" \}/);
-    expect(Shortcuts).toMatch(/\{ keys: \["E"\],\s*label: "Insert a template \(show or hide\)" \}/);
+    expect(Shortcuts).toContain('{ id: "inboxTemplates", caps: ["T"], label: "Edit templates" }');
+    expect(Shortcuts).toContain('{ id: "inboxInsert", caps: ["E"], label: "Insert a template (show or hide)" }');
   });
 });
 
@@ -82,7 +84,7 @@ describe("W3 — the words are on the buttons, not in a tooltip", () => {
   it("the header's Edit templates and Simulator carry their words", () => {
     // v18.16.0 (follow-up): rows of the WHATSAPP mark's menu, which draws a row's
     // icon before its word (ConversationMenu).
-    expect(Inbox).toContain('{ id: "sim", label: "Simulator", icon: FlaskIcon, rule: true, title: "WhatsApp simulator (X)", onPick: onOpenSim }');
+    expect(Inbox).toContain('{ id: "sim", label: "Simulator", icon: FlaskIcon, rule: true, title: "Open the WhatsApp simulator" + keyHint("simulator"), onPick: onOpenSim }');
     expect(Inbox).not.toContain("HEAD_TEXT_BTN");
   });
 });
@@ -166,20 +168,30 @@ describe("W5 — the phone's inbox", () => {
 
   // v18.16.0 (follow-up): one row with the mark left a phone no width for the
   // words, so the filter became its dot there; v18.17.0 (Patryk) made it the dot
-  // at every width, named by the words, and the row's red dot only while the open
-  // list holds something it would find.
-  it("Needs action is its dot alone at every width, and keeps its name", () => {
+  // at every width, named by the words. v18.18.0 (Patryk): the count of the open
+  // list's conversations that need a response takes the red, on the WhatsApp
+  // button's badge, and the dot is the button's ink.
+  it("Needs action is its dot at every width, keeps its name, and counts what it would find", () => {
     expect(Inbox).toContain('aria-label="Needs action"');
     expect(Inbox).not.toContain('"Needs action" : null}</button>');
-    expect(Inbox).toContain("const dotRed = !needsAction && conversations.some((c) => inTab(c, tab) && isActionable(c));");
-    expect(Inbox).toContain('backgroundColor: dotRed ? "var(--wa-unread-dot)" : "currentColor", boxShadow: dotRed ? "var(--wa-unread-ring)" : "none"');
+    expect(Inbox).toContain("const actionCount = conversations.filter((c) => inTab(c, tab) && isActionable(c)).length;");
+    expect(Inbox).toContain('<CountBadge n={actionCount} float background="var(--wa-unread-dot)" srText={actionCount === 1 ? "needs a response" : "need a response"} id={actionCountId} />');
+    expect(Inbox).toContain('style={{ position: "relative", flexShrink: 0, background: needsAction ?');
+    expect(Inbox).toContain('backgroundColor: "currentColor", flexShrink: 0');
+    expect(Inbox).not.toContain("dotRed");
+  });
+  // The name silences the contents, so the count is the description, and only
+  // while the badge is there to be pointed at.
+  it("hands the count to a screen reader as the button's description", () => {
+    expect(Inbox).toContain("aria-describedby={actionCount ? actionCountId : undefined}");
+    expect(Inbox).toContain("const actionCountId = useId();");
   });
 
   // v18.17.0 (Patryk): Archive is H, where it was Backspace, and the sheet says so.
   it("archives on H, not Backspace, and the shortcut sheet agrees", () => {
     expect(Inbox).toContain('if (k === "h" && tab === "inbox") {');
     expect(Inbox).not.toContain('e.key === "Backspace"');
-    expect(Shortcuts).toContain('{ keys: ["H"],        label: "Archive (Inbox; selection in select mode)" },');
+    expect(Shortcuts).toContain('{ id: "inboxArchive", caps: ["H"], label: "Archive (Inbox; selection in select mode)" },');
   });
 
   // v18.17.0 (Patryk): the select checkbox eases in and out on the list's fold.

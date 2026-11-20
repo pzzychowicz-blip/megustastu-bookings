@@ -19,6 +19,7 @@ import { useState, useRef, useEffect } from "react";
 import { BTN, S, R, T, FW } from "../lib/constants";
 import { searchBookings, matchedTagLabels, formatPhone } from "../lib/customers";
 import { formatDay, showsYear } from "../lib/day";
+import { keyHint } from "../lib/shortcuts";
 import { guestsLabel } from "../lib/booking-logic";
 import { Overlay, ModalTitle, mkInp, mkBtn, AutoHeight, SBadge, SBADGE_W, textWidth } from "./atoms";
 
@@ -99,6 +100,7 @@ export function SearchPanel({ bookings, todayStr, isMobile, guestTags, tagList, 
       <button /* @no-lift a result row as wide as the card: .mgt-ac-row tints it through --row-bg */
         key={b.id}
         onClick={function () { onPick(b); }}
+        title={"Go to " + formatDay(b.date) + " and show " + (b.name || "(no name)") + "'s booking in the List"}
         // v18.4.0 (Patryk): a wide row takes the tint and neither the lift nor the press dip (DESIGN.md, Press feedback).
         // At 8% a 690px row grew 28px a side, and at 96% its date slid inward.
         className="mgt-ac-row mgt-nopress"
@@ -141,6 +143,7 @@ export function SearchPanel({ bookings, todayStr, isMobile, guestTags, tagList, 
     <div style={{ display: "flex", justifyContent: "flex-end" }}><button
       className="mgt-hover-scale mgt-press"
       style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
+      title={"Close Find a booking" + keyHint("close")}
       onClick={onClose}>Done</button></div>
   );
 
@@ -150,6 +153,7 @@ export function SearchPanel({ bookings, todayStr, isMobile, guestTags, tagList, 
       <input
         ref={inputRef}
         aria-label="Search bookings by name, phone number or tag"
+        title="Type part of a guest's name, phone number or tag: every date is searched, upcoming first"
         value={query}
         onChange={function (e) { setQuery(e.target.value); }}
         placeholder="Search by name, phone or tag, any date…"

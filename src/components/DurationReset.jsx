@@ -16,6 +16,7 @@ export function DurationReset({ show, onReset }) {
       <button
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ fontSize: T.small, background: BTN.quiet, minHeight: H.chip, padding: "2px 10px" })}
+        title="Go back to the length the party's size gives"
         {...stepPress(onReset)}>Reset</button>
     </Presence>
   );

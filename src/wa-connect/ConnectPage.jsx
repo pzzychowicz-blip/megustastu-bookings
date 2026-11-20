@@ -221,7 +221,7 @@ export function ConnectPage() {
     body = (
       <>
         <p style={TEXT}>Sign in to {APP_NAME} on this device first, as an admin, then open this page again.</p>
-        <div><a className="mgt-hover-scale mgt-press" href="/" style={mkBtn({ boxSizing: "border-box", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" })}>Open {APP_NAME}</a></div>
+        <div><a className="mgt-hover-scale mgt-press" href="/" title={"Go to " + APP_NAME + " to sign in, then open this page again"} style={mkBtn({ boxSizing: "border-box", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" })}>Open {APP_NAME}</a></div>
       </>
     );
   } else if (!cfg) body = <p style={MUTED}>Checking your access&hellip;</p>;
@@ -241,6 +241,7 @@ export function ConnectPage() {
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.wide }}>
         <button type="button" className="mgt-hover-scale mgt-press" onClick={start}
+          title="Open Meta's window to link the WhatsApp Business app on the restaurant phone to this number"
           disabled={sdk !== "ready" || flow === "waiting" || flow === "sending" || !!retrying}
           style={mkSolidBtn("var(--accent)", sdk === "ready" && flow !== "waiting" && flow !== "sending" && !retrying ? null : { opacity: 0.55, cursor: "default" })}>
           {result ? "Connect again" : "Connect the Business app"}
@@ -317,6 +318,7 @@ function ConnectResult({ result, retrying, onRetry, retryNote, copied, onCopy, h
               {!s.ok && d.retry && linked ? (
                 <button type="button" className="mgt-hover-scale mgt-press" onClick={function () { onRetry(d.id); }}
                   disabled={!!retrying} aria-label={"Try again: " + d.label}
+                  title={"Run this step again: " + d.label}
                   style={mkBtn(retrying ? { opacity: 0.55, cursor: "default", flexShrink: 0 } : { flexShrink: 0 })}>
                   {retrying === d.id ? "Trying…" : "Try again"}
                 </button>
@@ -340,7 +342,7 @@ function ConnectResult({ result, retrying, onRetry, retryNote, copied, onCopy, h
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.base }}>
             <span style={MUTED}>Number id</span>
             <code style={{ fontSize: T.lead, fontWeight: FW.semi }}>{result.phoneNumberId}</code>
-            <button type="button" className="mgt-hover-scale mgt-press" onClick={onCopy} style={mkBtn({ display: "inline-flex", alignItems: "center", gap: SP.snug })}>
+            <button type="button" className="mgt-hover-scale mgt-press" onClick={onCopy} title="Copy the number id, to paste into Vercel" style={mkBtn({ display: "inline-flex", alignItems: "center", gap: SP.snug })}>
               <CopyIcon size={IC.control} />{copied ? "Copied" : "Copy"}
             </button>
           </div>
@@ -351,7 +353,7 @@ function ConnectResult({ result, retrying, onRetry, retryNote, copied, onCopy, h
           ) : null}
         </div>
       ) : null}
-      <div><a className="mgt-hover-scale mgt-press" href="/" style={mkBtn({ boxSizing: "border-box", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" })}>Back to {APP_NAME}</a></div>
+      <div><a className="mgt-hover-scale mgt-press" href="/" title={"Leave this page and go back to " + APP_NAME} style={mkBtn({ boxSizing: "border-box", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" })}>Back to {APP_NAME}</a></div>
     </>
   );
 }

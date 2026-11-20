@@ -36,6 +36,7 @@
 
 import { S, BTN, TBL, TABLE_GROUPS, R, T, FW, IC } from "../lib/constants";
 import { isIn, comboCap, guestsLabel } from "../lib/booking-logic";
+import { keyHint } from "../lib/shortcuts";
 import { Overlay, ModalTitle, mkBtn, AutoHeight, RowSlot } from "./atoms";
 import { CheckIcon } from "./Icons";
 
@@ -82,6 +83,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
             className="mgt-hover-scale mgt-press"
             style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
             onClick={() => onChange([])}
+            title="Clear the preferred tables, so any table will do"
           >
             Clear
           </button>
@@ -91,6 +93,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
         onClick={onClose}
+        title={"Close the picker; the tables chosen are kept" + keyHint("close")}
       >
         Done
       </button>
@@ -132,6 +135,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
                   key={t.id}
                   className="mgt-hover-scale"
                   onClick={() => togglePref(t.id)}
+                  title={(isPref ? "Take table " + t.id + " off" : "Add table " + t.id + " to") + " the tables this party would like"}
                   style={{
                     width: 64, height: 52,   /* @canvas */ padding: 0, borderRadius: R.pill,
                     border: "2px solid " + (isPref ? "var(--accent)" : tc.bg),

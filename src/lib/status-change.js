@@ -205,3 +205,21 @@ export function completeCleared(ctx){
     });
   };
 }
+
+// ── v18.18.0 (Part 2 batch 3): what a status button says on hover ────────────
+// The List card's next-step button and the quick-status card's buttons say
+// what a tap does to WHOSE booking (DESIGN.md, "Every control carries a hover
+// description": a verb first, the item named, never the state). One place, so
+// the two surfaces that offer the same tap describe it in the same words.
+const STATUS_TITLE = {
+  pending: (who) => "Set " + who + "'s booking back to pending",
+  confirmed: (who) => "Confirm " + who + "'s booking",
+  seated: (who) => "Mark " + who + " as seated at their tables",
+  completed: (who) => "Mark " + who + "'s visit as completed, freeing the tables",
+  cancelled: (who) => "Cancel " + who + "'s booking",
+};
+export function statusTitle(status, name){
+  const say = STATUS_TITLE[status];
+  const who = name || "(no name)";
+  return say ? say(who) : "Set " + who + "'s booking to " + status;
+}

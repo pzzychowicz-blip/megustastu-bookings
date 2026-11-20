@@ -33,10 +33,11 @@
 // constants.js, change it here, and the test will tell you what it cost.
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { appCode } from "./app-source.js";
 
 // v17.15.1: the token blocks moved out of index.html into src/index.css (the
 // service worker can cache a hashed asset; it re-sent the inline block on every
@@ -1120,7 +1121,40 @@ describe("a dialog's sheet does not show what is behind it", () => {
       const want = parse(more["--bg-sheet"]);
       for (const ch of ["r", "g", "b"]) expect(Math.abs(got[ch] - want[ch]), ch).toBeLessThanOrEqual(1);
     });
+    // v18.18.0 commit 19 (Patryk): at 0.98 with no blur the phone's sheet let the
+    // page ghost through (the Summary's "Afternoon" behind the Week view, on an
+    // iPhone). Solid, at the value 0.98 drew over --bg-app, which is what
+    // Increase Contrast already gave it, so the sheet's colour does not move.
+    it(`the phone's sheet is solid, at its old composite, in ${theme}`, () => {
+      expect(parse(vars["--bg-sheet-mobile"]).a).toBe(1);
+      const was = theme === "light" ? { r: 240, g: 243, b: 248, a: 0.98 } : { r: 28, g: 28, b: 30, a: 0.98 };
+      const got = over(was, parse(vars["--bg-app"]));
+      const now = parse(vars["--bg-sheet-mobile"]);
+      for (const ch of ["r", "g", "b"]) expect(Math.abs(got[ch] - now[ch]), ch).toBeLessThanOrEqual(1);
+    });
   }
+});
+
+// v18.18.0 commit 19 (Patryk): --border-input is a WHITE rim, and inside a sheet at
+// 0.98 or more it reads on nothing: the Week rows and the Month grid measured 1.01:1
+// against the desktop card, so a desktop or tablet showed neither. A surface's edge
+// is --border-soft, as the comment over --bg-sheet has said since v18.14.0. The token
+// stays for Dark's --field-edge, which points at it, so it is the components that
+// may not draw it.
+function componentFiles(dir) {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) return componentFiles(path);
+    return /\.jsx?$/.test(path) ? [path] : [];
+  });
+}
+describe("a white rim is no surface's edge", () => {
+  it("no component draws --border-input", () => {
+    const src = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
+    const drawn = componentFiles(join(src, "components")).filter((f) => stripComments(readFileSync(f, "utf8")).join("\n").includes("--border-input"));
+    expect(drawn).toEqual([]);
+    expect(appCode()).not.toContain("--border-input");
+  });
 });
 
 // ── The party-size ring — a NON-TEXT boundary (v17.9.1) ──────────────────────

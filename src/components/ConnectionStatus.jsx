@@ -119,7 +119,7 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
            connection state and still does; this adds the disclosure half. */
         aria-haspopup="dialog"
         aria-expanded={open}
-        title={connecting ? "Connecting to the server…" : connected ? "Connected to the server" : "Lost connection to the server"}
+        title={(connecting ? "Connecting to the server…" : connected ? "Connected to the server" : "Lost connection to the server") + " · open for the devices signed in and Log out"}
         aria-label={connecting ? "Connecting to the server" : connected ? "Connected to the server" : "Lost connection to the server"}
         style={{
           appearance: "none",
@@ -237,6 +237,7 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
                 type="button"
                 className="mgt-hover-scale"
                 onClick={onLogout}
+                title="Sign this device out of the app"
                 style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "6px 12px", background: BTN.quiet })}
               >
                 Log out
@@ -269,6 +270,7 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
               type="button"
               className="mgt-hover-scale"
               onClick={onReconnect}
+              title="Try to reach the database again now, without waiting"
               style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "6px 12px", background: BTN.quiet, marginBottom: 8 })}
             >
               Reconnect now

@@ -23,6 +23,7 @@ import { Reveal, mkSolidBtn, InlineAlert } from "../atoms";
 import { CloseIcon } from "../Icons";
 import { TemplatesIcon, PaperclipIcon, FileIcon } from "./WaIcons";
 import { BTN, R, T, FW, M, H, IC, SP, REVEAL_EXIT_MS } from "../../lib/constants";
+import { keyHint } from "../../lib/shortcuts";
 import { fileSizeLabel, WA_CAPTION_MAX } from "../../lib/whatsapp";
 import { attachKind, attachRefusal, shrinkPhoto } from "../../lib/wa-attach";
 import { draftTextOf, setReplyDraft } from "../../lib/wa-reply-drafts";
@@ -47,6 +48,7 @@ function TemplateChips({ templates, convLang, onInsert, scrollLang }) {
     <button
       key={t.id}
       className="mgt-hover-scale"
+      title={"Put the " + (outLang === "es" ? "Spanish" : "English") + " template " + (outLang === "es" ? t.labelEs : t.labelEn) + " into the reply"}
       onClick={() => onInsert(outLang === "es" ? t.textEs : t.textEn)}
       style={{ flexShrink: 0, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", borderRadius: R.pill, padding: "6px 12px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, color: "var(--text-primary)", boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" }}
     >{outLang === "es" ? t.labelEs : t.labelEn}</button>
@@ -60,6 +62,7 @@ function TemplateChips({ templates, convLang, onInsert, scrollLang }) {
         <button
           key={l}
           className="mgt-hover-scale"
+          title={"Put the templates into this reply in " + (l === "es" ? "Spanish" : "English")}
           onClick={() => setOutLang(l)}
           style={{ background: outLang === l ? "var(--accent)" : "transparent", color: outLang === l ? "var(--text-on-accent)" : "var(--text-primary)", border: "none", borderRadius: R.pill, padding: "4px 10px", fontSize: T.small, fontWeight: FW.semi, cursor: "pointer", textTransform: "uppercase", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
         >{l}</button>
@@ -337,7 +340,7 @@ export function ReplyComposer({ onSend, disabled, noWindow = false, templates, c
           // into this reply. The header's button, which EDITS them, had the
           // same name and icon.
           aria-label="Insert template"
-          title="Insert template (E)"
+          title={"Show or hide the templates to put into this reply" + keyHint("inboxInsert")}
           className="mgt-hover-scale mgt-press"
           style={sideBtn(tplOpen)}
         ><TemplatesIcon size={IC.chrome} /></button>
@@ -352,12 +355,13 @@ export function ReplyComposer({ onSend, disabled, noWindow = false, templates, c
           ><PaperclipIcon size={IC.chrome} /></button>
         ) : null}
         {/* The picker itself: never focused or seen, the button above opens it. */}
-        {onSendMedia ? <input /* @no-lift never rendered: the hidden file picker the paperclip opens */ ref={fileRef} type="file" accept="image/*,application/pdf" hidden onChange={onPick} /> : null}
+        {onSendMedia ? <input /* @no-lift never rendered: the hidden file picker the paperclip opens */ ref={fileRef} title="The photo or PDF to attach" type="file" accept="image/*,application/pdf" hidden onChange={onPick} /> : null}
         {/* Named for the same reason as the inbox search: the placeholder is
             the only text near this control and it disappears once you type. */}
         <textarea /* @no-lift a full-width text field, the inbox-search reason one control over */
           ref={areaRef}
           aria-label={att ? "Caption" : "Reply message"}
+          title={att ? "A caption sent with the attachment" : "The reply to send to this guest"}
           value={txt}
           // A refusal or a failed send leaves when you type, as InlineAlert
           // does in a form: it is about what you did, and you are moving on.
@@ -390,6 +394,7 @@ export function ReplyComposer({ onSend, disabled, noWindow = false, templates, c
         <button
           onClick={send}
           disabled={!canSend}
+          title="Send the reply on WhatsApp"
           className="mgt-hover-scale mgt-press"
           style={mkSolidBtn(canSend ? "var(--wa-green-dark)" : BTN.quiet, { padding: "10px 18px", cursor: canSend ? "pointer" : "not-allowed", fontSize: T.body, minHeight: H.touch, ...(canSend ? { boxShadow: "var(--shadow-btn)" } : null) })}
         >{busy ? "Sending…" : "Send"}</button>

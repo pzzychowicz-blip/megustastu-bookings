@@ -8,6 +8,7 @@ import { useState } from "react";
 import { Overlay, ModalTitle, Fld, mkInp, mkArea, mkBtn, mkDangerBtn, AutoHeight } from "../atoms";
 import { FoldRows } from "../FoldRows";
 import { S, BTN, R, T, FW, IC } from "../../lib/constants";
+import { keyHint } from "../../lib/shortcuts";
 import { markArmed, armSettled } from "../../lib/arm-guard";
 import { TrashIcon } from "../Icons";
 
@@ -62,9 +63,10 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
           {/* v18.2.0: each names its template, the visible word leading,
               for the reason the reminder rows' do (tests/a11y.test.js). */}
-          <button className="mgt-hover-scale" aria-label={"Edit (" + name + ")"} style={mkBtn({ fontSize: T.small, minHeight: 36, minWidth: REST_W, padding: "6px 12px", background: BTN.quiet })} onClick={() => openEdit(t)}>Edit</button>
+          <button className="mgt-hover-scale" aria-label={"Edit (" + name + ")"} title={"Change the template " + name} style={mkBtn({ fontSize: T.small, minHeight: 36, minWidth: REST_W, padding: "6px 12px", background: BTN.quiet })} onClick={() => openEdit(t)}>Edit</button>
           <button className="mgt-hover-scale"
             aria-label={(armed ? "Confirm — delete (" : "Delete (") + name + ")"}
+            title={armed ? "Delete the template " + name + " from the list" : "Delete the template " + name + " (asks for a second tap)"}
             style={mkDangerBtn({ fontSize: T.small, minHeight: 36, minWidth: REST_W, padding: "6px 12px", gap: 4 })}
             onClick={() => {
               if (armed) { if (!armSettled()) return; setArmedId(null); removeT(t.id); }
@@ -80,14 +82,14 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
 
   const editFooter = (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-      <button className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })} onClick={() => setEditing(null)}>Cancel</button>
-      <button onClick={saveEdit} className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: S.accent })}>Save template</button>
+      <button className="mgt-hover-scale" title="Back to the list without keeping this edit" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })} onClick={() => setEditing(null)}>Cancel</button>
+      <button onClick={saveEdit} title="Keep this template in the list; Save all stores it" className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: S.accent })}>Save template</button>
     </div>
   );
   const listFooter = (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-      <button className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })} onClick={onClose}>Close</button>
-      <button onClick={() => onSave(list)} className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: S.accent })}>Save all</button>
+      <button className="mgt-hover-scale" title={"Close the templates without saving the changes" + keyHint("close")} style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })} onClick={onClose}>Close</button>
+      <button onClick={() => onSave(list)} title="Save every template and close" className="mgt-hover-scale" style={mkBtn({ minHeight: 44, padding: "10px 18px", background: S.accent })}>Save all</button>
     </div>
   );
 
@@ -109,16 +111,16 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
         <div key="edit" className="mgt-fade-in" style={{ padding: "14px", borderRadius: R.card, background: "var(--wa-row-active-bg)", border: "1px solid var(--wa-row-active-border)" }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)", marginBottom: 10 }}>{editing === "__new__" ? "New template" : "Edit template"}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Fld label="Label (EN)">{(id) => <input id={id} className="mgt-hover-scale" value={form.labelEn} onChange={(e) => setForm(Object.assign({}, form, { labelEn: e.target.value }))} style={mkInp()} placeholder="Confirm" />}</Fld>
-            <Fld label="Label (ES)">{(id) => <input id={id} className="mgt-hover-scale" value={form.labelEs} onChange={(e) => setForm(Object.assign({}, form, { labelEs: e.target.value }))} style={mkInp()} placeholder="Confirmar" />}</Fld>
-            <Fld label="Text (EN)" style={{ gridColumn: "1 / -1" }}>{(id) => <textarea id={id} className="mgt-hover-scale" value={form.textEn} onChange={(e) => setForm(Object.assign({}, form, { textEn: e.target.value }))} rows={2} style={mkArea()} placeholder="Your booking is confirmed..." />}</Fld>
-            <Fld label="Text (ES)" style={{ gridColumn: "1 / -1" }}>{(id) => <textarea id={id} className="mgt-hover-scale" value={form.textEs} onChange={(e) => setForm(Object.assign({}, form, { textEs: e.target.value }))} rows={2} style={mkArea()} placeholder="Su reserva está confirmada..." />}</Fld>
+            <Fld label="Label (EN)">{(id) => <input id={id} className="mgt-hover-scale" title="The chip's name in English" value={form.labelEn} onChange={(e) => setForm(Object.assign({}, form, { labelEn: e.target.value }))} style={mkInp()} placeholder="Confirm" />}</Fld>
+            <Fld label="Label (ES)">{(id) => <input id={id} className="mgt-hover-scale" title="The chip's name in Spanish" value={form.labelEs} onChange={(e) => setForm(Object.assign({}, form, { labelEs: e.target.value }))} style={mkInp()} placeholder="Confirmar" />}</Fld>
+            <Fld label="Text (EN)" style={{ gridColumn: "1 / -1" }}>{(id) => <textarea id={id} className="mgt-hover-scale" title="The English message the chip puts into a reply" value={form.textEn} onChange={(e) => setForm(Object.assign({}, form, { textEn: e.target.value }))} rows={2} style={mkArea()} placeholder="Your booking is confirmed..." />}</Fld>
+            <Fld label="Text (ES)" style={{ gridColumn: "1 / -1" }}>{(id) => <textarea id={id} className="mgt-hover-scale" title="The Spanish message the chip puts into a reply" value={form.textEs} onChange={(e) => setForm(Object.assign({}, form, { textEs: e.target.value }))} rows={2} style={mkArea()} placeholder="Su reserva está confirmada..." />}</Fld>
           </div>
         </div>
       ) : (
         <div key="list" className="mgt-fade-in">
           {rows}
-          <button onClick={openNew} className="mgt-hover-scale mgt-press" style={mkBtn({ minHeight: 40, padding: "8px 14px", background: S.accent })}>+ Add template</button>
+          <button onClick={openNew} title="Write a new quick-reply template" className="mgt-hover-scale mgt-press" style={mkBtn({ minHeight: 40, padding: "8px 14px", background: S.accent })}>+ Add template</button>
         </div>
       )}
       </AutoHeight>

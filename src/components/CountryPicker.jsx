@@ -26,12 +26,19 @@
 // Rows use `useAcRow`, the booking form's tap-vs-scroll handling, so a swipe
 // through the list scrolls it rather than picking whichever country the
 // finger landed on.
+//
+// ── Opening upward (v18.18.0) ────────────────────────────────────────────────
+// `above` hangs the menu from the pill's TOP, for a pill with nothing under it but
+// the Save row: the phone refusal's "Other code…", in the booking form's footer.
+// `useMenuRoom` then measures the room over the pill. The search box sits at the
+// menu's BOTTOM, beside the pill (Patryk, 2026-11-19): the menu shrinks to its rows
+// as the search narrows them, so a box at the top would move under the typing.
 
 import { useState, useRef, useEffect, useId } from "react";
 import { S, T, FW, SP, IC, EXIT_MS } from "../lib/constants";
 import { afterFrame } from "../lib/after-frame";
-import { mkInp } from "./atoms";
-import { ChevronDownIcon, CheckIcon } from "./Icons";
+import { mkInp, TurnChevron } from "./atoms";
+import { CheckIcon } from "./Icons";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
 import { useMenuRoom } from "../hooks/useMenuRoom";
 import { COUNTRIES, countryByIso, flagOf, dialLabel, matchesCountry } from "../lib/phone-countries";
@@ -45,10 +52,25 @@ const HEAD = {
   textTransform: "uppercase", letterSpacing: "0.04em",
 };
 
+// Each way of opening has its pair, which starts 4px toward the pill and shrinks back
+// to it from the corner beside it (index.css, the popover pair's note).
+const POP = { in: "mgt-pop-in", out: "mgt-pop-out", origin: "top left" };
+const POP_UP = { in: "mgt-pop-up-in", out: "mgt-pop-up-out", origin: "bottom left" };
+// `above`: AC_MENU's `top: 100%` and margin turned over, and the search box (the first
+// child, so still the first stop for Tab and a screen reader) drawn at the bottom.
+const MENU_UP = { top: "auto", bottom: "100%", marginTop: 0, marginBottom: SP.tight, flexDirection: "column-reverse" };
+const SEARCH_EDGE = "1px solid var(--border-soft)";
+// `above`: the chevron starts pointing up, at the list it opens, and turns down.
+const CHEVRON_UP = { transform: "rotate(180deg)" };
+
 // `label` turns the pill into an ACTION ("+ Add country") rather than a
 // readout of the current choice: Settings' pinned-list editor picks a country
 // to add, and has no "current" one to show. Its name is then the label itself.
-export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Country code", label, style, disabled = false }) {
+// v18.18.0 (Part 2 batch 3–4, Patryk): `description` is the pill's hover
+// description, as on the atoms that draw a control. It differs per caller (the
+// phone field, the refusal's "Other code…", Settings' pinned countries), so it
+// has no default, and check:style Rule 14 asks every call site for it.
+export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Country code", label, description, style, disabled = false, above = false }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
@@ -69,7 +91,8 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
   const uid = useId();
   const acRow = useAcRow();
   const cur = countryByIso(iso);
-  useMenuRoom(menuRef, open, MENU_TALL);
+  useMenuRoom(menuRef, open, MENU_TALL, above);
+  const pop = above ? POP_UP : POP;
 
   // The rows on screen, in order. Unfiltered: pinned first, then every country
   // (a pinned one appears in both, as in every phone app — the long list is
@@ -145,6 +168,7 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={label ? undefined : ariaLabel + ": " + (cur ? cur.name + " " + dialLabel(cur) : "none")}
+        title={description}
         onClick={function () { if (open) close(false); else openList(); }}
         style={Object.assign({}, mkInp(), {
           width: "auto", flexShrink: 0, display: "flex", alignItems: "center", gap: SP.snug,
@@ -161,11 +185,14 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
           <span aria-hidden="true">{flagOf(cur.iso)}</span>
           <span>{dialLabel(cur)}</span>
         </> : <span style={{ color: "var(--field-prompt)" }}>Code</span>}
-        <span aria-hidden="true" style={{ color: S.muted, display: "flex" }}><ChevronDownIcon size={IC.inline} /></span>
+        {/* v18.18.0 (Patryk): the chevron turns as the list opens, and back. It
+            points where the list will appear and away once it is open, so an
+            `above` picker's starts pointing up (the outer turn) and turns down. */}
+        <span aria-hidden="true" style={Object.assign({ color: S.muted, display: "flex" }, above ? CHEVRON_UP : null)}><TurnChevron open={open} flip size={IC.inline} /></span>
       </button>
       {open || leaving ? (
-        <div ref={menuRef} key={opens} className={open ? "mgt-pop-in" : "mgt-pop-out"} inert={!open} style={Object.assign({}, AC_MENU, { transformOrigin: "top left", display: "flex", flexDirection: "column", overflowY: "hidden", maxHeight: MENU_TALL })}>
-          <div style={{ padding: SP.base, borderBottom: "1px solid var(--border-soft)", flexShrink: 0 }}>
+        <div ref={menuRef} key={opens} className={open ? pop.in : pop.out} inert={!open} style={Object.assign({}, AC_MENU, { transformOrigin: pop.origin, display: "flex", flexDirection: "column", overflowY: "hidden", maxHeight: MENU_TALL }, above ? MENU_UP : null)}>
+          <div style={Object.assign({ padding: SP.base, flexShrink: 0 }, above ? { borderTop: SEARCH_EDGE } : { borderBottom: SEARCH_EDGE })}>
             <input
               autoFocus
               className="mgt-hover-scale"
@@ -173,6 +200,7 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
               onChange={function (e) { setQ(e.target.value); setActive(0); }}
               onKeyDown={onKey}
               placeholder="Search country or code"
+              title="Type part of a country's name, or its code"
               /* v18.14.2: a country's name is no word to correct. Typing "pol"
                  on an iPad with a Polish keyboard raised iOS's "Pół" bubble,
                  which stayed on the screen after the form had closed. */
@@ -203,6 +231,7 @@ export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Count
                     data-idx={i}
                     role="option"
                     aria-selected={!!sel}
+                    title={"Use " + r.c.name + "'s code, " + dialLabel(r.c)}
                     className="mgt-ac-row"
                     {...acRow(function () { pick(r.c); })}
                     onMouseEnter={function () { setActive(i); }}

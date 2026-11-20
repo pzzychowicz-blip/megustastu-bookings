@@ -98,7 +98,7 @@ describe("no surface says pax", () => {
   const sites = [
     ["components/SearchPanel.jsx", /\{guestsLabel\(b\.size\)\}/],
     ["components/PlanView.jsx", /\{b\.name\}<\/span>[\s{}]*<SizeRing n=\{b\.size\} rim="var\(--chip-neutral-border\)" \/>/],
-    ["components/TimelineView.jsx", /title=\{"Waiting: " \+ g\.name \+ ", " \+ guestsLabel\(g\.size\) \+ ", at " \+ g\.time/],
+    ["components/TimelineView.jsx", /title=\{"Book " \+ g\.name \+ " from the waitlist: " \+ guestsLabel\(g\.size\) \+ ", at " \+ g\.time/],
     ["components/CustomersSettings.jsx", /\{guestsLabel\(b\.size\)\}/],
     ["components/WaitlistPanel.jsx", /\{guestsLabel\(w\.size\)\}/],
     ["components/WaitAvailBanner.jsx", /who \+ " · " \+ guestsLabel\(w\.size\) \+ " — table free"/],

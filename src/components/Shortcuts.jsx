@@ -22,7 +22,7 @@ import { Fragment } from "react";
 import { Kbd, Section } from "./atoms";
 import { T, FW } from "../lib/constants";
 import { WA_SANDBOX } from "../lib/waSandbox";
-import { shortcutDocs } from "../lib/shortcuts";
+import { shortcutDocs, ownShortcutDocs } from "../lib/shortcuts";
 
 // ── One row: keycap(s) + label ────────────────────────────────────────────────
 export function ShortcutRow({ keys, label, last }) {
@@ -58,37 +58,11 @@ export function ShortcutRow({ keys, label, last }) {
 
 // The sections whose keys are handled OUTSIDE the shortcut table: the inbox and
 // the More popover have their own key handlers, the table picker its own, and
-// Escape / Enter are the hook's two modal tables. These stay written here.
-const OWN_SECTIONS = {
-  "WhatsApp Inbox": { title: "WhatsApp Inbox", when: "whatsapp", rows: [
-    { keys: ["←", "→"],   label: "Switch Inbox / Archived" },
-    { keys: ["↑", "↓"],   label: "Select previous / next conversation" },
-    { keys: ["S"],        label: "Toggle multi-select" },
-    { keys: ["T"],        label: "Edit templates" },
-    { keys: ["E"],        label: "Insert a template (show or hide)" },
-    { keys: ["A"],        label: "Accept draft, else toggle Needs action" },
-    { keys: ["D"],        label: "Dismiss draft" },
-    { keys: ["C"],        label: "Focus the reply box" },
-    { keys: ["/"],        label: "Open search" },
-    { keys: ["H"],        label: "Archive (Inbox; selection in select mode)" },
-    { keys: ["R"],        label: "Restore (Archived; selection in select mode)" },
-  ]},
-  "More popover (Week / Month)": { title: "More popover (Week / Month)", rows: [
-    { keys: ["W", "M"], label: "Week / Month view" },
-    { keys: ["↑", "↓"], label: "Move day focus" },
-    { keys: ["←", "→"], label: "Prev / next (week, or day in Month)" },
-    { keys: ["T"],       label: "This week / month (today)" },
-    { keys: ["Enter"],   label: "Open the focused day" },
-  ]},
-  "Manual Table Assignment": { title: "Manual Table Assignment", rows: [
-    { keys: ["S"],       label: "Toggle Swap busy" },
-    { keys: ["C"],       label: "Clear selected tables" },
-  ]},
-  "Universal": { title: "Universal", rows: [
-    { keys: ["Esc"],     label: "Close current window (or clear the List selection)" },
-    { keys: ["Enter"],   label: "Confirm primary action" },
-  ]},
-};
+// Escape / Enter are the hook's two modal tables. v18.18.0: their rows are data
+// in lib/shortcuts.js (`OWN_SHORTCUT_SECTIONS`), beside the table's, because a
+// control's hover description reads the same keys through `keyHint`.
+const OWN_SECTIONS = {};
+ownShortcutDocs().forEach(function (sec) { OWN_SECTIONS[sec.title] = sec; });
 
 // The tab's order. A string is a section drawn from the shortcut table
 // (`shortcutDocs`, lib/shortcuts.js); the rest are the four above.

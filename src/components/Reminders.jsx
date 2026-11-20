@@ -25,6 +25,7 @@ import { FoldRows } from "./FoldRows";
 import { TrashIcon } from "./Icons";
 import { WEEKDAY_SHORT, formatDay } from "../lib/day";
 import { countLabel } from "../lib/booking-logic";
+import { keyHint } from "../lib/shortcuts";
 
 // ── One reminder card ────────────────────────────────────────────────────────
 // v18.2.0 phase 55: PAUSED_FADE moved to atoms (standing bookings share it).
@@ -84,7 +85,7 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
             the next. v17.15.6 moved the expression to `rname` above — see there
             for the two guards — because Edit and Delete beside it needed the
             same name and a second copy is a second answer. */}
-        <Toggle label={"Reminder: " + rname} on={r.active} onClick={() => onToggle(r.id)} />
+        <Toggle label={"Reminder: " + rname} description={"Pause or resume the reminder \u201c" + rname + "\u201d"} on={r.active} onClick={() => onToggle(r.id)} />
       </div>
       {/* v17.15.6: one Edit and one Delete PER REMINDER. v17.15.4 named the
           switch above and stopped at the switch, so a list of five reminders
@@ -97,6 +98,7 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
         <button
           onClick={() => onEdit(r)}
           aria-label={"Edit (" + rname + ")"}
+          title={"Change the reminder \u201c" + rname + "\u201d: its text, times and days"}
           className="mgt-hover-scale"
           style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.edit })}
         >
@@ -108,6 +110,7 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
         <button
           onClick={() => onDelete(r.id)}
           aria-label={"Delete (" + rname + ")"}
+          title={"Delete the reminder \u201c" + rname + "\u201d (asks first)"}
           className="mgt-hover-scale"
           style={mkDangerBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px" })}
         >
@@ -146,14 +149,17 @@ export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onTogg
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
+      {/* v18.18.0 (Patryk): New reminder keeps the right if the row wraps
+          (DESIGN.md, "A control keeps its side"). */}
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
         <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>
           {countLabel(list.length, "reminder", "reminders")}
         </div>
         <button
           onClick={onAdd}
+          title={"Make a new reminder" + keyHint("newReminder")}
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 36, padding: "6px 14px", background: "var(--accent)" })}
+          style={mkBtn({ minHeight: 36, padding: "6px 14px", background: "var(--accent)", marginLeft: "auto" })}
         >
           + New reminder
         </button>

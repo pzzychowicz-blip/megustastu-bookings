@@ -78,6 +78,7 @@ import { DRAG_HOLDS } from "../lib/drag-hold";
 import { splitExceptions, rangeLabel, specialHoursLabel } from "../lib/special-days";
 import { waAutoReplyOn, AUTO_ACK_TEXT } from "../lib/whatsapp";
 import { markArmed, armSettled } from "../lib/arm-guard";
+import { keyHint } from "../lib/shortcuts";
 import { newCrashesWord } from "../lib/crash-report";
 import { CloseIcon, DownloadIcon, TrashIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
@@ -160,6 +161,7 @@ export function TabBar({ tabs, current, onSelect, alerts }) {
           <button
             key={t.id}
             className="mgt-hover-scale"
+            title={"Show the " + t.label + " settings" + keyHint("settingsTabs")}
             onClick={() => onSelect(t.id)}
             // v18.2.0 (the design critique, S3): which tab is showing, said —
             // not only lifted. `aria-pressed`, as the view switcher's buttons.
@@ -208,7 +210,11 @@ const HOUR_STEP_BTN = mkStep(H.chrome);
 // visible heading above them and already required; `who` prefixes the row's
 // identity where the stepper repeats (the duration tiers: "Tier 2: stay for"),
 // LayoutSettings' `bandName(b, i) + ": …"` shape.
-function HourStepper({ label, who, value, onDec, onInc, disableDec, disableInc, fmt }) {
+//
+// `description` (v18.18.0, Part 2): both buttons' hover tooltip, "Decrease …" and
+// "Increase …" of it — what is stepped and by how much, said more fully than the
+// heading. MiniStepper below takes it the same way.
+function HourStepper({ label, who, value, onDec, onInc, disableDec, disableInc, fmt, description }) {
   const display = fmt ? fmt(value) : hourLabel(value);
   const name = (who ? who + ": " : "") + label;
   return (
@@ -219,6 +225,7 @@ function HourStepper({ label, who, value, onDec, onInc, disableDec, disableInc, 
           onClick={onDec} disabled={disableDec}
           className={disableDec ? undefined : "mgt-hover-scale"}
           aria-label={"Decrease " + name}
+          title={description ? "Decrease " + description : undefined}
           style={{ ...HOUR_STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}
         >
           −
@@ -230,6 +237,7 @@ function HourStepper({ label, who, value, onDec, onInc, disableDec, disableInc, 
           onClick={onInc} disabled={disableInc}
           className={disableInc ? undefined : "mgt-hover-scale"}
           aria-label={"Increase " + name}
+          title={description ? "Increase " + description : undefined}
           style={{ ...HOUR_STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}
         >
           +
@@ -244,7 +252,8 @@ function HourStepper({ label, who, value, onDec, onInc, disableDec, disableInc, 
 // revGuard CAS write. The draft re-syncs when the committed value changes (a
 // remote save from another device). mkInp returns a STYLE OBJECT (Bookings
 // convention — no prop passthrough).
-function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
+// `description` (v18.18.0, Part 2) is the box's hover description: what goes in it.
+function GsTextField({ label, value, onCommit, width, onDirty, dirtyId, description }) {
   const fid = useId();
   const [draft, setDraft] = useState(value);
   useEffect(() => { setDraft(value); }, [value]);
@@ -260,6 +269,7 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
       <input /* @no-lift pre-existing, not reviewed for v18.0.0 */
         id={fid}
         value={draft}
+        title={description}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => { if (draft !== value) onCommit(draft); }}
         onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
@@ -310,6 +320,7 @@ function PinnedCountriesSetting({ gs, onSave }) {
           return (
             <OutlineChip as="button" size="small" className="mgt-hover-scale"
               aria-label={"Unpin " + c.name}
+              title={"Take " + c.name + " off the pinned countries"}
               onClick={() => onSave({ pinnedCountries: list.filter((x) => x !== iso) })}
               style={{ minHeight: H.chip }}>
               <span aria-hidden="true">{flagOf(c.iso)}</span>{c.name + " " + dialLabel(c)}
@@ -320,7 +331,7 @@ function PinnedCountriesSetting({ gs, onSave }) {
         {/* The list of countries to ADD leaves out the ones already pinned —
             offering Spain twice would let the second tap do nothing. */}
         <div style={{ position: "relative", width: 280 /* @canvas wide enough for a country name in the list */ }}>
-          <CountryPicker label={full ? "Up to " + MAX_PINNED + " countries" : "+ Add country"} disabled={full} exclude={list}
+          <CountryPicker label={full ? "Up to " + MAX_PINNED + " countries" : "+ Add country"} description="Pin a country's code to the top of every phone field's list" disabled={full} exclude={list}
             onPick={(iso) => { if (list.indexOf(iso) < 0) onSave({ pinnedCountries: list.concat(iso) }); }}
             style={{ height: H.chip, padding: "0 12px", fontSize: T.body }} />
         </div>
@@ -340,7 +351,7 @@ const MINI_STEP_BTN = mkStep(H.compact);
 // steppers (the opening and closing hours once per weekday), and all 42
 // buttons announced "−" and "+" and nothing else. A stepper rendered per ROW
 // carries the row's identity ("Mon opening time").
-function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt, label }) {
+function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt, label, description }) {
   // v16.3.0: fmt is now optional (defaults to the HH:00 time format used by the
   // Opening-hours editor); the Standing-bookings horizon passes a plain number.
   const fmtFn = fmt || hourLabel;
@@ -348,10 +359,12 @@ function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt, label }
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
         aria-label={"Decrease " + label}
+        title={description ? "Decrease " + description : undefined}
         style={{ ...MINI_STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
       <span style={{ minWidth: 46, textAlign: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>{fmtFn(value)}</span>
       <button onClick={onInc} disabled={disableInc} className={disableInc ? undefined : "mgt-hover-scale"}
         aria-label={"Increase " + label}
+        title={description ? "Increase " + description : undefined}
         style={{ ...MINI_STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}>+</button>
     </div>
   );
@@ -379,11 +392,13 @@ function SpecialDaysList({ exceptions, onOpen }) {
         Dates that are closed, or open with other hours. Bookings already made stay.
       </div>
       <FoldRows items={upcoming} idOf={(ex) => ex.id}>{(ex) => (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: SP.snug, flexWrap: "wrap", padding: "6px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: SP.snug, flexWrap: "wrap", padding: "6px 0" }}>
           <span style={{ fontSize: T.body, color: "var(--text-primary)", flex: "1 1 200px" }}>{line(ex)}</span>
+          {/* v18.18.0 (Patryk): keeps the right where the row wraps (DESIGN.md, "A control keeps its side"). */}
           <button type="button" className="mgt-hover-scale" onClick={() => onOpen(ex.id)}
             aria-label={"Change " + rangeLabel(ex, today)}
-            style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.quiet })}>Change</button>
+            title={"Change the hours or note for " + rangeLabel(ex, today)}
+            style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.quiet, marginLeft: "auto" })}>Change</button>
         </div>
       )}</FoldRows>
       <Reveal show={upcoming.length === 0}>
@@ -399,6 +414,7 @@ function SpecialDaysList({ exceptions, onOpen }) {
       ) : null}
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: SP.snug }}>
         <button type="button" className="mgt-hover-scale" onClick={() => onOpen(null)}
+          title="Set different hours, or a closed day, for one date or a few"
           style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "6px 14px", background: BTN.quiet })}>Add a special day</button>
       </div>
     </div>
@@ -427,6 +443,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
           with it. */}
       <button onClick={() => onChange({ closed: !closed })} className="mgt-hover-scale"
         aria-label={label + ": " + (closed ? "Closed" : "Open")}
+        title={"Open or close the restaurant every " + label}
         style={{ ...pill, background: closed ? "var(--bg-stepper)" : "var(--suggest-bg)", color: closed ? "var(--text-muted)" : "var(--success-text)" }}>
         {closed ? "Closed" : "Open"}
       </button>
@@ -434,10 +451,10 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
         <span style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>No service this day</span>
       ) : (
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <MiniStepper label={label + " opening time"} value={o} disableDec={o <= 6} disableInc={o >= c - 1}
+          <MiniStepper label={label + " opening time"} description={label + "'s opening time, an hour at a time"} value={o} disableDec={o <= 6} disableInc={o >= c - 1}
             onDec={() => onChange({ open: o - 1 })} onInc={() => onChange({ open: o + 1 })} />
           <span style={{ color: "var(--text-faint)", fontWeight: FW.medium }}>–</span>
-          <MiniStepper label={label + " closing time"} value={c} disableDec={c <= o + 1} disableInc={c >= 25}
+          <MiniStepper label={label + " closing time"} description={label + "'s closing time, an hour at a time"} value={c} disableDec={c <= o + 1} disableInc={c >= 25}
             onDec={() => onChange({ close: c - 1 })} onInc={() => onChange({ close: c + 1 })} />
         </div>
       )}
@@ -458,7 +475,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
           what "copy → all" does, and against a short identifying name it is a
           description rather than an echo, which is the pair those two
           properties exist to be. */}
-      <button onClick={onCopyAll} className="mgt-hover-scale" title="Copy this day's hours to all days"
+      <button onClick={onCopyAll} className="mgt-hover-scale" title={"Copy " + label + "'s hours to every day"}
         aria-label={"copy → all (" + label + ")"}
         style={{ ...pill, marginLeft: "auto", background: "var(--bg-stepper)", color: "var(--accent)", fontWeight: FW.semi }}>
         copy → all
@@ -486,7 +503,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
 // where noted" is a statement about exactly these controls (the two marked
 // "This device only" are the exceptions it names). Left behind in General it
 // would have been a rule with nothing to govern.
-export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggleAutoTheme = () => {}, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, swEnabled = true, onToggleSw = () => {}, planGestures = true, onTogglePlanGestures = () => {}, planAvail = true, onTogglePlanAvail = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {}, largeText = false, onToggleLargeText = () => {}, indoorTint = true, onToggleIndoorTint = () => {}, cellBook = true, onToggleCellBook = () => {}, vibrateOnDrag = true, onToggleVibrate = () => {}, dragHold = "normal", onSetDragHold = () => {} }) {
+export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggleAutoTheme = () => {}, appWidth = 1600, onSetAppWidth = () => {}, appWidthFit = true, onToggleAppWidthFit = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, swEnabled = true, onToggleSw = () => {}, planGestures = true, onTogglePlanGestures = () => {}, planAvail = true, onTogglePlanAvail = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {}, largeText = false, onToggleLargeText = () => {}, indoorTint = true, onToggleIndoorTint = () => {}, cellBook = true, onToggleCellBook = () => {}, vibrateOnDrag = true, onToggleVibrate = () => {}, dragHold = "normal", onSetDragHold = () => {} }) {
   const tl = tlSettings && typeof tlSettings === "object"
     ? tlSettings : { followZoom: 4, defaultZoom: 1, followLead: 30, maxZoom: 5 };
   return (
@@ -518,7 +535,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
               Follows this device&rsquo;s light/dark setting.
             </div>
           </div>
-          <Toggle label="Automatic dark mode" on={autoTheme} onClick={onToggleAutoTheme} />
+          <Toggle label="Automatic dark mode" description="Follow this device's light and dark setting" on={autoTheme} onClick={onToggleAutoTheme} />
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
           <div style={{ textAlign: "left" }}>
@@ -529,22 +546,36 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
               </div>
             </Reveal>
           </div>
-          <Toggle label="Dark mode" on={isDark} onClick={onToggleDark} disabled={autoTheme} />
+          <Toggle label="Dark mode" description={"Switch between the dark and the light look" + keyHint("darkMode")} on={isDark} onClick={onToggleDark} disabled={autoTheme} />
+        </div>
+        {/* v18.18.0 (Patryk): Fit to screen, ON by default on every device, a
+            width already set included (useShellPrefs keeps it for when the switch
+            goes off). The App width stepper below it folds away while it is on. */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Fit to screen</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
+              This device only. The app uses the whole width of the screen.
+            </div>
+          </div>
+          <Toggle label="Fit to screen" description="Let the app use the whole width of this screen" on={appWidthFit} onClick={onToggleAppWidthFit} />
         </div>
         {/* v17.0.0 correction: per-device max app width. The 1.08 hover lift
             overflowed the viewport when the fixed 1600 exceeded the screen —
             now tunable per device (localStorage, same contract as the theme). */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
-          <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>App width</div>
-            <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
-              This device only. Lower it if the app overflows your screen.
+        <Reveal show={!appWidthFit}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
+            <div style={{ textAlign: "left" }}>
+              <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>App width</div>
+              <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
+                This device only. Lower it if the app overflows your screen.
+              </div>
             </div>
+            <MiniStepper label="app width" description="the app's width on this device, 50 px at a time" value={appWidth} fmt={(v) => v + " px"}
+              disableDec={appWidth <= 900} disableInc={appWidth >= 2400}
+              onDec={() => onSetAppWidth(appWidth - 50)} onInc={() => onSetAppWidth(appWidth + 50)} />
           </div>
-          <MiniStepper label="app width" value={appWidth} fmt={(v) => v + " px"}
-            disableDec={appWidth <= 900} disableInc={appWidth >= 2400}
-            onDec={() => onSetAppWidth(appWidth - 50)} onInc={() => onSetAppWidth(appWidth + 50)} />
-        </div>
+        </Reveal>
         {/* v17.1.0: per-device animation kill-switch for weak tablets — applies
             the same instant-transitions rule as the OS reduced-motion setting
             (index.html; useFlip honors it in JS). localStorage, theme pattern. */}
@@ -555,7 +586,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
               Turns off transitions and wipes. Helps on slower tablets.
             </div>
           </div>
-          <Toggle label="Reduce animations" on={reduceMotion} onClick={onToggleReduceMotion} />
+          <Toggle label="Reduce animations" description="Turn off transitions and wipes on this device" on={reduceMotion} onClick={onToggleReduceMotion} />
         </div>
         {/* v17.10.1: per-device offline shell. Default ON. It is a DEVICE
             setting, not an account one — see lib/serviceWorker.js for why
@@ -571,7 +602,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
               <code style={{ fontSize: T.body }}> ?sw=off </code> on the end of the address to switch this off.
             </div>
           </div>
-          <Toggle label="Work offline" on={swEnabled} onClick={onToggleSw} />
+          <Toggle label="Work offline" description="Let the app open on this device without a connection" on={swEnabled} onClick={onToggleSw} />
         </div>
         {/* v17.1.2: per-device Plan-view gesture switch (localStorage, theme
             pattern) — gates wheel/pinch zoom, drag pan and double-tap reset. */}
@@ -582,7 +613,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
               Scroll/pinch to zoom, drag to pan and double-tap to reset in the Plan view.
             </div>
           </div>
-          <Toggle label="Plan zoom and pan" on={planGestures} onClick={onTogglePlanGestures} />
+          <Toggle label="Plan zoom and pan" description="Let the Plan view zoom and pan with scroll, pinch and drag" on={planGestures} onClick={onTogglePlanGestures} />
         </div>
         {/* v18.2.0 phase 21: the Plan view's table availability — per person
             like the row above (Patryk's choice), ON by default, so only "0" is
@@ -594,7 +625,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
               In the Plan view, a free table shows how long it stays free. One too short for a walk-in gets a dashed amber outline.
             </div>
           </div>
-          <Toggle label="Table availability" on={planAvail} onClick={onTogglePlanAvail} />
+          <Toggle label="Table availability" description="Show on the Plan how long each free table stays free" on={planAvail} onClick={onTogglePlanAvail} />
         </div>
         {/* v17.5.0: per-device navigation lock (localStorage, theme pattern —
             but default OFF, so only the "1" is stored). Turns the app shell
@@ -606,7 +637,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
               Keeps the title bar and the date row in place while the timeline, list or plan scrolls underneath. Best on a tablet or desktop; on a phone those rows wrap and can take most of the screen.
             </div>
           </div>
-          <Toggle label="Lock navigation" on={navLocked} onClick={onToggleNavLock} />
+          <Toggle label="Lock navigation" description="Keep the title bar and the date row in place while the view scrolls" on={navLocked} onClick={onToggleNavLock} />
         </div>
         {/* v17.5.0: Split View master switch. While OFF the long-press / RMB
             gesture on a view button does nothing at all — same shape as "Plan
@@ -618,7 +649,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
               Right-click or press and hold a view button (Timeline, List, Plan) to show two views at once. Tablet and desktop only. Which two views you pick is remembered per device.
             </div>
           </div>
-          <Toggle label="Split view" on={splitEnabled} onClick={onToggleSplitEnabled} />
+          <Toggle label="Split view" description="Allow two views side by side, opened from a view button" on={splitEnabled} onClick={onToggleSplitEnabled} />
         </div>
         {/* v17.2.0: per-device Timeline zoom/follow settings (localStorage,
             theme pattern — useShellPrefs' tlSettings/onSetTlSetting). Zoom values step
@@ -640,7 +671,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
                   Bigger names, times and table numbers, with taller rows.
                 </div>
               </div>
-              <Toggle label="Larger text" on={largeText} onClick={onToggleLargeText} />
+              <Toggle label="Larger text" description="Show the timeline with bigger text and taller rows" on={largeText} onClick={onToggleLargeText} />
             </div>
             {/* v18.14.0 (correction 2): per device, like Larger text above it. */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
@@ -650,7 +681,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
                   A pale purple behind the indoor rows, so inside and outside read apart.
                 </div>
               </div>
-              <Toggle label="Tint indoor tables" on={indoorTint} onClick={onToggleIndoorTint} />
+              <Toggle label="Tint indoor tables" description="Tint the indoor tables' rows on the timeline" on={indoorTint} onClick={onToggleIndoorTint} />
             </div>
             {/* v18.16.0: per device, like its neighbours (useShellPrefs). */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
@@ -660,7 +691,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
                   An empty quarter hour starts a booking at that time, with its table as the preferred one. On a touch screen the first tap shows the cell and the second opens the form.
                 </div>
               </div>
-              <Toggle label="Tap an empty cell to book" on={cellBook} onClick={onToggleCellBook} />
+              <Toggle label="Tap an empty cell to book" description="Start a booking from an empty quarter hour on the timeline" on={cellBook} onClick={onToggleCellBook} />
             </div>
             {/* v18.14.0 (L7): per device, and hidden where the browser has no
                 vibration at all (lib/haptics.js). */}
@@ -672,25 +703,27 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
                     A short buzz when a block lifts and when it lands.
                   </div>
                 </div>
-                <Toggle label="Vibrate on drag" on={vibrateOnDrag} onClick={onToggleVibrate} />
+                <Toggle label="Vibrate on drag" description="Vibrate when a block lifts to be moved on the timeline" on={vibrateOnDrag} onClick={onToggleVibrate} />
               </div>
             ) : null}
             {/* v18.17.0 (H): per device, like its neighbours (lib/drag-hold.js).
                 A choice of three named values, so the app's one segmented
                 look (SEG_TRACK / segStyle) with `aria-pressed`, as the zone
                 segment and the Print chooser. */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <div style={{ textAlign: "left", flex: "1 1 200px" }}>
                 <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)" }}>Drag hold</div>
                 <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
                   How long a finger holds a block on the Timeline before it lifts to be moved. The status card still opens first.
                 </div>
               </div>
-              <div role="group" aria-label="Drag hold" style={{ ...SEG_TRACK, flexShrink: 0 }}>
+              {/* v18.18.0 (Patryk): keeps the right where the row wraps (DESIGN.md, "A control keeps its side"): at 375 it wrapped to the left. */}
+              <div role="group" aria-label="Drag hold" style={{ ...SEG_TRACK, flexShrink: 0, marginLeft: "auto" }}>
                 {DRAG_HOLDS.map(function (h) {
                   const on = dragHold === h.id;
                   return (
-                    <button key={h.id} className="mgt-hover-scale" aria-pressed={on}
+                    <button key={h.id} className="mgt-hover-scale"
+                      title={"Lift a timeline block after holding it for " + (h.ms / 1000) + " s"} aria-pressed={on}
                       onClick={function () { if (!on) onSetDragHold(h.id); }}
                       style={{ ...segStyle(on), padding: "2px 12px", minHeight: H.chip }}>{h.label}</button>
                   );
@@ -699,28 +732,28 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Zoom when opening the app</div>
-              <MiniStepper label="zoom when opening the app" value={tl.defaultZoom} fmt={(v) => v + "×"}
+              <MiniStepper label="zoom when opening the app" description="the timeline's zoom when the app opens, 0.5× at a time" value={tl.defaultZoom} fmt={(v) => v + "×"}
                 disableDec={tl.defaultZoom <= 1} disableInc={tl.defaultZoom >= tl.maxZoom}
                 onDec={() => onSetTlSetting("defaultZoom", tl.defaultZoom - 0.5)}
                 onInc={() => onSetTlSetting("defaultZoom", tl.defaultZoom + 0.5)} />
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Zoom when Follow turns on</div>
-              <MiniStepper label="zoom when Follow turns on" value={tl.followZoom} fmt={(v) => v + "×"}
+              <MiniStepper label="zoom when Follow turns on" description="the zoom Follow switches the timeline to, 0.5× at a time" value={tl.followZoom} fmt={(v) => v + "×"}
                 disableDec={tl.followZoom <= 1} disableInc={tl.followZoom >= tl.maxZoom}
                 onDec={() => onSetTlSetting("followZoom", tl.followZoom - 0.5)}
                 onInc={() => onSetTlSetting("followZoom", tl.followZoom + 0.5)} />
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Time shown behind the now-line</div>
-              <MiniStepper label="time shown behind the now-line" value={tl.followLead} fmt={(v) => countLabel(v, "min")}
+              <MiniStepper label="time shown behind the now-line" description="how much of the past Follow keeps on screen behind the now-line, 15 minutes at a time" value={tl.followLead} fmt={(v) => countLabel(v, "min")}
                 disableDec={tl.followLead <= 0} disableInc={tl.followLead >= 120}
                 onDec={() => onSetTlSetting("followLead", tl.followLead - 15)}
                 onInc={() => onSetTlSetting("followLead", tl.followLead + 15)} />
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Maximum zoom (+ button)</div>
-              <MiniStepper label="maximum zoom" value={tl.maxZoom} fmt={(v) => v + "×"}
+              <MiniStepper label="maximum zoom" description="the timeline's largest zoom, 0.5× at a time" value={tl.maxZoom} fmt={(v) => v + "×"}
                 disableDec={tl.maxZoom <= 2} disableInc={tl.maxZoom >= 10}
                 onDec={() => onSetTlSetting("maxZoom", tl.maxZoom - 0.5)}
                 onInc={() => onSetTlSetting("maxZoom", tl.maxZoom + 0.5)} />
@@ -868,10 +901,10 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
         summary={gs.restaurantName}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
-          <GsTextField label="Restaurant name" value={gs.restaurantName} width={260} onDirty={onDirty} dirtyId="gs-name"
+          <GsTextField label="Restaurant name" value={gs.restaurantName} width={260} description="The restaurant's name, shown at the top of the app and on the sign-in screen" onDirty={onDirty} dirtyId="gs-name"
             onCommit={(v) => onSaveGeneralSettings({ restaurantName: v })} />
           <TimeZoneSetting gs={gs} onSave={onSaveGeneralSettings} />
-          <GsTextField label="Currency symbol" value={gs.currency} width={80} onDirty={onDirty} dirtyId="gs-currency"
+          <GsTextField label="Currency symbol" value={gs.currency} width={80} description="The symbol written after every amount, such as €" onDirty={onDirty} dirtyId="gs-currency"
             onCommit={(v) => onSaveGeneralSettings({ currency: v })} />
           <PinnedCountriesSetting gs={gs} onSave={onSaveGeneralSettings} />
           <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>
@@ -910,12 +943,13 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               Split the day Summary into Afternoon / Evening.
             </div>
           </div>
-          <Toggle label="Shifts" on={se} onClick={() => onSaveShifts({ enabled: !se })} />
+          <Toggle label="Shifts" description="Split the day Summary into afternoon and evening" on={se} onClick={() => onSaveShifts({ enabled: !se })} />
         </div>
         <Reveal show={se}>{se ? (
           <div style={{ marginTop: 14 }}>
             <HourStepper
               label="Afternoon / Evening split" value={sp}
+              description="the hour the afternoon ends and the evening starts, an hour at a time"
               disableDec={sp <= wrMin + 1} disableInc={sp >= wrMax - 1}
               onDec={() => onSaveShifts({ split: sp - 1 })} onInc={() => onSaveShifts({ split: sp + 1 })}
             />
@@ -939,12 +973,13 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               Automatically stops reshuffling at a daily cutoff and resumes overnight.
             </div>
           </div>
-          <Toggle label="Auto-optimiser" on={oas} onClick={() => onSaveOptimizer({ autoSwitch: !oas })} />
+          <Toggle label="Auto-optimiser" description="Stop reshuffling at a daily cutoff, and start again overnight" on={oas} onClick={() => onSaveOptimizer({ autoSwitch: !oas })} />
         </div>
         <AutoHeight>{oas ? (
           <div style={{ marginTop: 14 }}>
             <HourStepper
               label="Daily cutoff" value={oc} fmt={cutoffLabel}
+              description="the hour the Optimiser stops reshuffling the day, an hour at a time"
               disableDec={oc <= 0} disableInc={oc >= 24}
               onDec={() => onSaveOptimizer({ cutoff: oc - 1 })} onInc={() => onSaveOptimizer({ cutoff: oc + 1 })}
             />
@@ -983,10 +1018,11 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end", paddingBottom: 14 }}>
                 <div style={{ width: 150 }}>
                   <HourStepper label="Parties up to" who={"Tier " + (i + 1)} value={t.max} fmt={upToLabel}
+                    description={"the largest party in tier " + (i + 1) + ", one guest at a time"}
                     disableDec={t.max <= minMax} disableInc={t.max >= maxMax}
                     onDec={() => updateTier(i, { max: t.max - 1 })} onInc={() => updateTier(i, { max: t.max + 1 })} />
                 </div>
-                <HourStepper label="stay for" who={"Tier " + (i + 1)} value={t.dur} fmt={minsLabel}
+                <HourStepper label="stay for" who={"Tier " + (i + 1)} description={"how long a party in tier " + (i + 1) + " is booked for, 15 minutes at a time"} value={t.dur} fmt={minsLabel}
                   disableDec={t.dur <= 15} disableInc={t.dur >= 360}
                   onDec={() => updateTier(i, { dur: t.dur - 15 })} onInc={() => updateTier(i, { dur: t.dur + 15 })} />
                 {/* v18.2.0 phase 63: the editors' quiet × (`mkRemoveX`),
@@ -1005,14 +1041,14 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                       onClick={() => armTierRemove(i)}
                       className="mgt-hover-scale mgt-press"
                       aria-label={"Confirm — remove Tier " + (i + 1)}
-                      title="Tap again to remove"
+                      title={"Remove tier " + (i + 1) + ", its parties taking the next length"}
                       style={mkDangerBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 10px" })}><TrashIcon size={IC.control} />Confirm — remove</button>
                   ) : (
                     <button
                       onClick={() => armTierRemove(i)}
                       className="mgt-hover-scale"
                       aria-label={"Remove Tier " + (i + 1)}
-                      title="Remove this tier"
+                      title={"Remove tier " + (i + 1) + " (asks for a second tap)"}
                       style={mkRemoveX(H.compact)}><CloseIcon size={IC.control} /></button>
                   )}
                 </div>
@@ -1024,7 +1060,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
             <div style={{ width: 150, height: H.chrome, display: "flex", alignItems: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>
               {tiers.length ? "Larger parties (" + restFrom + "+)" : "All parties"}
             </div>
-            <HourStepper label="stay for" who={tiers.length ? "Larger parties" : "All parties"} value={bd.restDur} fmt={minsLabel}
+            <HourStepper label="stay for" who={tiers.length ? "Larger parties" : "All parties"} description={(tiers.length ? "how long a larger party" : "how long every party") + " is booked for, 15 minutes at a time"} value={bd.restDur} fmt={minsLabel}
               disableDec={bd.restDur <= 15} disableInc={bd.restDur >= 360}
               onDec={() => onSaveBookingDefaults({ restDur: bd.restDur - 15 })} onInc={() => onSaveBookingDefaults({ restDur: bd.restDur + 15 })} />
           </div>
@@ -1032,6 +1068,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
             <button
               onClick={addTier}
               disabled={!canAddTier}
+              title="Add a booking length for another party size"
               className={canAddTier ? "mgt-hover-scale" : undefined}
               style={{
                 background: "var(--bg-stepper)", border: "1px solid var(--border-soft)", borderRadius: R.pill,
@@ -1057,12 +1094,12 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               Keeps a table free for a while after each booking, so parties are not booked back to back.
             </div>
           </div>
-          <Toggle label="Separation between bookings" on={bd.turnaroundEnabled === true} onClick={() => onSaveBookingDefaults({ turnaroundEnabled: bd.turnaroundEnabled !== true })} />
+          <Toggle label="Separation between bookings" description="Keep a table free for a while after each booking" on={bd.turnaroundEnabled === true} onClick={() => onSaveBookingDefaults({ turnaroundEnabled: bd.turnaroundEnabled !== true })} />
         </div>
         <AutoHeight>{bd.turnaroundEnabled === true ? (
           <div style={{ marginTop: 14 }}>
             <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
-              <HourStepper label="Separation" value={bd.turnaroundMin} fmt={minsLabel}
+              <HourStepper label="Separation" description="the time a table stays free after each booking, 5 minutes at a time" value={bd.turnaroundMin} fmt={minsLabel}
                 disableDec={bd.turnaroundMin <= 5} disableInc={bd.turnaroundMin >= 60}
                 onDec={() => onSaveBookingDefaults({ turnaroundMin: bd.turnaroundMin - 5 })}
                 onInc={() => onSaveBookingDefaults({ turnaroundMin: bd.turnaroundMin + 5 })} />
@@ -1088,14 +1125,14 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               Highlight confirmed bookings past their time and offer a one-tap no-show.
             </div>
           </div>
-          <Toggle label="Running late" on={bd.lateEnabled} onClick={() => onSaveBookingDefaults({ lateEnabled: !bd.lateEnabled })} />
+          <Toggle label="Running late" description="Highlight late bookings and offer a one-tap no-show" on={bd.lateEnabled} onClick={() => onSaveBookingDefaults({ lateEnabled: !bd.lateEnabled })} />
         </div>
         <AutoHeight>{bd.lateEnabled ? (
           <div style={{ marginTop: 14, display: "flex", gap: 18, flexWrap: "wrap" }}>
-            <HourStepper label="Highlight after" value={bd.lateWarnMin} fmt={minsLabel}
+            <HourStepper label="Highlight after" description="how late a booking is before it is highlighted, 5 minutes at a time" value={bd.lateWarnMin} fmt={minsLabel}
               disableDec={bd.lateWarnMin <= 5} disableInc={bd.lateWarnMin >= bd.lateNoShowMin - 5}
               onDec={() => onSaveBookingDefaults({ lateWarnMin: bd.lateWarnMin - 5 })} onInc={() => onSaveBookingDefaults({ lateWarnMin: bd.lateWarnMin + 5 })} />
-            <HourStepper label="Offer no-show after" value={bd.lateNoShowMin} fmt={minsLabel}
+            <HourStepper label="Offer no-show after" description="how late a booking is before No show is offered, 5 minutes at a time" value={bd.lateNoShowMin} fmt={minsLabel}
               disableDec={bd.lateNoShowMin <= bd.lateWarnMin + 5} disableInc={bd.lateNoShowMin >= 120}
               onDec={() => onSaveBookingDefaults({ lateNoShowMin: bd.lateNoShowMin - 5 })} onInc={() => onSaveBookingDefaults({ lateNoShowMin: bd.lateNoShowMin + 5 })} />
           </div>
@@ -1116,7 +1153,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               Warn when an overstaying seated party runs into the next booking on its table, with a one-tap reassign.
             </div>
           </div>
-          <Toggle label="Overlap warnings" on={bd.overlapWarnEnabled !== false} onClick={() => onSaveBookingDefaults({ overlapWarnEnabled: bd.overlapWarnEnabled === false })} />
+          <Toggle label="Overlap warnings" description="Warn when an overstaying party runs into the next booking on its table" on={bd.overlapWarnEnabled !== false} onClick={() => onSaveBookingDefaults({ overlapWarnEnabled: bd.overlapWarnEnabled === false })} />
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
           <div style={{ textAlign: "left" }}>
@@ -1125,7 +1162,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               Suggest a table reshuffle when the day's layout could seat parties more efficiently.
             </div>
           </div>
-          <Toggle label="Reshuffle suggestions" on={bd.reshuffleSuggestEnabled !== false} onClick={() => onSaveBookingDefaults({ reshuffleSuggestEnabled: bd.reshuffleSuggestEnabled === false })} />
+          <Toggle label="Reshuffle suggestions" description="Suggest a reshuffle when the day could seat its parties better" on={bd.reshuffleSuggestEnabled !== false} onClick={() => onSaveBookingDefaults({ reshuffleSuggestEnabled: bd.reshuffleSuggestEnabled === false })} />
         </div>
       </Section>
       {/* v16.3.0: Table turns — predict which seated tables free up in the next
@@ -1139,14 +1176,14 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               Show which seated tables are about to free up (a "freeing soon" line and a timeline countdown).
             </div>
           </div>
-          <Toggle label="Table turns" on={bd.freeSoonEnabled !== false} onClick={() => onSaveBookingDefaults({ freeSoonEnabled: bd.freeSoonEnabled === false })} />
+          <Toggle label="Table turns" description="Show which seated tables are about to free up" on={bd.freeSoonEnabled !== false} onClick={() => onSaveBookingDefaults({ freeSoonEnabled: bd.freeSoonEnabled === false })} />
         </div>
         {/* v16.3.0 correction: prediction window — how far ahead "freeing soon"
             looks. Revealed only while the feature is on. 5–60 min, 5-min steps. */}
         <AutoHeight>{bd.freeSoonEnabled !== false ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
             <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>Predict up to</span>
-            <MiniStepper label="how far ahead to predict" value={(bd.freeSoonWindow || 15)} fmt={(n) => countLabel(n, "min")}
+            <MiniStepper label="how far ahead to predict" description="how far ahead the app looks for tables freeing up, 5 minutes at a time" value={(bd.freeSoonWindow || 15)} fmt={(n) => countLabel(n, "min")}
               disableDec={(bd.freeSoonWindow || 15) <= 5} disableInc={(bd.freeSoonWindow || 15) >= 60}
               onDec={() => onSaveBookingDefaults({ freeSoonWindow: (bd.freeSoonWindow || 15) - 5 })}
               onInc={() => onSaveBookingDefaults({ freeSoonWindow: (bd.freeSoonWindow || 15) + 5 })} />
@@ -1167,7 +1204,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                 Weekly repeat bookings, auto-created for the next few weeks. Create one with "Repeat weekly" on the booking form.
               </div>
             </div>
-            <Toggle label="Standing bookings" on={recurring.enabled !== false} onClick={() => onSetRecurringEnabled(recurring.enabled === false)} />
+            <Toggle label="Standing bookings" description="Make weekly repeat bookings for the next few weeks" on={recurring.enabled !== false} onClick={() => onSetRecurringEnabled(recurring.enabled === false)} />
           </div>
           <AutoHeight>{recurring.enabled !== false ? (
             <div style={{ marginTop: 12 }}>
@@ -1191,7 +1228,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                 // phone (a 440px one is 38px short of sharing the line), beside
                 // it in the 600px-and-up card.
                 return (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: R.inset, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: R.inset, background: "var(--bg-input)", border: "1px solid var(--border-soft)" }}>
                     {/* Phase 55 (round 3's L-3): a paused rule looks like a
                         paused reminder one tab over — BOTH lines at PAUSED_FADE
                         and an outline "Paused" tag. It faded the name alone (to
@@ -1212,6 +1249,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                           state, and aria-checked already says it. */}
                       <Toggle
                         label={"Standing booking: " + ruleWho}
+                        description={"Pause or resume the standing booking for " + ruleWho}
                         on={r.active !== false} onClick={() => onUpdateRule(r.id, { active: r.active === false })} />
                       {/* v18.2.0 (S6): the rows' shared look — since phase 62
                           the app's one destructive look, solid red with the
@@ -1222,6 +1260,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                           called "Delete" (measured on DEV). */}
                       <button
                         aria-label={(armed ? "Confirm — delete (" : "Delete (") + ruleWho + ")"}
+                        title={armed ? "Delete the standing booking for " + ruleWho + "; its bookings already made stay" : "Delete the standing booking for " + ruleWho + " (asks for a second tap)"}
                         onClick={() => {
                           if (armed) { if (!armSettled()) return; onRemoveRule(r.id); setArmedRule(null); }
                           else { markArmed(); setArmedRule(r.id); }
@@ -1234,7 +1273,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               }}</FoldRows>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>Generate ahead</span>
-                <MiniStepper label="weeks generated ahead" value={(recurring.horizonWeeks || 4)} fmt={(n) => String(n)}
+                <MiniStepper label="weeks generated ahead" description="how many weeks of standing bookings are made ahead, a week at a time" value={(recurring.horizonWeeks || 4)} fmt={(n) => String(n)}
                   disableDec={(recurring.horizonWeeks || 4) <= 1} disableInc={(recurring.horizonWeeks || 4) >= 12}
                   onDec={() => onSetRecurringHorizon((recurring.horizonWeeks || 4) - 1)} onInc={() => onSetRecurringHorizon((recurring.horizonWeeks || 4) + 1)} />
                 <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>{"week" + ((recurring.horizonWeeks || 4) !== 1 ? "s" : "")}</span>
@@ -1255,31 +1294,31 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
         summary={"Regular at " + gs.regularMin + "+"}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 4 }}>
-          <HourStepper label="“Regular” from (completed visits)" value={gs.regularMin} fmt={(n) => String(n)}
+          <HourStepper label="“Regular” from (completed visits)" description="how many completed visits make a guest a Regular, one at a time" value={gs.regularMin} fmt={(n) => String(n)}
             disableDec={gs.regularMin <= 1} disableInc={gs.regularMin >= 50}
             onDec={() => onSaveGeneralSettings({ regularMin: gs.regularMin - 1 })}
             onInc={() => onSaveGeneralSettings({ regularMin: gs.regularMin + 1 })} />
           {/* v17.1.0: one threshold for ALL three rows banners (late / overlap / waitlist). */}
-          <HourStepper label="Collapse banners above" value={gs.lateCollapseMax} fmt={(n) => countLabel(n, "row", "rows")}
+          <HourStepper label="Collapse banners above" description="how many rows a notification shows before it folds, one at a time" value={gs.lateCollapseMax} fmt={(n) => countLabel(n, "row", "rows")}
             disableDec={gs.lateCollapseMax <= 1} disableInc={gs.lateCollapseMax >= 20}
             onDec={() => onSaveGeneralSettings({ lateCollapseMax: gs.lateCollapseMax - 1 })}
             onInc={() => onSaveGeneralSettings({ lateCollapseMax: gs.lateCollapseMax + 1 })} />
-          <HourStepper label="Waitlist match window (± wanted time)" value={gs.waitMatchWin} fmt={(n) => "±" + countLabel(n, "min")}
+          <HourStepper label="Waitlist match window (± wanted time)" description="how far from their wanted time a waiting party is offered a table, 15 minutes at a time" value={gs.waitMatchWin} fmt={(n) => "±" + countLabel(n, "min")}
             disableDec={gs.waitMatchWin <= 15} disableInc={gs.waitMatchWin >= 240}
             onDec={() => onSaveGeneralSettings({ waitMatchWin: gs.waitMatchWin - 15 })}
             onInc={() => onSaveGeneralSettings({ waitMatchWin: gs.waitMatchWin + 15 })} />
-          <HourStepper label="Undo toast stays for" value={gs.undoSecs} fmt={(n) => n + " s"}
+          <HourStepper label="Undo toast stays for" description="how long Undo stays on screen, 5 seconds at a time" value={gs.undoSecs} fmt={(n) => n + " s"}
             disableDec={gs.undoSecs <= 5} disableInc={gs.undoSecs >= 60}
             onDec={() => onSaveGeneralSettings({ undoSecs: gs.undoSecs - 5 })}
             onInc={() => onSaveGeneralSettings({ undoSecs: gs.undoSecs + 5 })} />
           {/* v17.2.0: starting party sizes of the new-booking / walk-in forms
               (were hard-coded 2). Only the form's INITIAL value — steppers in
               the forms still adjust per booking. */}
-          <HourStepper label="New booking starts at" value={gs.defaultBookingSize} fmt={guestsLabel}
+          <HourStepper label="New booking starts at" description="the party size a new booking starts with, one guest at a time" value={gs.defaultBookingSize} fmt={guestsLabel}
             disableDec={gs.defaultBookingSize <= 1} disableInc={gs.defaultBookingSize >= 20}
             onDec={() => onSaveGeneralSettings({ defaultBookingSize: gs.defaultBookingSize - 1 })}
             onInc={() => onSaveGeneralSettings({ defaultBookingSize: gs.defaultBookingSize + 1 })} />
-          <HourStepper label="Walk-in starts at" value={gs.defaultWalkinSize} fmt={guestsLabel}
+          <HourStepper label="Walk-in starts at" description="the party size a walk-in starts with, one guest at a time" value={gs.defaultWalkinSize} fmt={guestsLabel}
             disableDec={gs.defaultWalkinSize <= 1} disableInc={gs.defaultWalkinSize >= 20}
             onDec={() => onSaveGeneralSettings({ defaultWalkinSize: gs.defaultWalkinSize - 1 })}
             onInc={() => onSaveGeneralSettings({ defaultWalkinSize: gs.defaultWalkinSize + 1 })} />
@@ -1291,7 +1330,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           device (the Firebase free plan has no auto-backups). */}
       {onBackup && can("dataExport") ? (
         <Section style={{ marginBottom: 18 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div style={{ textAlign: "left", flex: "1 1 200px" }}>
               <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Backup</div>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
@@ -1300,9 +1339,11 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
             </div>
             <button
               onClick={onBackup}
+              title="Download a copy of the bookings, waitlist, reminders and settings to this device"
               className="mgt-hover-scale mgt-press"
               aria-busy={backupStatus && backupStatus.kind === "busy" ? true : undefined}
-              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.quiet, display: "inline-flex", alignItems: "center", gap: 6 })}><DownloadIcon size={IC.control} />Download backup</button>
+              /* v18.18.0 (Patryk): keeps the right where the row wraps (DESIGN.md, "A control keeps its side"): at 375 it wrapped to the left. */
+              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.quiet, display: "inline-flex", alignItems: "center", gap: 6, marginLeft: "auto" })}><DownloadIcon size={IC.control} />Download backup</button>
           </div>
           {/* v18.3.1: the outcome, here rather than in the red banner behind
               this overlay (App's backupStatus). The region is ALWAYS mounted:
@@ -1368,6 +1409,7 @@ function WhatsAppTabContent({ waSettings, onSaveWaSettings, isAdmin, waLink, can
               aria-checked's job and must never be in the name. */}
           <Toggle
             label="Archive when the booking is completed"
+            description="Archive a WhatsApp conversation once its booking is completed"
             on={autoArchive}
             onClick={function () { onSaveWaSettings({ autoArchiveOnComplete: !autoArchive }); }} />
         </div>
@@ -1391,6 +1433,7 @@ function WhatsAppTabContent({ waSettings, onSaveWaSettings, isAdmin, waLink, can
           </div>
           <Toggle
             label="Reply to a new customer’s first message"
+            description="Send one automatic reply to someone writing for the first time"
             on={autoReply}
             onClick={function () { onSaveWaSettings({ autoReply: !autoReply }); }} />
         </div>
@@ -1484,6 +1527,7 @@ function WaCostSection() {
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.base, paddingTop: SP.tight }}>
           <button type="button" className="mgt-hover-scale mgt-press" disabled={loading} aria-busy={loading}
             onClick={function () { usage.load(); }}
+            title="Ask Meta again for this month's WhatsApp figures"
             style={mkBtn({ minHeight: H.control })}>
             {loading ? "Asking…" : "Refresh"}
           </button>
@@ -1542,6 +1586,7 @@ function BusinessAppSection({ waLink }) {
         })}
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.base, paddingTop: SP.tight }}>
           <a className="mgt-hover-scale mgt-press" href="/wa-connect" target="_blank" rel="noopener"
+            title="Connect the restaurant's WhatsApp Business app, in a new tab"
             style={mkBtn({ minHeight: H.control, boxSizing: "border-box", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" })}>
             {state === "none" ? "Connect the Business app" : "Connect again"}
           </a>
@@ -1597,6 +1642,8 @@ export function SettingsContent({
   onToggleAutoTheme,
   appWidth,
   onSetAppWidth,
+  appWidthFit,
+  onToggleAppWidthFit,
   reduceMotion,
   swEnabled,
   onToggleSw,
@@ -1756,7 +1803,7 @@ export function SettingsContent({
       onOpenCapabilities={onOpenCapabilities} onOpenActivity={onOpenActivity} newCrashes={newCrashes} moreCrashes={moreCrashes} retentionDays={activityRetentionDays} onSetRetention={onSetActivityRetention}
       waRetentionDays={waRetentionDays} onSetWaRetention={onSetWaRetention} />;
   } else if (cur === "app") {
-    content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} planAvail={planAvail} onTogglePlanAvail={onTogglePlanAvail} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} largeText={largeText} onToggleLargeText={onToggleLargeText} indoorTint={indoorTint} onToggleIndoorTint={onToggleIndoorTint} cellBook={cellBook} onToggleCellBook={onToggleCellBook} vibrateOnDrag={vibrateOnDrag} onToggleVibrate={onToggleVibrate} dragHold={dragHold} onSetDragHold={onSetDragHold} />;
+    content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} appWidthFit={appWidthFit} onToggleAppWidthFit={onToggleAppWidthFit} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} planAvail={planAvail} onTogglePlanAvail={onTogglePlanAvail} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} largeText={largeText} onToggleLargeText={onToggleLargeText} indoorTint={indoorTint} onToggleIndoorTint={onToggleIndoorTint} cellBook={cellBook} onToggleCellBook={onToggleCellBook} vibrateOnDrag={vibrateOnDrag} onToggleVibrate={onToggleVibrate} dragHold={dragHold} onSetDragHold={onSetDragHold} />;
   } else if (cur === "general") {
     content = <GeneralTabContent can={can} appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} exceptions={exceptions} onOpenSpecialDay={onOpenSpecialDay} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} backupStatus={backupStatus} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
   } else if (cur === "layout") {

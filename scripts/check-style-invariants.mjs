@@ -184,6 +184,52 @@
 // thing worth preventing. Rule 10 then requires the bare input inside it to say
 // `@no-lift`, so the two rules meet.
 //
+// ── Rule 14: every control carries a hover description ─────────────────────
+// v18.18.0 (Part 2, Patryk 2026-11-19). The search box's "Search conversations
+// (/)" was the model: a mouse resting on a control is told what it does, in the
+// browser's own tooltip (`title`). Mouse only, so it never shows on the
+// restaurant's tablets, and DESIGN.md's rule still stands that the meaning is ON
+// the control; the tooltip is the longer description (DESIGN.md, "A control's
+// meaning is on the control").
+//
+// Rule 10's tag reader again, one level wider. A CONTROL is:
+//   · a <button>, <input> (not type="hidden"), <select> or <textarea>;
+//   · an <a> with an href;
+//   · any tag with an interactive `role` (button, switch, menuitem,
+//     menuitemradio, menuitemcheckbox, tab, option, link, checkbox, radio), or a
+//     `tabIndex` that is not a literal -1;
+//   · a call site of an atom that DRAWS one (`DESCRIBED_ATOMS`), which takes a
+//     `description` and renders it as its control's `title` — the atom's own
+//     tag then passes on `title={…}` like any other;
+//   · an `<OutlineChip as="button">`, which hands `title` through to its button.
+// A control passes with a `title=` (or, at an atom's call site, `description=`).
+// An SVG element has no `title` attribute: it passes with a `<title>` child
+// straight after its opening tag, which is what the browser reads.
+//
+// It also counts a description that TYPES a key in parentheses ("Inbox (I)"):
+// a key comes from the shortcut table through `keyHint(id)` (lib/shortcuts.js),
+// so the tooltip cannot name a key the table has moved.
+//
+// It lands with a CEILING, the way `lint` has `--max-warnings`: each batch of
+// Part 2 describes a set of screens and lowers it, and the last sets it to 0.
+// Batch 7 (v18.18.0 commit 14) did: every control in the tree has one, so the
+// ceiling now holds at 0 and the next undescribed control fails the gate.
+// The ceiling is exact in both directions on the app's own tree. Over it is a
+// control added without a description; under it is a batch that forgot to
+// lower it, which would let the next undescribed control in for free. A fixture
+// directory (`node check-style-invariants.mjs <dir>`, tests/style-check.test.js)
+// has a ceiling of 0. `MGT_HOVER_LIST=1` lists every site, at or under it.
+//
+// Excluded: the WhatsApp simulator (sandbox builds only, stripped from
+// production by vite.config.js's `stripSimulator`).
+const HOVER_CEILING = 0;
+const DESCRIBED_ATOMS = ["Toggle", "Stepper", "MiniStepper", "HourStepper", "TimeChip", "SearchField", "DateField", "CountryPicker", "TagChips"];
+const HOVER_SKIP = [/[\\/]WaSimulator\.jsx$/];
+const CONTROL_ROLES = /^(button|switch|menuitem|menuitemradio|menuitemcheckbox|tab|option|link|checkbox|radio)$/;
+const SVG_TAGS = /^(svg|g|rect|circle|ellipse|path|polygon|line|text)$/;
+// A parenthesised key at the END of a description: "(I)", "(/)", "(⇧D)", "(Esc)".
+const TYPED_KEY = /\(\s*⇧?\s*(?:[A-Z0-9]|[/?=+\-−←→↑↓]|Esc|Enter|Space)\s*\)\s*$/;
+
 // ── Rules 8 & 9: the icon scale and the motion scale ────────────────────────
 // v17.13.0. CLAUDE.md states both as rules — "No new numeric `size={n}` on an
 // icon", and `grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back
@@ -404,6 +450,49 @@ function tagEnd(src, i) {
 }
 
 const problems = [];
+const hover = [];   // Rule 14's sites, judged against the ceiling at the end
+
+// Rule 14: the value of an attribute in an opening tag, as written — a quoted
+// string, or the text of a balanced `{…}`. null when the tag does not carry it.
+function attrValue(tag, name) {
+  const re = new RegExp("(?<![\\w-])" + name + "\\s*=\\s*", "g");
+  const m = re.exec(tag);
+  if (!m) return null;
+  let i = m.index + m[0].length;
+  const c = tag[i];
+  if (c === '"' || c === "'") return tag.slice(i + 1, tag.indexOf(c, i + 1));
+  if (c !== "{") return "";
+  let depth = 0, j = i, quote = null;
+  for (; j < tag.length; j++) {
+    const d = tag[j];
+    if (quote) { if (d === "\\") j++; else if (d === quote) quote = null; continue; }
+    if (d === '"' || d === "'" || d === "`") quote = d;
+    else if (d === "{") depth++;
+    else if (d === "}" && --depth === 0) break;
+  }
+  return tag.slice(i + 1, j);
+}
+
+// Rule 14: is this opening tag a control, and if so which attribute describes
+// it? → null (not a control), or { attr: "title" | "description" }.
+function hoverDue(name, tag) {
+  if (DESCRIBED_ATOMS.includes(name)) return { attr: "description" };
+  if (name === "OutlineChip") return attrValue(tag, "as") === "button" ? { attr: "title" } : null;
+  if (name === "button" || name === "select" || name === "textarea") return { attr: "title" };
+  if (name === "input") return attrValue(tag, "type") === "hidden" ? null : { attr: "title" };
+  if (name === "a" && attrValue(tag, "href") !== null) return { attr: "title" };
+  // A role is a quoted literal, or an expression whose QUOTED strings are the
+  // roles it can take (`role={on ? "button" : undefined}`); an identifier in it
+  // is not a role.
+  const role = tag.match(/(?<![\w-])role\s*=\s*(?:"([^"]*)"|\{([^}]*)\})/);
+  if (role) {
+    const roles = role[1] !== undefined ? [role[1]] : (role[2].match(/["'`]([^"'`]*)["'`]/g) || []).map((s) => s.slice(1, -1));
+    if (roles.some((r) => CONTROL_ROLES.test(r))) return { attr: "title" };
+  }
+  const tab = attrValue(tag, "tabIndex");
+  if (tab !== null && !/^\s*-1\s*$/.test(tab)) return { attr: "title" };
+  return null;
+}
 
 for (const file of walk(SRC)) {
   const rel = relative(ROOT, file);
@@ -718,6 +807,37 @@ for (const file of walk(SRC)) {
       });
     }
 
+    // ── Rule 14 ─────────────────────────────────────────────────────────────
+    // Every opening tag, read whole. The character before `<` must not be part
+    // of an expression (`i<n` is a comparison, not a tag).
+    if (!HOVER_SKIP.some((re) => re.test(file))) {
+      for (const m of code.matchAll(/(?<![\w)\]$])<([A-Za-z][\w.]*)(?=[\s/>])/g)) {
+        const name = m[1];
+        const end = tagEnd(code, m.index);
+        if (end < 0) continue;
+        const tag = code.slice(m.index, end + 1);
+        const due = hoverDue(name, tag);
+        if (!due) continue;
+        const at = code.slice(0, m.index).split("\n").length;
+        const site = { file: rel, line: at, text: lines[at - 1].trim().slice(0, 90) };
+        let value = attrValue(tag, due.attr);
+        if (value === null && due.attr === "title" && SVG_TAGS.test(name) && code[end - 1] !== "/") {
+          // An SVG element is described by a <title> child, first in it.
+          const child = code.slice(end + 1).match(/^\s*<title>([\s\S]*?)<\/title>/);
+          if (child) value = child[1];
+        }
+        if (value === null) {
+          hover.push(Object.assign(site, { rule: "hover-description",
+            hint: due.attr === "description"
+              ? "<" + name + "> draws a control: pass `description` — what pressing it does, a verb first (DESIGN.md)"
+              : "control without a hover description — add `title`: what it does, a verb first, no full stop (DESIGN.md)" }));
+        } else if (TYPED_KEY.test(value.replace(/["'`]\s*$/, ""))) {
+          hover.push(Object.assign(site, { rule: "hover-typed-key",
+            hint: "a key typed into a description — append keyHint(\"<row id>\") from lib/shortcuts.js instead" }));
+        }
+      }
+    }
+
     // ── Rule 11 ─────────────────────────────────────────────────────────────
     for (const m of code.matchAll(/<ModalTitle\b/g)) {
       const end = tagEnd(code, m.index);
@@ -736,11 +856,29 @@ for (const file of walk(SRC)) {
   }
 }
 
+// ── Rule 14's verdict: the ceiling ──────────────────────────────────────────
+const ownTree = !process.argv[2];
+const ceiling = ownTree ? HOVER_CEILING : 0;
+if (process.env.MGT_HOVER_LIST) {
+  for (const p of hover) console.log("  " + p.file + ":" + p.line + "  [" + p.rule + "]  " + p.text);
+}
+if (hover.length > ceiling) {
+  for (const p of hover) problems.push(p);
+  problems.push({ file: "scripts/check-style-invariants.mjs", line: 0, rule: "hover-ceiling",
+    text: hover.length + " controls without a hover description, over the ceiling of " + ceiling,
+    hint: "describe the new control, or MGT_HOVER_LIST=1 npm run check:style to list every site" });
+} else if (hover.length < ceiling) {
+  problems.push({ file: "scripts/check-style-invariants.mjs", line: 0, rule: "hover-ceiling",
+    text: "HOVER_CEILING is " + ceiling + " and " + hover.length + " controls are left",
+    hint: "lower HOVER_CEILING to " + hover.length + ", so the next undescribed control cannot take the room" });
+}
+
 if (problems.length === 0) {
   console.log("style invariants: OK (radius + type + spacing + height scales, "
             + "white-inset-over-fixed-fill, shadow + colour literals, icon + motion "
             + "scales, marker placement, control hover-lift, modal-title background, "
-            + "modal auto-height, search-field lift)");
+            + "modal auto-height, search-field lift, hover descriptions: "
+            + hover.length + " left of ceiling " + ceiling + ")");
   process.exit(0);
 }
 

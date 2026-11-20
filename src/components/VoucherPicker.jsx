@@ -127,6 +127,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
           {settledHere ? null : (
             <button type="button"
               onClick={function () { onChange(""); setErr(""); }}
+              title={"Take voucher " + formatCode(code) + " off this booking; nothing is spent until the booking is completed"}
               aria-label={"Remove voucher " + formatCode(code) + " from this booking"}
               className="mgt-hover-scale"
               style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.quiet, borderRadius: R.pill, marginLeft: "auto" })}>
@@ -227,6 +228,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
                         it (measured: x 42 at 375px, the right edge at 320). */}
                     <button type="button"
                       onClick={function () { attach(s.code); }}
+                      title={"Attach voucher " + formatCode(s.code) + "; it is spent when the booking is completed"}
                       aria-label={"Attach voucher " + formatCode(s.code) + " to this booking"}
                       className="mgt-hover-scale"
                       style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.quiet, borderRadius: R.pill, marginLeft: "auto" })}>
@@ -250,6 +252,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
                 /* Phase 53 (V-4): it read "Number, or pick from the li" at
                    375px (221px of text in a 205px box). */
                 placeholder="Number, or pick one"
+                title="Type the number on the guest's voucher, or pick an open one from the list"
                 autoCapitalize="characters"
                 autoComplete="off"
                 className="mgt-hover-scale"
@@ -257,6 +260,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
               {menu}
             </div>
             <button type="button" onClick={function () { attach(); }}
+              title="Attach the voucher typed here; it is spent when the booking is completed"
               className="mgt-hover-scale"
               style={mkBtn({ fontSize: T.body, background: BTN.quiet, borderRadius: R.pill })}>
               Attach

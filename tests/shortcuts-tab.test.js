@@ -85,11 +85,12 @@ describe("a key is listed only where it works", () => {
     expect(sc).toMatch(/if \(when === "sandbox"\) return WA_SANDBOX;/);
     expect(sc).toMatch(/if \(when === "whatsapp"\) return whatsappOn === true;/);
     // v18.4.5: the two rows are the TABLE's, so the tag that lists a key is the
-    // tag that gates it. The inbox section is still written in the tab.
+    // tag that gates it.
     const nav = shortcutDocs().find((sec) => sec.title === "Navigation").rows;
     expect(nav.find((r) => r.label === "Open WhatsApp simulator")).toEqual({ keys: ["X"], label: "Open WhatsApp simulator", when: "sandbox" });
     expect(nav.find((r) => r.label === "Open WhatsApp inbox")).toEqual({ keys: ["I"], label: "Open WhatsApp inbox", when: "whatsapp" });
-    expect(sc).toMatch(/\{ title: "WhatsApp Inbox", when: "whatsapp", rows: \[/);
+    // v18.18.0: the inbox section is data in lib/shortcuts.js, behind the same tag.
+    expect(read("lib/shortcuts.js")).toMatch(/\{ title: "WhatsApp Inbox", when: "whatsapp", rows: \[/);
   });
 
   it("Settings hands the sheet the module's state", () => {

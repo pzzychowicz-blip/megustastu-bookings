@@ -38,7 +38,9 @@ describe("the availability line", () => {
 
 describe("the country codes", () => {
   it("run under the mark as well as the sentence", () => {
-    expect(Form).toMatch(/below=\{codes\.length\?<div style=\{\{display:"grid",gridTemplateColumns:"repeat\("\+codeColumns\(codes\.length,isMobile\)\+",1fr\)"/);
+    expect(Form).toMatch(/const codeGrid=codes\.length\?<div style=\{\{display:"grid",gridTemplateColumns:"repeat\("\+codeColumns\(codes\.length,isMobile\)\+",1fr\)"/);
+    // v18.18.0: with "Other code…" a row of its own under them, as wide.
+    expect(Form).toContain('below={noCode?<div style={{display:"flex",flexDirection:"column",gap:SP.snug}}>{codeGrid}');
     expect(Atoms).toMatch(/flexWrap: below \? "wrap" : undefined,/);
     expect(Atoms).toMatch(/\{below \? <div style=\{\{ flex: "1 1 100%", minWidth: 0 \}\}>\{below\}<\/div> : null\}/);
   });

@@ -84,12 +84,15 @@ import { useAcRow, AC_ROW } from "../hooks/useAcRow";
 import { AcMenu } from "./AcMenu";
 import { VoucherPicker } from "./VoucherPicker";
 import { PhoneField } from "./PhoneField";
+// v18.18.0: the phone refusal's "Other code…".
+import { CountryPicker } from "./CountryPicker";
 // v18.0.0 session 8 (item 2b): a recognised guest's own open vouchers, plus the
 // two predicates the "carried from" note is derived with.
 import { guestOpenVouchers, normalizeCode, isUnsettled } from "../lib/vouchers";
 import { matchesIdentity, guestTagBase } from "../lib/customers";
 import { enteredPhone } from "../lib/booking-fields";
 import { cleanTagIds, editTagIds, toggleTagEdit } from "../lib/tags";
+import { keyHint } from "../lib/shortcuts";
 import { TagChips } from "./TagChips";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
@@ -102,6 +105,9 @@ import { TagChips } from "./TagChips";
 // a hard CI gate. Only one modal is ever mounted at a time, so a fixed id
 // cannot collide; useId() would be the answer if that stopped being true.
 const FORM_ERROR_ID = "mgt-form-error";
+// v18.18.0: the phone refusal's "Other code…" pill, a row as wide as the codes above
+// it and as tall as they are, its words at the left and the ▾ at the right.
+const OTHER_CODE = { width: "100%", height: H.control, padding: "0 12px", justifyContent: "space-between" };
 // v18.14.0 (correction 29, Patryk): every status the form's row can offer, in the
 // order `statusTargets` offers them, so each keeps its place and eases out and in.
 const STATUS_ROW = ["confirmed", "seated", "completed", "cancelled", "pending"];
@@ -302,11 +308,14 @@ export function BookingFormModal({
   const chipMark=function(which){return <TurnChevron open={histWhich===which} size={IC.inline} />;};
   const regularChip=custMatch&&custMatch.regularCount>=1?<OutlineChip
     key="reg" tone="success" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
+    title="Show or hide this guest's past visits"
     onClick={function(){toggleChipHist("regular");}}><span>{regularChipLabel(custMatch.regularCount,regularMin)}</span>{chipMark("regular")}</OutlineChip>:null;
   const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<OutlineChip
     key="ns" tone="warn" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
+    title="Show or hide this guest's past no-shows"
     onClick={function(){toggleChipHist("noshow");}}><span>{"No-show ×"+custMatch.noShowCount}</span>{chipMark("noshow")}</OutlineChip>:<OutlineChip
     key="ns" tone="neutral" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
+    title="Show or hide this guest's past no-shows"
     onClick={function(){toggleChipHist("noshow");}}><span>1 no-show</span>{chipMark("noshow")}</OutlineChip>):null;
   // Disclosure panel — the WA pastListBody, on app tokens (suggest family for
   // Regular, warn family for no-shows). Top 5 rows like WA; a muted "+N earlier"
@@ -535,6 +544,7 @@ export function BookingFormModal({
     const prefBtn=<button
       className="mgt-hover-scale"
       style={mkBtn({background:hasPref?"var(--btn-tables)":BTN.quiet,fontSize: T.body,padding:"6px 10px",display:"inline-flex",alignItems:"center",gap:6})}
+      title={"Choose the tables this party would like, given when they are free"+keyHint("formPreferred")}
       onClick={function(){onOpenPrefPicker();}}><StarIcon size={IC.inline} />{hasPref?prefs.join("+"):"Preferred"}</button>;
     if(editId){
       const cur=bookings.find(function(b){return b.id===editId;});
@@ -658,10 +668,12 @@ export function BookingFormModal({
       leftEls.push(<RowSlot key="clrmt" show={!!mt} gap={8}>{mt?<button
         className="mgt-hover-scale mgt-press"
         style={mkBtn({fontSize: T.body,background:BTN.quiet})}
+        title={"Clear the tables chosen by hand, so the app chooses them"+keyHint("formClear")}
         onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>:null}</RowSlot>);
       leftEls.push(<RowSlot key="clrman" show={!!showClearManual} gap={8}>{showClearManual?<button
         className="mgt-hover-scale mgt-press"
         style={mkBtn({fontSize: T.body,background:BTN.quiet})}
+        title={"Clear the tables this booking was given by hand, so the app chooses them on save"+keyHint("formClear")}
         onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[],_clearManual:true});});onClearSwap();}}>Clear</button>:null}</RowSlot>);
       return (
         <Section><div
@@ -669,6 +681,7 @@ export function BookingFormModal({
               style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",flex:1,minWidth:0}}>{leftEls}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button
                 className="mgt-hover-scale"
                 style={mkBtn({background:BTN.tables,display:"inline-flex",alignItems:"center",gap:6})}
+                title={"Choose the tables for this booking by hand"+keyHint("formAssign")}
                 onClick={function(){onOpenManualAssign(editId);}}><AssignIcon size={IC.control} />Assign</button>{prefBtn}</div></div></Section>
       );
     }
@@ -677,13 +690,15 @@ export function BookingFormModal({
     leftEls.push(<RowSlot key="clrmt" show={!!mt} gap={8}>{mt?<button
       className="mgt-hover-scale mgt-press"
       style={mkBtn({fontSize: T.body,background:BTN.quiet})}
-      onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>:null}</RowSlot>);
+      title={"Clear the tables chosen by hand, so the app chooses them"+keyHint("formClear")}
+        onClick={function(){setForm(function(f){return Object.assign({},f,{manualTables:[]});});onClearSwap();}}>Clear</button>:null}</RowSlot>);
     return (
       <Section><div
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><div
             style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",flex:1,minWidth:0}}>{leftEls}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button
               className="mgt-hover-scale"
               style={mkBtn({background:BTN.tables,display:"inline-flex",alignItems:"center",gap:6})}
+              title={"Choose the tables for this booking by hand"+keyHint("formAssign")}
               onClick={function(){onOpenManualAssign("__new__");}}><AssignIcon size={IC.control} />Assign</button>{prefBtn}</div></div></Section>
     );
   })();
@@ -838,6 +853,7 @@ export function BookingFormModal({
         <RowSlot key={s} show={offered} gap={6}>{offered?<button
           className="mgt-hover-scale"
           style={mkBtn({background:STATUS_BTN_BG[s],color:BLOCK_INK[s]||"var(--text-on-accent)",textTransform:"capitalize",minHeight:H.control,display:"inline-flex",alignItems:"center",gap:6})}
+          title={s==="cancelled"?"Cancel this booking (asks again first)":"Change this booking's status to "+s+", saved with the booking"}
           onClick={function(){flashStatus(s);if(s==="cancelled"){onRequestCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}><StatusIcon status={s} size={IC.control} />{s}</button>:null}</RowSlot>
       );})}</div></Section>:null;
 
@@ -860,7 +876,7 @@ export function BookingFormModal({
         onClick={function(){onOpenHistory();}}
         className="mgt-hover-scale"
         aria-label={"History, "+n+" "+(n===1?"entry":"entries")}
-        title={"History ("+n+")"}
+        title={"Show who changed this booking and when, "+n+" "+(n===1?"entry":"entries")+keyHint("history")}
         style={mkBtn({background:BTN.quiet,padding:SP.none,minHeight:H.chrome,width:H.chrome,display:"inline-flex",alignItems:"center",justifyContent:"center"})}><HistoryIcon size={IC.chrome} /></button>
     );
   })();
@@ -881,6 +897,7 @@ export function BookingFormModal({
   const deleteBtn=editId?(
     <button
       onClick={function(){onRequestDelete(editId);}}
+      title="Delete this booking (asks again first)"
       className="mgt-hover-scale mgt-press"
       style={mkDangerBtn({fontSize: T.body,padding:"8px 16px",minHeight:36})}><TrashIcon size={IC.control} />Delete</button>
   ):null;
@@ -892,6 +909,7 @@ export function BookingFormModal({
     return (
       <button
         onClick={function(){onBookAgain(cur);}}
+        title={"Start a new booking for this guest, their details filled in"+keyHint("bookAgain")}
         className="mgt-hover-scale"
         style={mkBtn({fontSize: T.body,background:"var(--app-success-solid)",padding:"8px 16px",minHeight:36})}>Book again</button>
     );
@@ -957,9 +975,18 @@ export function BookingFormModal({
   // v18.14.0 (correction 3): the codes run edge to edge under the sentence, in
   // equal cells, a grid because a phone's six are 3 + 3 (`codeColumns`). A phone's
   // 2px less padding a side is what keeps the sentence on one line at 375.
-  const codes=error===NO_CODE_REFUSAL?pinnedCodes(pinnedCountries):[];
+  // v18.18.0 (Patryk): and a last button, "Other code…", for a code no pinned one
+  // gives. It opens the whole list, every country included (someone who missed
+  // Spain's button still finds Spain by typing), and a pick there is a button's tap:
+  // `onPickCode`. A row of its own, as wide as the codes: its words need ~137px and a
+  // code's cell is 79 on the tablet with the six pinned by default (measured). The
+  // list opens UPWARD, because under the refusal there is only the Save row. With no
+  // pins it stands alone under the sentence.
+  const noCode=error===NO_CODE_REFUSAL;
+  const codes=noCode?pinnedCodes(pinnedCountries):[];
+  const codeGrid=codes.length?<div style={{display:"grid",gridTemplateColumns:"repeat("+codeColumns(codes.length,isMobile)+",1fr)",gap:SP.snug}}>{codes.map(function(c){return <TimeChip key={c.iso} time={c.iso} label={c.label} description={"Put "+c.label+" in front of the number and try again"} onPick={onPickCode} style={{minHeight:H.control,padding:"0 8px"}} />;})}</div>:null;
   const errorEl=<div role="alert"><Reveal show={!!error}>{error?
-    <InlineAlert id={FORM_ERROR_ID} style={{marginBottom:14,rowGap:SP.snug,...(codes.length&&isMobile?{padding:"10px 12px"}:null)}} below={codes.length?<div style={{display:"grid",gridTemplateColumns:"repeat("+codeColumns(codes.length,isMobile)+",1fr)",gap:SP.snug}}>{codes.map(function(c){return <TimeChip key={c.iso} time={c.iso} label={c.label} onPick={onPickCode} style={{minHeight:H.control,padding:"0 8px"}} />;})}</div>:null}>{error}</InlineAlert>
+    <InlineAlert id={FORM_ERROR_ID} style={{marginBottom:14,rowGap:SP.snug,...(noCode&&isMobile?{padding:"10px 12px"}:null)}} below={noCode?<div style={{display:"flex",flexDirection:"column",gap:SP.snug}}>{codeGrid}<div style={{position:"relative"}}><CountryPicker label="Other code…" description="Choose another country's code for the number, and try again" above onPick={onPickCode} style={OTHER_CODE} /></div></div>:null}>{error}</InlineAlert>
   :null}</Reveal></div>;
   // Gated on `error` as well as the field name, so the id handed to
   // aria-describedby can only ever name an element that is on screen.
@@ -987,13 +1014,14 @@ export function BookingFormModal({
           refusal yields to Save's, which is the same sentence: two panes saying
           one thing read as a fault. */}
       <div role="status"><Reveal show={lineShown&&!(lineAvail.refusal&&lineAvail.refusal===error)}>{availLine}</Reveal></div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}{deleteBtn}{(function(){
+      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}{deleteBtn}{(function(){
         if(editId) return null;
         const canSave=!!form.date;
         return (
           <button
             disabled={!canSave}
             onClick={onSavePending}
+            title="Save the booking as pending, still to be confirmed with the guest"
             className="mgt-hover-scale"
             /* v17.8.0: demoted from a solid amber pill to the OUTLINE treatment
                (CLAUDE.md's second label shape — no fill, 2px border in the
@@ -1008,7 +1036,9 @@ export function BookingFormModal({
                fill-derived one measured 1.44:1 on the light sheet (index.css). */
             style={{background:"transparent",border:"2px solid "+(canSave?"var(--pending-outline)":"var(--border-soft)"),borderRadius:R.pill,padding:"8px 16px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:canSave?"var(--status-pending-text)":"var(--text-faint)",minHeight:44}}>Save pending</button>
         );
-      })()}</div><div style={{display:"flex",gap:8}}><button
+      })()}</div>{/* v18.18.0 (Patryk): Back and Save keep the right where the row wraps
+          (an edit at 375, with Delete): `space-between` started them on the
+          second line at the left. DESIGN.md, "A control keeps its side". */}<div style={{display:"flex",gap:8,marginLeft:"auto"}}><button
         className="mgt-hover-scale"
         /* v17.8.0: was BTN.cancel — the RED one. In this app "cancel" means
            cancel the BOOKING, which is why that token is red; this button closes
@@ -1018,6 +1048,7 @@ export function BookingFormModal({
            primary, so the footer read as three warnings. The quiet button is the
            neutral dialog secondary. */
         style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
+        title={"Close the form, asking first if anything changed"+keyHint("close")}
         onClick={function(){onClose();}}>Back</button>{(function(){
         // v14 p1 (Issue 3): Save is disabled when date is empty. Prevents the
         // dd.mm.yyyy placeholder state from being submitted (esp. via Book Again
@@ -1027,6 +1058,7 @@ export function BookingFormModal({
           <button
             disabled={!canSave}
             onClick={onSave}
+            title={"Save the booking and close the form"+keyHint("confirm")}
             className="mgt-hover-scale"
             style={mkSolidBtn(canSave?S.accent:"var(--btn-disabled)",{cursor:canSave?"pointer":"not-allowed",color:canSave?"var(--text-on-accent)":"var(--btn-disabled-ink)",boxShadow:canSave?"var(--shadow-btn-accent)":"none"})}>Save booking</button>
         );
@@ -1035,6 +1067,7 @@ export function BookingFormModal({
           <button
             disabled={!form.date}
             onClick={onSaveConfirm}
+            title="Save the booking and mark it confirmed"
             className="mgt-hover-scale"
             style={mkSolidBtn(form.date?"var(--app-success-solid)":"var(--btn-disabled)",{cursor:form.date?"pointer":"not-allowed",color:form.date?"var(--text-on-accent)":"var(--btn-disabled-ink)",boxShadow:form.date?"var(--shadow-btn-success)":"none"})}>Save&confirm</button>
         </Presence>
@@ -1060,6 +1093,7 @@ export function BookingFormModal({
             onClick={function(){setNameFocus(true);}}
             onBlur={function(){setNameFocus(false);}}
             placeholder="Full name"
+            title="The guest's name; typing suggests guests who have booked before"
             className="mgt-hover-scale"
             style={inp()} />{nameDropdown}</div>;}}</Fld><Fld label="Phone number" invalid={invalidField("phone")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <PhoneField
             /* v18.1.0: the country code is its own control (PhoneField,
@@ -1092,6 +1126,7 @@ export function BookingFormModal({
               :Object.assign({id:fid},attrs)}
             value={form.date}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{date:e.target.value});});}}
+            description="The day of the booking"
             style={inp()} /><Reveal show={dateLocked}>{dateLocked?<div id={DATE_LOCK_ID} style={{fontSize: T.small,color:S.muted,paddingTop:4}}>Change the status to change the date</div>:null}</Reveal></>;}}</Fld><Fld label="Time" invalid={invalidField("time")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input
             id={fid}
             {...attrs}
@@ -1102,44 +1137,53 @@ export function BookingFormModal({
             /* v18.0.0 session 8 (C7): the last start, not the close. `lastStartMins`
                caps at midnight, so the ">= 24" branch this replaced is inside it. */
             max={toTime(lastStartMins(fh.close))}
+            title="The time the party arrives, up to the day's last start"
             className="mgt-hover-scale"
             style={inp()} />;}}</Fld><Fld label="Seating preference">{function(fid){return <select
             id={fid}
             value={form.preference}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{preference:e.target.value});});}}
+            title="Where the party would like to sit; Auto lets the app choose"
             className="mgt-hover-scale"
             style={mkSel()}><option value="auto">Auto (recommended)</option>{INDOOR.length>0?<option value="indoor">Indoor</option>:null}{OUTDOOR.length>0?<option value="outdoor">Outdoor</option>:null}</select>;}}</Fld><Fld label="Number of guests"><div style={{display:"flex",alignItems:"center",gap:6}}><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               aria-label="Decrease number of guests"
+              title="Decrease the number of guests, one at a time"
               {...stepPress(function(){const v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});})}>−</button><span
               style={{minWidth:56,textAlign:"center",fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{String(Number(form.size)||2)}</span><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               aria-label="Increase number of guests"
+              title="Increase the number of guests, one at a time"
               {...stepPress(function(){const v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});})}>+</button></div></Fld><Fld label="Duration"><div style={{position:"relative",display:"flex",alignItems:"center",gap:6}}><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               aria-label="Decrease duration"
+              title="Decrease how long the party stays, 15 minutes at a time"
               {...stepPress(function(){const v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});})}>−</button><span
               style={{minWidth:56,textAlign:"center",fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{countLabel(dur,"min")}</span><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               aria-label="Increase duration"
+              title="Increase how long the party stays, 15 minutes at a time"
               {...stepPress(function(){const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});})}>+</button><span style={{fontSize: T.body,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={availChecking}>{checkingRow}</Reveal>{quickStatusBtns}<Section><Fld label="Notes">{function(fid){return <textarea
           id={fid}
           value={form.notes}
           onChange={function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});}}
           rows={2}
           placeholder="Allergies, special requests..."
+          title="Anything staff should know: allergies, requests; shown when the party is seated"
           className="mgt-hover-scale"
           style={mkArea()} />;}}</Fld>{/* v18.5.0: the tags, under the notes they take over from. A kind with
           no tags in the list (Settings → Customers → Tags) is not drawn. */}{guestTagChoices.length?<Fld label="Guest tags"><TagChips
           tags={guestTagChoices}
           on={guestTagsOn}
+          description={function(label){return "Add "+label+" to this guest's tags on all their bookings, or take it off";}}
           onToggle={function(id){setForm(function(f){return Object.assign({},f,{guestTagEdits:toggleTagEdit(f.guestTagEdits,guestTagsBase,id)});});}} /></Fld>:null}{occasionChoices.length?<Fld label="Occasion"><TagChips
           tags={occasionChoices}
           on={form.tags}
+          description={function(label){return "Mark this visit as "+label+", or take it off";}}
           onToggle={function(id){setForm(function(f){const cur=cleanTagIds(f.tags);return Object.assign({},f,{tags:cur.indexOf(id)>=0?cur.filter(function(x){return x!==id;}):cleanTagIds(cur.concat([id]))});});}} /></Fld>:null}{/* v16.3.0: deposit / prepayment amount (€). Empty = none.
           v18.3.1: `inputMode="numeric"`, the digit pad (Patryk, on the iPhone).
           Not "decimal": on a Spanish-locale phone that pad types a comma, which
@@ -1152,6 +1196,7 @@ export function BookingFormModal({
           value={form.deposit}
           onChange={function(e){setForm(function(f){return Object.assign({},f,{deposit:e.target.value});});}}
           placeholder="0"
+          title="Money the guest paid ahead, in whole amounts; it shows on the booking"
           className="mgt-hover-scale"
           style={inp()} />;}}</Fld>{/* v18.0.0: the gift voucher attached to this booking. ATTACHED, not
         redeemed — the ledger entry is written when the booking is completed.
@@ -1182,7 +1227,7 @@ export function BookingFormModal({
                 {"Create a standing booking every "+(WEEKDAY_LONG[new Date(form.date).getUTCDay()]||"week")+(form.time?" at "+form.time:"")+". Manage it in Settings → General → Standing bookings."}
               </div>
             </div>
-            <Toggle label="Repeat weekly" on={!!form.repeatWeekly} onClick={function(){setForm(function(f){return Object.assign({},f,{repeatWeekly:!f.repeatWeekly});});}} />
+            <Toggle label="Repeat weekly" description="Make this a standing booking, the same day and time every week" on={!!form.repeatWeekly} onClick={function(){setForm(function(f){return Object.assign({},f,{repeatWeekly:!f.repeatWeekly});});}} />
           </div>
         </Section>
       ):null}</AutoHeight></Overlay>

@@ -19,7 +19,7 @@ export default function UpdateRequired({ onRefresh }) {
   return (
     <Overlay /* @static-height two fixed sentences, nothing in it changes while it is open */ onClose={stay} footer={
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button className="mgt-hover-scale" onClick={onRefresh}
+        <button className="mgt-hover-scale" onClick={onRefresh} title="Reload the page to fetch the newer version of the app"
           style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--accent)" })}>Refresh</button>
       </div>
     }>

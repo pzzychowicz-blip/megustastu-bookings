@@ -103,6 +103,7 @@ function TagRow({ tag, index, kind, tagList, onSave, armed, onArm, onDirty }) {
           value={draft}
           maxLength={TAG_LABEL_MAX}
           aria-label={"Name of " + KIND_ONE[kind] + " " + (index + 1)}
+          title={"The " + KIND_ONE[kind] + "'s name; a new name shows on every booking that carries the tag"}
           aria-invalid={refusal ? true : undefined}
           aria-describedby={refusalShown ? hintId : undefined}
           onChange={function (e) { setDraft(e.target.value); if (refusal) setRefusal(null); }}
@@ -119,6 +120,7 @@ function TagRow({ tag, index, kind, tagList, onSave, armed, onArm, onDirty }) {
               onClick={function () { onArm(tag.id); }}
               className="mgt-hover-scale mgt-press"
               aria-label={"Confirm — remove " + tag.label}
+              title={"Remove " + tag.label + " from the list; bookings that carry it stop showing it"}
               aria-describedby={hintId}
               style={mkDangerBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 10px" })}><TrashIcon size={IC.control} />Confirm — remove</button>
           ) : (
@@ -126,7 +128,7 @@ function TagRow({ tag, index, kind, tagList, onSave, armed, onArm, onDirty }) {
               onClick={function () { onArm(tag.id); }}
               className="mgt-hover-scale"
               aria-label={"Remove " + tag.label}
-              title="Remove this tag"
+              title={"Remove " + tag.label + " from the list (asks for a second tap)"}
               style={mkRemoveX(H.compact)}><CloseIcon size={IC.control} /></button>
           )}
         </div>
@@ -169,6 +171,7 @@ function AddTagRow({ kind, tagList, onSave, onDirty }) {
           disabled={full}
           placeholder={full ? "Up to " + TAG_LIST_MAX + " tags" : "New " + KIND_ONE[kind]}
           aria-label={"New " + KIND_ONE[kind]}
+          title={"The name of a new " + KIND_ONE[kind] + "; Enter adds it"}
           aria-invalid={refusal ? true : undefined}
           aria-describedby={refusal ? hintId : undefined}
           onChange={function (e) { setDraft(e.target.value); if (refusal) setRefusal(null); }}
@@ -180,6 +183,7 @@ function AddTagRow({ kind, tagList, onSave, onDirty }) {
           onClick={add}
           disabled={full || !dirty}
           aria-label={"Add " + KIND_ONE[kind]}
+          title={"Add the new " + KIND_ONE[kind] + " to the list"}
           className="mgt-hover-scale mgt-press"
           style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 14px", background: BTN.quiet, opacity: full || !dirty ? 0.4 : 1, cursor: full || !dirty ? "not-allowed" : "pointer" })}>Add</button>
       </div>
@@ -219,6 +223,7 @@ export function TagListEditor({ tagList, onSave, tagError, onClearError, canEdit
             <button
               onClick={onClearError}
               aria-label="Dismiss"
+              title="Hide this message"
               className="mgt-hover-scale"
               style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 10px", background: BTN.quiet })}>Dismiss</button>
           </div>

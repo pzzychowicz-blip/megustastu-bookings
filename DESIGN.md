@@ -270,8 +270,9 @@ explaining why is usually the one to read.
   back: a field at rest is that same quiet edge, about 1.6:1 on a Section, and 3:1 is
   what Increase Contrast gives (`--text-muted`). This is his decision against the
   letter of 1.4.11, recorded so it is not raised again. `--field-edge` is the field's
-  own token, because `--border-input` also rims stat cells and rows that are not
-  controls. `mkInp` reads it, so `DateField` and `SearchField` do; so do
+  own token, because the stat cells and rows that are not fields took another edge,
+  `--border-soft` since v18.18.0 (below, "A surface inside a sheet"), and
+  `--border-input` is left only as Dark's field edge. `mkInp` reads it, so `DateField` and `SearchField` do; so do
   `LayoutSettings`' two small inputs, the WhatsApp composer and the header's date pill.
   A new field built without `mkInp` takes it by hand. Focus stays the 2px
   `--focus-ring`, a long way from the edge. Dark keeps its rim, because its fill is
@@ -308,8 +309,8 @@ explaining why is usually the one to read.
   reaches the restaurant's phones: `prefers-reduced-transparency` did not match
   on iOS 26.5 (measured), and `forced-colors` is Windows only. One `@media`
   block after the dark tokens flips two things. **The glass goes opaque**:
-  `--tl-card-bg`, `--bg-sheet`, `--bg-sheet-mobile`, and in dark `--tl-popup-bg`
-  (light's is already opaque). Each value is that token's composite over
+  `--tl-card-bg`, `--bg-sheet`, and in dark `--tl-popup-bg` (light's is already
+  opaque, and so is `--bg-sheet-mobile` in both since v18.18.0). Each value is that token's composite over
   `--bg-app`, so a surface keeps its colour and only stops showing what is
   behind it — the page header ghosted faintly through the iPhone booking sheet
   in dark. A change to the token does not carry its composite along:
@@ -519,6 +520,28 @@ explaining why is usually the one to read.
   `--bg-cal-cell` now, the solid colour a cell had over a plain page. Glass is
   for chrome; anything whose colour MEANS something sits on a solid fill. The
   busyness shading got the key it never had, drawn from the same `HEAT` scale.
+- **A surface inside a sheet takes `--border-soft` as its edge, never the white rim
+  (v18.18.0, commit 19, Patryk).** `--border-input` is a 40% white line, and
+  v18.14.0 raised the desktop card to 98% white. From 600px up the Week rows, the
+  Month grid, the Stats tiles and the key then measured 1.01:1 against the card,
+  edge 1.00:1, so a Mac or the tablet showed none of them, while the phone's grey
+  sheet (1.09:1) kept them: the same screen read differently by width alone. Six
+  files drew the rim; all take `--border-soft` now, the edge every `Section` on
+  that card already had. Measured edge against what is around it, before → after:
+  More's cells 1.00 → 1.30 on the card and 1.10 → 1.19 on the phone; the Summary's
+  shift totals and notes rows 1.04 → 1.25; Plan's popover rows 1.09 → 1.17;
+  Customers' tiles and the floor plan inspector 1.03 → 1.26 (the standing-booking
+  rows share their fill and Section; DEV had none to draw). Dark barely moves (12%
+  white to 10%). `tests/contrast.test.js` fails a component that draws
+  `--border-input`; the token stays because Dark's `--field-edge` is it.
+- **The phone's sheet is solid (v18.18.0, commit 19, Patryk).** `--bg-sheet-mobile`
+  was 0.98 with no blur, so the page ghosted through on an iPhone: the Summary's
+  "Afternoon" and the header's view switcher behind More (1.04:1, and visible on a
+  flat sheet). It is now the colour 0.98 drew over `--bg-app` (#f0f3f8, #1c1c1e),
+  so the sheet's colour does not move, and Increase Contrast, which had those
+  values already, no longer names it. `MOBILE_BAR` shares the token and is solid
+  with it. The desktop card stays at 0.98 under its scrim and blur, where nothing
+  legible comes through.
 - **A Cancel is never red.** Layout's rename and add-table Cancel shared the
   remove button's red × (`X_BTN`); it is the stepper's neutral now (`CANCEL_X`).
 - **A paused item fades its TEXT, never its controls (v18.2.0, S5).** A paused
@@ -585,8 +608,8 @@ explaining why is usually the one to read.
   and "+ New" wrapped onto a second header row of their own, and the header and
   date row took ~455 of an 812px screen before the grid began. Below 600px they
   are `MOBILE_BAR` (App.jsx): fixed to the bottom, two equal thumb-width
-  buttons, the OPAQUE `--bg-sheet-mobile` (0.98 — `--bg-sheet`, at 0.72 until
-  v18.14.0, let a timeline row show through) with a hairline and `--shadow-soft`, NO blur (the
+  buttons, the OPAQUE `--bg-sheet-mobile` (solid since v18.18.0, 0.98 before it;
+  `--bg-sheet`, at 0.72 until v18.14.0, let a timeline row show through) with a hairline and `--shadow-soft`, NO blur (the
   ≤4 budget), z 100 — over the page and the toasts, under every modal. A spacer
   of the same height ends `<main>` so the last row is never under it.
 - **The Summary sits beside the date controls only on one line (v18.2.0).** The
@@ -643,6 +666,35 @@ explaining why is usually the one to read.
   menu, word and mark as a menu row draws them.
   A bare ✕ for Close and a bare ⋯ for More are the exceptions: everybody reads
   them, and Re-check keeps its word on the ⋯ menu's row (v18.14.0).
+- **Every control carries a hover description (v18.18.0, Patryk).** A mouse
+  resting on a button, field, switch, link or chip is told what it does, in the
+  browser's own tooltip: the `title` attribute, or `description` on an atom that
+  draws the control (`Toggle`, the steppers, `TimeChip`, `SearchField`,
+  `DateField`, `CountryPicker`, whose pill reads differently at each of its
+  three callers, and `TagChips`, whose `description` is a function of the tag's
+  label because a chip means something else at each of its four). Mouse only, so the tablets and phones never see it, and the rule
+  above still holds: the meaning is on the control, and the tooltip says more.
+  `check:style` Rule 14 fails a control without one. How a description reads:
+  - **What happens, starting with a verb, on one line, with no full stop**:
+    "Save the booking and close the form".
+  - **It says more than the visible words, never only those.** For a field, it
+    says what goes in it ("Guest's phone number, with the country code").
+  - **It names the item where several controls share a word**: "Move 9 up in
+    Prefer", not "Move up".
+  - **It never states the control's state.** `aria-pressed` and `aria-checked`
+    say that, and a tooltip reading "On" is wrong half the time.
+  - **A key comes last, from the shortcut table**: `"Open the WhatsApp inbox" +
+    keyHint("inbox")` reads "Open the WhatsApp inbox (I)". Never type the key:
+    Rule 14 fails "(I)" written by hand, because the table can move it.
+  - **A stepper's description is what it steps**, and its buttons read
+    "Decrease …" and "Increase …" of it ("Increase the seats at table 3, one at
+    a time").
+  - **On SVG** the attribute does nothing; the element takes a `<title>` child,
+    first inside it.
+
+  A `title` is also the accessible DESCRIPTION, and the NAME of a control that
+  has no text and no `aria-label`: there Label in Name still applies, so the
+  description starts with the word the control is known by.
 - **A day is written ONE way: "Thu 24.09" (v18.2.0, C1).** Weekday, day and
   month, and the year only when it is not this year: "Fri 15.01.2027". It is
   `formatDay` in `lib/day.js`, and nothing else writes a date on screen. The
@@ -919,6 +971,14 @@ explaining why is usually the one to read.
   reaching for accent, check the hue is actually free — the app's slots are green
   seated/success, amber confirmed/pending, burnt orange warn, red danger, purple
   indoor, teal outdoor, graphite `--tag-flag` for booking flags.
+- **A control that is always there wears the orange only while pressing it
+  would help (v18.18.0, Patryk).** Reshuffle used to appear on today with the
+  Optimiser off, orange, the one moment it was needed. Since it shows on every
+  day ahead it is quiet at rest (`BTN.quiet`, inside `mkBtn`, so the grey brings
+  its own ink) and burnt orange when the day has something to gain: today with
+  the Optimiser off, or while the "Tables could be reshuffled" check fires. A
+  colour that is always on carries no news. The flip eases as one change through
+  `.mgt-hover-scale`'s shared transition; `tests/quiet-buttons.test.js` pins it.
 
 - **Notifications are ONE surface (v17.8.0).** Every in-flow banner
   (`BannerRows` + Late/Overlap/WaitAvail, `AppBanners`, the reminder banner) and
@@ -1986,9 +2046,14 @@ the first table row from 253px down to 162, which is 5 tables on opening instead
   top of the header's buttons under it. 8px did, on the tablet's installed app and
   not in its Chrome tab, which has no strip. At 998 × 507 the 4px cost no table row.
 - **What moves, on a lone Timeline only** (`toolbarFolded`): Follow and zoom into the
-  header, after the name, on a horizontal `Reveal` so they leave and return with the
-  view. Optimiser and Reshuffle into the opened Summary, left of its own actions. In
-  a split each pane keeps its own toolbar.
+  header, first among its controls, right before Timeline / List / Plan (v18.18.0; after
+  the name until then, which put them on the opposite side from every larger screen).
+  They ride a horizontal `Reveal` held to its `end`, so they leave and return with the
+  view and stay still while their left edge folds. Where the controls take a line of
+  their own (today, at 998 × 507) Follow and zoom lead that line, and the switcher
+  moves 285px off the left edge v18.4.0 gave it: Patryk chose that knowing it.
+  Optimiser and Reshuffle go into the opened Summary, left of its own actions, the
+  side they have in the toolbar. In a split each pane keeps its own toolbar.
 - **The inbox gets the same treatment (correction 9, Patryk):** a conversation is
   there to be read. At 998 × 507 the title bar, the filter row and a header that
   wrapped left the message no height at all, with a draft open. So with two panes
@@ -2000,6 +2065,38 @@ the first table row from 253px down to 162, which is 5 tables on opening instead
   it is the half nobody reaches for mid-service.
 - **It is a breakpoint, not a transition**, like `isMobile`. A screen does not change
   height in service, and on Android the keyboard can only flip it behind a modal.
+
+### A control keeps its side (v18.18.0)
+A button that sits at the right on a large screen stays at the right on the tablet and
+the phone, as far as the room allows, and the same for the left. Patryk asked for it on
+2026-11-20 for muscle memory: whoever learned No show at the right of the row on one
+screen reaches to the right on the next. **It is a preference, not a rule**, so
+`check:style` does not hold it, and a layout that cannot keep a side may give it up.
+
+- **The pattern: the trailing controls are ONE group with `marginLeft: "auto"`.** On
+  one line that is the layout `justify-content: space-between` gives. Once the row
+  wraps it is not: `space-between` puts a lone item at the START of its line, and
+  buttons placed one by one after a sentence each land wherever the wrap leaves them.
+  A group wraps as one and keeps the right. If the group can wrap inside itself, give
+  it `justifyContent: "flex-end"` too.
+- **Its mirror, for a trailing item that cannot take the margin:** a `RowSlot` already
+  spends its margin cancelling the row's gap, so the row packs to its end
+  (`justifyContent: "flex-end"`) and the item before it takes the slack
+  (`marginRight: "auto"`). Assign's and Walk-in's Clear, and the opened Summary's
+  actions, are built this way.
+- **Measured at 375 × 812:** on the banners (commit 17), Running late put No show at
+  the left and its ✕ at the right, 164px apart, and Not on the grid put Assign at the
+  left. In the forms and Settings (commit 18), an edit's Back and Save, Backup's
+  download, the kitchen limit, Drag hold and Admin's Open the log all started a second
+  line at the left; at 320 a new booking's Back and Save did too. After, each ends at
+  its row's right edge. At 998 and 1440 nothing moved, because none of them wrapped.
+- **Not a flip:** controls that sit at the left on every screen stay there when they
+  wrap, which is their side. Admin's people rows are one (the level menu takes the
+  whole line on any screen, so Capabilities and Remove start the next), and so are
+  the two late-booking steppers in Settings → General.
+- **Two places that give it up:** the phone's bottom bar, which holds Walk-in and
+  + New where a thumb reaches them (v18.2.0, Patryk's choice), and the switcher's left
+  edge on the compact header, which Follow and zoom take (The compact layout, above).
 
 ### Press feedback — universal, opt-OUT (v17.8.0)
 Every `button` dips to `scale(0.96)` on `:active`; `.mgt-hover-scale` buttons dip

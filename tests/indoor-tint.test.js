@@ -55,7 +55,7 @@ describe("the switch is this device's, not the account's", () => {
   });
   it("has one switch, in the Timeline group beside Larger text", () => {
     const settings = code("components/Settings.jsx");
-    expect(settings).toMatch(/<Toggle label="Tint indoor tables" on=\{indoorTint\} onClick=\{onToggleIndoorTint\} \/>/);
+    expect(settings).toMatch(/<Toggle label="Tint indoor tables" description="[^"]+" on=\{indoorTint\} onClick=\{onToggleIndoorTint\} \/>/);
     expect(settings.indexOf('label="Tint indoor tables"')).toBeGreaterThan(settings.indexOf('label="Larger text"'));
     expect(settings.indexOf('label="Tint indoor tables"')).toBeLessThan(settings.indexOf('"zoom when opening the app"'));
   });

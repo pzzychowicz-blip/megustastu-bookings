@@ -10,7 +10,7 @@ import { describe, it, expect } from "vitest";
 import { planAssign, planReassign, planReshuffle, planUnlock, lockedOn, swapSlot, liveSwap } from "../src/lib/manual-assign.js";
 import { todayStr, addDays } from "../src/lib/day.js";
 import { appCode } from "./app-source.js";
-import { unlockOffered } from "../src/lib/booking-logic.js";
+import { unlockOffered, reshuffleOffer } from "../src/lib/booking-logic.js";
 import { ALL_TABLES } from "../src/lib/constants.js";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
@@ -589,3 +589,109 @@ describe("planReshuffle: Reshuffle and unlock N", () => {
   });
 });
 
+
+// ── v18.18.0 commit 15: Reshuffle asks for Move tables ───────────────────────
+// Reshuffle moves every unlocked party of the day, and it was the one action
+// that moves tables without asking `bookingAssign`: a drag, Assign, Reassign and
+// Unlock all ask it. App's `openReshuffle` is the one door to the confirm, and
+// it asks at the press, so the refusal comes before the confirm opens.
+describe("Reshuffle asks for Move tables", () => {
+  it("one door opens the confirm, and it asks first", () => {
+    const app = appCode();
+    expect(app).toContain('function openReshuffle(){if(refused("bookingAssign"))return;setConfirmReshuffle(true);}');
+    // Nothing else opens it, so no way in can skip the question.
+    expect(app.match(/setConfirmReshuffle\(true\)/g)).toHaveLength(1);
+  });
+
+  it("every way in goes through it: the notice, the views' button and the keyboard", () => {
+    const app = appCode();
+    // The notice's goes through the ref: `openReshuffle` itself in that render-time
+    // call made the React Compiler give up on BookingApp (src/CLAUDE.md, hook order).
+    expect(app).toContain("onReshuffle:function(){viewActionsRef.current.openReshuffle();},");
+    expect(app).toContain("onReshuffle:function(){R.current.openReshuffle();},");
+    expect(app).toContain("setConfirmReshuffle:setConfirmReshuffle,openReshuffle:openReshuffle,");
+  });
+});
+
+
+// ── v18.18.0 commit 16: Reshuffle on today and every later day ───────────────
+// Since v18.17.0 a save on a day the Optimiser owns keeps the day (`applyOptKeep`),
+// so the fresh pass happens only on Reshuffle, which showed on today with the
+// switch OFF alone. Patryk: today and every later day, whatever the switch says;
+// grey, and orange while pressing it would help. The undo of each kind is proved
+// in tests/delete-undo.test.js ("a Reshuffle, undone").
+describe("reshuffleOffer: where the Reshuffle button shows, and when it is orange", () => {
+  const offer = (viewDate, autoOptimizer, suggest) => reshuffleOffer({ viewDate, today: TODAY, autoOptimizer, suggest });
+
+  it("nothing on a past day, whatever the switch or the check says", () => {
+    [true, false].forEach((on) => [true, false].forEach((s) => {
+      expect(offer(addDays(TODAY, -1), on, s), on + " " + s).toBe(null);
+      expect(offer(addDays(TODAY, -30), on, s), on + " " + s).toBe(null);
+    }));
+  });
+  it("today with the Optimiser off is always orange, as it was", () => {
+    expect(offer(TODAY, false, false)).toEqual({ lit: true });
+    expect(offer(TODAY, false, true)).toEqual({ lit: true });
+  });
+  it("today with it on is grey, and orange while the check fires", () => {
+    expect(offer(TODAY, true, false)).toEqual({ lit: false });
+    expect(offer(TODAY, true, true)).toEqual({ lit: true });
+  });
+  it("a later day is grey whatever the switch says, and orange while the check fires", () => {
+    [true, false].forEach((on) => {
+      expect(offer(D, on, false), String(on)).toEqual({ lit: false });
+      expect(offer(D, on, true), String(on)).toEqual({ lit: true });
+    });
+  });
+  it("only the literal true lights it, and a date it cannot compare offers nothing", () => {
+    for (const s of [1, "true", undefined, null]) expect(offer(D, true, s), String(s)).toEqual({ lit: false });
+    expect(reshuffleOffer({ viewDate: null, today: TODAY })).toBe(null);
+    expect(reshuffleOffer({ viewDate: D })).toBe(null);
+    expect(reshuffleOffer(undefined)).toBe(null);
+  });
+});
+
+describe("App: Reshuffle on every day ahead", () => {
+  const src = (f) => stripComments(readFileSync(new URL("../src/components/" + f, import.meta.url), "utf8")).join("\n");
+
+  it("the notice and the button read one check, and neither is offered on a past day", () => {
+    const app = appCode();
+    expect(app).toContain("const suggestOn=!!(inefficient&&optimizerActiveFor(viewDate,autoOptimizer)&&bookingDefaults.reshuffleSuggestEnabled&&viewDate>=today);");
+    // Dismiss is the notice's alone: the button reads `suggestOn`, which does not know it.
+    expect(app).toContain("const ineffShow=!reshuffled&&suggestOn&&dismissedIneff!==viewDate;");
+    // `todayStr()` in place: App's `today` handed to a call at render made the
+    // React Compiler give up on BookingApp (src/CLAUDE.md, hook order).
+    expect(app).toContain("const reshuffleBtn=reshuffleOffer({viewDate:viewDate,today:todayStr(),autoOptimizer:autoOptimizer,suggest:suggestOn});");
+  });
+
+  it("both places that draw it take the answer as scalars (the Summary is a memo)", () => {
+    const app = appCode();
+    expect(app).toContain("reshuffleOn={!!reshuffleBtn}");
+    expect(app.match(/reshuffleLit=\{!!reshuffleBtn&&reshuffleBtn\.lit\}/g)).toHaveLength(2);
+    expect(src("TimelineView.jsx")).toContain("const optBtns = reshuffleOn ? (");
+    for (const f of ["TimelineView.jsx", "Summary.jsx"]) {
+      expect(src(f), f).toContain("<OptimiserControls autoOptimizer={autoOptimizer} setAutoOptimizer={setAutoOptimizer} onReshuffle={onReshuffle} isToday={isToday} lit={reshuffleLit} />");
+    }
+  });
+
+  it("Reshuffle comes first, and the Optimiser toggle beside it is today's alone", () => {
+    const c = src("OptimiserControls.jsx");
+    const reshuffleAt = c.indexOf(">\n        Reshuffle\n      </button>");
+    const toggleAt = c.indexOf('{"Optimiser: " + (autoOptimizer ? "ON" : "OFF")}');
+    expect(reshuffleAt).toBeGreaterThan(-1);
+    expect(toggleAt).toBeGreaterThan(reshuffleAt);
+    expect(c).toContain("{isToday ? (");
+    // It no longer slides in with the switch: it is always there on its days.
+    expect(c).not.toContain("Presence");
+  });
+
+  it("the confirm names the day away from today, and says seated parties stay only on today", () => {
+    const app = appCode();
+    expect(app).toContain('{"Reshuffle all bookings"+(viewDate===today?"":" on "+formatDay(viewDate))+"?"}');
+    expect(app).toContain('{"Confirmed bookings may be moved to different tables to improve efficiency."+(viewDate===today?" Seated bookings will not be moved.":"")}');
+  });
+
+  it("the pass reads no switch, so today ON and OFF and every later day get the same fresh pass", () => {
+    expect(appCode()).toContain("function forceReshuffle(unlock){const plan=planReshuffle({viewDate:viewDate,tableBlocks:tableBlocks,today:today,nowMins:nowMins,unlock:unlock===true,bookings:bookings,user:getUser()});");
+  });
+});

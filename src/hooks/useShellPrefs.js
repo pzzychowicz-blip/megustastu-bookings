@@ -7,6 +7,7 @@
 //
 //   themePref, isDark, onToggleDark, onToggleAutoTheme      the theme
 //   appWidth, onSetAppWidth                                 App width
+//   appWidthFit, onToggleAppWidthFit                        Fit to screen, v18.18.0
 //   reduceMotion, planGestures, planAvail, navLocked,
 //   splitEnabled, and their onToggle*                       the five PREF_SPEC booleans
 //   swEnabled, onToggleSw                                   the offline shell's switch
@@ -95,13 +96,41 @@ export function readThemePref(){
 // box without ever overflowing it.
 const APP_WIDTH_MIN=900, APP_WIDTH_MAX=2400;
 
-function readAppWidth(){
+// The width this device stored, or null for none (or one out of range).
+function storedAppWidth(){
   try{
     const v=parseInt(localStorage.getItem("mgt-appwidth"),10);
     if(Number.isFinite(v)&&v>=APP_WIDTH_MIN&&v<=APP_WIDTH_MAX) return v;
   }catch{/* ignore */}
+  return null;
+}
+function readAppWidth(){
+  const v=storedAppWidth();
+  if(v!==null) return v;
   const w=Math.round((window.innerWidth-300)/50)*50;
   return Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,w));
+}
+
+// v18.18.0 (Patryk, item 3): "Fit to screen", a switch ON by default on every
+// device, including one that already stored a width: the app takes the window's
+// whole width, and the stored width waits until the switch is turned off. So only
+// "0" is ever stored, under its own key, and `mgt-appwidth` is never read to decide it.
+const APP_FIT_KEY="mgt-appwidth-fit";
+function readAppWidthFit(){
+  try{return localStorage.getItem(APP_FIT_KEY)!=="0";}catch{return true;}
+}
+// While it is on, the width the stepper and ⇧+ / ⇧− start from: the window's,
+// rounded down to 50 and kept to the stepper's range, so a step is from what is seen.
+export function fitAppWidth(winW){
+  return Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,Math.floor(winW/50)*50));
+}
+// When it is turned off with no width stored, the width stored instead: the
+// window's, rounded UP to 50. The shell fills the window less its 16px sides, and
+// rounding down can land under that (v18.18.0 /code-review, measured on DEV at the
+// tablet's 998: fitAppWidth's 950 under a 966px shell, so the app narrowed 16px at
+// the tap). Up is never under it, and stays on the stepper's 50s.
+export function keptAppWidth(winW){
+  return Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,Math.ceil(winW/50)*50));
 }
 
 // v17.5.0: the persisted Split View, per device. Restored on load so a split
@@ -332,10 +361,34 @@ export function useShellPrefs({
   }
   // v17.0.0 correction: per-device app width (see readAppWidth above).
   const [appWidth,setAppWidth]=useState(readAppWidth);
+  // v18.18.0: Fit to screen (see readAppWidthFit above).
+  const [appWidthFit,setAppWidthFit]=useState(readAppWidthFit);
+  function storeFitOff(){
+    try{localStorage.setItem(APP_FIT_KEY,"0");}catch{/* ignore */}
+    setAppWidthFit(false);
+  }
   function onSetAppWidth(next){
     const v=Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,next));
     try{localStorage.setItem("mgt-appwidth",String(v));}catch{/* ignore */}
     setAppWidth(v);
+    // A width chosen by hand, the stepper's or ⇧+ / ⇧−'s, is no longer the screen's.
+    if(appWidthFit) storeFitOff();
+  }
+  function onToggleAppWidthFit(){
+    if(!appWidthFit){
+      try{localStorage.removeItem(APP_FIT_KEY);}catch{/* ignore */}
+      setAppWidthFit(true);
+      return;
+    }
+    // Off brings the stored width back. With none stored it keeps the width on
+    // screen, which it stores, so the app does not jump to the old default (the
+    // screen less 300px), nor shrink by the rounding (`keptAppWidth`).
+    if(storedAppWidth()===null){
+      const v=keptAppWidth(winW);
+      try{localStorage.setItem("mgt-appwidth",String(v));}catch{/* ignore */}
+      setAppWidth(v);
+    }
+    storeFitOff();
   }
   // v17.1.0: per-device "Reduce animations" (Settings → General). Theme
   // pattern: localStorage["mgt-reduce-motion"]="1" + <html data-motion> —
@@ -503,7 +556,8 @@ export function useShellPrefs({
   },[isMobile,split]);
   // v17.11.0: the width the two panes actually divide — the app is clamped to
   // the per-device App-width setting, so the WINDOW is not what a pane gets.
-  const shellW=Math.min(winW,appWidth);
+  // v18.18.0: unless Fit to screen is on, when it is.
+  const shellW=appWidthFit?winW:Math.min(winW,appWidth);
   const tlSide=split?(split.a==="timeline"?"a":split.b==="timeline"?"b":null):null;
   const splitSideBySideOk=tlPaneOk(shellW,"v",0.5,"a");
   // …and the repair: an existing side-by-side split whose Timeline pane has
@@ -598,7 +652,10 @@ export function useShellPrefs({
 
   return {
     themePref, isDark, onToggleDark, onToggleAutoTheme,
-    appWidth, onSetAppWidth,
+    // While Fit to screen is on, `appWidth` is the width on screen (fitAppWidth),
+    // and the shell is drawn with no maxWidth at all (App reads `appWidthFit`).
+    appWidth: appWidthFit ? fitAppWidth(winW) : appWidth, onSetAppWidth,
+    appWidthFit, onToggleAppWidthFit,
     reduceMotion, onToggleReduceMotion,
     planGestures, onTogglePlanGestures,
     planAvail, onTogglePlanAvail,

@@ -77,7 +77,7 @@ export const CAPABILITIES = [
   { id: "bookingCreate",  group: "service", label: "Take bookings",        blurb: "Add a booking or a walk-in." },
   { id: "bookingEdit",    group: "service", label: "Edit bookings",        blurb: "Change a booking's name, size, time or notes." },
   { id: "bookingStatus",  group: "service", label: "Change status",        blurb: "Confirm, seat, complete or cancel a booking." },
-  { id: "bookingAssign",  group: "service", label: "Move tables",          blurb: "Assign or drag a booking to another table." },
+  { id: "bookingAssign",  group: "service", label: "Move tables",          blurb: "Assign, drag or reshuffle bookings onto other tables." },
   { id: "tableBlock",     group: "service", label: "Block tables",         blurb: "Take a table out of service for a period." },
   { id: "waitlistManage", group: "service", label: "Manage the waitlist",  blurb: "Add, book or remove a waiting party." },
 

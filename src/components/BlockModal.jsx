@@ -24,6 +24,7 @@ import { AlertPanel, AlertRow } from "./AlertPanel";
 import { ClosedIcon } from "./Icons";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { formatDay } from "../lib/day";
+import { keyHint } from "../lib/shortcuts";
 
 // v18.13.0 (#25): what a block that did not go out says. `onSave` and `onRemove` answer
 // false when `saveBlocks` held or refused it, and the sentence is here, not in the red
@@ -103,6 +104,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
           className="mgt-hover-scale"
           style={mkBtn({ minHeight: 40, padding: "8px 16px", background: BTN.quiet })}
           onClick={() => { setNotSaved(false); setMode("add"); }}
+          title={"Take table " + tableId + " out of service for a time on this day"}
         >
           + Add block
         </button>
@@ -110,6 +112,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
           className="mgt-hover-scale"
           style={mkBtn({ minHeight: 40, padding: "8px 16px", background: BTN.quiet })}
           onClick={onClose}
+          title={"Close the blocks for table " + tableId + keyHint("close")}
         >
           Close
         </button>
@@ -181,6 +184,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
                     </span>
                     <button
                       onClick={() => setNotSaved(onRemove(bl) === false)}
+                      title={"Put table " + tableId + " back in service " + (bl.allDay ? "for the whole day" : "from " + bl.from + " to " + bl.to)}
                       className="mgt-hover-scale"
                       style={mkDangerBtn({ fontSize: T.body, flexShrink: 0 })}
                     >
@@ -205,11 +209,13 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
         className="mgt-hover-scale"
         style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
         onClick={onClose}
+        title={"Close without blocking, asking first if a time changed" + keyHint("close")}
       >
         Back
       </button>
       <button
         onClick={handleSave}
+        title={"Take table " + tableId + " out of service for these times"}
         className="mgt-hover-scale"
         // v17.8.0: deep red, deliberately — this Save BLOCKS a table out of
         // service rather than saving a booking. Tokenized onto the app's solid
@@ -242,6 +248,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
               type="time"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
+              title={"When table " + tableId + " goes out of service"}
               min={String(OPEN).padStart(2, "0") + ":00"}
               max={GRID_CLOSE >= 24 ? "23:59" : String(GRID_CLOSE).padStart(2, "0") + ":00"}
               className="mgt-hover-scale"
@@ -254,6 +261,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
               type="time"
               value={to}
               onChange={(e) => setTo(e.target.value)}
+              title={"When table " + tableId + " comes back into service"}
               min={String(OPEN).padStart(2, "0") + ":00"}
               max={GRID_CLOSE >= 24 ? "23:59" : String(GRID_CLOSE).padStart(2, "0") + ":00"}
               className="mgt-hover-scale"

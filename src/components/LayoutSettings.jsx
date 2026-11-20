@@ -17,7 +17,7 @@ import { AlertPanel, AlertRow } from "./AlertPanel";
 import { contiguousRuns, comboKey, activePickRules, PICK_RULES_MAX, R, T, FW, H, IC } from "../lib/constants";
 import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon, TrashIcon } from "./Icons";
 import { todayStr } from "../lib/day";
-import { countLabel } from "../lib/booking-logic";
+import { countLabel, joinFirstMatters } from "../lib/booking-logic";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
 // v17.8.0: was a private copy of the byte-identical style in Settings.jsx.
@@ -130,15 +130,22 @@ const pickName = (i) => "pick rule " + (i + 1);
 // so there is no word being taken away — these controls were unaddressable
 // before and are addressable now. A stepper labelled with real WORDS would
 // have to lead with them.
-function Stepper({ value, onDec, onInc, disableDec, disableInc, label, width = 30 }) {
+//
+// `description` (v18.18.0, Part 2) is the hover tooltip of both buttons, as
+// "Decrease …" and "Increase …" of it: what is stepped, said more fully than
+// `label` ("the seats at table 3, one at a time"). check:style Rule 14 asks every
+// call site for one.
+function Stepper({ value, onDec, onInc, disableDec, disableInc, label, description, width = 30 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
         aria-label={"Decrease " + label}
+        title={description ? "Decrease " + description : undefined}
         style={{ ...STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
       <span style={{ minWidth: width, textAlign: "center", fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)" }}>{value}</span>
       <button onClick={onInc} disabled={disableInc} className={disableInc ? undefined : "mgt-hover-scale"}
         aria-label={"Increase " + label}
+        title={description ? "Increase " + description : undefined}
         style={{ ...STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}>+</button>
     </div>
   );
@@ -442,24 +449,24 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               <span key={id} style={GCHIP}>
                 {ranked ? (
                   <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { onChange(moveInList(list, idx, -1)); }} disabled={idx === 0}
-                    title="Move up in rank" aria-label={"Move " + id + " up in " + label + rowIn}
+                    title={"Move " + id + " up in " + label} aria-label={"Move " + id + " up in " + label + rowIn}
                     style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}><ChevronUpIcon size={IC.inline} /></button>
                 ) : null}
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
                 {ranked ? (
                   <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { onChange(moveInList(list, idx, 1)); }} disabled={idx === last}
-                    title="Move down in rank" aria-label={"Move " + id + " down in " + label + rowIn}
+                    title={"Move " + id + " down in " + label} aria-label={"Move " + id + " down in " + label + rowIn}
                     style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronDownIcon size={IC.inline} /></button>
                 ) : null}
                 <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { onChange(list.filter(function (x) { return x !== id; })); }}
                   disabled={keep}
-                  title={keep ? "Add the other table first" : "Remove"} aria-label={"Remove " + id + " from " + label + rowIn}
+                  title={keep ? "Add another table to " + label + " first" : "Take " + id + " out of " + label} aria-label={"Remove " + id + " from " + label + rowIn}
                   style={{ ...GCHIP_BTN, color: "var(--danger-text)", opacity: keep ? 0.3 : 1, cursor: keep ? "default" : "pointer" }}><CloseIcon size={IC.inline} /></button>
               </span>
             );
           }) : <span style={{ fontSize: T.small, color: "var(--text-faint)" }}>—</span>}
           <button onClick={function () { setPriPick(open ? null : { kind: kind, band: bandIdx }); }} className="mgt-hover-scale"
-            title={"Add a table"} aria-label={"Add a table to " + label + rowIn} disabled={!avail.length}
+            title={"Add a table to " + label} aria-label={"Add a table to " + label + rowIn} disabled={!avail.length}
             style={{ ...GCHIP_BTN, width: H.chip, height: H.chip, fontSize: T.title, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)", opacity: avail.length ? 1 : 0.3, cursor: avail.length ? "pointer" : "not-allowed" }}>+</button>
         </div>
         <Reveal show={open} inert={!open}>{open ? (
@@ -471,6 +478,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               return (
                 <button key={id} onClick={function () { setPriPick(null); onChange(list.concat([id])); }}
                   aria-label={id + " — add to " + label + rowIn}
+                  title={"Add table " + id + " to " + label}
                   className="mgt-hover-scale" style={PICK_CHIP}>{id}</button>
               );
             })}
@@ -502,7 +510,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             <div key={t.id} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 {editing ? (
-                  <input /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={editVal} autoFocus aria-label={"Rename table " + t.id} style={{ ...TXT_INP }}
+                  <input /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={editVal} autoFocus aria-label={"Rename table " + t.id} title={"The new name for table " + t.id + "; Enter saves it, Esc cancels"} style={{ ...TXT_INP }}
                     onChange={function (e) { setEditVal(e.target.value); }}
                     onKeyDown={function (e) { if (e.key === "Enter" && editValid) commitEdit(t.id); if (e.key === "Escape") cancelEdit(); }} />
                 ) : (
@@ -513,7 +521,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   <span style={{ minWidth: 44, display: "inline-flex", flexShrink: 0 }}><TBadge id={t.id} /></span>
                 )}
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>seats</span>
-                <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 20} label={"seats at table " + t.id}
+                <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 20} label={"seats at table " + t.id} description={"the seats at table " + t.id + ", one at a time"}
                   onDec={function () { updateTable(t.id, { capacity: cap - 1 }); }} onInc={function () { updateTable(t.id, { capacity: cap + 1 }); }} />
                 {/* v17.15.6: one per table, and it HAS visible text — so it read
                     as named while announcing "Indoor" or "Outdoor" thirteen
@@ -536,6 +544,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                       <button key={z} onClick={function () { if (!on) updateTable(t.id, { zone: z }); }} className="mgt-hover-scale"
                         aria-pressed={on}
                         aria-label={(z === "indoor" ? "Indoor" : "Outdoor") + " (table " + t.id + ")"}
+                        title={"Put table " + t.id + " in the " + z + " zone"}
                         style={{ ...segStyle(on), padding: "2px 12px", minHeight: H.chip }}>
                         {z === "indoor" ? "Indoor" : "Outdoor"}
                       </button>
@@ -565,7 +574,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                         when ONE table exists, so there is exactly one of them on
                         screen and nothing to disambiguate. Adding a name must
                         never cost a name that was already saying more. */}
-                    <button onClick={function () { startEdit(t.id); }} className="mgt-hover-scale" title="Rename table"
+                    <button onClick={function () { startEdit(t.id); }} className="mgt-hover-scale" title={"Give table " + t.id + " a new name"}
                       aria-label={"Rename table " + t.id}
                       style={{ ...GCHIP_BTN, width: H.chip, height: H.chip, fontSize: T.lead, border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)" }}><EditIcon size={IC.control} /></button>
                     <button onClick={function () { setEditId(null); setPendingRemove(t.id); }} disabled={tables.length <= 1}
@@ -573,7 +582,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                       aria-label={tables.length <= 1
                         ? "Remove table " + t.id + " (unavailable — a layout needs at least one table)"
                         : "Remove table " + t.id}
-                      title={tables.length <= 1 ? "A layout needs at least one table" : "Remove table"}
+                      title={tables.length <= 1 ? "A layout needs at least one table" : "Remove table " + t.id + " from the layout (asks first)"}
                       style={{ ...X_BTN, opacity: tables.length <= 1 ? 0.4 : 1, cursor: tables.length <= 1 ? "not-allowed" : "pointer" }}><CloseIcon size={IC.control} /></button>
                   </>
                 )}
@@ -616,8 +625,10 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 <AlertRow first style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                     <button onClick={function () { setPendingRemove(null); }} className="mgt-hover-scale"
+                      title={"Keep table " + t.id}
                       style={{ border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "4px 12px", fontSize: T.body, fontWeight: FW.bold, background: "var(--bg-stepper)", color: "var(--text-primary)", cursor: "pointer", boxShadow: "var(--shadow-btn)" }}>Cancel</button>
                     <button onClick={function () { removeTable(t.id); }} className="mgt-hover-scale"
+                      title={"Remove table " + t.id + " from the layout" + (orph > 0 ? ", though upcoming bookings use it" : "")}
                       style={mkDangerBtn({ padding: "4px 12px", fontSize: T.body, minHeight: H.compact })}><TrashIcon size={IC.control} />{orph > 0 ? "Remove anyway" : "Remove"}</button>
                   </div>
                 </AlertRow>
@@ -630,11 +641,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         {/* Add a table */}
         {adding ? (
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-soft)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <input /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={newId} autoFocus placeholder="id" aria-label="New table id" style={{ ...TXT_INP }}
+            <input /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={newId} autoFocus placeholder="id" aria-label="New table id" title="The new table's name, such as 14; Enter adds it, Esc cancels" style={{ ...TXT_INP }}
               onChange={function (e) { setNewId(e.target.value); }}
               onKeyDown={function (e) { if (e.key === "Enter" && newIdValid) addTable(); if (e.key === "Escape") { setAdding(false); setNewId(""); } }} />
             <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>seats</span>
-            <Stepper value={newCap} disableDec={newCap <= 1} disableInc={newCap >= 20} label="seats at the new table"
+            <Stepper value={newCap} disableDec={newCap <= 1} disableInc={newCap >= 20} label="seats at the new table" description="the seats at the new table, one at a time"
               onDec={function () { setNewCap(Math.max(1, newCap - 1)); }} onInc={function () { setNewCap(Math.min(20, newCap + 1)); }} />
             {/* v18.2.0 phase 71: the same two-option segment as every table's row. */}
             <div role="group" aria-label="Zone of the new table" style={{ ...SEG_TRACK, flexShrink: 0 }}>
@@ -644,6 +655,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   <button key={z} onClick={function () { setNewZone(z); }} className="mgt-hover-scale"
                     aria-pressed={on}
                     aria-label={(z === "indoor" ? "Indoor" : "Outdoor") + " (new table)"}
+                    title={"Put the new table in the " + z + " zone"}
                     style={{ ...segStyle(on), padding: "2px 12px", minHeight: H.chip }}>
                     {z === "indoor" ? "Indoor" : "Outdoor"}
                   </button>
@@ -652,6 +664,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             </div>
             <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
               <button onClick={addTable} disabled={!newIdValid} className={newIdValid ? "mgt-hover-scale" : undefined}
+                title="Add the new table to the layout"
                 style={{ ...ACT_BTN, opacity: newIdValid ? 1 : 0.4, cursor: newIdValid ? "pointer" : "not-allowed" }}>Add</button>
               <button onClick={function () { setAdding(false); setNewId(""); }} className="mgt-hover-scale" title="Cancel" style={CANCEL_X}><CloseIcon size={IC.control} /></button>
             </div>
@@ -668,6 +681,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           </div>
         ) : (
           <button onClick={function () { setAdding(true); }} className="mgt-hover-scale"
+            title="Add a table to the layout"
             style={{ marginTop: 10, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add table</button>
         )}
       </Collapsible>
@@ -695,13 +709,13 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                           single-group membership, so a table appears in exactly
                           one group. */}
                       <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { moveInGroup(gi, idx, -1); }} disabled={idx === 0}
-                        title="Move left" aria-label={"Move " + id + " left in its joined group"}
+                        title={"Move " + id + " left in its joined group"} aria-label={"Move " + id + " left in its joined group"}
                         style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}><ChevronLeftIcon size={IC.inline} /></button>
                       <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
                       <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { moveInGroup(gi, idx, 1); }} disabled={idx === last}
-                        title="Move right" aria-label={"Move " + id + " right in its joined group"}
+                        title={"Move " + id + " right in its joined group"} aria-label={"Move " + id + " right in its joined group"}
                         style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronRightIcon size={IC.inline} /></button>
-                      <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { removeFromGroup(gi, id); }} title="Remove from group"
+                      <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { removeFromGroup(gi, id); }} title={"Take " + id + " out of its joined group"}
                         aria-label={"Remove " + id + " from its joined group"}
                         style={{ ...GCHIP_BTN, color: "var(--danger-text)" }}><CloseIcon size={IC.inline} /></button>
                     </span>
@@ -712,10 +726,10 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     names itself by its members, which is also how it is labelled
                     on screen. */}
                 <button onClick={function () { setPickFor(pickFor === gi ? null : gi); }} className="mgt-hover-scale"
-                  title="Add a table to this group" aria-label={"Add a table to the group " + group.join(" + ")}
+                  title={"Add a table to the group " + group.join(" + ")} aria-label={"Add a table to the group " + group.join(" + ")}
                   disabled={!ungrouped.length}
                   style={{ ...GCHIP_BTN, width: H.chip, height: H.chip, fontSize: T.title, color: "var(--accent)", border: "1px solid var(--border-soft)", borderRadius: R.pill, background: "var(--bg-stepper)", boxShadow: "var(--shadow-btn)", opacity: ungrouped.length ? 1 : 0.3, cursor: ungrouped.length ? "pointer" : "not-allowed" }}>+</button>
-                <button onClick={function () { removeGroup(gi); }} className="mgt-hover-scale" title="Remove whole group"
+                <button onClick={function () { removeGroup(gi); }} className="mgt-hover-scale" title={"Remove the group " + group.join(" + ") + " and the combos it makes"}
                   aria-label={"Remove the group " + group.join(" + ")}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
               </div>
@@ -737,6 +751,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     return (
                       <button key={id} onClick={function () { addToGroup(gi, id); }}
                         aria-label={id + " — add to the group " + group.join(" + ")}
+                        title={"Add table " + id + " to the group " + group.join(" + ")}
                         className="mgt-hover-scale" style={PICK_CHIP}>{id}</button>
                     );
                   }) : <span style={{ fontSize: T.small, color: "var(--text-faint)" }}>No ungrouped tables.</span>}
@@ -755,7 +770,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     ) : null}
                     <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>seats</span>
-                      <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 60} label={"seats at combo " + run.join(" + ")}
+                      <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 60} label={"seats at combo " + run.join(" + ")} description={"the seats at combo " + run.join(" + ") + ", one at a time"}
                         onDec={function () { setComboCap(key, cap - 1); }} onInc={function () { setComboCap(key, cap + 1); }} />
                     </div>
                   </div>
@@ -781,6 +796,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               return (
                 <button key={id} onClick={function () { newGroupFrom(id); }}
                   aria-label={id + " — start a new joined group"}
+                  title={"Start a new joined group with table " + id}
                   className="mgt-hover-scale" style={PICK_CHIP}>{id}</button>
               );
             }) : <span style={{ fontSize: T.small, color: "var(--text-faint)" }}>none — every table is in a group</span>}
@@ -796,11 +812,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>{mc.ids.join(" + ")}</span>
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>seats</span>
-                  <Stepper value={mc.cap} disableDec={mc.cap <= 1} disableInc={mc.cap >= 60} label={"seats at combo " + mc.ids.join(" + ")}
+                  <Stepper value={mc.cap} disableDec={mc.cap <= 1} disableInc={mc.cap >= 60} label={"seats at combo " + mc.ids.join(" + ")} description={"the seats at combo " + mc.ids.join(" + ") + ", one at a time"}
                     onDec={function () { setMegaCap(i, mc.cap - 1); }} onInc={function () { setMegaCap(i, mc.cap + 1); }} />
                   {/* v17.15.6: the combo's members, which is what the row shows
                       and what the `Stepper` beside it already names itself by. */}
-                  <button onClick={function () { removeMega(i); }} className="mgt-hover-scale" title="Remove combo"
+                  <button onClick={function () { removeMega(i); }} className="mgt-hover-scale" title={"Remove the cross-group combo " + mc.ids.join(" + ")}
                     aria-label={"Remove the cross-group combo " + mc.ids.join(" + ")}
                     style={X_BTN}><CloseIcon size={IC.control} /></button>
                 </div>
@@ -829,6 +845,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   <button key={t.id} onClick={function () { toggleAdd(t.id); }} className="mgt-hover-scale"
                     aria-pressed={on}
                     aria-label={t.id + " — include in the new combo"}
+                    title={"Put table " + t.id + " in the new combo, or take it out"}
                     style={{
                       fontSize: T.body, fontWeight: FW.bold, borderRadius: R.pill, padding: "4px 10px", cursor: "pointer",
                       border: on ? "1px solid var(--accent)" : "1px solid var(--border-soft)",
@@ -843,9 +860,10 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 18, flexWrap: "wrap" }}>
               <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>seats</span>
-              <Stepper value={addCap} disableDec={addCap <= 1} disableInc={addCap >= 60} label="seats at the new combo"
+              <Stepper value={addCap} disableDec={addCap <= 1} disableInc={addCap >= 60} label="seats at the new combo" description="the seats at the new combo, one at a time"
                 onDec={function () { setAddCap(Math.max(1, addCap - 1)); }} onInc={function () { setAddCap(Math.min(60, addCap + 1)); }} />
               <button onClick={addMega} disabled={!canAdd} className={canAdd ? "mgt-hover-scale" : undefined}
+                title="Add a combo of the tables picked, across their groups"
                 style={{
                   ...mkBtn({ padding: "6px 14px", minHeight: 32, background: "var(--accent)" }),
                   opacity: canAdd ? 1 : 0.4, cursor: canAdd ? "pointer" : "not-allowed"
@@ -873,25 +891,34 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         subtitle="Which tables the optimiser picks first, per party size. Shared across all devices."
         summary={priBands.length + (priBands.length === 1 ? " size rule · " : " size rules · ") + priRules.length + (priRules.length === 1 ? " combo rule" : " combo rules")}
       >
-        <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginBottom: 10 }}>
+        <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginBottom: 6 }}>
           Rules are checked top to bottom — the first match wins. A party size with no rule gets the smallest free table (or best combo) that fits.
+        </div>
+        {/* v18.18.0 (Patryk, the Table priorities plan's Part B): the order inside
+            one rule, which `findBest` follows. "Avoid last" would be wrong with the
+            switch off, where an Avoid table comes BEFORE joined tables (measured),
+            so the sentence says what is true either way. */}
+        <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginBottom: 10 }}>
+          Inside a rule: Prefer first, then joined tables or the other single tables, in the order the switch sets. Avoid tables are the last single tables tried.
         </div>
 
         {/* ── Party-size rules (bands) ── */}
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Party-size rules · {priBands.length}</div>
         {priBands.map(function (b, i) {
           const zm = zoneMode(b);
+          // v18.18.0: the switch cannot change this rule's tables (joinFirstMatters).
+          const switchIdle = !joinFirstMatters(b, tables);
           return (
             <div key={i} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)", marginTop: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>Party of</span>
-                <Stepper value={b.min} disableDec={b.min <= 1} disableInc={b.min >= b.max} label={bandName(b, i) + ": smallest party size"}
+                <Stepper value={b.min} disableDec={b.min <= 1} disableInc={b.min >= b.max} label={bandName(b, i) + ": smallest party size"} description={"the smallest party in size rule " + (i + 1) + ", one guest at a time"}
                   onDec={function () { setBand(i, { min: b.min - 1 }); }} onInc={function () { setBand(i, { min: b.min + 1 }); }} />
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>to</span>
-                <Stepper value={b.max} disableDec={b.max <= b.min} disableInc={b.max >= 30} label={bandName(b, i) + ": largest party size"}
+                <Stepper value={b.max} disableDec={b.max <= b.min} disableInc={b.max >= 30} label={bandName(b, i) + ": largest party size"} description={"the largest party in size rule " + (i + 1) + ", one guest at a time"}
                   onDec={function () { setBand(i, { max: b.max - 1 }); }} onInc={function () { setBand(i, { max: b.max + 1 }); }} />
                 <button onClick={function () { removeBand(i); }} className="mgt-hover-scale"
-                  title="Remove rule" aria-label={"Remove " + bandName(b, i)}
+                  title={"Remove size rule " + (i + 1)} aria-label={"Remove " + bandName(b, i)}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
               </div>
               {chipRow("Prefer", b.prefer || [], true, "prefer", i, function (l) { setBand(i, { prefer: l }); }, bandName(b, i))}
@@ -906,6 +933,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                          v17.15.4's Label-in-Name rule. "Try first: Indoor" would
                          read better and would stop "click Indoor" working. */
                       aria-label={opt[1] + " (" + bandName(b, i) + ")"}
+                      title={opt[0] === "any" ? "In size rule " + (i + 1) + ", try the other single tables in the tables list's order" : "In size rule " + (i + 1) + ", try the " + opt[0] + " single tables first"}
                       aria-pressed={on}
                       style={{ ...SEG_BTN, background: on ? "var(--accent)" : "var(--bg-stepper)", color: on ? "var(--text-on-accent)" : "var(--text-primary)", border: on ? "1px solid var(--accent)" : "1px solid var(--border-soft)" }}>
                       {opt[1]}
@@ -923,14 +951,30 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     out of the live page, not by reading this file: on the page
                     the repetition is one string printed three times, and in
                     the source it is one string inside a `.map`. */}
-                <Toggle label={bandName(b, i) + ": try joined tables before single tables"}
+                {/* v18.18.0 (Patryk, Part B): "other" single tables, because Prefer
+                    comes first whatever the switch says; the name still leads with
+                    the band's (tests/a11y.test.js) and holds the words on screen. */}
+                <Toggle label={bandName(b, i) + ": then try joined tables before other single tables"}
+                  description={"In size rule " + (i + 1) + ", try joined tables before the single tables not in Prefer"}
                   on={!!b.combosFirst} onClick={function () { setBand(i, { combosFirst: !b.combosFirst }); }} />
-                <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)" }}>Try joined tables before single tables</span>
+                <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)" }}>Then try joined tables before other single tables</span>
               </div>
+              {/* v18.18.0 (Patryk, Part B): said only where it is true, that no table
+                  outside Prefer seats the rule's smallest party, so the switch changes
+                  nothing (held to findBest by tests/booking-logic.test.js). It eases
+                  in and out as Prefer or the sizes change. */}
+              <Reveal show={switchIdle}>
+                {switchIdle ? (
+                  <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", paddingTop: 4, paddingLeft: 56 /* @canvas the switch's 48 and the row's gap of 8: the note starts under the switch's words */ }}>
+                    No table outside Prefer seats {b.min}, so this changes nothing here.
+                  </div>
+                ) : null}
+              </Reveal>
             </div>
           );
         })}
         <button onClick={addBand} className="mgt-hover-scale"
+          title="Add a rule for another range of party sizes"
           style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add size rule</button>
 
         {/* ── Combo preferences ── */}
@@ -943,18 +987,18 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             const known = declared.some(function (d) { return d.key === r.key; });
             return (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
-                <select /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={r.key} aria-label={"Combo for rule " + (i + 1)} onChange={function (e) { setRule(i, { key: e.target.value }); }} style={SEL_INP}>
+                <select /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={r.key} aria-label={"Combo for rule " + (i + 1)} title={"The joined tables combo rule " + (i + 1) + " is about"} onChange={function (e) { setRule(i, { key: e.target.value }); }} style={SEL_INP}>
                   {known ? null : <option value={r.key}>{String(r.key).split("|").join(" + ")}</option>}
                   {declared.map(function (d) { return <option key={d.key} value={d.key}>{d.label}</option>; })}
                 </select>
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>party</span>
-                <Stepper value={r.min} disableDec={r.min <= 1} disableInc={r.min >= r.max} label={comboName(r, i) + ": smallest party size"}
+                <Stepper value={r.min} disableDec={r.min <= 1} disableInc={r.min >= r.max} label={comboName(r, i) + ": smallest party size"} description={"the smallest party combo rule " + (i + 1) + " applies to, one guest at a time"}
                   onDec={function () { setRule(i, { min: r.min - 1 }); }} onInc={function () { setRule(i, { min: r.min + 1 }); }} />
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>to</span>
-                <Stepper value={r.max} disableDec={r.max <= r.min} disableInc={r.max >= 30} label={comboName(r, i) + ": largest party size"}
+                <Stepper value={r.max} disableDec={r.max <= r.min} disableInc={r.max >= 30} label={comboName(r, i) + ": largest party size"} description={"the largest party combo rule " + (i + 1) + " applies to, one guest at a time"}
                   onDec={function () { setRule(i, { max: r.max - 1 }); }} onInc={function () { setRule(i, { max: r.max + 1 }); }} />
                 <button onClick={function () { setRule(i, { avoid: !r.avoid }); }} className="mgt-hover-scale"
-                  title={r.avoid ? "Used only as a last resort — tap to prefer instead" : "Preferred — tap to avoid instead"}
+                  title={r.avoid ? "Prefer combo rule " + (i + 1) + "'s tables again" : "Avoid combo rule " + (i + 1) + "'s tables, using them only as a last resort"}
                   aria-label={(r.avoid ? "Avoid" : "Prefer") + " (" + comboName(r, i) + ")"}
                   style={{ ...SEG_BTN, background: r.avoid ? "var(--danger-bg)" : "var(--bg-stepper)", color: r.avoid ? "var(--danger-text)" : "var(--text-primary)", border: r.avoid ? "1px solid var(--danger-border)" : "1px solid var(--border-soft)" }}>
                   {r.avoid ? "Avoid" : "Prefer"}
@@ -962,17 +1006,18 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 {r.avoid ? null : (
                   <>
                     <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>priority</span>
-                    <Stepper value={r.weight} disableDec={r.weight <= 1} disableInc={r.weight >= 10} label={comboName(r, i) + ": priority"}
+                    <Stepper value={r.weight} disableDec={r.weight <= 1} disableInc={r.weight >= 10} label={comboName(r, i) + ": priority"} description={"combo rule " + (i + 1) + "'s priority, one step at a time"}
                       onDec={function () { setRule(i, { weight: r.weight - 1 }); }} onInc={function () { setRule(i, { weight: r.weight + 1 }); }} />
                   </>
                 )}
                 <button onClick={function () { removeRule(i); }} className="mgt-hover-scale"
-                  title="Remove rule" aria-label={"Remove " + comboName(r, i)}
+                  title={"Remove combo rule " + (i + 1)} aria-label={"Remove " + comboName(r, i)}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
               </div>
             );
           })}
           <button onClick={addRule} disabled={!declared.length} className={declared.length ? "mgt-hover-scale" : undefined}
+            title="Add a preference for one combo and a range of party sizes"
             style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)", opacity: declared.length ? 1 : 0.4, cursor: declared.length ? "pointer" : "not-allowed" }}>+ Add combo rule</button>
         </div>
 
@@ -996,6 +1041,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                 <button key={id} onClick={function () { toggleMixed(id); }} className="mgt-hover-scale"
                   aria-pressed={on}
                   aria-label={id + " — require in cross-zone combos"}
+                  title={"Let the app choose a cross-zone combo only with table " + id + " in it, or stop requiring it"}
                   style={{ ...PICK_CHIP, background: on ? "var(--accent)" : "var(--bg-stepper)", color: on ? "var(--text-on-accent)" : "var(--text-primary)", border: on ? "1px solid var(--accent)" : "1px solid var(--border-soft)" }}>
                   {id}
                 </button>
@@ -1017,23 +1063,24 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             return (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>Free</span>
-                <select /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={r.table} aria-label={"Table to free, swap rule " + (i + 1)} onChange={function (e) { setSwap(i, { table: e.target.value }); }} style={SEL_INP}>
+                <select /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={r.table} aria-label={"Table to free, swap rule " + (i + 1)} title={"The table swap rule " + (i + 1) + " frees"} onChange={function (e) { setSwap(i, { table: e.target.value }); }} style={SEL_INP}>
                   {tableIds.indexOf(r.table) >= 0 ? null : <option value={r.table}>{r.table}</option>}
                   {tableIds.map(function (id) { return <option key={id} value={id}>{id}</option>; })}
                 </select>
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>from a party of</span>
-                <Stepper value={r.fromSize} disableDec={r.fromSize <= 1} disableInc={r.fromSize >= 30} label={swapName(r, i) + ": party size it is taken from"}
+                <Stepper value={r.fromSize} disableDec={r.fromSize <= 1} disableInc={r.fromSize >= 30} label={swapName(r, i) + ": party size it is taken from"} description={"the party size swap rule " + (i + 1) + " takes table " + r.table + " from, one guest at a time"}
                   onDec={function () { setSwap(i, { fromSize: r.fromSize - 1 }); }} onInc={function () { setSwap(i, { fromSize: r.fromSize + 1 }); }} />
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>for a party of</span>
-                <Stepper value={r.toSize} disableDec={r.toSize <= 1} disableInc={r.toSize >= 30} label={swapName(r, i) + ": party size it is given to"}
+                <Stepper value={r.toSize} disableDec={r.toSize <= 1} disableInc={r.toSize >= 30} label={swapName(r, i) + ": party size it is given to"} description={"the party size swap rule " + (i + 1) + " gives table " + r.table + " to, one guest at a time"}
                   onDec={function () { setSwap(i, { toSize: r.toSize - 1 }); }} onInc={function () { setSwap(i, { toSize: r.toSize + 1 }); }} />
                 <button onClick={function () { removeSwap(i); }} className="mgt-hover-scale"
-                  title="Remove rule" aria-label={"Remove " + swapName(r, i)}
+                  title={"Remove swap rule " + (i + 1)} aria-label={"Remove " + swapName(r, i)}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
               </div>
             );
           })}
           <button onClick={addSwap} className="mgt-hover-scale"
+            title="Add a rule that frees a table from one party size for another"
             style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add swap rule</button>
         </div>
       </Collapsible>
@@ -1057,7 +1104,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Rule {i + 1}</span>
                 <button onClick={function () { removePickRule(i); }} className="mgt-hover-scale"
-                  title="Remove rule" aria-label={"Remove " + pickName(i)}
+                  title={"Remove pick rule " + (i + 1)} aria-label={"Remove " + pickName(i)}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
               </div>
               {chipRow("Pair", r.pair, false, "pickPair", i, function (l) { setPickRule(i, { pair: l }); }, pickName(i), { max: 2, min: 1, exclude: r.need })}
@@ -1073,6 +1120,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           );
         })}
         <button onClick={addPickRule} className="mgt-hover-scale" disabled={tables.length < 3 || pickRules.length >= PICK_RULES_MAX}
+          title="Add a pair of tables that may be picked together only with others"
           style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add rule</button>
       </Collapsible>
       {/* v17.0.0: Floor plan — the Plan view's geometry (settings/layout.floorPlan).
@@ -1085,16 +1133,17 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         <FloorPlanEditor layout={layout} onSaveLayout={onSaveLayout} />
       </Collapsible>
       <Section style={{ marginBottom: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Kitchen limit</div>
             <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
               Max simultaneous booking starts before a kitchen-load warning.
             </div>
           </div>
-          <Stepper value={kitchenLimit} disableDec={kitchenLimit <= 1} disableInc={kitchenLimit >= 20} label="the kitchen limit"
+          {/* v18.18.0 (Patryk): keeps the right where the row wraps (DESIGN.md, "A control keeps its side"): at 375 it wrapped to the left. `Stepper` takes no style, so a box. */}
+          <div style={{ marginLeft: "auto" }}><Stepper value={kitchenLimit} disableDec={kitchenLimit <= 1} disableInc={kitchenLimit >= 20} label="the kitchen limit" description="how many bookings may start together before the kitchen warning, one at a time"
             onDec={() => onSaveLayout({ ...layout, kitchenLimit: kitchenLimit - 1 })}
-            onInc={() => onSaveLayout({ ...layout, kitchenLimit: kitchenLimit + 1 })} />
+            onInc={() => onSaveLayout({ ...layout, kitchenLimit: kitchenLimit + 1 })} /></div>
         </div>
       </Section>
     </div>

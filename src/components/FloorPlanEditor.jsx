@@ -40,7 +40,9 @@ function snap(n){ return Math.round(n / SNAP) * SNAP; }
 // ("Decrease Room width"), as HourStepper's are — they announced "−" and "+".
 // `who` prefixes a group the visible label leaves implicit: the chair steppers
 // read "Top", "Right"… under a "Chairs per side" heading ("Chairs: Top").
-function Step({ label, who, value, fmt, onDec, onInc, disableDec, disableInc }){
+// `description` (v18.18.0, Part 2): both buttons' hover description, "Decrease …"
+// and "Increase …" of it, what is stepped and by how much (the steppers' rule).
+function Step({ label, who, value, fmt, onDec, onInc, disableDec, disableInc, description }){
   const name = (who ? who + ": " : "") + label;
   const btn = {
     background: "var(--bg-stepper)", border: "1px solid var(--border-soft)", borderRadius: R.pill,
@@ -53,10 +55,12 @@ function Step({ label, who, value, fmt, onDec, onInc, disableDec, disableInc }){
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
           aria-label={"Decrease " + name}
+          title={description ? "Decrease " + description : undefined}
           style={{ ...btn, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
         <span style={{ minWidth: 46, textAlign: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>{fmt ? fmt(value) : value}</span>
         <button onClick={onInc} disabled={disableInc} className={disableInc ? undefined : "mgt-hover-scale"}
           aria-label={"Increase " + name}
+          title={description ? "Increase " + description : undefined}
           style={{ ...btn, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}>+</button>
       </div>
     </div>
@@ -242,6 +246,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
     const cap = capOf[id] || 0;
     const chairStep = function(side, lbl){
       return <Step key={side} label={lbl} who={lbl === "Chairs" ? undefined : "Chairs"} value={chairs[side] || 0}
+        description={(lbl === "Chairs" ? "the chairs round table " + id : "the chairs on table " + id + "'s " + lbl.toLowerCase() + " side") + ", one at a time"}
         disableDec={(chairs[side] || 0) <= 0} disableInc={(chairs[side] || 0) >= 12}
         onDec={function(){ patchTable(id, { chairs: { ...chairs, [side]: (chairs[side] || 0) - 1 } }); }}
         onInc={function(){ patchTable(id, { chairs: { ...chairs, [side]: (chairs[side] || 0) + 1 } }); }} />;
@@ -252,20 +257,24 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
         <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
           {["round", "square", "rect"].map(function(sh){
             return <button key={sh} onClick={function(){ patchTable(id, { shape: sh }); }}
+              title={"Draw table " + id + " as a " + (sh === "rect" ? "rectangle" : sh) + " on the plan"}
               className="mgt-hover-scale"
               style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: e.shape === sh ? S.accent : BTN.quiet, textTransform: "capitalize" })}>{sh === "rect" ? "Rectangle" : sh}</button>;
           })}
         </div>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 12 }}>
-          <Step label={e.shape === "rect" ? "Width" : "Size"} value={e.w} fmt={function(n){ return n + " cm"; }}
+          <Step label={e.shape === "rect" ? "Width" : "Size"} value={e.w}
+            description={"table " + id + "'s " + (e.shape === "rect" ? "width" : "size") + ", 10 cm at a time"} fmt={function(n){ return n + " cm"; }}
             disableDec={e.w <= 30} disableInc={e.w >= 400}
             onDec={function(){ patchTable(id, { w: e.w - 10 }); }} onInc={function(){ patchTable(id, { w: e.w + 10 }); }} />
           {e.shape === "rect" ? (
-            <Step label="Height" value={e.h} fmt={function(n){ return n + " cm"; }}
+            <Step label="Height" value={e.h}
+              description={"table " + id + "'s height, 10 cm at a time"} fmt={function(n){ return n + " cm"; }}
               disableDec={e.h <= 30} disableInc={e.h >= 400}
               onDec={function(){ patchTable(id, { h: e.h - 10 }); }} onInc={function(){ patchTable(id, { h: e.h + 10 }); }} />
           ) : null}
-          <Step label="Rotation" value={e.rot || 0} fmt={function(n){ return n + "°"; }}
+          <Step label="Rotation" value={e.rot || 0}
+            description={"table " + id + "'s rotation, 15° at a time"} fmt={function(n){ return n + "°"; }}
             disableDec={false} disableInc={false}
             onDec={function(){ patchTable(id, { rot: ((e.rot || 0) + 345) % 360 }); }} onInc={function(){ patchTable(id, { rot: ((e.rot || 0) + 15) % 360 }); }} />
         </div>
@@ -292,9 +301,11 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
       <div>
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, marginBottom: 8 }}>Door</div>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <Step label="Rotation" value={d.rot || 0} fmt={function(n){ return n + "°"; }}
+          <Step label="Rotation" value={d.rot || 0}
+            description="the door's rotation, 15° at a time" fmt={function(n){ return n + "°"; }}
             onDec={function(){ patchDoor(i, { rot: ((d.rot || 0) + 345) % 360 }); }} onInc={function(){ patchDoor(i, { rot: ((d.rot || 0) + 15) % 360 }); }} />
-          <Step label="Width" value={d.width} fmt={function(n){ return n + " cm"; }}
+          <Step label="Width" value={d.width}
+            description="the door's width, 10 cm at a time" fmt={function(n){ return n + " cm"; }}
             disableDec={d.width <= 40} disableInc={d.width >= 300}
             onDec={function(){ patchDoor(i, { width: d.width - 10 }); }} onInc={function(){ patchDoor(i, { width: d.width + 10 }); }} />
           {/* v17.0.0 correction: which side the door opens toward (hinge side) */}
@@ -303,12 +314,14 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             <div style={{ display: "flex", gap: 6 }}>
               {[["left", !d.flip], ["right", !!d.flip]].map(function(o){
                 return <button key={o[0]} onClick={function(){ patchDoor(i, { flip: o[0] === "right" }); }}
+                  title={"Hinge the door on its " + o[0] + ", so it opens that way"}
                   className="mgt-hover-scale"
                   style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: o[1] ? S.accent : BTN.quiet, textTransform: "capitalize" })}>{o[0]}</button>;
               })}
             </div>
           </div>
           <button onClick={function(){ commitFp({ ...fp, doors: fp.doors.filter(function(_, j){ return j !== i; }) }); setSel(null); }}
+            title="Delete this door from the plan"
             className="mgt-hover-scale" style={mkDangerBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px" })}><TrashIcon size={IC.control} />Delete door</button>
         </div>
       </div>
@@ -320,14 +333,18 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text }}>{"Wall · " + len + " cm"}</div>
         <button onClick={function(){ commitFp({ ...fp, walls: fp.walls.filter(function(_, j){ return j !== i; }) }); setSel(null); }}
+          title="Delete this wall from the plan"
           className="mgt-hover-scale" style={mkDangerBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px" })}><TrashIcon size={IC.control} />Delete wall</button>
         <span style={{ fontSize: T.body, color: S.muted }}>Drag the wall to move it, or drag its endpoint handles to reshape it.</span>
       </div>
     );
   }
 
+  // v18.18.0 (Part 2): what each mode's button does, said on hover.
+  const MODE_HINT = { select: "Pick a table, door or wall to edit it, or drag one to move it", wall: "Draw a wall: tap where it starts, then where it ends", door: "Place a door: tap where it sits" };
   const modeBtn = function(m, lbl){
     return <button key={m} onClick={function(){ setMode(m); setWallStart(null); setHoverPt(null); }}
+      title={MODE_HINT[m]}
       className="mgt-hover-scale"
       style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: mode === m ? S.accent : BTN.quiet })}>{lbl}</button>;
   };
@@ -342,12 +359,15 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
         <div style={{ display: "flex", gap: 4, marginLeft: 6, alignItems: "center" }}>
           <button onClick={function(){ zoomBy(1 / 1.25); }} disabled={zoom.k <= 1} className={zoom.k <= 1 ? undefined : "mgt-hover-scale"}
             aria-label="Zoom out"
+            title="Zoom out of the plan"
             style={mkBtn({ fontSize: T.lead, fontWeight: FW.bold, minHeight: 32, width: 34, padding: 0, background: BTN.quiet, opacity: zoom.k <= 1 ? 0.4 : 1 })}>−</button>
           <span style={{ fontSize: T.small, color: S.muted, minWidth: 30, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{Math.round(zoom.k * 100) + "%"}</span>
           <button onClick={function(){ zoomBy(1.25); }} disabled={zoom.k >= 4} className={zoom.k >= 4 ? undefined : "mgt-hover-scale"}
             aria-label="Zoom in"
+            title="Zoom in on the plan"
             style={mkBtn({ fontSize: T.lead, fontWeight: FW.bold, minHeight: 32, width: 34, padding: 0, background: BTN.quiet, opacity: zoom.k >= 4 ? 0.4 : 1 })}>+</button>
           <button onClick={resetZoom} disabled={zoom.k === 1 && zoom.x === 0 && zoom.y === 0} className={zoom.k === 1 && zoom.x === 0 && zoom.y === 0 ? undefined : "mgt-hover-scale"}
+            title="Show the whole plan again, at 100%"
             style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.quiet, opacity: zoom.k === 1 && zoom.x === 0 && zoom.y === 0 ? 0.4 : 1 })}>Reset</button>
         </div>
         <span style={{ fontSize: T.body, color: S.muted, marginLeft: 6 }}>
@@ -441,17 +461,18 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             if(!e) return null;
             const selT = sel && sel.type === "table" && sel.key === t.id;
             return <TableGlyph key={t.id} id={t.id} entry={e}
+              description={"Drag to move table " + t.id + " on the plan"}
               fill="var(--bg-card)" stroke={selT ? "var(--accent)" : "var(--fp-outline)"} strokeWidth={selT ? 3 : 2}
               onPointerDown={function(ev){ startDrag(ev, "table", t.id, e); }} />;
           })}
         </svg>
       </div>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end", marginTop: 12 }}>
-        <Step label="Room width" value={fp.room.w} fmt={function(n){ return n + " cm"; }}
+        <Step label="Room width" value={fp.room.w} description="the room's width, 50 cm at a time" fmt={function(n){ return n + " cm"; }}
           disableDec={fp.room.w <= 300} disableInc={fp.room.w >= 4000}
           onDec={function(){ commitFp({ ...fp, room: { ...fp.room, w: fp.room.w - 50 } }); }}
           onInc={function(){ commitFp({ ...fp, room: { ...fp.room, w: fp.room.w + 50 } }); }} />
-        <Step label="Room height" value={fp.room.h} fmt={function(n){ return n + " cm"; }}
+        <Step label="Room height" value={fp.room.h} description="the room's height, 50 cm at a time" fmt={function(n){ return n + " cm"; }}
           disableDec={fp.room.h <= 300} disableInc={fp.room.h >= 4000}
           onDec={function(){ commitFp({ ...fp, room: { ...fp.room, h: fp.room.h - 50 } }); }}
           onInc={function(){ commitFp({ ...fp, room: { ...fp.room, h: fp.room.h + 50 } }); }} />
@@ -459,7 +480,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
       <Reveal show={!!inspector} inert={!inspector}>
         {inspector ? (
           <div style={{ paddingTop: 14 }}>
-            <div style={{ padding: "12px 14px", borderRadius: R.card, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+            <div style={{ padding: "12px 14px", borderRadius: R.card, background: "var(--bg-input)", border: "1px solid var(--border-soft)" }}>
               {inspector}
             </div>
           </div>

@@ -65,10 +65,10 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", settle 
       onClose={onClose}
       footer={
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
-          <button type="button" onClick={onSkip} className="mgt-hover-scale" style={mkBtn({ background: BTN.quiet })}>
+          <button type="button" onClick={onSkip} title={settle ? "Leave the voucher unsettled for now; the strip keeps asking" : "Complete the booking and leave the voucher unspent"} className="mgt-hover-scale" style={mkBtn({ background: BTN.quiet })}>
             {settle ? "Not now" : "Complete without using it"}
           </button>
-          <button type="button" onClick={commit} className="mgt-hover-scale" style={mkSolidBtn("var(--accent)")}>
+          <button type="button" onClick={commit} title={settle ? "Take the amount below off the voucher" : "Take the amount below off the voucher and complete the booking"} className="mgt-hover-scale" style={mkSolidBtn("var(--accent)")}>
             {settle ? "Redeem" : "Redeem & complete"}
           </button>
         </div>
@@ -102,6 +102,7 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", settle 
             type="number" min={0} max={max} step={0.01} inputMode="decimal"
             value={amount}
             onChange={function (e) { setAmount(e.target.value); setErr(""); }}
+            title="How much of the bill the voucher paid; the whole balance at first"
             className="mgt-hover-scale"
             style={mkInp()} />
         );

@@ -56,7 +56,7 @@ function MediaNote({ icon, children, action }) {
 
 function RetryChip({ onRetry, autoFocus }) {
   return (
-    <OutlineChip as="button" tone="danger" onClick={onRetry} autoFocus={autoFocus} className="mgt-hover-scale mgt-press"
+    <OutlineChip as="button" tone="danger" onClick={onRetry} autoFocus={autoFocus} title="Send this message again" className="mgt-hover-scale mgt-press"
       style={{ padding: "0 6px" }}><RetryIcon size={IC.inline} />Retry</OutlineChip>
   );
 }

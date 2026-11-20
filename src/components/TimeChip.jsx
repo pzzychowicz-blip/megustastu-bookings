@@ -21,11 +21,16 @@ import { R, T, FW, H } from "../lib/constants";
 // pill for another one-tap answer, Save's country codes, which pick a code by its
 // `time` and read as its flag and number. v18.14.0 (L1): `H.chip` tall on its own,
 // the WhatsApp "Accept at" row. It was 21px, under WCAG 2.5.8's 24.
-export function TimeChip({ time, label, onPick, style }) {
+//
+// `description` (v18.18.0, Part 2): the hover tooltip, what a tap does at this
+// time ("Book Ana for 20:30"). No default: the same pill answers three different
+// questions, and only the caller knows which.
+export function TimeChip({ time, label, onPick, style, description }) {
   return (
     <button
       type="button"
       className="mgt-hover-scale"
+      title={description}
       onClick={() => onPick(time)}
       style={{
         cursor: "pointer", padding: "2px 8px", minHeight: H.chip, borderRadius: R.pill,

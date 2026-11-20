@@ -56,6 +56,7 @@ import { TableGrid } from "./TableGrid";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 import { useLineBand } from "../hooks/useLineBand";
 import { todayStr } from "../lib/day";
+import { keyHint } from "../lib/shortcuts";
 
 // v17.8.0 review fix: hex literals ON PURPOSE — see the identical pair in
 // BookingFormModal. The kitchen-suggestion chip FILLS are hard-coded pale green
@@ -177,6 +178,7 @@ export function WalkinForm({
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ fontSize: T.body, padding: "6px 12px", background: BTN.quiet })}
         onClick={() => setDraft({ ...wf, tables: [], _pre: false })}
+        title="Clear the tables chosen, to choose again"
       >
         Clear
       </button>
@@ -366,12 +368,14 @@ export function WalkinForm({
           className="mgt-hover-scale"
           style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}
           onClick={onClose}
+          title={"Close the walk-in, asking first if anything changed" + keyHint("close")}
         >
           Back
         </button>
         <button
           onClick={onSave}
           disabled={!wOk}
+          title={"Seat the party at the tables chosen now" + keyHint("confirm")}
           className="mgt-hover-scale"
           style={mkSolidBtn(wOk ? "var(--app-success-solid)" : "var(--btn-disabled)", {
             cursor: wOk ? "pointer" : "not-allowed",
@@ -417,6 +421,7 @@ export function WalkinForm({
               onChange={(e) => setDraft({ ...wf, tables: [], time: e.target.value, _pre: false })}
               min={String(th.open).padStart(2, "0") + ":00"}
               max={th.close >= 24 ? "23:59" : String(th.close).padStart(2, "0") + ":00"}
+              title="The time the party sat down; changing it clears the tables chosen"
               className="mgt-hover-scale"
               style={mkInp()}
             />
@@ -427,6 +432,7 @@ export function WalkinForm({
                 className="mgt-hover-scale"
                 style={stepperBtnStyle}
                 aria-label="Decrease number of guests"
+                title="Decrease the number of guests, one at a time"
                 {...stepPress(() => {
                   setDraft({
                     ...wf,
@@ -445,6 +451,7 @@ export function WalkinForm({
                 className="mgt-hover-scale"
                 style={stepperBtnStyle}
                 aria-label="Increase number of guests"
+                title="Increase the number of guests, one at a time"
                 {...stepPress(() => {
                   setDraft({
                     ...wf,
@@ -464,11 +471,13 @@ export function WalkinForm({
         marginBottom: 14, padding: "12px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
         border: "1px solid " + (wOk ? "var(--suggest-border)" : "var(--border-soft)"),
-        display: "flex", alignItems: "center", justifyContent: "space-between",
+        // v18.18.0 (Patryk): Clear keeps the right where a long selection wraps
+        // it under the summary, as in Assign (DESIGN.md, "A control keeps its side").
+        display: "flex", alignItems: "center", justifyContent: "flex-end",
         gap: 8, flexWrap: "wrap",
         boxShadow: "var(--shadow-card)"
       }}>
-        <div>
+        <div style={{ marginRight: "auto" }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>
             {"Selected: " + (wSel.length ? wSel.join(" + ") : "none")}
           </div>
@@ -507,6 +516,7 @@ export function WalkinForm({
                 className="mgt-hover-scale"
                 style={stepperBtnStyle}
                 aria-label="Decrease duration"
+                title="Decrease how long the party stays, 15 minutes at a time"
                 {...stepPress(() => {
                   const cd = wf.customDur || getDur(Number(wf.size) || 2);
                   setDraft({ ...wf, customDur: Math.max(15, cd - 15) });
@@ -519,6 +529,7 @@ export function WalkinForm({
                 className="mgt-hover-scale"
                 style={stepperBtnStyle}
                 aria-label="Increase duration"
+                title="Increase how long the party stays, 15 minutes at a time"
                 {...stepPress(() => {
                   const cd = wf.customDur || getDur(Number(wf.size) || 2);
                   setDraft({ ...wf, customDur: Math.min(480, cd + 15) });
@@ -539,6 +550,7 @@ export function WalkinForm({
               onChange={(e) => setDraft({ ...wf, notes: e.target.value })}
               rows={2}
               placeholder="Special requests..."
+              title="Anything staff should know about this party: allergies, requests"
               className="mgt-hover-scale"
               style={mkArea()}
             />

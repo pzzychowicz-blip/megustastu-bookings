@@ -22,9 +22,16 @@ import { useState } from "react";
 import { BTN, S, T, FW, H } from "../lib/constants";
 import { hourLabel } from "../lib/time-grid";
 import { TimelineSheet } from "./TimelineSheet";
+import { keyHint } from "../lib/shortcuts";
 import { Overlay, ModalTitle, mkBtn, mkSolidBtn, mkStep, SEG_TRACK, segStyle, PAUSED_FADE } from "./atoms";
 
 const KINDS = [["sheet", "Day sheet"], ["timeline", "Timeline"], ["both", "Both"]];
+// v18.18.0 (Part 2 batch 4): each choice's hover description.
+const KIND_TITLE = {
+  sheet: "Print the day's bookings as a list",
+  timeline: "Print the day's timeline, one row a table",
+  both: "Print the list, then the timeline on its own page",
+};
 const SAYS = {
   sheet: "The day's bookings as a list, with phones, deposits and notes.",
   timeline: "The day's grid: every table a row, each booking in its status colour.",
@@ -40,12 +47,14 @@ function HourStep({ label, value, min, max, onChange, disabled }) {
         onClick={function () { onChange(value - 1); }} disabled={noDec}
         className={noDec ? undefined : "mgt-hover-scale"}
         aria-label={"Earlier " + label.toLowerCase() + " hour"}
+        title={"Decrease the printed timeline's " + (label === "From" ? "first" : "last") + " hour, one hour at a time"}
         style={{ ...mkStep(H.control), opacity: noDec ? 0.4 : 1, cursor: noDec ? "not-allowed" : "pointer" }}>−</button>
       <span style={{ minWidth: 58, textAlign: "center", fontSize: T.lead, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{hourLabel(value)}</span>
       <button
         onClick={function () { onChange(value + 1); }} disabled={noInc}
         className={noInc ? undefined : "mgt-hover-scale"}
         aria-label={"Later " + label.toLowerCase() + " hour"}
+        title={"Increase the printed timeline's " + (label === "From" ? "first" : "last") + " hour, one hour at a time"}
         style={{ ...mkStep(H.control), opacity: noInc ? 0.4 : 1, cursor: noInc ? "not-allowed" : "pointer" }}>+</button>
     </div>
   );
@@ -58,8 +67,8 @@ export function PrintModal({ range, onPrint, onClose }) {
   const grid = kind !== "sheet";
   const footer = (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-      <button className="mgt-hover-scale mgt-press" onClick={onClose} style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: BTN.quiet })}>Cancel</button>
-      <button className="mgt-hover-scale mgt-press" onClick={function () { onPrint({ kind: kind, from: from, to: to, Sheet: TimelineSheet }); }} style={mkSolidBtn("var(--accent)", { minHeight: H.touch })}>Print</button>
+      <button className="mgt-hover-scale mgt-press" onClick={onClose} title={"Close without printing" + keyHint("close")} style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: BTN.quiet })}>Cancel</button>
+      <button className="mgt-hover-scale mgt-press" title="Open the browser's print window for the choice above" onClick={function () { onPrint({ kind: kind, from: from, to: to, Sheet: TimelineSheet }); }} style={mkSolidBtn("var(--accent)", { minHeight: H.touch })}>Print</button>
     </div>
   );
   return (
@@ -68,7 +77,7 @@ export function PrintModal({ range, onPrint, onClose }) {
       <div role="group" aria-label="What to print" style={{ ...SEG_TRACK, display: "flex", marginBottom: 10 }}>
         {KINDS.map(function (k) {
           return (
-            <button key={k[0]} className="mgt-hover-scale" aria-pressed={kind === k[0]}
+            <button key={k[0]} className="mgt-hover-scale" title={KIND_TITLE[k[0]]} aria-pressed={kind === k[0]}
               onClick={function () { setKind(k[0]); }}
               style={Object.assign(segStyle(kind === k[0]), { flex: 1, minHeight: H.chrome, padding: "6px 14px" })}>{k[1]}</button>
           );

@@ -41373,3 +41373,807 @@ full evening with a hand-placed party the optimiser cannot seat).
 
 Gate on the last fix: main entry 479.00 kB, gzip 141.65 kB (141.39 before the run) · Tests 4681 passed (4669 before) · Lint 63 problems
 (0 errors, 63 warnings) · style invariants OK. No rule changed and nothing stored changed shape (`SCHEMA` stays).
+
+## v18.18.0 — a swap that seats each party only where it needs, the day's notes in the Summary, four interface fixes, the switch's wording, a description on every control, Reshuffle on every day ahead, and buttons that keep their side
+
+**Date:** 2026-11-19 · **Branch:** `feat/v18.18.0-summary-notes-and-swap`
+
+**Why:** Patryk sent seven points on 2026-11-19, the day Part A of the table-priorities plan went live on PROD (a settings change he
+made himself). Six are this version's work, decided with him in three rounds of questions; the plan is
+`/Users/patrykzychowicz/.claude/plans/users-patrykzychowicz-desktop-megustast-swift-zebra.md`. He also put Part B and Part 2 of
+`MGT_Bookings_Table_Priorities_and_Hover_Descriptions_Plan_2026-11-19.md` (context folder) into this version. **Behavioural change:
+yes**, each commit below.
+
+### Commit 1 — a swap gives each party only the tables it needs
+
+- **The report:** on 19.11 Patryk dragged Noel (party of 1, on table 9) onto row 1 or 2, where Seba (party of 4) sat on 1+2, and Noel
+  ended up on two tables. **Measured** with node against the real `lib/drop-plan.js` before the fix, Optimiser on and off: Noel onto
+  row 1 or row 2 gave Noel `1+2` and Seba `9`, and Seba dragged onto 9 gave Noel `1+2` too. The row hint said "Swaps with Seba".
+- **Why only the swap:** `swapOf` traded the two parties' WHOLE sets (`newSrc = other.tables`, `newOther = cur`), the v17.0.0 rule
+  "ONE overlapping booking = swap full table sets", set before a party of 1 could trade with a party of 4 on joined tables. A plain
+  move and a displacement give a party of 1 only the dropped table (its first candidate is that table, which seats 2). The swap runs
+  no optimiser pass and the dragged party is locked, so nothing ever gave the second table back.
+- **The fix (Patryk: "only what it needs"):** `fewestWithin(set, size, prefer)` (`lib/booking-logic.js`, beside
+  `rankCombosContaining`) is the fewest tables inside a set that seat a party: one table that does, else a declared combo inside the
+  set; ties to the dropped row (`prefer`), then the fewest seats, then the drop's combo preference, then the layout's order; a set
+  nothing smaller can seat comes back as it is. `swapOf` gives the dragged party `fewestWithin(other's set, its size, the dropped
+  row)` and the other party `fewestWithin(the dragged party's set, its size)`, and runs the same capacity and `canAssign` checks on
+  those. The trimmed sets are inside the whole ones, so a swap is offered exactly where it was, and the history lines and the hint read
+  what is written.
+- **Measured after**, the same six drags: Noel onto row 1 → Noel `1`, Seba `9`; onto row 2 → `2` / `9`; Seba onto 9 → `9` / Noel `1`;
+  the same with the Optimiser off; every day `verifyClean`. Two parties that each need their whole set still trade whole sets.
+- **On DEV (2026-11-20), with a real drag:** a mouse drag paced over frames (4px every 20ms; the block lifted, so the drag armed),
+  Noel (1, on 9) and Seba (4, on 1+2) staged at the same time on a future day, which the Optimiser owns, and on today after the
+  cutoff ("Optimiser: OFF", twelve other bookings, three of them later on 1, 2 and 9). Both days gave the node results: onto row 1 →
+  Noel `1` (locked) and Seba `9`, with 2 left free; onto row 2 → `2` / `9`; Seba onto 9 → Seba `9`, Noel `1`. The hint read "Swaps
+  with Seba" ("Swaps with Noel" for the reverse), the toast "Noel and Seba — tables swapped." with Undo, and each Undo put back
+  Noel `9` / Seba `1+2`. None of the day's other bookings moved.
+
+`tests/drop-plan.test.js` (both rows of a joined pair, the reverse drag, a whole-set trade, and 400 generated days with parties on
+joined sets: every swap leaves both parties inside the set they traded for, seated, on the fewest tables that seat them. With the old
+`swapOf` put back, three of these fail.) `tests/booking-logic.test.js` (`fewestWithin`, read off the layout).
+
+### Commit 2 — the day's notes in the opened Summary
+
+- **What (Patryk, item 1):** the opened Summary now starts with **Notes (N)**: every booking of the viewed day with a note or a tag,
+  each with the booking it belongs to, and a tap on a row opens that booking in the edit form (`VA.onEdit`). His answers: tags and
+  notes, every booking that has either; cancelled ones out and finished ones in (the printed day sheet's set); first in the panel.
+  `lib/day-notes.js`'s `dayNotes` decides which bookings, the order (the BOOKED time, `scheduledTime || time`, then id) and the line,
+  which is the day sheet's Notes cell: `tagLine(bookingTags(…))` in bold, then the note. A note that is only whitespace is no note.
+- **Columns (Patryk, on the first draft: "align vertically in columns … for reference alignment in ListView"):** time · name · size ·
+  tables · the note, the order he picked from two (the size after the name, as on the List card, the block and the day sheet), and
+  the size as the List's ring (his pick over "2 guests"). Each column is the widest of its kind in the list, measured in the cell's
+  own font (`textWidth`, Find a booking's pattern); the name is capped at 160px and wraps. The note sits on a 200px basis, so on a phone
+  it takes a line of its own under the name, in every row at once. **Measured on DEV** (a day staged on 2027-03-11, nine notes among
+  thirteen bookings): every row's cells start at one x per column at 998×507 (44 · 94 · 190 · 220 · 310) and at 1280×800, and at
+  375×812 the note starts at 90 in every row. The ring's own rim (0.55 white, for a saturated block) was invisible on the row, so it
+  takes the List card's `--chip-neutral-border`, as the List does. The row's name is its text, read by Chrome as
+  "13:00 Marta Gil 2 guests table 1 Window seat if possible" (`Accessibility.getPartialAXTree`: contents, with the `title`
+  "Open Marta Gil's booking" as its description): the ring and the badges show bare numbers, so a hidden "2 guests" and "table"
+  ride beside them.
+- **A defect the first draft brought, measured before anything else was decided:** with Lock navigation on, the body's slot never
+  shrank, so a day with notes pushed the panel past the screen: Print and More 63px below it at 998×507 and the phone's past its
+  bottom too, out of reach. Patryk chose "the panel scrolls" over a notes list scrolling on its own: in the pinned layout the slot is
+  a column that may shrink (`SUMMARY_SLOT_FIT`) and the Summary wraps its body in a scroller (`fit`, `FIT_SCROLL`) that shrinks with
+  it, notes in full and first, while `<main>` gives way until the panel closes. The scroller wraps the `Reveal` rather than being it:
+  a `Reveal` made a flex item would size its `fr` row against its own flexed height and lag the room it opens. It pads its sides by
+  the card's shadow reach and takes it back, and a new day opens at its top. **Measured after**: scrolled to its end, Print sits at
+  446–478 of 507 on the tablet, 729–761 of 812 on the phone and 713–745 of 800 on the desktop; the body still eases both ways (the
+  slot's height sampled per frame); a tap on Lena Vogel's row opened her booking at all three sizes and Escape closed it. With Lock navigation off nothing scrolls inside and the page does, as before (998×507: the wrapper unstyled, the page 1501px tall, Print reached by scrolling it). Both themes
+  checked by screenshot. Lock navigation was already on for the DEV account; the staged bookings were deleted afterwards.
+
+`tests/day-notes.test.js` (which bookings, the order, the line, the Summary reading `dayNotes`, the props App passes, and the scrolling
+slot), and `tests/guest-tags.test.js` (the seventh surface; App hands the tag map to six views now).
+
+### Commit 3 — "Other code…" in the phone refusal
+
+- **What (Patryk, item 2):** under the pinned codes in "Choose the country code for this phone number.", a last button, **Other code…**,
+  opens the whole country list. A pick there does what a code's tap does (`onPickCode`, App's `pickPhoneCode`, unchanged): it writes
+  the code, and the refused save carries on. With no pins it stands alone under the sentence.
+- **Three decisions made with him first (2026-11-19)**, all three after measuring:
+  - **A row of its own, as wide as the codes.** The plan had it as the grid's last cell (`codeColumns(codes.length + 1)`). Measured on
+    DEV at 998×507 with the six default pins, the words need 137.4px (17px medium, the chevron, its gap and padding) and a code's
+    cell is 78.7px (101px on a phone), so it overflowed. The codes keep `codeColumns(codes.length)`.
+  - **The list opens upward, with its search box at the bottom, beside the button.** Under the refusal there is only the Save row, and
+    `useMenuRoom` measured only below. The menu shrinks to its rows as you search, so a box at the top would move under the typing.
+  - **Every country is in it, the pinned ones too** (the plan had `exclude={pinnedCountries}`): someone who missed Spain's button
+    finds Spain by typing, where the plan's list said "No country matches".
+- **How:** `CountryPicker` takes `above`. The menu hangs from the wrapper's top (`bottom: 100%`), draws its search box last with
+  `column-reverse` (the box stays the first stop in the DOM), and rises on a new pair, `mgt-pop-up-in` / `-out`, the popover pair
+  turned over: it starts 4px below its rest and shrinks to the bottom corner. `useMenuRoom(menuRef, open, tall, above)` measures the
+  room over the anchor with `menuRoomAbove`, up to the top of the box that clips the menu (`clipBox`: the nearest ancestor with any
+  overflow but `visible`, stopping at a fixed box; on the tablet the form's card, `overflow: hidden`; on a phone's sheet none, so
+  the screen's top). `scrollPort` would not do: it knows only `auto` and `scroll` and walks past the card. **No floor going up:**
+  below, a menu taller than its room runs under the footer, where scrolling the form still reaches it; above, what runs past the
+  card's top is cut off with nothing to scroll.
+- **A defect found while measuring, fixed here:** on the tablet at 289px tall (the keyboard as Android takes it), the list's top ran
+  4px past the card's top. The keyboard's measure had run before the footer's `tight` padding eased 16 → 6. With the form's body
+  down to its padding, that ease lifts the refusal's button 10px and changes no box's size, so no observer saw it. `useMenuRoom`
+  now measures again at every `transitionend` inside its port, in both directions. After: 6px inside the card at 289 and at 231.
+- **Measured on DEV through the rig** (writes dropped in the socket; only presence writes were dropped, no booking):
+
+  | Size | Button | List | max-height | Rows seen |
+  |---|---|---|---|---|
+  | 998×507, the tablet | 300.6–340.6, 502 wide | 31.6–296.6, 6.3px under the card's top | 263 | 5 |
+  | 998×289, keyboard up | 147.5–187.5 | 20.5–143.5 | 121 | 2 |
+  | 998×231, keyboard up | 144.6–184.6 | 17.6–140.6 | 121 | 2 (1½ visible) |
+  | 998×231, no pins | 98.6–138.6 | 17.6–94.6 | 75 | 1, the rows scroll |
+  | 375×812 | 555–595, 315 wide | 229–551 | 320 (full) | 7 |
+  | 375×470, keyboard up | 219–259 | 12–215 | 201 | 4 |
+  | 1280×800 | 579–619 | 253–575 | 320 (full) | 7 |
+
+  At every size the search box took the focus and sat 13px over the button, "48" left one row, Poland, Escape closed the list
+  alone (the refusal stayed, focus back on Other code…), and picking Poland set the picker to "Poland +48" and re-ran the save,
+  which went on to its next check ("Could not assign a table" on DEV's evening). The accessible name is "Other code…", from its
+  contents, `haspopup` listbox, `expanded` false and true. Sampled per frame, the list rises 4px → 0 and fades in over ~240ms, and
+  leaves the same way over ~260ms, then unmounts.
+- **Seen, not changed:** with the keyboard up on the tablet the footer is taller than the card and the Save row is cut off below it.
+  That was already so with the codes alone: before this commit, at 231, the 208px footer sat under the body's 48px of padding in a
+  208px card, its last 49px cut off. Here it happens only while the list is open, and a pick carries the save on by itself. The list lets the form behind it show faintly through its rows. The
+  phone field's own list, which opens downward, does exactly the same (compared side by side at 375×812), so it is how these menus
+  already render.
+
+`tests/menu-room.test.js` (`menuRoomAbove` on the measured numbers, `clipBox`'s two stops, the `transitionend` listener, and the
+refusal: a row of its own, `above`, no `exclude`, `onPickCode`), `tests/country-menu.test.js` (the two pairs, `MENU_UP`), and two
+pins moved to the new shape: `tests/save-path.test.js` (`noCode`, a `toContain`, no snapshot moved) and `tests/stretched-chips.test.js`.
+
+### Commit 4 — Fit to screen
+
+- **What (Patryk, item 3):** on a new device the app should fill the screen. Settings › App › **Fit to screen**, on by default on
+  every device, including one that already set a width (his decision, 2026-11-19): that width is kept and comes back when the switch
+  is turned off. The App width stepper folds away under it (`Reveal`) while it is on.
+- **How:** `useShellPrefs` reads `appWidthFit` from its own key, `mgt-appwidth-fit`, stored only as `"0"` (the indoor tint's shape),
+  so `mgt-appwidth` never decides it. While it is on, App draws the shell with no `maxWidth`; the `appWidth` the hook returns is the
+  window's, rounded down to 50 within 900–2400 (`fitAppWidth`), so ⇧+ / ⇧− step from what is seen; and `shellW`, the width Split
+  View divides, is the window. **`onSetAppWidth` turns it off**, so the stepper and both shortcuts do (`lib/shortcuts.js` is
+  unchanged). Turned off with no width stored, it stores the width on screen: `readAppWidth`'s own default is the screen less 300px,
+  which would have shrunk the app by 300px at the tap.
+- **Measured on DEV** (998×507 touch, 1280×800, 1920×1080; writes dropped in the socket): with both keys cleared the shell is
+  966 / 1248 / 1888 wide, 16px from each edge, and follows a resize (300px wider, 300px wider). With `mgt-appwidth` = 1000 stored it
+  still fills. The switch off gives 1000 (140px and 460px margins) and shows the stepper at 1000; on again it fills, and the 1000
+  stays stored. Shift+minus from fit gives 1200 at 1280 (1250 − 50) and 1850 at 1920, with the switch off. The rightmost lifted
+  control, the connection dot, reaches 1265.4 of 1280 when hovered (×1.08), inside the gutter.
+- **Checked, not changed:** with Lock navigation on, `<main>`'s hover-lift gutter (`marginInline: -4%` with `paddingInline: 4%`,
+  v17.5.0) now reaches 34px past each edge of a 1280 window (8px at an app width of 1200; inside the old default's 150px margins it
+  never did). That shell's html and body are `overflow: hidden` and `<main>` is `overflowX: hidden`, so nothing scrolls sideways,
+  and the List cards the gutter was made for stopped lifting in v17.9.1. With Lock navigation off nothing reaches past the window:
+  the scroll width is 1280 of 1280 and `window.scrollX` stays 0, in the Timeline and the List.
+- **Split View** divides the window while fit is on. On the tablet any stored width of 998 or more already gave a `shellW` of 998,
+  so side by side is decided exactly as before; a desktop whose stored width was narrower than its window now divides the wider shell.
+
+`tests/app-width-fit.test.js` (new): the key and its one stored value, a stored width that does not decide it, `onSetAppWidth`
+turning it off and both shortcuts reaching it, the stored width on screen when it goes off with none, no database write, App's
+`maxWidth` and `shellW`, `fitAppWidth`'s numbers, and the switch with the stepper folding under it.
+
+### Commit 5 — the Needs action count
+
+- **What (Patryk, item 4):** the inbox's **Needs action** button carries a count, as the WhatsApp button does: how many of the open
+  list's conversations need a response, on the same red badge at its corner. His decision (2026-11-19): **the badge takes the red, and
+  the dot is the button's ink** (grey, white on the pressed green), where v18.17.0 turned the dot itself red while the list held
+  something it would find. The badge stays while the filter is on and is gone at none.
+- **How:** `actionCount` replaces `dotRed`, counted with the list's own two predicates (`inTab`, `isActionable`), so with no search
+  typed it is the number of rows the filter leaves. The badge is `CountBadge` with `float` and `--wa-unread-dot`, the WhatsApp
+  button's pair, already in `tests/contrast.test.js` in both themes; the button became `position: relative` for it. The name stays
+  "Needs action" (pinned), and an `aria-label` silences what the button holds, so the count reaches a screen reader as the button's
+  **description**: `CountBadge` takes an `id`, and the button points `aria-describedby` at it only while it shows (at none there is no
+  element, and a reference to an absent id is a broken one). Its words agree with the number, "1 needs a response", "9 need a
+  response", as the crash trail's do (`newCrashesWord`).
+- **Measured on DEV through the rig** (writes dropped in the socket: only presence, and the two local-cache updates below). DEV holds
+  10 conversations in the Inbox and 7 in Archived. At 998×507 (the tablet), 1280×800, 900×700 (the narrowest two panes), 820×1180
+  (an iPad upright, one pane) and 375×812:
+  - the badge read **9** in the Inbox and **5** in Archived, and turning the filter on left **9** and **5** rows;
+  - nothing clips it: no ancestor's box cuts it, and a hit test at its four edges and its centre finds the badge;
+  - Chrome computes the name "Needs action" (from `aria-label`), the description "9 need a response" ("5 need a response" in
+    Archived), and pressed false and true;
+  - the dot is the button's ink: rgb(90, 100, 116) off and white on in Light, rgb(166, 166, 172) and white in Dark (through
+    `?theme=dark`: the account's synced theme overrides a local key, so the first "dark" run had measured Light);
+  - on a phone, opening the search with the filter off still folds Needs action away, and Escape brings it back. With the filter on it
+    stays, its badge 3px from the field at their closest and about 4px from the field's focus ring at the badge's height; magnified,
+    the two do not touch.
+  - **One and none**, staged in the page's local cache only (every Inbox conversation but one muted; the updates never left the
+    socket): the badge read 1 and the description "1 needs a response"; with all ten muted the badge and the `aria-describedby` were
+    gone and the dot stayed grey.
+- **Seen, not changed:** while the count shows, the description is the count and the `title` ("Show only conversations that need a
+  response") is not read, because the accessible description takes `aria-describedby` before `title`; at none Chrome reads the title.
+  The name and the count say what the title says.
+
+`tests/wa-inbox-layout.test.js`: the `dotRed` pins became the count line, the badge with its fill, words and `id`, the button
+positioned for it, the dot in `currentColor` and no `dotRed` left; and a new case for the description and the id.
+
+### Commit 6 — chevrons that turn
+
+- **What (Patryk, item 5):** three ▾ stood still while their lists opened: the inbox's WhatsApp mark, the phone field's country-code
+  picker and Settings' time-zone picker. Each now turns up as its list opens and back as it closes, the Summary's `TurnChevron`
+  (`flip`, on `M.move`), and keeps its colour (the pickers' muted ink, the mark's white).
+- **One decision made with him (2026-11-19):** "Other code…" opens upward (commit 3), so its chevron **starts pointing up and turns
+  down** as the list opens. Every chevron in the app points toward its list at rest and away once it is open, and this keeps that
+  true; it is also the usual drop-up convention. It is a half turn on the chevron's wrapper (`CHEVRON_UP`), so `TurnChevron` is
+  unchanged.
+- **How:** the mark's menu owns `open`, so `ConversationMenu`'s `trigger` may now be a function of it, and the mark passes one. Both
+  pickers own `open` already.
+- **Measured on DEV** (the rig: the chevron's rotation sampled every frame through an open and a close; writes dropped in the socket)
+  at 1280×800, 998×507 and 375×812 (the time-zone picker at the first two, where Settings is): every one turns 0° → 180° and back in
+  about 190–200ms with 9 to 12 frames in between (`M.move` is 240ms). "Other code…" rests at 180°, pointing up, and turns to 360°,
+  pointing down, and back. Escape closes the mark's menu and leaves the inbox open, and closes the refusal's list and leaves the
+  refusal. **With Reduce animations** (`data-motion="reduce"`) each one snaps in a single frame both ways, and **with the device
+  asking for reduced motion** it snaps too, because a transform is not among the properties that keep their short cross-fade there.
+  The zone was left as it was (no pick).
+
+`tests/turn-chevron.test.js`: the three draw `TurnChevron` with their own `open` and none draws the still `ChevronDownIcon`, the menu's
+trigger as a function of `open`, and the upward picker's half turn. `tests/conversation-menu.test.js`: the trigger pin moved to the new
+form.
+
+### Commit 7 — Part B: the size rule's switch says what it does, and where it changes nothing
+
+- **What (Patryk, 2026-11-19, the Table priorities plan's Part B):** in Settings › Layout › Table priorities a size rule's switch read
+  "Try joined tables before single tables", but Prefer comes first whatever it says. In the restaurant's layout table 9 is the only
+  single that seats more than 2, so on the old "Party of 3 to 4" (Prefer 9) the switch could change nothing, which is why a party of
+  4 kept getting 9. Part A, his settings change, is live on PROD; this is the wording.
+- **How:**
+  - `joinFirstMatters(band, tables)` beside `findBest`: true only if a table outside the rule's Prefer list seats its smallest party.
+    A preferred table that fails `findBest`'s first step fails the same tests a single must pass, and a table too small for the
+    smallest party is too small for every party the rule covers.
+  - The switch reads **"Then try joined tables before other single tables"**; its name is the band's, then those words (the band
+    still leads, which `tests/a11y.test.js` holds).
+  - Under it, eased in and out (`Reveal`): **"No table outside Prefer seats 3, so this changes nothing here."** where
+    `joinFirstMatters` is false on the stored tables, starting under the switch's words.
+  - Above the rules: **"Inside a rule: Prefer first, then joined tables or the other single tables, in the order the switch sets.
+    Avoid tables are the last single tables tried."**
+- **One decision made with him (2026-11-19):** the plan's sentence ended "…Avoid last". Measured with the real `findBest`: with the
+  switch off an Avoid table is tried **before** joined tables, because the single-table step falls back to an avoided table before
+  joined tables are reached (a Party-of-4 rule with Avoid 9 seats a 4 on 9 on an empty day; with the switch on, on 1+2). He chose the
+  wording that is true both ways. The Optimiser is unchanged.
+- **Part A on DEV was already there** (read, not written): "Party of 3 to 3" with Prefer 9 and the switch on, "Party of 4 to 4" with
+  the switch on, the swap rule kept. DEV also holds a second "Party of 2 to 2" rule after the 3-rule, empty and switched off; the
+  first rule that covers a size wins, so it never applies. Left as it is.
+- **Measured on DEV** (the rig; the edits stayed in the page's cache, dropped in the socket) at 1280×800 and 998×507: the note on
+  "Party of 3 to 3" only, its text starting exactly where the switch's words do (336 and 336, 195 and 195). Taking 9 out of that rule's
+  Prefer folds it away over about half a second (22 to 26 frames in between), and putting 9 back eases it in. Chrome computes each
+  switch's name as "size rule 3, party of 3 to 3: then try joined tables before other single tables".
+
+`tests/booking-logic.test.js`: `joinFirstMatters` on the restaurant's layout (the shipped rule, Part A's two, an Avoid table, no
+single that seats 5); an Avoid table before joined tables with the switch off and after them with it on; **the agreement**: over 200
+generated layouts, rules and days, wherever it says false (121 rules), `findBest` picks the same tables with the switch on and off in
+all 4,338 cases, and where it says true the switch changes 690 of them, so the comparison can see a difference. Three wrong versions
+(Avoid tables left out, the largest party read for the smallest, always false) each fail it. And Settings asks it on the stored
+tables, with the new words.
+
+### Commit 8 — Part 2, batch 1: the hover-description rule, `keyHint`, and the atoms' `description`
+
+- **What (Patryk, 2026-11-19, the Table priorities and Hover descriptions plan's Part 2):** every control describes what it does
+  in the browser's own tooltip, the way the inbox's search shows "Search conversations (/)". Mouse only; the tablets never show it.
+  This batch is the groundwork; batches 2–6 describe the screens, and batch 7 sets the ceiling to 0.
+- **`check:style` Rule 14** (`scripts/check-style-invariants.mjs`), Rule 10's tag reader one level wider. A control is a
+  `<button>`, `<input>` (not hidden), `<select>`, `<textarea>`, an `<a href>`, any tag with an interactive `role` (a quoted
+  literal, or the quoted strings of an expression) or a `tabIndex` that is not a literal −1, an `<OutlineChip as="button">`,
+  and the call site of an atom that draws one (`Toggle`, `Stepper`, `MiniStepper`, `HourStepper`, `TimeChip`, `SearchField`,
+  `DateField`), which owes `description` rather than `title`. An SVG element passes with a `<title>` child first inside it. It also
+  counts a key typed into a description in parentheses ("(I)", "(Esc)"). The WhatsApp simulator is skipped.
+  - **The ceiling is exact both ways** on the app's own tree (over: a control added undescribed; under: a batch that forgot to
+    lower it, which would let the next one in free); a fixture directory's is 0. `MGT_HOVER_LIST=1 npm run check:style` lists
+    every site. The OK line ends with the count.
+  - **Measured on this tree:** 421 to start (414 undescribed, 7 typed keys: App's inbox, ← and → buttons, the Summary's More,
+    the inbox's search and its Close, the composer's Insert template). The atoms' own controls now carry their `title`, so the
+    commit lands at **410**.
+  - **What it cannot see:** a description handed through an object or a prop that is not `title`/`description` (the inbox's
+    menu rows carry `title: "Edit templates (T)"` in data). Batch 6 converts those by hand.
+- **`keyHint(id)`** (`lib/shortcuts.js`) → `" (I)"`: the row's caps as the Shortcuts tab prints them. Every row of the table has
+  an `id` (39), and the keys handled elsewhere (the inbox, More, the table picker, Esc and Enter) moved out of `Shortcuts.jsx`
+  into `OWN_SHORTCUT_SECTIONS` as data (25 rows), so a tooltip and the tab read one list. W and M became two rows with one label,
+  each with an id, and still print as one line (`docRows`, now shared with the table's sections). An unknown id gives "" rather
+  than throwing in render.
+- **The atoms take `description`, with no default:** `Toggle` (the switch's `title`), `DateField` (the pill and the input, since
+  the weekday is the control too), `SearchField` (the field; its ✕ reads "Empty the search box"), `TimeChip`, and the three
+  steppers, whose two buttons read "Decrease …" and "Increase …" of it.
+- **DESIGN.md:** "Every control carries a hover description", beside "A control's meaning is on the control", with how a
+  description reads.
+- **Measured on DEV:** Settings › Shortcuts draws every section and row as before, W / M on one line.
+
+`tests/style-check.test.js`: Rule 14 on each kind of control, an atom asked for `description` and not `title`, the shapes that
+pass (an expression title, a hidden input, `tabIndex={-1}`, a plain chip, an SVG `<title>`), a multi-line tag read whole and an SVG
+title that is not first, a comparison and prose, typed keys against `keyHint`, the simulator skipped, and the app's tree held to
+its ceiling exactly. One older fixture gained a `title`. `tests/shortcuts.test.js`: unique ids across both lists, `keyHint`'s
+shape, "" for an unknown id, every `keyHint("…")` in `src/` naming a row (it failed on a throwaway file calling `keyHint("nope")`
+and passed its `keyHint("inbox")`), and the own sections printing as they did. `tests/shortcuts-tab.test.js` and
+`tests/wa-inbox-layout.test.js`: their pins on the inbox's rows read `lib/shortcuts.js` now.
+
+### Commit 9 — Part 2, batch 2: the header and the shell
+
+- **What:** a hover description on every control of the header, the date row, the compact header's Follow and zoom, the Optimiser
+  controls, the Summary, the split menu, the Undo toast and the notification strip with its eight banners and the parked write's
+  Discard. **Rule 14: 410 → 364.**
+- **Keys come from the table:** Walk-in (W), + New (N), WhatsApp (I), Find (/), the gear (?), ← and →, Today (D), the three views
+  (T, L, P), Follow (F), zoom (−, 0, =), the Optimiser (O), Reshuffle (R), the Summary's toggle (S) and More (M). The three keys
+  typed by hand in these files ("WhatsApp inbox (I)", "Previous day (←)", "Next day (→)", the Summary's "(M)") are gone.
+- **Four existing titles rewritten to the rules:** the view buttons had a tooltip only while split view could be used (they now
+  name the view, and add the split gesture where it works; `tests/a11y.test.js`'s pin on `title={gesturesOn` holds, unchanged);
+  the connection dot said only its state, and now adds what opening it offers; the waitlist badge leads with what it opens; the
+  gear puts a crash count first, so the key stays last.
+- **Names are untouched:** every control described here has visible text or an `aria-label`, so its `title` is its description,
+  never its name.
+- **Left for their batches:** App's confirm dialogs (batch 4), the Settings overlay's Close (batch 5), the inbox's archive and
+  delete confirms (batch 6).
+- **Measured on DEV** (reloaded, read from the live DOM): every header, date-row and toolbar control carries its title as written,
+  the keys printed by `keyHint`, e.g. "Go to the day before (←)" and "Show the List: the day's bookings as cards; right-click or
+  hold to add it to a split view (L)".
+
+No test changed: `keyHint` ids are literals (the views' are taken once at module scope), which `tests/shortcuts.test.js` asks of
+every call.
+
+### Commit 10 — Part 2, batch 3: the three views and their popups
+
+- **What:** a hover description on the Timeline's blocks, their Assign handle and the cell marker; the List card, its next-step
+  button, Assign, No show and ⋯; the Plan's tables, its table popover's rows and Walk-in here, and Now; the quick-status card's
+  buttons; the More popover (its three modes, the period arrows, This week / This month, Close, and every day row and month cell);
+  Find a booking (the field, each result, Done); the history's Close; and the empty day's New booking and Walk-in, which no batch
+  had named (Patryk: EmptyDay here, the fired reminder's toast with batch 5, LoginScreen, ErrorBoundary, UpdateRequired, the
+  `/wa-connect` page and the suggestion-row atom with batch 7). **Rule 14: 364 → 340.**
+- **One sentence for a status tap:** `statusTitle(status, name)` (`lib/status-change.js`) says what a tap does to whose booking
+  ("Mark Hanna as seated at their tables", "Confirm Ana's booking"). The List card's next step and the quick-status card read it,
+  so the two surfaces that offer the same tap describe it in the same words.
+- **The Plan's tables are SVG:** `TableGlyph` takes `description` and draws it as a `<title>`, first inside its `<g>`. Measured in
+  headless Chromium through CDP `Accessibility.getPartialAXTree`, not the automation tree: with an `aria-label` the label stays
+  the NAME and the `<title>` becomes the DESCRIPTION; without one the `<title>` would be the name. Every Plan table passes an
+  `aria-label`. A table offers "right-click to change Ana's status" only where `targetBookingFor` finds a party, and names them.
+  The floor-plan editor passes "Drag to move table N on the plan" (Patryk): the same measurement shows a `<g>` with a `<title>`
+  becomes a named group (it was generic), which a screen reader meets in a drawing it could not act on before either; an empty
+  `<title>` still makes it a group, so there was no silent option.
+- **The block's title carries the tags:** the block's `role="button"` wrapper is most of the block and the innermost `title` wins,
+  so its description ("Open Mike's booking to edit it; right-click for its status, drag to move it") ends with the tags the
+  outer `title` shows, or a mouse would find them only over the rail's edges. The mouse's words: a tooltip is never seen on a
+  tablet, so it says right-click, not hold.
+- **Two existing titles rewritten to the rules:** the Assign handle ("Assign tables" → "Choose tables for Mike by hand", batch 2's
+  wording for the same act) and the waitlist ghost, which read "Waiting: Ana, 4 guests, at 19:00. Tap to book." and now reads
+  "Book Ana from the waitlist: 4 guests, at 19:00" (Patryk). `tests/party-size.test.js` pinned the old opening words, and its
+  pattern moved with them; it still asks for `guestsLabel`. The More popover's arrows said only "Previous week".
+- **S was the More popover's undocumented key** (Patryk): `WeekView` switched to Stats on S, and the shortcut table had no row
+  for it, so the Shortcuts tab never listed it and the Stats button could not name it. `moreStats` is that row.
+- **Names are untouched:** every control described here has visible text or an `aria-label` (the ⋯ keeps "More actions", which
+  `tests/a11y.test.js` pins), so each `title` is a description. The week view's mode buttons put `title` before `aria-pressed`
+  so `tests/week-view.test.js`'s pin on `aria-pressed={active}` then `style` holds.
+- **Measured on DEV** (reloaded, read from the live DOM): blocks, handles, a List card and its buttons, the Plan's tables (the
+  `<title>` first in each `<g>`), its popover rows and Walk-in here, the quick-status card, More's modes ("Show the month's
+  numbers: covers, busy hours and tables (S)") and days, Find a booking's field, result and Done ("Close Find a booking (Esc)"),
+  the history's Close and an empty day's New booking ("Make a new booking (N)"; a future day offers no Walk-in). The waitlist
+  ghost and the cell marker were not on screen; their source is read by the tests above and Rule 14.
+
+### Commit 11 — Part 2, batch 4: forms, pickers and the confirm dialogs
+
+- **What:** a hover description on every control of the booking form (its fields, steppers, Tables row, status buttons, History,
+  Book again, Delete, Save pending, Back, Save booking and Save&confirm, the guest chips, and the phone refusal's country codes and
+  "Other code…"), the phone field, the walk-in form, the availability line, Duration's Reset, the table picker and its grid, the
+  preferred-tables picker, the block editor, the special-day editor, Print, the waitlist, the voucher field, the seat clash and
+  seat note, the voucher redeem and carry prompts, and App's confirms (delete, discard, cancel with No show, kitchen, voucher back,
+  reshuffle and its unlock, reminder delete). **Rule 14: 340 → 235.** App's Settings Close and the inbox's two confirms stay for
+  batches 5 and 6.
+- **`CountryPicker` takes `description` and joined `DESCRIBED_ATOMS`** (Patryk): its pill reads differently at each of its three
+  callers, so Rule 14 asks every call site. Settings' pinned-countries picker is one of them, so it is described here, a batch
+  early. `tests/style-check.test.js`'s list of atoms gained it; `tests/menu-room.test.js` pins the "Other code…" tag whole, and
+  takes its `description`.
+- **A key is named only where the modal answers it**, read from `modal-keys.js`: Esc on every Back, Close, Cancel and Done whose
+  modal has an `escapeAction`, Enter only on the actions `enterAction` runs (the form's Save, the walk-in's Seat, the table
+  picker's Assign, Delete, the kitchen's Confirm, Reshuffle, the reminder's Delete). The block editor, the special day and the
+  voucher prompt have no Enter, so their buttons name none. The form's keys come from its own rows: Assign (A), Preferred (P),
+  Clear (C), History (H), Book again (B); the table picker's Swap busy (S) and Clear (C).
+- **One existing title rewritten:** History read "History (4)", and now says what it opens with its count and key ("Show who
+  changed this booking and when, 4 entries (H)"); the `aria-label` keeps the name.
+- **Pins kept by placement, not by editing the test:** the availability line's `TimeChip` takes `description` after its `style`
+  (`tests/stretched-chips.test.js`), and the voucher field's Attach and Remove carry `title` before `aria-label`
+  (`tests/voucher-picker.test.js`, which reads 260 characters from the label to the auto margin).
+- **Measured on DEV** (reloaded, read from the live DOM): the edit form, every field and button ("Save the booking and close the
+  form (Enter)", "Choose the tables for this booking by hand (A)"); the table picker over it (Swap busy's switch, a taken table's
+  "Table 3 is taken then, so it cannot be picked"); the walk-in; the delete confirm from the List's ⋯ ("Delete the booking
+  (Enter)", "Keep the booking (Esc)"); Print (whose hour steppers were reworded on reading: "the printed timeline's first hour");
+  the special day; and the waitlist ("Take Test 4 off the waitlist (asks for a second tap)"). The block editor, the seat clash and
+  note, the kitchen, the voucher prompts and the reshuffle confirm were not opened; they are read from source and by Rule 14.
+
+### Commit 12 — Part 2, batch 5: Settings
+
+- **What:** a hover description on every control in Settings: the tab bar (with its ← → keys), every General section (the name
+  and currency boxes, the pinned countries, the time zone, the weekday hours, special days, shifts, the Optimiser's cutoff, the
+  duration tiers, separation, running late, the warnings, table turns, standing bookings, the preferences and the backup), all of
+  Layout (tables, combos, table priorities, cross-zone combos, swap rules, pick rules, the floor-plan editor and the kitchen
+  limit), Customers and its tag editor, Vouchers, Reminders and the reminder editor, WhatsApp's two switches, usage and connect
+  link, App, Admin (modules, people, invitations, the capability grid's Done, retention) and the activity log; App's Settings
+  Close; and the fired reminder's Snooze and Done (Patryk put them here). **Rule 14: 235 → 56.** The batch was 179 sites: the
+  hand-off's per-file counts add to 179, and its total said 190.
+- **`TagChips` takes `description` and joined `DESCRIBED_ATOMS`**, on batch 4's `CountryPicker` precedent: a chip means a
+  different thing at each of its four callers (a guest tag in the form and in Customers, the visit's occasion in the form, a
+  filter in the List), so Rule 14 asks each call site. Here it is a FUNCTION of the tag's label, because one call draws a row of
+  chips. The form and the List are batch 3 and 4 files; their two call sites are described here. `tests/style-check.test.js`'s
+  atom list gained it (4765 tests, one more).
+- **`GsTextField` and the floor-plan editor's `Step` take a `description`** inside their own files (one caller each file, so
+  Rule 14 reads the inner tag): the name and currency boxes, and every editor stepper ("Decrease table 3's rotation, 15° at a
+  time").
+- **Keys named only where answered:** Esc on Settings' Close, the activity log's Done, the capability grid's Done and the reminder
+  editor's Back; Enter on the reminder editor's Save (`enterAction` saves a valid draft); ← → on the tabs; N on New reminder;
+  ⇧D on Dark mode.
+- **Older titles rewritten to the rules** (the batch-2 decision): Layout's "Move up in rank", "Remove", "Add a table", "Rename
+  table", "Remove table", "Move left/right", "Remove from group", "Remove whole group", "Remove combo", four "Remove rule"s and
+  the combo rule's "Preferred — tap to avoid instead" (which stated the state); General's "Copy this day's hours to all days"
+  (now names the day) and the tier ×'s "Remove this tier" and "Tap again to remove"; the activity log's "Open this booking";
+  the voucher copy's "Copy the number". **Kept on purpose:** Layout's `title="Save name"` and `title="Cancel"`, which
+  `tests/a11y.test.js` pins as deliberately static single-instance controls.
+- **Pins:** shaped by placement where the pin is a run of attributes (the tab bar's `onClick` then `aria-pressed`, the drag-hold
+  segment's `aria-pressed` then `onClick`, the reminder's remove-time `aria-label` then `style`, the tier stepper's `who` then
+  `value`). **Seven tests edited, each where the pin was the whole tag:** the six App-tab switches' `<Toggle … />` pins
+  (`app-width-fit`, `cell-offer`, `indoor-tint`, `large-text`, `haptics`, `plan-avail`) now take `description="[^"]+"` after the
+  label, and `destructive-buttons` pins the tier ×'s new title. `count-label` flagged two wordings ("… entries", "… covers") as
+  counts; both were reworded rather than allowed.
+- **`atoms.jsx:1069`, the last site batch 7 holds, is `Collapsible`'s header**, every Settings section's: the hand-off named it
+  the suggestion-row button. It stays in batch 7, as Patryk split it.
+- **Measured on DEV** (reloaded, read from the live DOM): every tab with its sections opened (General, Layout, Customers, Vouchers,
+  Reminders, App, Admin), the reminder editor, the activity log and the new-booking form's tag chips. Five wordings were rewritten
+  on reading: the cross-zone Require chip, the Customers and form guest-tag chips ("Tag Alicia Ortiz Allergy…" now "Add Allergy
+  to Alicia Ortiz's tags…"), the tag name box, and two in the reminder editor (a time and a weekday). Not on screen, read from
+  source and Rule 14: the fired reminder's toast, an invitation's Withdraw and Apply, the module-off confirm, Delete customer
+  armed, and the crash download.
+
+### Commit 13 — Part 2, batch 6: WhatsApp
+
+- **What:** a hover description on every control in the WhatsApp inbox: the panel's search box and button, Close, select mode's
+  Archive / Restore / Delete / Cancel and the bulk-delete confirm; a conversation row and its select-mode checkbox (named for the
+  guest, and saying "Open" or "Select or unselect" by mode); the Regular chip that opens past visits; the draft card's Accept,
+  Dismiss, "Accept at" time chips and Add to waitlist, in both its layouts; the linked booking's Open and Cancel; a failed
+  message's Retry; the photo viewer's Save photo and Done; the composer's template chips, its EN / ES switch, Insert template,
+  the reply box, the file picker and Send; the templates editor's Edit, Delete (resting and armed), Cancel, Save template, Close,
+  Save all, its four fields and + Add template; and App's two inbox confirms (archive a conversation whose booking is upcoming,
+  delete a conversation). **Rule 14: 56 → 12**, the hand-off's 40 sites plus the four confirms it named in App.
+- **Descriptions handed through data, converted by hand** (Rule 14 cannot see an object field): the mark menu's four rows
+  ("Inbox (←)" became "Show the Inbox conversations (← / →)", and the simulator and Edit templates rows the same way) and the
+  conversation menu's Archive, Restore and Delete. Every key in them now comes from `keyHint`.
+- **Keys named only where answered:** ← → on the two tab rows, X on the simulator, T on Edit templates, / on the search button,
+  E on Insert template, A and D on the draft's Accept and Dismiss, H and R on Archive and Restore (on the open conversation and,
+  in select mode, on the selection: `shortcuts.js` says both), and Esc on the inbox's Close, select mode's Cancel, the bulk
+  confirm's Back, the photo's Done, the templates editor's Close (InboxPanel's own Escape closes the editor first) and both App
+  confirms' Back. No Enter anywhere: `enterAction` covers none of the WhatsApp modals.
+- **The bulk confirm follows the count**: "Delete 2 conversations and their messages, for good", "Delete 1 conversation and its
+  messages, for good", through `countLabel`. `tests/count-label.test.js` flagged the first wording (`+ " messages …"` reads as a
+  typed count) and the word moved inside the ternary rather than being allowed.
+- **Pins: three edited in `tests/wa-inbox-layout.test.js`, each a whole-literal pin whose title half changed** (the Edit
+  templates row, the Simulator row, and the composer's `aria-label` then `title`). The labels and icons those tests are about
+  are still pinned as they were.
+- **Measured on DEV** (read from the live DOM): the panel, the rows in both modes, both menus on an Inbox and an Archived
+  conversation, a draft card, the composer with its chips open, the linked booking card, select mode on both tabs, the bulk
+  confirm at one and at two, the conversation delete confirm, and the templates editor's list, armed Delete and edit form. The
+  EN / ES switch was reworded on reading: "Show the templates in English" undersold it, since it also picks the language a
+  chip puts into the reply. **Not on screen, read from source and Rule 14:** App's archive confirm (it opens only for a
+  conversation linked to an UPCOMING booking, and DEV has none; archiving Hanna's past booking went straight through, and she
+  was restored), the "Accept at" time chips (no DEV draft offers other times), the photo viewer, Retry and the file picker.
+- **The 12 left are batch 7's:** LoginScreen 3, ErrorBoundary 2, UpdateRequired 1, `/wa-connect`'s ConnectPage 5 and
+  `atoms.jsx:1069`.
+
+### Commit 14 — Part 2, batch 7: the close-out, and Rule 14's ceiling at 0
+
+- **What:** a hover description on the last 12 controls: the login screen's Email and Password fields and Log in; the error
+  boundary's Try again and Reload app; "This device needs refreshing"'s Refresh; `/wa-connect`'s Open MGT (signed out), the
+  Connect button, a failed step's Try again (named for the step, after its `aria-label`), Copy (the number id) and Back to MGT;
+  and `Collapsible`'s header, which every Settings section, the Tags editor and the List's "Completed & cancelled" fold draw.
+  The header reads "Show or hide the <title> section" from the `title` prop; all 16 callers pass a string, and a non-string
+  title gets no description. **Rule 14: 12 → 0, and `HOVER_CEILING` is 0**, so a new control without one fails the gate.
+- **No key named:** none of these surfaces is in the modal stack, and none has a key in the shortcut table. The login fields'
+  own Enter is the form's convention, not a table row, so it is not typed into the description.
+- **Pins:** none edited. Each `title` sits after an attribute the existing pins match, and the suite passed unchanged.
+- **Measured:** the Settings headers on DEV, read from the live DOM ("Show or hide the Restaurant section", Opening hours,
+  Booking durations, Preferences). The login screen in a headless Chromium context with no storage against the dev server
+  (signed out, so the Browser pane's DEV session was untouched and no password was typed): all three titles as written.
+  **Read from source and Rule 14:** the error boundary (needs a crash), Refresh (needs the schema gate tripped) and
+  `/wa-connect` (its own build, and it works only on an https deployment Meta lists).
+- **Docs:** DESIGN.md's rule already says Rule 14 fails a control without one, so it needed no change; the ceiling note in
+  `scripts/check-style-invariants.mjs` now records that batch 7 set it to 0. No surface was added, so GLOSSARY is unchanged.
+
+### Commit 15 — Reshuffle asks for Move tables
+
+- **What (Patryk, 2026-11-20, planning the version's last two features):** Reshuffle moves every unlocked party of the
+  day, and it was the one action that moves tables without asking the **Move tables** capability (`bookingAssign`): a
+  drag, Assign, Reassign and Unlock all ask it, and Reshuffle asked nothing. It asks now, at the press, before the
+  confirm opens. Staff hold Move tables by default (`STAFF`, `lib/roles.js`), so nobody's access changes on the day it
+  ships; an account with a deny on it gets "You don't have permission to move tables." and no confirm.
+- **One door:** App's new `openReshuffle()` is the only place the confirm opens (`refused("bookingAssign")`, then
+  `setConfirmReshuffle(true)`). The three ways in call it: the button on the Timeline and in the compact Summary
+  (`VA.onReshuffle` → `viewActionsRef.current.openReshuffle`, which replaces `setConfirmReshuffle` there), the "Tables
+  could be reshuffled" notice's button, and `R` (the shortcut table calls `K.openReshuffle()`; K keeps
+  `setConfirmReshuffle`, which Escape closes the confirm through). `forceReshuffle` is unchanged, so the Undo every
+  Reshuffle arms through `saveMove` is untouched.
+- **The notice's opener goes through the ref, and why (measured):** the first gate read 21 lint errors, all
+  `react-hooks/preserve-manual-memoization` across App.jsx: the React Compiler had given up on BookingApp. Linting
+  App.jsx variants through stdin settled it: HEAD 0 errors; HEAD plus `openReshuffle` in K, or in
+  `viewActionsRef.current` and `VA`, 0; plus the notice's prop as `function(){openReshuffle();}` or as `openReshuffle`
+  bare, 21. As `function(){viewActionsRef.current.openReshuffle();}`, 0 errors and HEAD's 6 warnings. The notice's
+  props go to `appBannerSections`, a call made during render, which `openReshuffle` must not reach. Why it trips the
+  compiler was not established, so `src/CLAUDE.md`'s hook-order list records the measurement, not a reason.
+- **The capability's line** in the Capabilities pop-up says it now: "Assign, drag or reshuffle bookings onto other
+  tables." (was "Assign or drag a booking to another table."), since it is what an admin reads when deciding who
+  holds it.
+- **Pins:** `tests/shortcuts.test.js`, R now records `["openReshuffle"]` (edited: the pin covered the whole call). New
+  in `tests/manual-assign.test.js`: `openReshuffle` asks first, `setConfirmReshuffle(true)` appears exactly once in
+  App, and each of the three openers goes through it.
+- **Measured on DEV** (an admin account, Today after the cutoff, "Optimiser: OFF"): the Timeline's Reshuffle and `R`
+  each opened "Reshuffle all bookings?". **Read from source and pinned, not measured:** the refusal itself. No DEV
+  account lacks Move tables, and putting a deny on the one DEV account would have taken drags away from it.
+- **Docs:** GLOSSARY gains the **Reshuffle button** row, which it never had. `src/CLAUDE.md`'s hook-order list gains
+  the line on a handler inside a render-time call.
+
+### Commit 16 — Reshuffle on today and every later day, orange when the check finds a better seating
+
+- **What (Patryk, 2026-11-20):** since v18.17.0 the Optimiser keeps the day (`applyOptKeep`). On a later day, and on
+  today with the switch ON, a save places only its own party, so the seating drifts from the best fit, and the fresh
+  pass (`planReshuffle` → `applyOpt`) came only from Reshuffle, which showed on today with the switch OFF. Reshuffle now
+  shows on today and every later day, whatever the switch says. A past day gets nothing, the notice included.
+- **One rule:** `reshuffleOffer({viewDate, today, autoOptimizer, suggest})` (`lib/booking-logic.js`) → `null` before
+  today, else `{lit}`. App draws from it (`reshuffleBtn`): TimelineView takes `reshuffleOn` / `reshuffleLit`, the
+  Summary `showOptimiser={toolbarFolded&&!!reshuffleBtn}` and `reshuffleLit`, scalars because the Summary is a memo.
+  The `R` key asks the same function, so the key and the button cannot disagree.
+- **Grey, and orange while it would help:** `BTN.quiet` at rest, `BTN.orange` on today with the Optimiser off (as it
+  always was) or while the notice's check fires. App's `suggestOn` is that check: `checkInefficent`, a day the
+  Optimiser owns, the Settings switch "Reshuffle suggestions", and today or later. Dismiss hides only the notice; the
+  button stays orange (Patryk). While the check lights it, its description adds ": moving some would free up more
+  capacity".
+- **Order:** Reshuffle first, then today's toggle, so Reshuffle keeps one place on every day. It no longer slides in
+  with the switch, so its `Presence` is gone (`index.css`'s slide comment now names the Today button alone).
+- **The notice** reads `suggestOn` too (`ineffShow=!reshuffled&&suggestOn&&dismissedIneff!==viewDate`). It had no
+  date floor and could show on a past day, since `optimizerActiveFor` is true there.
+- **The confirm** names the day away from today ("Reshuffle all bookings on Sun 22.11?", `formatDay`), and "Seated
+  bookings will not be moved." shows on today only, the one day that can have seated parties.
+- **Undo (Patryk's requirement on the plan):** no Undo code changed. Every way in ends in `forceReshuffle` →
+  `saveMove(…,"reshuffle",…)`, which arms the pill when the write lands, for the Settings time; `planUndo` restores the
+  snapshots verbatim, with no Optimiser pass, and takes the view to the reshuffled day. What was missing was proof
+  beyond one hand-made round trip on today. `tests/delete-undo.test.js` ("a Reshuffle, undone") now runs App's
+  pipeline end to end (`planReshuffle`, `withUndoDelta` with `undoDelta`'s sync, `planUndo`): a later day with four
+  parties moved; Reshuffle and unlock (tables, `_locked`, `_manual` and history all back, the "unlocked by Reshuffle"
+  line gone); today with a seated party running over (kept out of the snapshots by the sync, everyone else back); a
+  day with nothing to gain (no snapshots, so no pill); a held write replayed on a fresher list (undoes to that list).
+  **The fixtures go through `sanitize`**: hand-made rows lack the flags a pass writes (`_conflict`, `_manual`,
+  `_locked`), and the seated party read as moved until they did (measured in a probe).
+- **Two traps, both measured:**
+  1. **The React Compiler.** The first gate read 21 errors (`preserve-manual-memoization`, BookingApp skipped). Linting
+     App.jsx variants through stdin: the render-time `reshuffleOffer({...})` call was the trigger, and inside it,
+     App's `today` (`const today = todayStr()`). `reshuffleOffer({today:today})`, `reshuffleOffer(today)` and even
+     `formatDay(today)` gave 21 or 22 errors; `today:todayStr()`, `String(today)` or a literal gave 0 and HEAD's 6
+     warnings. App passes `todayStr()` there. `src/CLAUDE.md`'s hook-order line now covers `today` beside commit 15's
+     handler.
+  2. **The chunks.** `reshuffleOffer` first lived in `manual-assign.js`. `shortcuts.js` importing it from there moved
+     ~21 kB out of the main entry, and the 10 kB `customers` chunk with it, into the shared `atoms` chunk: entry
+     489.61 → 468.82 kB, `atoms` 127.47 → 159.11 kB, about +0.9 kB in all (both builds compared chunk by chunk, the
+     commit 15 tree built from `git archive`). The build runs no React Compiler, so the drop was not the trap above.
+     Moved to `booking-logic.js`, beside `optimizerActiveFor` and `unlockOffered`, which `shortcuts.js` already imports:
+     entry 489.95 kB, `atoms` 127.69 kB, `customers` 9.99 kB, the split as at commit 15.
+- **Pins:** new in `tests/manual-assign.test.js`, `reshuffleOffer`'s five cases, and App's `suggestOn`, `ineffShow`,
+  `reshuffleBtn`, both views' scalars, the order in `OptimiserControls`, the confirm's two sentences, and
+  `forceReshuffle`'s call (it passes no switch, so today ON and OFF and every later day get one pass). New in
+  `tests/quiet-buttons.test.js`, the fill ternary inside `mkBtn` on a `mgt-hover-scale` button. New in
+  `tests/shortcuts.test.js`, `R` on today and later days with either switch, nothing on a past day, and agreement with
+  `reshuffleOffer` on every day three either side of today. **Test edits:** `tests/compact-shell.test.js`'s
+  `showOptimiser` pin (it named `viewDate===todayStr()`, the condition that changed); `tests/shortcuts.test.js`'s
+  "O toggles the optimiser today; R asks to reshuffle only while it is off", split into the O test, unchanged, and
+  the new R tests, because its R half asserted the old rule. The `OptimiserControls` call keeps its first three
+  attributes, so `compact-shell`'s Summary pin stands as it was.
+- **Gate:** 489.95 kB / 145.28 kB gz · 4787 tests (from 4767) · lint 63 problems (0 errors, 63 warnings) · style OK,
+  hover descriptions 0 of ceiling 0.
+- **Measured on DEV, 1024×768 (the Browser pane)**, with Sun 22.11 staged by direct writes (`updatedAt` raised,
+  `baseUpdatedAt` the stored one, as another device would) and restored to the byte afterwards:
+  - Today, Optimiser OFF: `[Reshuffle]` orange, then `[Optimiser: OFF]`, description "Re-seat today's unlocked
+    bookings from scratch, once (R)". ON: Reshuffle grey (quiet fill, secondary ink, the field edge), toggle green.
+  - Sun 22.11: Reshuffle grey and alone at the same x (29), "this day's"; `R` opened "Reshuffle all bookings on Sun
+    22.11?" with no seated sentence.
+  - Iván Serrano staged 1 → 7, Marta Ruiz 2 → 6 locked by hand: the confirm offered "Reshuffle and unlock 1". The
+    plain Reshuffle moved Iván 7 → 1 and kept Marta (read from the database), pill "Tables re-optimised. · Undo";
+    Undo put Iván back on 7.
+  - "Reshuffle and unlock 1": Iván → 1, Marta → 2, unlocked, with "unlocked by Reshuffle"; pill "Tables
+    re-optimised, 1 unlocked. · Undo". Previous day to Sat 21.11, then Undo: the view went back to 22.11, Iván on 7,
+    Marta on 6, locked and hand-placed, and the history line gone.
+  - Nuria Soler (3) staged on 7+8 with the 4-top free: the notice showed and both Reshuffles were orange, the
+    toolbar's description adding the reason. Dismiss: notice gone, button still orange. Settings "Reshuffle
+    suggestions" off: grey, plain description; on again: orange, notice still dismissed for the day. The Shortcuts
+    tab lists "Reshuffle (today and later days)".
+  - Reshuffle then: Nuria → 9, Iván → 1, and the check stopped firing (grey). Undo: both back, orange again. **The
+    check does not fire right after a Reshuffle**, so the plan's stop-and-ask did not arise.
+  - A past day (Thu 19.11): no Reshuffle, no toggle, `R` opens nothing, no notice.
+- **Measured with a headless rig** (Chromium on a copy of the manual's capture profile, this worktree on :5179, the
+  profile's dark theme):
+  - **998×507, DPR 2, touch (the restaurant tablet):** the toolbar is folded; the opened Summary shows `[Reshuffle]`
+    orange and `[Optimiser: OFF]` at x 31 and 116 on today, and Reshuffle grey and alone at x 31 on 22.11. A real
+    pointer press on the Summary's Reshuffle, then the confirm's: Iván (staged on 7 again) → 1. **The pill was on
+    screen and reachable**: 58×32 at 546,361 inside 998×507, and topmost at its centre. A real click on Undo put Iván
+    back on 7 (database).
+  - **375×812:** the toolbar's left, x 25, with the toggle at 110 on today, alone on 22.11.
+  - **Not measured:** the grey ↔ orange ease itself. The hidden pane runs no frames, and one reading caught "Optimiser:
+    OFF" still green mid-transition; it was re-read after a forced frame.
+- **Docs:** GLOSSARY (Reshuffle button, inefficiency section, optimiser toggle); DESIGN.md (a control that is always
+  there wears the orange only while it would help); `src/components/CLAUDE.md` (OptimiserControls, the Summary's
+  `showOptimiser`); `src/lib/CLAUDE.md` (`reshuffleOffer`, and why it lives in `booking-logic.js`); `src/CLAUDE.md`
+  (the hook-order line).
+
+### Commit 17 — buttons keep their side on the tablet and the phone: the main screen and the banners
+
+- **What (Patryk, 2026-11-20):** a button that sits at the right on a big screen stays at the right on the tablet and
+  the phone, "as much as possible", for muscle memory. He called it a preference, not a rule, so there is no
+  `check:style` rule for it, and no new motion. The phone's bottom bar stays as his v18.2.0 choice left it. This commit
+  covers the main screen and the notification strip; commit 18 the modals, forms, Settings and the inbox. DESIGN.md has
+  a new passage, "A control keeps its side".
+- **The pattern:** a row's trailing controls become ONE group with `marginLeft: "auto"`, in place of
+  `justify-content: space-between`. With a sentence on a content basis (`flex: "1 1 auto"`) taking every spare pixel of
+  a single line, the two give the same layout. Once the sentence needs the whole row and the buttons wrap under it,
+  `space-between` spreads two buttons to the two edges and starts a lone one at the left. A group wraps as one and
+  keeps the right.
+- **Six banners, one change each:** Running late (No show and ✕; the `Presence` that eases No show stays inside the
+  group), Overlap (Reassign, ✕), Clash (Assign, ✕), Not on the grid (Assign), Unsettled (Settle), Table free (Book, ✕).
+- **The survey**, with the headless rig on this worktree (:5179): Daniel Prieto staged running late and Irene Campos on
+  a table that does not exist (99), both restored afterwards.
+
+  | Row | 1440 × 900 | 998 × 507 | 375 × 812 before | 375 × 812 after |
+  |---|---|---|---|---|
+  | Running late | one line, buttons right | one line, buttons right | No show at the left, ✕ at the right, 164px apart | both at the right, 8px apart, flush with the edge |
+  | Not on the grid | one line, Assign right | one line, Assign right | Assign at the left, 144px short of the edge | Assign flush with the right edge |
+
+  At 1440 and 998 the readings are the same before and after. Overlap, Clash, Unsettled and Table free were not
+  staged; they have the same row (a `1 1 auto` sentence, then the buttons) and got the same change, read from source.
+- **Left alone, read from source:** the reminder rows, Couldn't load and Tables could be reshuffled have zero-basis
+  sentences (`flex: 1`), so their buttons never leave the line; Couldn't save already puts its buttons in a
+  `marginLeft:auto` group; the Timeline toolbar's zoom group is v18.14.2's fix; Plan's legend has no right-hand group;
+  the opened Summary's actions row is `flex-end` with the Optimiser group `marginRight: "auto"`, so both sides hold.
+- **The compact header** (`toolbarFolded`, 998 × 507): Follow and zoom sat after the name (`marginRight:"auto"`), on
+  the left, where every larger screen shows them at the right of the Timeline card. On today the header's controls take
+  a line of their own, and v18.4.0 gave that line's left edge to the switcher (Patryk), so two readings of "keep the
+  side" disagree there. Measured:
+
+  | | today, Timeline (two rows) | a later day (one row) |
+  |---|---|---|
+  | before | Follow 180–256 and zoom 260–460 on the name's row; switcher 18–205 on row 2 | zoom 180–380 after the name; switcher 459–645 |
+  | D, the right end of the name's row (my recommendation) | Follow 703–779, zoom 783–982; switcher stays at 18 | zoom 249–449, right before the switcher |
+  | A, first among the controls, before Timeline/List/Plan | Follow 16–92, zoom 96–295 lead row 2; switcher 303–490 | zoom 251–451, right before the switcher |
+
+  Patryk chose A, told that on today it moves the switcher 285px off the left edge his v18.4.0 rule gave it. List, and
+  the actions (Walk-in 653, Find 904–940), are the same in all three.
+- **The fold: a `Reveal` held to its end.** In the new place the group's LEFT edge is the one that moves, because the
+  row holds the switcher still. Held to its start, as every horizontal Reveal was, the group slid toward the switcher
+  as it folded ("+" 415 → 547). `Reveal` takes `end` (`atoms.jsx`), and it took two alignments. In a flex row the
+  Reveal's box is a flex item, so its width resolves first, f × W mid-fold, and the grid then sizes its `fr` track
+  against that width, f × f × W, at the box's start: paused 117ms into a fold, the box was 28px and its track 4px.
+  With the inner track's `flex-end` alone the "+" dipped 46px and came back (the gap is (f − f²) × W, W/4 at its
+  peak). With the outer grid's `justifyContent: "end"` too, it held at x 415 in all 81 frames of a fold and an unfold.
+- **And a box that keeps it from squeezing.** Sampled on "+" alone, a `flexShrink: 0` box around the group read as
+  doing nothing, and I took it out. "+" sits on the pinned edge, so it could not have shown anything. Sampling every
+  button on a later day: without the box, "· Whole day" (a nested Reveal, minimum width 0) gave up 68px as the track narrowed and
+  "−" slid 251 → 320 while "+" held; with it, "−" 251–252, the level button 119px wide and "+" 415 in every frame, both
+  ways. The box is back, pinned, and the trap is in the `mgt-measurement-traps` skill. HEAD squeezed the same way:
+  its "+" moved 344 → 275 in the fold, with the group held to its start.
+- **On today** the header goes from two rows to one as the group folds, and back as it opens, so the controls change
+  line once each way (to List after ~105ms, back to Timeline after ~305ms). Each change shows one frame between the
+  two layouts, `useSharesLine` deciding the actions' `marginLeft:auto` from the previous frame's layout: Follow at
+  125 for one frame going to List, "+" still at 415 on row 2 for one frame coming back. Within each line the group holds
+  still, apart from a 4px settle (Follow 12 → 16 over two frames) as the last of the unfold lands on row 2. HEAD
+  measured the same one-frame step with the switcher, at (415,14) and (459,58). Opacity and width ease both ways on
+  both days.
+- **Unchanged at 1440 × 900 and 375 × 812:** `toolbarFolded` is false there, so the Reveal never mounts (0 inline grids
+  in the header, counted on today and a later day), and Follow and zoom stay in the Timeline card.
+- **Pins:** new in `tests/compact-shell.test.js`, the Reveal first in the header's controls group, before
+  `<ViewSwitcher`, with its `flexShrink:0` box (and the old `marginRight:"auto"` placement gone), and `end`'s two
+  alignments in `atoms.jsx`. **Test edits:** `tests/leaving-order.test.js` pins the whole `Reveal` signature, which
+  `end` joins; `tests/mobile-bar.test.js` found the controls block by `><ViewSwitcher` right after its tag, which the
+  Reveal now comes before, so it is anchored on the tag itself. What it checks is unchanged: no flex basis, and
+  `justifyContent:"flex-end",flexGrow:1`.
+- **Docs:** DESIGN.md ("A control keeps its side", and The compact layout's "What moves"); GLOSSARY (the compact
+  layout row); `src/components/CLAUDE.md` (`Reveal`'s `end`); the `mgt-measurement-traps` skill (a position read on
+  the edge you pinned).
+- **Gate:** 490.38 kB / 145.31 kB gz (from 489.95) · 4789 tests (from 4787) · lint 63 problems (0 errors, 63
+  warnings) · style OK, hover descriptions 0 of ceiling 0.
+
+### Commit 18 — buttons keep their side, in the modals, forms, Settings and the inbox
+
+- **What:** commit 17's preference carried to the rest of the app. Every row that wraps with a control at its right was
+  found in the source: `space-between` with `flexWrap`, or a growing block with a basis (`1 1 200px`) before a control,
+  in every component, plus every modal footer.
+- **The survey:** a generic probe in the rig over the topmost dialog, reporting every `flex-wrap: wrap` row that took
+  more than one line and where its last item landed, and every control's position, saved per surface and diffed
+  before and after. Surfaces: a new booking, Assign with a table picked, Walk-in with a table picked, an edit (from the
+  List), More, and Settings → General, Layout, Reminders and App, at 375 × 812, 998 × 507 and 1440 × 900, and at
+  320 × 640 too (a small phone). Admin was read in the Browser pane, at 1024 and 375, because the rig's account has no
+  Admin tab. The draft card could not be staged: none of DEV's ten conversations holds a draft.
+- **Flips measured, and fixed** (375 unless said):
+
+  | Row | Before | After |
+  |---|---|---|
+  | The booking form's footer (an edit; a new booking at 320) | Back and Save booking start line two at the left, x 18 and 94 | at the right, x 153 and 229, flush with the edge |
+  | Settings → General, Backup | Download backup at x 33 | x 181, flush |
+  | Settings → Layout, Kitchen limit | the stepper at x 33 | x 240, flush |
+  | Settings → App, Drag hold | the segment at x 33 | x 157, flush |
+  | Settings → Admin, Activity log | Open the log at x 33 (765 at 1024) | x 235, flush (765 at 1024) |
+
+- **Fixed by structure, read from source:** these hold today because their content fits, and flip once it outgrows
+  the line. More's Close and the Reminders tab's New reminder; a special day's Change (DEV has none to list); the full
+  draft card's confidence chip (about 350px of caption and chip in a card of about 320 at 375, an estimate, not a
+  reading). Assign's and Walk-in's Clear never wrapped with real content, even at 320, since Assign keeps a single
+  table for a party of two however many are tapped. With "Conflict: cannot use these tables together." put into the
+  status line at 375, the longest thing the card says, Clear wrapped to x 33 before and to 284 after, flush with the
+  card's content edge. Assign's Clear is a `RowSlot`, whose negative margin cancels the row's gap, so these two take
+  the mirror form: the row `flex-end`, the summary `marginRight: "auto"`.
+- **Left alone:** the form's Tables row (its left group is zero-basis, so Assign and Preferred never leave the line;
+  at 375 the label and the chip stack inside the group's 107px instead). The two late-booking steppers in General,
+  and Admin's people and invite rows: their controls sit at the left on every screen (the level menu takes the whole
+  line at 1024 too), so a wrap keeps their side. Every other modal footer (`flex-end`); the inbox's select bar, its
+  conversation header, the compact draft card and the recurring rules (already `marginLeft:auto` groups); the activity
+  log's search (it grows to fill its line); the linked-booking card (nothing at its right).
+- **At 998 and 1440 nothing moved:** every control on every surface read the same before and after. New booking,
+  Assign and Walk-in were first compared across a gap of 2¾ hours, in which the form's default time had moved (End
+  18:30 → 21:15): an availability line had arrived and no table was free to pick, so the readings differed for a
+  reason that was not the code. Re-run back to back with the page's clock fixed at noon (`page.clock.set_fixed_time`)
+  and HEAD's files swapped in for the before, they read the same at all three sizes.
+- **Pins:** new `tests/keeps-its-side.test.js`, one pin per row that keeps its side, commit 17's six banners included
+  (each also free of `space-between`). **Test edits:** `tests/drag-hold.test.js` quotes Drag hold's group style,
+  which gains `marginLeft: "auto"`; `tests/minor-findings.test.js` counts the two confidence chips by their source,
+  and the full card's now carries a style.
+- **Docs:** DESIGN.md ("A control keeps its side": the mirror form, what was measured, and what is not a flip);
+  `src/components/CLAUDE.md` (`RowSlot`'s margin is taken).
+- **Gate:** 490.40 kB / 145.32 kB gz (from 490.38) · 4800 tests (from 4789) · lint 63 problems (0 errors, 63
+  warnings) · style OK, hover descriptions 0 of ceiling 0.
+
+### Commit 19 — More's cells keep their edge on a desktop, and the phone's sheet is solid
+
+- **The report (Patryk, 2026-11-20):** five screenshots of More, two from Chrome on his Mac and three from an iPhone. On
+  the Mac the Week rows and the Month grid were barely there; on the iPhone they were clear white cards, and the page
+  ghosted through behind them ("Afternoon", "Timeline List Plan").
+- **Measured: the WIDTH, not the device.** The same Chrome at 375 × 812 drew the iPhone's look and at 1024 the Mac's.
+  `Overlay` is a full-screen sheet below 600px (`--bg-sheet-mobile`, rgba(240, 243, 248, 0.98)) and a card from 600px up
+  (`--bg-sheet`, rgba(255, 255, 255, 0.98), over the 25% scrim). The cells are `--bg-cal-cell` #fbfcfd with
+  `--border-input`, a 40% white rim. Computed styles and their composites, read in the page: a cell is **1.01:1** against
+  the card (edge 1.00) and **1.09:1** against the phone sheet (edge 1.10). It began with v18.14.0's L6
+  (`5a2ecae8`), which raised the card from 0.72 to 0.98; against the 0.72 card a cell was about 1.19:1. v18.18.0 had
+  changed none of More's colours. Dark is not affected: 1.28:1 on the card, 1.55:1 on the sheet.
+- **Patryk's choice: `--border-soft`** over `--field-edge` (#c3cad6, 1.63:1, shown to him beside it in a live preview).
+  It is the hairline DESIGN.md already gave a surface inside a near-opaque sheet, and the edge of every `Section` on the
+  same card (1.30:1 there). Then, on reading the two loose ends of the report, he put both into this commit:
+  - **the same rim in five more files** — `Summary.jsx` (the notes rows and `ShiftChip`), `PlanView.jsx` (the table
+    popover's rows), `FloorPlanEditor.jsx` (the inspector), `CustomersSettings.jsx` (the four totals) and `Settings.jsx`
+    (a standing booking's row) — all `--border-soft` now;
+  - **the phone's sheet solid**: `--bg-sheet-mobile` is #f0f3f8 / #1c1c1e, the colour 0.98 drew over `--bg-app` (and the
+    values Increase Contrast already gave it, so that block no longer names the token). `MOBILE_BAR` shares the token and
+    is solid with it. `--bg-sheet` stays at 0.98: under its scrim and blur nothing legible comes through.
+- **Measured after, live on DEV**, edge against what is around it, before → after: More's Week rows, 41 Month cells, the
+  key and the Stats tiles 1.00 → 1.30 on the card; the Week rows 1.10 → 1.19 on the phone sheet, which now reads
+  rgb(240, 243, 248) at alpha 1 with nothing behind it showing (screenshot at 375 × 812); Dark on the phone sheet 2.10.
+  The Summary's shift totals and notes rows 1.04 → 1.25; Plan's popover rows 1.09 → 1.17; Customers' totals and the
+  floor plan inspector 1.03 → 1.26. A standing booking's row could not be drawn (DEV has no standing bookings); it has
+  the totals' fill on the same Section, so the same composite. Before is the same element read with the old rim.
+- **Kept:** `--border-input` itself. Dark's `--field-edge` is `var(--border-input)`, so the token stays and only the
+  components stop drawing it.
+- **Pins:** `tests/week-view.test.js` (the four edges are `EDGE`, `--border-soft`, and no `--border-input` is left);
+  `tests/contrast.test.js` (the phone's sheet is solid at its old composite in both themes; no component, and nothing
+  App reads, draws `--border-input`). Each fails on the tree before this commit.
+- **Docs:** DESIGN.md (two new rules under "A surface that carries data is OPAQUE", the field-edge paragraph, the
+  Increase Contrast list, and `MOBILE_BAR`'s sheet).
+- **Gate:** 490.40 kB / 145.33 kB gz (from 145.32) · 4804 tests (from 4800) · lint 63 problems (0 errors, 63
+  warnings) · style OK, hover descriptions 0 of ceiling 0.
+
+### /code-review (max), 2026-11-20 — the ship run
+
+The review of the whole branch, at `max`, done inline (no subagents). Three findings survived verification, and each is fixed in a
+commit of its own; what it disproved is listed after them.
+
+- **Fit to screen, turned off with no width stored, narrowed the app (fix 1).** It stored `fitAppWidth(winW)`, the window rounded
+  DOWN to 50, while the shell it replaced had been drawn at the window less its two 16px sides, so a remainder over 32 shrank the app
+  at the tap. **Measured on DEV** at the tablet's 998×507 with both keys cleared: the shell 966 wide, then 950 after the tap (stored
+  950). Arithmetic for other screens: 12px at 1194, 8px at 1440, 4px at 1536. It now stores `keptAppWidth(winW)`, rounded UP to 50:
+  the same steps read 966 and 966, stored 1000, the stepper showing "1000 px". `fitAppWidth` is unchanged, so ⇧+ / ⇧− still step
+  from it while the switch is on. `tests/app-width-fit.test.js`: the stored width is never under the shell at eight common widths,
+  and is a step of 50.
+- **GLOSSARY.md had no row for the hover description (fix 2).** The version gives every control one, and the term is used by
+  DESIGN.md, the atoms' `description` prop and `check:style` Rule 14, but the vocabulary file did not name it (CLAUDE.md: "A version
+  that adds a user-visible surface adds its row there, in the same PR"). The row is in section 4, Labels and chips.
+- **A comment sent readers to the wrong file (fix 3).** App's note above `reshuffleBtn` said `reshuffleOffer` is in
+  `lib/manual-assign.js`; commit 16 moved it to `lib/booking-logic.js` on purpose, because importing it from manual-assign.js into
+  `shortcuts.js` moved ~21 kB out of the entry. The comment now names the right file and says not to move it back.
+
+**The ~9 kB drop in the main entry at commit 13, explained (the hand-off's open question).** Commit 13 only added strings, and the
+entry went from 498.68 to 489.21 kB. **Measured** by building commits 12 (`e6f68921`) and 13 (`452fa785`) side by side with this
+worktree's install, which `npm ls` passes and whose lockfile has not changed since commit 12: the entry 498.68 → 489.21 (−9.47),
+the shared `atoms` chunk 117.65 → 127.41 (+9.76), InboxPanel +2.41, PhotoViewer +0.08, every other chunk within 0.03; all JS
+together 1,401,607 → 1,404,342 bytes, **+2.7 kB**. The shortcut table's strings ("Toggle Summary panel", "Mark seated", "Week /
+Month view") are in `index-*.js` at commit 12 and in `atoms-*.js` at commit 13: `lib/shortcuts.js` moved. Commit 13 made the
+inbox's two lazy chunks import `keyHint`, and with them every lazy chunk that imports `atoms.jsx` also imports `lib/shortcuts.js`
+(Settings, the activity log, Find a booking, Print, special days, the inbox, the photo viewer), and Rolldown put it in the chunk
+it shares with atoms. The entry imports `atoms` statically, so a cold start loads the same code: re-chunking, not weight, the
+mechanism commit 16 measured with `manual-assign.js`. **Not a stale install either**: rebuilt here, commit 12 is 498.68 again.
+
+**Checked and disproved:**
+- The Esc and Enter keys named in 40 descriptions (`keyHint("close")`, `keyHint("confirm")`): each surface's key does what its
+  description says, through `escapeAction` / `enterAction` or the surface's own handler (the inbox's capture-phase Escape for the
+  templates editor, the bulk-delete confirm and select mode; ManualModal's own Enter). The inbox's letter keys match its handler too.
+- The swap trim seating a party off the row it was dropped on: over 2,850 generated swaps on the real layout (every party on one
+  table or a pair, beside a party on any declared combo of up to three) it happens in one shape, a party of 5 dropped on row 5 next to
+  a party on 3+4+5, where 3+4 is the only pair inside the set that seats five. That is the logged rule, fewest tables first and the
+  dropped row breaking ties, and not a defect.
+- `joinFirstMatters` is given the stored `{id, capacity}` tables, and its "false is a promise" argument holds for every size in a
+  band (a table too small for the smallest party is too small for every one).
+- The Summary's new props are stable (`guestTags` is App's `guestTagMap` memo, `onEdit` is `VA.onEdit`), so its memo still holds.
+- The notes list's table column: `TBadge` draws 10px of padding and a 1px border each side, `NOTE_BADGE_EDGE`'s 22.
+- "Other code…" hands `pickPhoneCode` an iso, as a pinned code's `TimeChip` does; `R` reads `env.today`, which is `todayStr()`.
+- The upward menu's `mgt-pop-up-*` keyframes: both reduce-motion rules match `*`, so they cover it.
+- `useMenuRoom`'s `transitionend` listener: one layout read per transition end and an idempotent write. PlanView's `glyphTitle`:
+  13 tables, each one filter of the day's bookings per render. Neither measurable.
+- `--bg-sheet-mobile` is defined in both themes. The cheat sheet's own keys lost no row in the move to `lib/shortcuts.js`, and More's
+  `S` was already WeekView's. The generated-layout test restores `DEFAULT_LAYOUT` after each case. The Needs action badge and its
+  `aria-describedby` show on the same condition.
+- ROADMAP: no entry is resolved by this version, and none was added.
+- **Gate after the review:** 490.47 kB / 145.32 kB gz · 4805 tests (from 4804, fix 1's) · lint 63 problems (0 errors, 63
+  warnings) · style OK, hover descriptions 0 of ceiling 0.

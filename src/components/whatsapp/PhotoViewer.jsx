@@ -14,6 +14,7 @@
 import { useWaMedia } from "../../hooks/useWaMedia";
 import { formatClockTime, mediaLabel } from "../../lib/whatsapp";
 import { BTN, S, R, T, FW, SP, IC } from "../../lib/constants";
+import { keyHint } from "../../lib/shortcuts";
 import { Overlay, AutoHeight, mkBtn } from "../atoms";
 import { PhotoIcon } from "./WaIcons";
 
@@ -35,11 +36,11 @@ export function PhotoViewer({ photo, onClose }) {
           44px floor was the CONTENT's and it measured 66px (Patryk: "gigantic"),
           stretching Done beside it to match. */}
       {m.status === "ready" ? (
-        <a className="mgt-hover-scale mgt-press" href={m.url}
+        <a className="mgt-hover-scale mgt-press" href={m.url} title="Save the photo to this device"
           download={"whatsapp-photo-" + msg.id + (PHOTO_EXT[String(m.type || "").split(";")[0].trim()] || ".jpg")}
           style={mkBtn({ minHeight: 44, padding: "10px 18px", boxSizing: "border-box", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" })}>Save photo</a>
       ) : null}
-      <button className="mgt-hover-scale mgt-press" onClick={onClose}
+      <button className="mgt-hover-scale mgt-press" onClick={onClose} title={"Close the photo" + keyHint("close")}
         style={mkBtn({ minHeight: 44, padding: "10px 18px", background: BTN.quiet })}>Done</button>
     </div>
   );

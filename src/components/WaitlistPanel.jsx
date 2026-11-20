@@ -67,6 +67,7 @@ import { formatDay, clockTime } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
 import { tagLabels } from "../lib/tags";
 import { markArmed, armSettled } from "../lib/arm-guard";
+import { keyHint } from "../lib/shortcuts";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { useLeavingOrder } from "../hooks/useLeavingOrder";
 import { Overlay, ModalTitle, mkBtn, mkDangerBtn, AutoHeight, Reveal } from "./atoms";
@@ -123,9 +124,11 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
             className="mgt-hover-scale"
             aria-label={"Book ("+party+")"}
             style={mkBtn({fontSize: T.body,background:"var(--app-success-solid)",minHeight:36})}
+            title={"Book "+who+" now, the form filled in from the waitlist"}
             onClick={function(){onBook(w);}}>Book</button><button
             className="mgt-hover-scale mgt-press"
             aria-label={(arming?"Confirm — remove (":"Remove (")+party+")"}
+            title={arming?"Take "+who+" off the waitlist for good":"Take "+who+" off the waitlist (asks for a second tap)"}
             style={mkDangerBtn({fontSize: T.body,minHeight:36})}
             onClick={function(){if(arming){if(!armSettled())return;onRemove(w.id);setConfirmId(null);}else{markArmed();setConfirmId(w.id);}}}><TrashIcon size={IC.control} />{arming?"Confirm — remove":"Remove"}</button></div></div>
     );
@@ -154,6 +157,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
     <div style={{display:"flex",justifyContent:"flex-end"}}><button
         className="mgt-hover-scale mgt-press"
         style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
+        title={"Close the waitlist"+keyHint("close")}
         onClick={onClose}>Done</button></div>
   );
 
