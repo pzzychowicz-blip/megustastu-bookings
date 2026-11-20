@@ -42137,3 +42137,6 @@ commit of its own; what it disproved is listed after them.
   the same steps read 966 and 966, stored 1000, the stepper showing "1000 px". `fitAppWidth` is unchanged, so ⇧+ / ⇧− still step
   from it while the switch is on. `tests/app-width-fit.test.js`: the stored width is never under the shell at eight common widths,
   and is a step of 50.
+- **GLOSSARY.md had no row for the hover description (fix 2).** The version gives every control one, and the term is used by
+  DESIGN.md, the atoms' `description` prop and `check:style` Rule 14, but the vocabulary file did not name it (CLAUDE.md: "A version
+  that adds a user-visible surface adds its row there, in the same PR"). The row is in section 4, Labels and chips.

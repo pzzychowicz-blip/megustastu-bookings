@@ -127,6 +127,7 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | Tinted panel with a mark, a heading and a list under it — the Blocked list, a guest's Past bookings / No-shows, the kitchen-busy notice | **alert panel** (`AlertPanel` + `AlertRow`, `AlertPanel.jsx`) | The notification strip's section shape for a titled LIST, as `InlineAlert` is for one sentence. Picks a `role` from `ALERT_TONES`, which supplies tone AND tint as one decision. A panel that collapses (`onHeaderClick`) has a real **toggle button** as its heading, with `aria-expanded` (v18.3.0); the header's own buttons sit beside it, never inside it. |
 | The coloured pill at the top of a modal | **title pill** (`ModalTitle`) | An `<h2>` that also names the dialog. Create/act surfaces wear their action's colour; configure/read surfaces wear neutral grey. |
 | Small mark at the top of a section | **section mark** (`SectionMark`) | The section's icon at header size. |
+| The browser's tooltip over a control, e.g. "Open the WhatsApp inbox (I)" | **hover description** (`title`; `description` on an atom that draws the control; the key from `keyHint`, `lib/shortcuts.js`) | v18.18.0. Every button, field, switch, link and chip has one: what pressing it does, starting with a verb, with the key last where one works there. Mouse only, so the tablets and phones never show it, and the meaning still has to be on the control. `check:style` Rule 14 fails a control without one, and a key typed in by hand. How to write one: `DESIGN.md`, "Every control carries a hover description". |
 
 ---
 
