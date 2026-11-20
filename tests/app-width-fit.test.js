@@ -14,7 +14,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { appCode } from "./app-source.js";
-import { fitAppWidth } from "../src/hooks/useShellPrefs.js";
+import { fitAppWidth, keptAppWidth } from "../src/hooks/useShellPrefs.js";
 
 const read = (f) => readFileSync(new URL("../src/" + f, import.meta.url), "utf8");
 const code = (f) => stripComments(read(f)).join("\n");
@@ -45,8 +45,23 @@ describe("the switch", () => {
   it("turned off with no width stored, keeps the width on screen and stores it, so nothing jumps", () => {
     const toggle = hook.slice(hook.indexOf("function onToggleAppWidthFit("), hook.indexOf("const [reduceMotion,setReduceMotion]"));
     expect(toggle).toContain("if(storedAppWidth()===null){");
-    expect(toggle).toContain("const v=fitAppWidth(winW);");
+    expect(toggle).toContain("const v=keptAppWidth(winW);");
     expect(toggle).toContain('try{localStorage.setItem("mgt-appwidth",String(v));}');
+  });
+  // /code-review (v18.18.0): it stored fitAppWidth, rounded DOWN, and the shell had
+  // been drawn at the window less its two 16px sides, so a remainder over 32 shrank
+  // the app at the tap: 966 → 950 on the restaurant tablet, measured on DEV.
+  it("the width it stores is never under the shell it replaces, and is a step of the stepper", () => {
+    const SIDES = 32;
+    [998, 1024, 1194, 1280, 1366, 1440, 1536, 1920].forEach((w) => {
+      const v = keptAppWidth(w);
+      expect(v, "at " + w).toBeGreaterThanOrEqual(w - SIDES);
+      expect(v % 50, "at " + w).toBe(0);
+    });
+    expect(keptAppWidth(998)).toBe(1000);
+    expect(fitAppWidth(998)).toBeLessThan(998 - SIDES);   // the width that shrank it
+    expect(keptAppWidth(375)).toBe(900);
+    expect(keptAppWidth(3000)).toBe(2400);
   });
   it("never reaches the database: it is this device's", () => {
     const toggle = hook.slice(hook.indexOf("function storeFitOff("), hook.indexOf("const [reduceMotion,setReduceMotion]"));

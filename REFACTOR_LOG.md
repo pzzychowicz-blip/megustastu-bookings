@@ -42124,3 +42124,16 @@ every call.
   Increase Contrast list, and `MOBILE_BAR`'s sheet).
 - **Gate:** 490.40 kB / 145.33 kB gz (from 145.32) · 4804 tests (from 4800) · lint 63 problems (0 errors, 63
   warnings) · style OK, hover descriptions 0 of ceiling 0.
+
+### /code-review (max), 2026-11-20 — the ship run
+
+The review of the whole branch, at `max`, done inline (no subagents). Three findings survived verification, and each is fixed in a
+commit of its own; what it disproved is listed after them.
+
+- **Fit to screen, turned off with no width stored, narrowed the app (fix 1).** It stored `fitAppWidth(winW)`, the window rounded
+  DOWN to 50, while the shell it replaced had been drawn at the window less its two 16px sides, so a remainder over 32 shrank the app
+  at the tap. **Measured on DEV** at the tablet's 998×507 with both keys cleared: the shell 966 wide, then 950 after the tap (stored
+  950). Arithmetic for other screens: 12px at 1194, 8px at 1440, 4px at 1536. It now stores `keptAppWidth(winW)`, rounded UP to 50:
+  the same steps read 966 and 966, stored 1000, the stepper showing "1000 px". `fitAppWidth` is unchanged, so ⇧+ / ⇧− still step
+  from it while the switch is on. `tests/app-width-fit.test.js`: the stored width is never under the shell at eight common widths,
+  and is a step of 50.

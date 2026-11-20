@@ -124,6 +124,14 @@ function readAppWidthFit(){
 export function fitAppWidth(winW){
   return Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,Math.floor(winW/50)*50));
 }
+// When it is turned off with no width stored, the width stored instead: the
+// window's, rounded UP to 50. The shell fills the window less its 16px sides, and
+// rounding down can land under that (v18.18.0 /code-review, measured on DEV at the
+// tablet's 998: fitAppWidth's 950 under a 966px shell, so the app narrowed 16px at
+// the tap). Up is never under it, and stays on the stepper's 50s.
+export function keptAppWidth(winW){
+  return Math.max(APP_WIDTH_MIN,Math.min(APP_WIDTH_MAX,Math.ceil(winW/50)*50));
+}
 
 // v17.5.0: the persisted Split View, per device. Restored on load so a split
 // survives a reload/redeploy — losing your layout on every refresh would make
@@ -374,9 +382,9 @@ export function useShellPrefs({
     }
     // Off brings the stored width back. With none stored it keeps the width on
     // screen, which it stores, so the app does not jump to the old default (the
-    // screen less 300px).
+    // screen less 300px), nor shrink by the rounding (`keptAppWidth`).
     if(storedAppWidth()===null){
-      const v=fitAppWidth(winW);
+      const v=keptAppWidth(winW);
       try{localStorage.setItem("mgt-appwidth",String(v));}catch{/* ignore */}
       setAppWidth(v);
     }
