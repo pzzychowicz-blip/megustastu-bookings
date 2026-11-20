@@ -1069,6 +1069,7 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
       <button /* @no-lift .mgt-ac-row carries its own hover treatment via --row-bg */
         type="button"
         aria-expanded={open}
+        title={typeof title === "string" ? "Show or hide the " + title + " section" : undefined}
         /* v18.4.0 (Patryk): `mgt-nopress`. The header is a button element, so the
            universal press dip shrank a row hundreds of px wide to 96% and its
            title slid inward and back on every tap ("the text looks sharp").

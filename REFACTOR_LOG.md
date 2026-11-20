@@ -41822,3 +41822,22 @@ every call.
   was restored), the "Accept at" time chips (no DEV draft offers other times), the photo viewer, Retry and the file picker.
 - **The 12 left are batch 7's:** LoginScreen 3, ErrorBoundary 2, UpdateRequired 1, `/wa-connect`'s ConnectPage 5 and
   `atoms.jsx:1069`.
+
+### Commit 14 — Part 2, batch 7: the close-out, and Rule 14's ceiling at 0
+
+- **What:** a hover description on the last 12 controls: the login screen's Email and Password fields and Log in; the error
+  boundary's Try again and Reload app; "This device needs refreshing"'s Refresh; `/wa-connect`'s Open MGT (signed out), the
+  Connect button, a failed step's Try again (named for the step, after its `aria-label`), Copy (the number id) and Back to MGT;
+  and `Collapsible`'s header, which every Settings section, the Tags editor and the List's "Completed & cancelled" fold draw.
+  The header reads "Show or hide the <title> section" from the `title` prop; all 16 callers pass a string, and a non-string
+  title gets no description. **Rule 14: 12 → 0, and `HOVER_CEILING` is 0**, so a new control without one fails the gate.
+- **No key named:** none of these surfaces is in the modal stack, and none has a key in the shortcut table. The login fields'
+  own Enter is the form's convention, not a table row, so it is not typed into the description.
+- **Pins:** none edited. Each `title` sits after an attribute the existing pins match, and the suite passed unchanged.
+- **Measured:** the Settings headers on DEV, read from the live DOM ("Show or hide the Restaurant section", Opening hours,
+  Booking durations, Preferences). The login screen in a headless Chromium context with no storage against the dev server
+  (signed out, so the Browser pane's DEV session was untouched and no password was typed): all three titles as written.
+  **Read from source and Rule 14:** the error boundary (needs a crash), Refresh (needs the schema gate tripped) and
+  `/wa-connect` (its own build, and it works only on an https deployment Meta lists).
+- **Docs:** DESIGN.md's rule already says Rule 14 fails a control without one, so it needed no change; the ceiling note in
+  `scripts/check-style-invariants.mjs` now records that batch 7 set it to 0. No surface was added, so GLOSSARY is unchanged.

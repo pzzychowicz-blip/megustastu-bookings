@@ -212,6 +212,8 @@
 //
 // It lands with a CEILING, the way `lint` has `--max-warnings`: each batch of
 // Part 2 describes a set of screens and lowers it, and the last sets it to 0.
+// Batch 7 (v18.18.0 commit 14) did: every control in the tree has one, so the
+// ceiling now holds at 0 and the next undescribed control fails the gate.
 // The ceiling is exact in both directions on the app's own tree. Over it is a
 // control added without a description; under it is a batch that forgot to
 // lower it, which would let the next undescribed control in for free. A fixture
@@ -220,7 +222,7 @@
 //
 // Excluded: the WhatsApp simulator (sandbox builds only, stripped from
 // production by vite.config.js's `stripSimulator`).
-const HOVER_CEILING = 12;
+const HOVER_CEILING = 0;
 const DESCRIBED_ATOMS = ["Toggle", "Stepper", "MiniStepper", "HourStepper", "TimeChip", "SearchField", "DateField", "CountryPicker", "TagChips"];
 const HOVER_SKIP = [/[\\/]WaSimulator\.jsx$/];
 const CONTROL_ROLES = /^(button|switch|menuitem|menuitemradio|menuitemcheckbox|tab|option|link|checkbox|radio)$/;

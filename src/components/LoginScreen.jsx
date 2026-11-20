@@ -112,6 +112,7 @@ export function LoginScreen() {
           <input
             type="email"
             aria-label="Email"
+            title="The email address of your staff account"
             autoComplete="username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -123,6 +124,7 @@ export function LoginScreen() {
           <input
             type="password"
             aria-label="Password"
+            title="The password of your staff account"
             autoComplete="current-password"
             // v18.3.0 (N9): the keyboard's own key reads "go". On an iPhone the
             // accessory bar covers the card's Log in button while this field
@@ -145,6 +147,7 @@ export function LoginScreen() {
           ) : null}</Reveal></div>
           <button
             onClick={handleLogin}
+            title="Log in with this email and password"
             disabled={loading}
             className="mgt-hover-scale"
             style={{
