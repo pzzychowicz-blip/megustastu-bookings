@@ -41402,6 +41402,12 @@ yes**, each commit below.
   what is written.
 - **Measured after**, the same six drags: Noel onto row 1 → Noel `1`, Seba `9`; onto row 2 → `2` / `9`; Seba onto 9 → `9` / Noel `1`;
   the same with the Optimiser off; every day `verifyClean`. Two parties that each need their whole set still trade whole sets.
+- **On DEV (2026-11-20), with a real drag:** a mouse drag paced over frames (4px every 20ms; the block lifted, so the drag armed),
+  Noel (1, on 9) and Seba (4, on 1+2) staged at the same time on a future day, which the Optimiser owns, and on today after the
+  cutoff ("Optimiser: OFF", twelve other bookings, three of them later on 1, 2 and 9). Both days gave the node results: onto row 1 →
+  Noel `1` (locked) and Seba `9`, with 2 left free; onto row 2 → `2` / `9`; Seba onto 9 → Seba `9`, Noel `1`. The hint read "Swaps
+  with Seba" ("Swaps with Noel" for the reverse), the toast "Noel and Seba — tables swapped." with Undo, and each Undo put back
+  Noel `9` / Seba `1+2`. None of the day's other bookings moved.
 
 `tests/drop-plan.test.js` (both rows of a joined pair, the reverse drag, a whole-set trade, and 400 generated days with parties on
 joined sets: every swap leaves both parties inside the set they traded for, seated, on the fewest tables that seat them. With the old
