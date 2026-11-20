@@ -152,7 +152,7 @@ describe("it is this device's switch, on by default", () => {
   });
   it("has one switch, in the Timeline group, and the view takes it as a scalar", () => {
     const settings = code("components/Settings.jsx");
-    expect(settings).toMatch(/<Toggle label="Tap an empty cell to book" on=\{cellBook\} onClick=\{onToggleCellBook\} \/>/);
+    expect(settings).toMatch(/<Toggle label="Tap an empty cell to book" description="[^"]+" on=\{cellBook\} onClick=\{onToggleCellBook\} \/>/);
     expect(settings.indexOf('label="Tap an empty cell to book"')).toBeGreaterThan(settings.indexOf(">Timeline<"));
     expect(appCode()).toMatch(/cellBook=\{cellBook\}\s+onNewAt=\{VA\.onNewAt\}/);
   });

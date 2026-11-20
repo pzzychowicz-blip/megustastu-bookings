@@ -1177,9 +1177,11 @@ export function BookingFormModal({
           no tags in the list (Settings → Customers → Tags) is not drawn. */}{guestTagChoices.length?<Fld label="Guest tags"><TagChips
           tags={guestTagChoices}
           on={guestTagsOn}
+          description={function(label){return "Add "+label+" to this guest's tags on all their bookings, or take it off";}}
           onToggle={function(id){setForm(function(f){return Object.assign({},f,{guestTagEdits:toggleTagEdit(f.guestTagEdits,guestTagsBase,id)});});}} /></Fld>:null}{occasionChoices.length?<Fld label="Occasion"><TagChips
           tags={occasionChoices}
           on={form.tags}
+          description={function(label){return "Mark this visit as "+label+", or take it off";}}
           onToggle={function(id){setForm(function(f){const cur=cleanTagIds(f.tags);return Object.assign({},f,{tags:cur.indexOf(id)>=0?cur.filter(function(x){return x!==id;}):cleanTagIds(cur.concat([id]))});});}} /></Fld>:null}{/* v16.3.0: deposit / prepayment amount (€). Empty = none.
           v18.3.1: `inputMode="numeric"`, the digit pad (Patryk, on the iPhone).
           Not "decimal": on a Spanish-locale phone that pad types a comma, which

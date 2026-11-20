@@ -38,6 +38,7 @@ import { Overlay, Fld, InlineAlert, ModalTitle, Toggle, Reveal, RowSlot, mkBtn, 
 import { FoldRows } from "./FoldRows";
 import { CloseIcon } from "./Icons";
 import { todayStr, wallClock } from "../lib/day";
+import { keyHint } from "../lib/shortcuts";
 
 // Mon-first display order; `i` is the underlying getDay() index stored in
 // recurrence.days. Sun is at the end (index 0).
@@ -127,6 +128,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <button
           onClick={onCancel}
+          title={"Close the reminder, asking first if anything changed" + keyHint("close")}
           className="mgt-hover-scale"
           style={mkBtn({ minHeight: H.touch, padding: "10px 18px", background: BTN.quiet })}
         >
@@ -135,6 +137,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
         <button
           onClick={() => { if (!err) onSave(); }}
           disabled={!!err}
+          title={"Save the reminder and close it" + keyHint("confirm")}
           className="mgt-hover-scale"
           // v17.15.0: was minHeight 40, the only modal-footer decision button
           // in the app below the 44 floor (H.touch is "decision surfaces only,
@@ -181,6 +184,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             onChange={(e) => updText(e.target.value)}
             rows={2}
             placeholder="e.g. Place order to Coca Cola today"
+            title="What the reminder says when it comes up"
             className="mgt-hover-scale"
             style={mkArea()}
           />
@@ -195,6 +199,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                 <input
                   type="time"
                   aria-label={"Time " + (i + 1)}
+                  title={"Time " + (i + 1) + ": a time of day the reminder comes up"}
                   value={t}
                   onChange={(e) => updTime(i, e.target.value)}
                   className="mgt-hover-scale"
@@ -208,6 +213,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                       // v18.2.0 phase 63: the editors' quiet × (`mkRemoveX`), at
                       // the time field's own height, and NAMED — it was a solid
                       // red square with no accessible name at all.
+                      title={"Remove time " + (i + 1) + ", so the reminder no longer comes up then"}
                       aria-label={"Remove time " + (i + 1)}
                       style={mkRemoveX(H.control)}
                     >
@@ -219,6 +225,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             )}</FoldRows>
             <button
               onClick={addTime}
+              title="Add another time of day for the reminder"
               className="mgt-hover-scale"
               style={mkBtn({ minHeight: 36, padding: "6px 12px", fontSize: T.body, background: BTN.quiet })}
             >
@@ -231,6 +238,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           <div style={{ display: "flex", gap: 6 }}>
             <button
               onClick={() => setType("once")}
+              title="Bring the reminder up on one date only"
               className="mgt-hover-scale"
               style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "once" ? S.accent : BTN.quiet })}
             >
@@ -238,6 +246,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
             </button>
             <button
               onClick={() => setType("weekly")}
+              title="Bring the reminder up every week, on the days chosen"
               className="mgt-hover-scale"
               style={mkBtn({ flex: 1, minHeight: 40, background: rec.type === "weekly" ? S.accent : BTN.quiet })}
             >
@@ -253,6 +262,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                so it rides in inputProps with `min`. */
             <DateField
               value={rec.date || ""}
+              description="The date the reminder comes up"
               onChange={(e) => setDate(e.target.value)}
               style={mkInp()}
               inputProps={{ id: fid, min: today }}
@@ -269,6 +279,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                   <button
                     key={d.i}
                     onClick={() => toggleDay(d.i)}
+                    title={"Add " + d.s + " to the reminder's days, or take it off"}
                     className="mgt-hover-scale"
                     style={mkBtn({ flex: 1, minWidth: 48, minHeight: 40, padding: "8px 6px", fontSize: T.body, background: sel ? S.accent : BTN.quiet })}
                   >
@@ -295,7 +306,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
               A name that contains NEITHER word satisfies both states, and
               keeps the rule this version is built on: aria-checked carries the
               state, the name never does. */}
-          <Toggle label="Reminder status" on={draft.active} onClick={toggleActive} />
+          <Toggle label="Reminder status" description="Pause or resume this reminder" on={draft.active} onClick={toggleActive} />
           <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.semi }}>
             {draft.active ? "Active" : "Inactive"}
           </span>

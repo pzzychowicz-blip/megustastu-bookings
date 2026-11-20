@@ -41746,3 +41746,45 @@ every call.
   (Enter)", "Keep the booking (Esc)"); Print (whose hour steppers were reworded on reading: "the printed timeline's first hour");
   the special day; and the waitlist ("Take Test 4 off the waitlist (asks for a second tap)"). The block editor, the seat clash and
   note, the kitchen, the voucher prompts and the reshuffle confirm were not opened; they are read from source and by Rule 14.
+
+### Commit 12 — Part 2, batch 5: Settings
+
+- **What:** a hover description on every control in Settings: the tab bar (with its ← → keys), every General section (the name
+  and currency boxes, the pinned countries, the time zone, the weekday hours, special days, shifts, the Optimiser's cutoff, the
+  duration tiers, separation, running late, the warnings, table turns, standing bookings, the preferences and the backup), all of
+  Layout (tables, combos, table priorities, cross-zone combos, swap rules, pick rules, the floor-plan editor and the kitchen
+  limit), Customers and its tag editor, Vouchers, Reminders and the reminder editor, WhatsApp's two switches, usage and connect
+  link, App, Admin (modules, people, invitations, the capability grid's Done, retention) and the activity log; App's Settings
+  Close; and the fired reminder's Snooze and Done (Patryk put them here). **Rule 14: 235 → 56.** The batch was 179 sites: the
+  hand-off's per-file counts add to 179, and its total said 190.
+- **`TagChips` takes `description` and joined `DESCRIBED_ATOMS`**, on batch 4's `CountryPicker` precedent: a chip means a
+  different thing at each of its four callers (a guest tag in the form and in Customers, the visit's occasion in the form, a
+  filter in the List), so Rule 14 asks each call site. Here it is a FUNCTION of the tag's label, because one call draws a row of
+  chips. The form and the List are batch 3 and 4 files; their two call sites are described here. `tests/style-check.test.js`'s
+  atom list gained it (4765 tests, one more).
+- **`GsTextField` and the floor-plan editor's `Step` take a `description`** inside their own files (one caller each file, so
+  Rule 14 reads the inner tag): the name and currency boxes, and every editor stepper ("Decrease table 3's rotation, 15° at a
+  time").
+- **Keys named only where answered:** Esc on Settings' Close, the activity log's Done, the capability grid's Done and the reminder
+  editor's Back; Enter on the reminder editor's Save (`enterAction` saves a valid draft); ← → on the tabs; N on New reminder;
+  ⇧D on Dark mode.
+- **Older titles rewritten to the rules** (the batch-2 decision): Layout's "Move up in rank", "Remove", "Add a table", "Rename
+  table", "Remove table", "Move left/right", "Remove from group", "Remove whole group", "Remove combo", four "Remove rule"s and
+  the combo rule's "Preferred — tap to avoid instead" (which stated the state); General's "Copy this day's hours to all days"
+  (now names the day) and the tier ×'s "Remove this tier" and "Tap again to remove"; the activity log's "Open this booking";
+  the voucher copy's "Copy the number". **Kept on purpose:** Layout's `title="Save name"` and `title="Cancel"`, which
+  `tests/a11y.test.js` pins as deliberately static single-instance controls.
+- **Pins:** shaped by placement where the pin is a run of attributes (the tab bar's `onClick` then `aria-pressed`, the drag-hold
+  segment's `aria-pressed` then `onClick`, the reminder's remove-time `aria-label` then `style`, the tier stepper's `who` then
+  `value`). **Seven tests edited, each where the pin was the whole tag:** the six App-tab switches' `<Toggle … />` pins
+  (`app-width-fit`, `cell-offer`, `indoor-tint`, `large-text`, `haptics`, `plan-avail`) now take `description="[^"]+"` after the
+  label, and `destructive-buttons` pins the tier ×'s new title. `count-label` flagged two wordings ("… entries", "… covers") as
+  counts; both were reworded rather than allowed.
+- **`atoms.jsx:1069`, the last site batch 7 holds, is `Collapsible`'s header**, every Settings section's: the hand-off named it
+  the suggestion-row button. It stays in batch 7, as Patryk split it.
+- **Measured on DEV** (reloaded, read from the live DOM): every tab with its sections opened (General, Layout, Customers, Vouchers,
+  Reminders, App, Admin), the reminder editor, the activity log and the new-booking form's tag chips. Five wordings were rewritten
+  on reading: the cross-zone Require chip, the Customers and form guest-tag chips ("Tag Alicia Ortiz Allergy…" now "Add Allergy
+  to Alicia Ortiz's tags…"), the tag name box, and two in the reminder editor (a time and a weekday). Not on screen, read from
+  source and Rule 14: the fired reminder's toast, an invitation's Withdraw and Apply, the module-off confirm, Delete customer
+  armed, and the crash download.

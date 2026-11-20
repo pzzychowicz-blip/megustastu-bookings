@@ -93,7 +93,7 @@ describe("the wiring", () => {
   });
 
   it("the App tab has the switch, named as it reads", () => {
-    expect(Settings).toMatch(/<Toggle label="Table availability" on=\{planAvail\} onClick=\{onTogglePlanAvail\} \/>/);
+    expect(Settings).toMatch(/<Toggle label="Table availability" description="[^"]+" on=\{planAvail\} onClick=\{onTogglePlanAvail\} \/>/);
   });
 });
 

@@ -1138,7 +1138,7 @@ export const ListView = memo(function ListView({
           and last tagged booking. `TagChips` is the form's chip, pressed = on. */}
       <Reveal show={tagChips.length > 0}>{tagChips.length > 0 ? (
         <div role="group" aria-label="Show only bookings tagged">
-          <TagChips tags={tagChips} on={tagFilter} onToggle={function (id) { onTagFilter(toggleTagId(tagFilter, id)); }} />
+          <TagChips tags={tagChips} on={tagFilter} description={function (label) { return "Show only bookings tagged " + label + ", or stop filtering by it"; }} onToggle={function (id) { onTagFilter(toggleTagId(tagFilter, id)); }} />
         </div>
       ) : null}</Reveal>
       {/* v18.6.0: in a Reveal, as the two rows above, so the line folds in and

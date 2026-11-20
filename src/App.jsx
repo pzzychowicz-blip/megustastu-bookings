@@ -4446,6 +4446,7 @@ export function BookingApp({uid}){
         showSettings?<Overlay /* @static-height the tab body eases inside SettingsContent's own AutoHeight watch={cur} */ onClose={requestCloseSettings} maxWidth={SETTINGS_CARD_W} anchor="top" footer={<div style={{display:"flex",justifyContent:"flex-end"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"8px 18px",background:BTN.quiet})}
+              title={"Close Settings, asking first if a box holds an unsaved change"+keyHint("close")}
               onClick={requestCloseSettings}>Close</button></div>}><ModalTitle background="var(--app-btn-grey-strong)">Settings</ModalTitle><Suspense fallback={null}><SettingsContent
             appVersion={__APP_SIGNATURE__.version}
             onDirty={setSettingsDirty}

@@ -29,6 +29,7 @@ import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, 
 import { MODULES, moduleOn } from "../lib/modules";
 import { RETENTION_CHOICES } from "../lib/activity";
 import { markArmed, armSettled } from "../lib/arm-guard";
+import { keyHint } from "../lib/shortcuts";
 import { newCrashesWord } from "../lib/crash-report";
 import { useIntegrationStatus } from "../hooks/useIntegrationStatus";
 
@@ -99,6 +100,7 @@ function ModuleRow({ mod, on, warning, onToggle, onConfirm, onCancel }) {
              and only on the running page is three (v17.15.6). `aria-checked`
              says on or off, so the name must not. */
           label={mod.label}
+          description={"Turn " + mod.label + " on or off for everyone at the restaurant"}
         />
       </div>
 
@@ -115,10 +117,12 @@ function ModuleRow({ mod, on, warning, onToggle, onConfirm, onCancel }) {
                 <div style={{ display: "flex", gap: SP.base, marginTop: SP.base, flexWrap: "wrap" }}>
                   <button className="mgt-hover-scale"
                     onClick={once(onConfirm)}
+                    title={"Turn " + mod.label + " off for everyone at the restaurant"}
                     style={mkSolidBtn("var(--app-warn-solid)")}
                   >Turn {mod.label} off anyway</button>
                   <button className="mgt-hover-scale"
                     onClick={once(onCancel)}
+                    title={"Leave " + mod.label + " on"}
                     style={mkBtn()}
                   >Keep it on</button>
                 </div>
@@ -228,6 +232,7 @@ function IntegrationsSection() {
       <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: SP.wide }}>
         To add or change one: open{" "}
         <a href="https://vercel.com/dashboard" target="_blank" rel="noreferrer noopener"
+          title="Open Vercel's dashboard in a new tab"
           style={{ color: "var(--accent)", fontWeight: FW.semi }}>
           Vercel
         </a>
@@ -599,7 +604,7 @@ export function RolesModal({ rows, selectedUid, myUid, onSelect, onToggleCap, on
       // shipped as a bare button and sat bottom-LEFT with the rest of the bar
       // empty, which is the only footer in the app that does.
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button className="mgt-hover-scale" onClick={onClose} style={mkSolidBtn(BTN.quiet)}>Done</button>
+        <button className="mgt-hover-scale" onClick={onClose} title={"Close the capabilities" + keyHint("close")} style={mkSolidBtn(BTN.quiet)}>Done</button>
       </div>
     }>
       {/* `background` is REQUIRED and has no default — omitting it rendered
@@ -639,6 +644,7 @@ export function RolesModal({ rows, selectedUid, myUid, onSelect, onToggleCap, on
                 onClick={function () { onSelect(id); }}
                 aria-pressed={on}
                 aria-label={displayName(r) + (r.kind === "invite" ? ", invited" : "")}
+                title={"Show " + displayName(r) + "'s level and what they may do"}
                 style={{
                   display: "block", width: "100%", textAlign: "left",
                   padding: SP.base, marginBottom: SP.tight,
@@ -731,7 +737,7 @@ export function AdminTabContent({
                 : "Off. Everybody can do everything, exactly as before — turn this on once the people below have the levels you want."}
             </div>
           </div>
-          <Toggle on={enforceRoles} onClick={function () { onSetEnforceRoles(!enforceRoles); }} label="Enforce roles" />
+          <Toggle on={enforceRoles} onClick={function () { onSetEnforceRoles(!enforceRoles); }} label="Enforce roles" description="Hold everyone to what their level allows" />
         </div>
       </Section>
 
@@ -808,6 +814,7 @@ export function AdminTabContent({
                       <button className="mgt-hover-scale"
                         onClick={function () { setArmedUid(null); onWithdrawInvite(r.inviteId); }}
                         aria-label={"Withdraw the invitation for " + displayName(r)}
+                        title={"Withdraw the invitation for " + displayName(r) + ", so it cannot be used"}
                         style={mkBtn()}
                       >Withdraw</button>
                     </>
@@ -816,12 +823,14 @@ export function AdminTabContent({
                         ? <button className="mgt-hover-scale"
                             onClick={function () { setArmedUid(null); say(onApplyInvite(r.uid, r.invite)); }}
                             aria-label={"Apply the " + LEVEL_LABEL[r.invite.role] + " invitation to " + displayName(r)}
+                            title={"Give " + displayName(r) + " the " + LEVEL_LABEL[r.invite.role] + " level they were invited with"}
                             style={mkSolidBtn("var(--accent)")}
                           >Apply {LEVEL_LABEL[r.invite.role]} invite</button>
                         : null}
                       <select className="mgt-hover-scale"
                         value={r.role || ""}
                         aria-label={"Level for " + displayName(r)}
+                        title={"Choose " + displayName(r) + "'s level"}
                         onChange={function (e) { setArmedUid(null); say(onSetRole(r.uid, { role: e.target.value || null })); }}
                         style={mkSel()}
                       >
@@ -831,6 +840,7 @@ export function AdminTabContent({
                       <button className="mgt-hover-scale"
                         onClick={function () { setArmedUid(null); onOpenCapabilities(r.uid); }}
                         aria-label={"Capabilities for " + displayName(r)}
+                        title={"Choose what " + displayName(r) + " may do, one capability at a time"}
                         style={mkBtn()}
                       >Capabilities</button>
                       {/* v18.2.0 (S4): two taps, and never on your own row. On
@@ -847,6 +857,7 @@ export function AdminTabContent({
                           else { markArmed(); setMsg(null); setArmedUid(r.uid); }
                         }}
                         aria-label={(armed ? "Confirm — remove " : "Remove ") + displayName(r)}
+                        title={armed ? "Remove " + displayName(r) + "'s access to the app" : "Remove " + displayName(r) + "'s access to the app (asks for a second tap)"}
                         style={mkDangerBtn()}
                       ><TrashIcon size={IC.control} />{armed ? "Confirm — remove" : "Remove"}</button>}
                     </>}
@@ -882,11 +893,12 @@ export function AdminTabContent({
             type="email"
             value={email}
             aria-label="Email address to invite"
+            title="The email address of the person to invite"
             placeholder="name@example.com"
             onChange={function (e) { setEmail(e.target.value); }}
             style={{ ...mkInp(), flex: "1 1 200px", minWidth: 0 }}
           />
-          <select className="mgt-hover-scale" value={role} aria-label="Level for the invitation" onChange={function (e) { setRole(e.target.value); }} style={mkSel()}>
+          <select className="mgt-hover-scale" value={role} aria-label="Level for the invitation" title="Choose the level the invited person gets" onChange={function (e) { setRole(e.target.value); }} style={mkSel()}>
             {ROLES.map(function (x) { return <option key={x} value={x}>{LEVEL_LABEL[x]}</option>; })}
           </select>
           <button className="mgt-hover-scale"
@@ -895,6 +907,7 @@ export function AdminTabContent({
               say(res);
               if (res && res.ok) setEmail("");
             }}
+            title="Invite this email address at the chosen level"
             style={mkSolidBtn("var(--accent)")}
           >Invite</button>
         </div>
@@ -921,6 +934,7 @@ export function AdminTabContent({
             type="button"
             className="mgt-hover-scale"
             onClick={onOpenActivity}
+            title="Open the log of what happened in the app, and who did it"
             style={mkBtn({ background: BTN.quiet, flexShrink: 0, display: "inline-flex", alignItems: "center" })}
           >Open the log<CountBadge n={newCrashes} plus={!!moreCrashes} background="var(--app-danger-solid)" srText={newCrashesWord(newCrashes, !!moreCrashes)} /></button>
         </div>
@@ -945,6 +959,7 @@ export function AdminTabContent({
           <select
             value={retentionDays}
             onChange={function (e) { onSetRetention(Number(e.target.value)); }}
+            title="How long the activity log keeps an entry"
             className="mgt-hover-scale"
             style={{ ...mkSel(), width: "auto" }}
           >
@@ -976,6 +991,7 @@ export function AdminTabContent({
             <select
               value={waRetentionDays}
               onChange={function (e) { onSetWaRetention(Number(e.target.value)); }}
+              title="How long WhatsApp messages are kept"
               className="mgt-hover-scale"
               style={{ ...mkSel(), width: "auto" }}
             >

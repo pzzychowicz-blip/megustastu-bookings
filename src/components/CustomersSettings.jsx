@@ -201,6 +201,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           // MOUSEDOWN, so it moves out from under the finger between press and
           // release and the click is lost. preventDefault suppresses only focus.
           onMouseDown={function (e) { e.preventDefault(); }}
+          title={"Show or hide " + (c.name || "this customer") + "'s bookings and tags"}
           className="mgt-hover-scale"
           onClick={function () { setOpenKey(open ? null : c.key); setArmedKey(null); }}
           // borderRadius is REQUIRED on any .mgt-hover-scale element: since
@@ -220,6 +221,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
                   tags={guestChoices}
                   on={tagIds}
                   disabled={!canEditGuestTags || !onSetCustomerTag}
+                  description={function (label) { return "Add " + label + " to " + (c.name || "this customer") + "'s tags on all their bookings, or take it off"; }}
                   onToggle={function (id) { onSetCustomerTag(c.key, (tagIds.indexOf(id) >= 0 ? "-" : "+") + id); }} />
               </div>
             ) : null}
@@ -235,6 +237,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
               <button
                 className="mgt-hover-scale mgt-press"
                 aria-describedby={armed ? DELETE_WARN_ID : undefined}
+                title={armed ? "Erase " + (c.name || "this customer") + "'s personal data from every booking, for good" : "Erase " + (c.name || "this customer") + "'s personal data from every booking (asks for a second tap)"}
                 style={mkDangerBtn({ fontSize: T.body, minHeight: 36, minWidth: DELETE_W })}
                 onClick={function () {
                   if (armed) { if (!armSettled()) return; onDeleteCustomer({ phone: c.phone, guestIds: c.guestIds }); setArmedKey(null); setOpenKey(null); }
@@ -269,6 +272,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
       <button
         key={key}
         onClick={function () { setFilter(key); setOpenKey(null); setArmedKey(null); }}
+        title={key === "all" ? "Show every customer" : key === "regulars" ? "Show only regulars" : key === "noshows" ? "Show only customers with a no-show" : "Show only customers tagged " + label}
         className="mgt-hover-scale"
         style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: active ? "var(--accent)" : BTN.quiet, opacity: searching ? 0.5 : 1 })}>{label}</button>
     );
@@ -305,6 +309,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
         </div>
         <input
           aria-label="Search customers by name or phone number"
+          title="Find a customer by name or phone number"
           value={query}
           onChange={function (e) { setQuery(e.target.value); setOpenKey(null); setArmedKey(null); }}
           placeholder="Search by name or phone…"
@@ -324,6 +329,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
               <button
                 onClick={function () { setRegularMin(function (m) { return Math.max(1, m - 1); }); }}
                 aria-label="Decrease visits for a regular"
+                title="Decrease the visits that make a regular in this list, one at a time"
                 disabled={regularMin <= 1}
                 className={regularMin <= 1 ? undefined : "mgt-hover-scale"}
                 style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.quiet, opacity: regularMin <= 1 ? 0.4 : 1, cursor: regularMin <= 1 ? "not-allowed" : "pointer" })}>−</button>
@@ -331,6 +337,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
               <button
                 onClick={function () { setRegularMin(function (m) { return Math.min(50, m + 1); }); }}
                 aria-label="Increase visits for a regular"
+                title="Increase the visits that make a regular in this list, one at a time"
                 disabled={regularMin >= 50}
                 className={regularMin >= 50 ? undefined : "mgt-hover-scale"}
                 style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.quiet, opacity: regularMin >= 50 ? 0.4 : 1, cursor: regularMin >= 50 ? "not-allowed" : "pointer" })}>+</button>

@@ -267,9 +267,11 @@ export function useReminders({ nowMins, setWriteWarning, reminderEditor, setRemi
               <SmallTag label={ab.time} style={{background:"var(--tag-flag)",color:"var(--text-on-accent)",border:"1px solid var(--border-glass)",fontWeight: FW.bold,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap",flexShrink:0}} /><span
               style={{fontSize: T.body,color:"var(--text-primary)",fontWeight: FW.semi,wordBreak:"break-word"}}>{ab.reminder.text}</span></div><div style={{display:"flex",gap:6,flexShrink:0}}><button
               onClick={function(){snoozeReminderFire(ab.fireKey);}}
+              title="Hide this reminder and bring it back in 15 minutes"
               className="mgt-hover-scale mgt-press"
               style={mkBtn({fontSize: T.body,minHeight:H.chrome,padding:"4px 12px",background:BTN.quiet})}>Snooze 15m</button><button
               onClick={function(){markReminderDone(ab.fireKey);}}
+              title="Mark this reminder done, so it goes away"
               className="mgt-hover-scale mgt-press"
               style={mkBtn({fontSize: T.body,minHeight:H.chrome,padding:"6px 14px",background:"var(--app-success-solid)"})}>Done</button></div></div>
       );

@@ -68,7 +68,7 @@ describe("it is this device's, not the account's", () => {
   });
   it("has one switch, in the Timeline group", () => {
     const settings = code("components/Settings.jsx");
-    expect(settings).toMatch(/<Toggle label="Larger text" on=\{largeText\} onClick=\{onToggleLargeText\} \/>/);
+    expect(settings).toMatch(/<Toggle label="Larger text" description="[^"]+" on=\{largeText\} onClick=\{onToggleLargeText\} \/>/);
     expect(settings.indexOf('label="Larger text"')).toBeGreaterThan(settings.indexOf(">Timeline<"));
   });
 });

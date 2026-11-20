@@ -72,7 +72,7 @@ describe("while it is on", () => {
 
 describe("in Settings → App", () => {
   it("is one switch, and the App width stepper folds away under it while it is on", () => {
-    expect(settings).toContain('<Toggle label="Fit to screen" on={appWidthFit} onClick={onToggleAppWidthFit} />');
+    expect(settings).toMatch(/<Toggle label="Fit to screen" description="[^"]+" on=\{appWidthFit\} onClick=\{onToggleAppWidthFit\} \/>/);
     const fold = settings.slice(settings.indexOf("<Reveal show={!appWidthFit}>"));
     expect(fold.indexOf('<MiniStepper label="app width"')).toBeGreaterThan(0);
     expect(fold.indexOf('<MiniStepper label="app width"')).toBeLessThan(fold.indexOf("</Reveal>"));

@@ -647,8 +647,9 @@ explaining why is usually the one to read.
   resting on a button, field, switch, link or chip is told what it does, in the
   browser's own tooltip: the `title` attribute, or `description` on an atom that
   draws the control (`Toggle`, the steppers, `TimeChip`, `SearchField`,
-  `DateField`, and `CountryPicker`, whose pill reads differently at each of its
-  three callers). Mouse only, so the tablets and phones never see it, and the rule
+  `DateField`, `CountryPicker`, whose pill reads differently at each of its
+  three callers, and `TagChips`, whose `description` is a function of the tag's
+  label because a chip means something else at each of its four). Mouse only, so the tablets and phones never see it, and the rule
   above still holds: the meaning is on the control, and the tooltip says more.
   `check:style` Rule 14 fails a control without one. How a description reads:
   - **What happens, starting with a verb, on one line, with no full stop**:

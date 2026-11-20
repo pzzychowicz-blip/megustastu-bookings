@@ -349,7 +349,7 @@ describe("phase 63 — the editors' ×s: one quiet look, and named", () => {
   const Reminder = read("components/ReminderEditor.jsx");
 
   it("the duration tier's × is the quiet ×, named for its tier", () => {
-    expect(Settings).toMatch(/aria-label=\{"Remove Tier " \+ \(i \+ 1\)\}\s*title="Remove this tier"\s*style=\{mkRemoveX\(H\.compact\)\}><CloseIcon size=\{IC\.control\} \/><\/button>/);
+    expect(Settings).toMatch(/aria-label=\{"Remove Tier " \+ \(i \+ 1\)\}\s*title=\{"Remove tier " \+ \(i \+ 1\) \+ " \(asks for a second tap\)"\}\s*style=\{mkRemoveX\(H\.compact\)\}><CloseIcon size=\{IC\.control\} \/><\/button>/);
   });
 
   it("armed, it is the app's destructive look saying what the second tap does — never the banned triple", () => {

@@ -741,7 +741,7 @@ describe("Rule 14 — a hover description on every control", () => {
     expect(r.out).toMatch(/\[hover-description\]/);
   });
 
-  it.each(["Toggle", "Stepper", "MiniStepper", "HourStepper", "TimeChip", "SearchField", "DateField", "CountryPicker"])(
+  it.each(["Toggle", "Stepper", "MiniStepper", "HourStepper", "TimeChip", "SearchField", "DateField", "CountryPicker", "TagChips"])(
     "asks <%s>'s call site for a description, not a title", (atom) => {
       const bare = run({ "a.jsx": `const x = <${atom} title="no" label="x" />;\n` });
       expect(bare.out).toMatch(/\[hover-description\]/);

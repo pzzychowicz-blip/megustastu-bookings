@@ -127,6 +127,7 @@ export function TimeZonePicker({ value, onPick, ariaLabel = "Time zone", style }
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel + ": " + shown + (offset ? ", " + offset : "")}
+        title="Choose the restaurant's time zone, which every device's clock follows"
         onClick={function () { if (open) close(false); else openList(); }}
         style={Object.assign({}, mkInp(), {
           width: "auto", maxWidth: "100%", display: "flex", alignItems: "center", gap: SP.snug,
@@ -148,6 +149,7 @@ export function TimeZonePicker({ value, onPick, ariaLabel = "Time zone", style }
               onChange={function (e) { setQ(e.target.value); setActive(0); }}
               onKeyDown={onKey}
               placeholder="Search place or UTC offset"
+              title="Find a zone by place, region or UTC offset"
               autoCorrect="off"
               autoCapitalize="none"
               spellCheck={false}
@@ -178,6 +180,7 @@ export function TimeZonePicker({ value, onPick, ariaLabel = "Time zone", style }
                   data-idx={i}
                   role="option"
                   aria-selected={sel}
+                  title={"Set the restaurant's time zone to " + zoneName(tz)}
                   className="mgt-ac-row"
                   onMouseEnter={function () { setActive(i); }}
                   style={Object.assign({}, AC_ROW, i === active ? { "--row-bg": "var(--bg-ac-hover)" } : null)}

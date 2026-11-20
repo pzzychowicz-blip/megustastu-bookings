@@ -57,7 +57,11 @@ const PRESSABLE = { minHeight: H.chip, gap: 0 };
 const MARK = { display: "inline-flex", paddingRight: SP.tight };
 const ROW = { display: "flex", flexWrap: "wrap", gap: SP.tight };
 
-export function TagChips({ tags, on, onToggle, disabled = false }) {
+// `description` (v18.18.0, Part 2) is a FUNCTION of a tag's label, the chip's hover
+// description: a chip means something different at each of its four callers (the
+// form's guest and occasion tags, Customers, the List's filter), so Rule 14 asks
+// every call site for one, as it does CountryPicker's.
+export function TagChips({ tags, on, onToggle, disabled = false, description }) {
   const held = Array.isArray(on) ? on : [];
   return (
     <div style={ROW}>
@@ -70,6 +74,7 @@ export function TagChips({ tags, on, onToggle, disabled = false }) {
             tone={pressed ? "success" : "neutral"}
             aria-pressed={pressed}
             disabled={disabled}
+            title={description ? description(t.label) : undefined}
             onClick={function () { onToggle(t.id); }}
           ><Reveal horizontal show={pressed} speed="move"><span style={MARK}><CheckIcon size={IC.inline} /></span></Reveal>{t.label}</OutlineChip>
         );

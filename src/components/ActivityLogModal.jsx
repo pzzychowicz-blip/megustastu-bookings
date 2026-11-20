@@ -54,6 +54,7 @@ import { DownloadIcon } from "./Icons";
 // v18.2.0 /code-review: the entry count joins its word like every other count.
 import { countLabel } from "../lib/booking-logic";
 import { markArmed, armSettled } from "../lib/arm-guard";
+import { keyHint } from "../lib/shortcuts";
 import { newCrashesWord } from "../lib/crash-report";
 
 // The kinds a person would filter by, in the order they matter during service.
@@ -234,6 +235,7 @@ export function ActivityLogModal({
     <Overlay onClose={onClose} footer={
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button className="mgt-hover-scale" onClick={onClose}
+          title={"Close the activity log" + keyHint("close")}
           style={mkBtn({ background: BTN.quiet })}>Done</button>
       </div>
     }>
@@ -249,6 +251,7 @@ export function ActivityLogModal({
       <div style={{ display: "flex", gap: SP.base, flexWrap: "wrap", alignItems: "center", marginBottom: SP.base }}>
         <DateField
           value={fromDay}
+          description="The first day the log shows; leave it empty for no start"
           onChange={function (e) { setArmed(false); onSetFromDay(e.target.value); }}
           style={{ ...mkInp(), width: "auto", flex: "0 1 190px" }}
           inputProps={{ "aria-label": "From day (leave empty for no start)" }}
@@ -256,6 +259,7 @@ export function ActivityLogModal({
         <span aria-hidden="true" style={{ fontSize: T.body, color: S.muted }}>→</span>
         <DateField
           value={toDay}
+          description="The last day the log shows; leave it empty for no end"
           onChange={function (e) { setArmed(false); onSetToDay(e.target.value); }}
           style={{ ...mkInp(), width: "auto", flex: "0 1 190px" }}
           inputProps={{ "aria-label": "To day (leave empty for no end)" }}
@@ -266,12 +270,15 @@ export function ActivityLogModal({
         style={{ display: "flex", gap: SP.tight, flexWrap: "wrap", alignItems: "center", marginBottom: SP.base }}>
         <OutlineChip as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={oneDay && fromDay === today ? "success" : "neutral"}
           aria-pressed={oneDay && fromDay === today}
+          title="Show today's entries"
           onClick={function () { setRange(today, today); }}>Today</OutlineChip>
         <OutlineChip as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={fromDay === addDays(today, -6) && toDay === today ? "success" : "neutral"}
           aria-pressed={fromDay === addDays(today, -6) && toDay === today}
+          title="Show the entries of the last 7 days, today included"
           onClick={function () { setRange(addDays(today, -6), today); }}>Last 7 days</OutlineChip>
         <OutlineChip as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={allTime ? "success" : "neutral"}
           aria-pressed={allTime}
+          title="Show every entry, newest first"
           onClick={function () { setRange("", ""); }}>All time</OutlineChip>
       </div>
 
@@ -286,6 +293,7 @@ export function ActivityLogModal({
           value={whoActive}
           onChange={function (e) { setWho(e.target.value); }}
           aria-label="Filter by person"
+          title="Show only what one person did"
           className="mgt-hover-scale"
           style={{ ...mkSel(), width: "auto", flex: "0 1 170px" }}
         >
@@ -304,6 +312,7 @@ export function ActivityLogModal({
           onChange={function (e) { setQ(e.target.value); }}
           onClear={function () { setQ(""); }}
           ariaLabel="Search the activity log"
+          description="Find entries by any word in them, a guest's name included"
           placeholder="Search…"
           style={{ flex: "1 1 140px" }}
         />
@@ -317,6 +326,7 @@ export function ActivityLogModal({
             <OutlineChip
               key={k} as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={on ? "success" : "neutral"}
               aria-pressed={on}
+              title={"Show or hide " + KIND_LABEL[k] + " in the log"}
               onClick={function () { toggleKind(k); }}
             >{KIND_LABEL[k]}{k === "crash" ? <CountBadge n={newCrashes} plus={!!moreCrashes} background="var(--app-danger-solid)" srText={newCrashesWord(newCrashes, !!moreCrashes)} /> : null}</OutlineChip>
           );
@@ -327,6 +337,7 @@ export function ActivityLogModal({
         <span aria-hidden="true" style={{ width: SP.wide }} />
         <OutlineChip as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={peopleOnly ? "success" : "neutral"}
           aria-pressed={peopleOnly}
+          title="Show only what people did, hiding what the app did by itself"
           onClick={function () { setPeopleOnly(function (v) { return !v; }); }}
         >People only</OutlineChip>
       </div>
@@ -342,6 +353,7 @@ export function ActivityLogModal({
               type="button"
               className="mgt-hover-scale"
               disabled={crashBusy}
+              title="Download every crash entry as a file, not only the rows shown"
               onClick={pressCrashes}
               style={mkBtn({
                 background: BTN.quiet, fontSize: T.body, minHeight: H.compact,
@@ -438,7 +450,7 @@ export function ActivityLogModal({
                       // The padding gives the tint a pane and the matching
                       // negative margin keeps the sentence where it was.
                       className="mgt-ac-row mgt-nopress"
-                      title={live ? "Open this booking" : "Find " + goneName + " in Customers"}
+                      title={live ? "Open the booking this entry is about" : "Find " + goneName + " in Customers"}
                       onClick={function () {
                         if (live) onOpenBooking(live); else onOpenCustomer(goneName);
                       }}
@@ -470,6 +482,7 @@ export function ActivityLogModal({
                 type="button"
                 className="mgt-hover-scale"
                 onClick={onLoadOlder}
+                title="Show the next older entries"
                 disabled={loadingMore}
                 style={mkBtn({ background: BTN.quiet, minHeight: H.compact, fontSize: T.body })}
               >{loadingMore ? "Loading…" : "Load older"}</button>
@@ -520,6 +533,7 @@ export function ActivityLogModal({
               type="button"
               className="mgt-hover-scale"
               disabled={!shown.length}
+              title="Download the entries shown as a CSV file"
               onClick={function () { onDownload(activityCsv(shown, byId), activityCsvName(fromDay, toDay)); }}
               style={mkBtn({
                 background: BTN.quiet, fontSize: T.body, minHeight: H.compact,
@@ -532,6 +546,7 @@ export function ActivityLogModal({
               className="mgt-hover-scale"
               disabled={allTime || clearBusy || !!badDay || !!backwards}
               aria-describedby={armed ? warnId : undefined}
+              title={armed ? "Delete every entry in this range for good, whatever the filters" : "Delete every entry in this range, whatever the filters (asks for a second tap)"}
               onClick={function () {
                 if (armed) { if (!armSettled()) return; setArmed(false); onClearRange(); }
                 else { markArmed(); setArmed(true); }
