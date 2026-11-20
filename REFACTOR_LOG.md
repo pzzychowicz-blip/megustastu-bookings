@@ -42143,3 +42143,37 @@ commit of its own; what it disproved is listed after them.
 - **A comment sent readers to the wrong file (fix 3).** App's note above `reshuffleBtn` said `reshuffleOffer` is in
   `lib/manual-assign.js`; commit 16 moved it to `lib/booking-logic.js` on purpose, because importing it from manual-assign.js into
   `shortcuts.js` moved ~21 kB out of the entry. The comment now names the right file and says not to move it back.
+
+**The ~9 kB drop in the main entry at commit 13, explained (the hand-off's open question).** Commit 13 only added strings, and the
+entry went from 498.68 to 489.21 kB. **Measured** by building commits 12 (`e6f68921`) and 13 (`452fa785`) side by side with this
+worktree's install, which `npm ls` passes and whose lockfile has not changed since commit 12: the entry 498.68 → 489.21 (−9.47),
+the shared `atoms` chunk 117.65 → 127.41 (+9.76), InboxPanel +2.41, PhotoViewer +0.08, every other chunk within 0.03; all JS
+together 1,401,607 → 1,404,342 bytes, **+2.7 kB**. The shortcut table's strings ("Toggle Summary panel", "Mark seated", "Week /
+Month view") are in `index-*.js` at commit 12 and in `atoms-*.js` at commit 13: `lib/shortcuts.js` moved. Commit 13 made the
+inbox's two lazy chunks import `keyHint`, and with them every lazy chunk that imports `atoms.jsx` also imports `lib/shortcuts.js`
+(Settings, the activity log, Find a booking, Print, special days, the inbox, the photo viewer), and Rolldown put it in the chunk
+it shares with atoms. The entry imports `atoms` statically, so a cold start loads the same code: re-chunking, not weight, the
+mechanism commit 16 measured with `manual-assign.js`. **Not a stale install either**: rebuilt here, commit 12 is 498.68 again.
+
+**Checked and disproved:**
+- The Esc and Enter keys named in 40 descriptions (`keyHint("close")`, `keyHint("confirm")`): each surface's key does what its
+  description says, through `escapeAction` / `enterAction` or the surface's own handler (the inbox's capture-phase Escape for the
+  templates editor, the bulk-delete confirm and select mode; ManualModal's own Enter). The inbox's letter keys match its handler too.
+- The swap trim seating a party off the row it was dropped on: over 2,850 generated swaps on the real layout (every party on one
+  table or a pair, beside a party on any declared combo of up to three) it happens in one shape, a party of 5 dropped on row 5 next to
+  a party on 3+4+5, where 3+4 is the only pair inside the set that seats five. That is the logged rule, fewest tables first and the
+  dropped row breaking ties, and not a defect.
+- `joinFirstMatters` is given the stored `{id, capacity}` tables, and its "false is a promise" argument holds for every size in a
+  band (a table too small for the smallest party is too small for every one).
+- The Summary's new props are stable (`guestTags` is App's `guestTagMap` memo, `onEdit` is `VA.onEdit`), so its memo still holds.
+- The notes list's table column: `TBadge` draws 10px of padding and a 1px border each side, `NOTE_BADGE_EDGE`'s 22.
+- "Other code…" hands `pickPhoneCode` an iso, as a pinned code's `TimeChip` does; `R` reads `env.today`, which is `todayStr()`.
+- The upward menu's `mgt-pop-up-*` keyframes: both reduce-motion rules match `*`, so they cover it.
+- `useMenuRoom`'s `transitionend` listener: one layout read per transition end and an idempotent write. PlanView's `glyphTitle`:
+  13 tables, each one filter of the day's bookings per render. Neither measurable.
+- `--bg-sheet-mobile` is defined in both themes. The cheat sheet's own keys lost no row in the move to `lib/shortcuts.js`, and More's
+  `S` was already WeekView's. The generated-layout test restores `DEFAULT_LAYOUT` after each case. The Needs action badge and its
+  `aria-describedby` show on the same condition.
+- ROADMAP: no entry is resolved by this version, and none was added.
+- **Gate after the review:** 490.47 kB / 145.32 kB gz · 4805 tests (from 4804, fix 1's) · lint 63 problems (0 errors, 63
+  warnings) · style OK, hover descriptions 0 of ceiling 0.
