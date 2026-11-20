@@ -1133,16 +1133,17 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         <FloorPlanEditor layout={layout} onSaveLayout={onSaveLayout} />
       </Collapsible>
       <Section style={{ marginBottom: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Kitchen limit</div>
             <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
               Max simultaneous booking starts before a kitchen-load warning.
             </div>
           </div>
-          <Stepper value={kitchenLimit} disableDec={kitchenLimit <= 1} disableInc={kitchenLimit >= 20} label="the kitchen limit" description="how many bookings may start together before the kitchen warning, one at a time"
+          {/* v18.18.0 (Patryk): keeps the right where the row wraps (DESIGN.md, "A control keeps its side"): at 375 it wrapped to the left. `Stepper` takes no style, so a box. */}
+          <div style={{ marginLeft: "auto" }}><Stepper value={kitchenLimit} disableDec={kitchenLimit <= 1} disableInc={kitchenLimit >= 20} label="the kitchen limit" description="how many bookings may start together before the kitchen warning, one at a time"
             onDec={() => onSaveLayout({ ...layout, kitchenLimit: kitchenLimit - 1 })}
-            onInc={() => onSaveLayout({ ...layout, kitchenLimit: kitchenLimit + 1 })} />
+            onInc={() => onSaveLayout({ ...layout, kitchenLimit: kitchenLimit + 1 })} /></div>
         </div>
       </Section>
     </div>

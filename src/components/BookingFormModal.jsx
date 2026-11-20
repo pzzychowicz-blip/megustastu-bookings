@@ -1014,7 +1014,7 @@ export function BookingFormModal({
           refusal yields to Save's, which is the same sentence: two panes saying
           one thing read as a fault. */}
       <div role="status"><Reveal show={lineShown&&!(lineAvail.refusal&&lineAvail.refusal===error)}>{availLine}</Reveal></div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}{deleteBtn}{(function(){
+      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{historyBtn}{bookAgainBtn}{deleteBtn}{(function(){
         if(editId) return null;
         const canSave=!!form.date;
         return (
@@ -1036,7 +1036,9 @@ export function BookingFormModal({
                fill-derived one measured 1.44:1 on the light sheet (index.css). */
             style={{background:"transparent",border:"2px solid "+(canSave?"var(--pending-outline)":"var(--border-soft)"),borderRadius:R.pill,padding:"8px 16px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:canSave?"var(--status-pending-text)":"var(--text-faint)",minHeight:44}}>Save pending</button>
         );
-      })()}</div><div style={{display:"flex",gap:8}}><button
+      })()}</div>{/* v18.18.0 (Patryk): Back and Save keep the right where the row wraps
+          (an edit at 375, with Delete): `space-between` started them on the
+          second line at the left. DESIGN.md, "A control keeps its side". */}<div style={{display:"flex",gap:8,marginLeft:"auto"}}><button
         className="mgt-hover-scale"
         /* v17.8.0: was BTN.cancel — the RED one. In this app "cancel" means
            cancel the BOOKING, which is why that token is red; this button closes

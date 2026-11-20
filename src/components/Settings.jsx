@@ -392,12 +392,13 @@ function SpecialDaysList({ exceptions, onOpen }) {
         Dates that are closed, or open with other hours. Bookings already made stay.
       </div>
       <FoldRows items={upcoming} idOf={(ex) => ex.id}>{(ex) => (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: SP.snug, flexWrap: "wrap", padding: "6px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: SP.snug, flexWrap: "wrap", padding: "6px 0" }}>
           <span style={{ fontSize: T.body, color: "var(--text-primary)", flex: "1 1 200px" }}>{line(ex)}</span>
+          {/* v18.18.0 (Patryk): keeps the right where the row wraps (DESIGN.md, "A control keeps its side"). */}
           <button type="button" className="mgt-hover-scale" onClick={() => onOpen(ex.id)}
             aria-label={"Change " + rangeLabel(ex, today)}
             title={"Change the hours or note for " + rangeLabel(ex, today)}
-            style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.quiet })}>Change</button>
+            style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.quiet, marginLeft: "auto" })}>Change</button>
         </div>
       )}</FoldRows>
       <Reveal show={upcoming.length === 0}>
@@ -709,14 +710,15 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
                 A choice of three named values, so the app's one segmented
                 look (SEG_TRACK / segStyle) with `aria-pressed`, as the zone
                 segment and the Print chooser. */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <div style={{ textAlign: "left", flex: "1 1 200px" }}>
                 <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)" }}>Drag hold</div>
                 <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
                   How long a finger holds a block on the Timeline before it lifts to be moved. The status card still opens first.
                 </div>
               </div>
-              <div role="group" aria-label="Drag hold" style={{ ...SEG_TRACK, flexShrink: 0 }}>
+              {/* v18.18.0 (Patryk): keeps the right where the row wraps (DESIGN.md, "A control keeps its side"): at 375 it wrapped to the left. */}
+              <div role="group" aria-label="Drag hold" style={{ ...SEG_TRACK, flexShrink: 0, marginLeft: "auto" }}>
                 {DRAG_HOLDS.map(function (h) {
                   const on = dragHold === h.id;
                   return (
@@ -1328,7 +1330,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           device (the Firebase free plan has no auto-backups). */}
       {onBackup && can("dataExport") ? (
         <Section style={{ marginBottom: 18 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div style={{ textAlign: "left", flex: "1 1 200px" }}>
               <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Backup</div>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
@@ -1340,7 +1342,8 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               title="Download a copy of the bookings, waitlist, reminders and settings to this device"
               className="mgt-hover-scale mgt-press"
               aria-busy={backupStatus && backupStatus.kind === "busy" ? true : undefined}
-              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.quiet, display: "inline-flex", alignItems: "center", gap: 6 })}><DownloadIcon size={IC.control} />Download backup</button>
+              /* v18.18.0 (Patryk): keeps the right where the row wraps (DESIGN.md, "A control keeps its side"): at 375 it wrapped to the left. */
+              style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.quiet, display: "inline-flex", alignItems: "center", gap: 6, marginLeft: "auto" })}><DownloadIcon size={IC.control} />Download backup</button>
           </div>
           {/* v18.3.1: the outcome, here rather than in the red banner behind
               this overlay (App's backupStatus). The region is ALWAYS mounted:

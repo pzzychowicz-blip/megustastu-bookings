@@ -59,7 +59,9 @@ describe("W6 — the draft card's confidence says what to do", () => {
     expect(D).toMatch(/const confTitle = conf\.charAt\(0\)\.toUpperCase\(\) \+ conf\.slice\(1\) \+ " confidence";/);
   });
   it("both the bar and the card say it, with the level as the tooltip", () => {
-    const chips = D.match(/<OutlineChip title=\{confTitle\} tone=\{confTone\} size="small">\{confSays\}<\/OutlineChip>/g) || [];
+    // v18.18.0 commit 18: the full card's chip carries `marginLeft: "auto"`, so it
+    // keeps the right where the caption takes the row.
+    const chips = D.match(/<OutlineChip title=\{confTitle\} tone=\{confTone\} size="small"(?: style=\{\{ marginLeft: "auto" \}\})?>\{confSays\}<\/OutlineChip>/g) || [];
     expect(chips.length).toBe(2);
     expect(D, "the level in capitals is back").not.toMatch(/textTransform: "uppercase"/);
   });

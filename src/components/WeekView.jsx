@@ -207,13 +207,15 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
 
   // ── Footer (mode-aware nav) ──
   const footer = (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+    // v18.18.0 (Patryk): Close keeps the right if the row wraps (DESIGN.md, "A
+    // control keeps its side"); `space-between` would start it on the left.
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <button onClick={function(){ isWeek ? goWeek(-1) : goMonth(-1); }} aria-label={isWeek ? "Previous week" : "Previous month"} title={isWeek ? "Show the week before" : "Show the month before"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.quiet })} ><ChevronLeftIcon size={IC.chrome} /></button>
         <button onClick={goToday} title={(isWeek ? "Go back to this week" : "Go back to this month") + keyHint("moreToday")} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "6px 14px", background: BTN.today })}>{isWeek ? "This week" : "This month"}</button>
         <button onClick={function(){ isWeek ? goWeek(1) : goMonth(1); }} aria-label={isWeek ? "Next week" : "Next month"} title={isWeek ? "Show the week after" : "Show the month after"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.quiet })} ><ChevronRightIcon size={IC.chrome} /></button>
       </div>
-      <button onClick={onClose} title={"Close More and stay on this day" + keyHint("close")} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: BTN.quiet })}>Close</button>
+      <button onClick={onClose} title={"Close More and stay on this day" + keyHint("close")} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: BTN.quiet, marginLeft: "auto" })}>Close</button>
     </div>
   );
 

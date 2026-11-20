@@ -42038,3 +42038,52 @@ every call.
   the edge you pinned).
 - **Gate:** 490.38 kB / 145.31 kB gz (from 489.95) · 4789 tests (from 4787) · lint 63 problems (0 errors, 63
   warnings) · style OK, hover descriptions 0 of ceiling 0.
+
+### Commit 18 — buttons keep their side, in the modals, forms, Settings and the inbox
+
+- **What:** commit 17's preference carried to the rest of the app. Every row that wraps with a control at its right was
+  found in the source: `space-between` with `flexWrap`, or a growing block with a basis (`1 1 200px`) before a control,
+  in every component, plus every modal footer.
+- **The survey:** a generic probe in the rig over the topmost dialog, reporting every `flex-wrap: wrap` row that took
+  more than one line and where its last item landed, and every control's position, saved per surface and diffed
+  before and after. Surfaces: a new booking, Assign with a table picked, Walk-in with a table picked, an edit (from the
+  List), More, and Settings → General, Layout, Reminders and App, at 375 × 812, 998 × 507 and 1440 × 900, and at
+  320 × 640 too (a small phone). Admin was read in the Browser pane, at 1024 and 375, because the rig's account has no
+  Admin tab. The draft card could not be staged: none of DEV's ten conversations holds a draft.
+- **Flips measured, and fixed** (375 unless said):
+
+  | Row | Before | After |
+  |---|---|---|
+  | The booking form's footer (an edit; a new booking at 320) | Back and Save booking start line two at the left, x 18 and 94 | at the right, x 153 and 229, flush with the edge |
+  | Settings → General, Backup | Download backup at x 33 | x 181, flush |
+  | Settings → Layout, Kitchen limit | the stepper at x 33 | x 240, flush |
+  | Settings → App, Drag hold | the segment at x 33 | x 157, flush |
+  | Settings → Admin, Activity log | Open the log at x 33 (765 at 1024) | x 235, flush (765 at 1024) |
+
+- **Fixed by structure, read from source:** these hold today because their content fits, and flip once it outgrows
+  the line. More's Close and the Reminders tab's New reminder; a special day's Change (DEV has none to list); the full
+  draft card's confidence chip (about 350px of caption and chip in a card of about 320 at 375, an estimate, not a
+  reading). Assign's and Walk-in's Clear never wrapped with real content, even at 320, since Assign keeps a single
+  table for a party of two however many are tapped. With "Conflict: cannot use these tables together." put into the
+  status line at 375, the longest thing the card says, Clear wrapped to x 33 before and to 284 after, flush with the
+  card's content edge. Assign's Clear is a `RowSlot`, whose negative margin cancels the row's gap, so these two take
+  the mirror form: the row `flex-end`, the summary `marginRight: "auto"`.
+- **Left alone:** the form's Tables row (its left group is zero-basis, so Assign and Preferred never leave the line;
+  at 375 the label and the chip stack inside the group's 107px instead). The two late-booking steppers in General,
+  and Admin's people and invite rows: their controls sit at the left on every screen (the level menu takes the whole
+  line at 1024 too), so a wrap keeps their side. Every other modal footer (`flex-end`); the inbox's select bar, its
+  conversation header, the compact draft card and the recurring rules (already `marginLeft:auto` groups); the activity
+  log's search (it grows to fill its line); the linked-booking card (nothing at its right).
+- **At 998 and 1440 nothing moved:** every control on every surface read the same before and after. New booking,
+  Assign and Walk-in were first compared across a gap of 2¾ hours, in which the form's default time had moved (End
+  18:30 → 21:15): an availability line had arrived and no table was free to pick, so the readings differed for a
+  reason that was not the code. Re-run back to back with the page's clock fixed at noon (`page.clock.set_fixed_time`)
+  and HEAD's files swapped in for the before, they read the same at all three sizes.
+- **Pins:** new `tests/keeps-its-side.test.js`, one pin per row that keeps its side, commit 17's six banners included
+  (each also free of `space-between`). **Test edits:** `tests/drag-hold.test.js` quotes Drag hold's group style,
+  which gains `marginLeft: "auto"`; `tests/minor-findings.test.js` counts the two confidence chips by their source,
+  and the full card's now carries a style.
+- **Docs:** DESIGN.md ("A control keeps its side": the mirror form, what was measured, and what is not a flip);
+  `src/components/CLAUDE.md` (`RowSlot`'s margin is taken).
+- **Gate:** 490.40 kB / 145.32 kB gz (from 490.38) · 4800 tests (from 4789) · lint 63 problems (0 errors, 63
+  warnings) · style OK, hover descriptions 0 of ceiling 0.

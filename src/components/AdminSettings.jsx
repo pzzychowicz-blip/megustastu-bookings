@@ -935,7 +935,9 @@ export function AdminTabContent({
             className="mgt-hover-scale"
             onClick={onOpenActivity}
             title="Open the log of what happened in the app, and who did it"
-            style={mkBtn({ background: BTN.quiet, flexShrink: 0, display: "inline-flex", alignItems: "center" })}
+            /* v18.18.0 (Patryk): keeps the right where the row wraps (DESIGN.md, "A
+               control keeps its side"): at 375 it wrapped to the left. */
+            style={mkBtn({ background: BTN.quiet, flexShrink: 0, display: "inline-flex", alignItems: "center", marginLeft: "auto" })}
           >Open the log<CountBadge n={newCrashes} plus={!!moreCrashes} background="var(--app-danger-solid)" srText={newCrashesWord(newCrashes, !!moreCrashes)} /></button>
         </div>
         {/* v18.0.0 session 11: the retention window, which was hard-coded in

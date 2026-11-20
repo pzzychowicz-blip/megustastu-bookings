@@ -290,13 +290,17 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
         marginBottom: 14, padding: "12px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
         border: "1px solid " + (conflict ? "var(--danger-border)" : ok ? "var(--suggest-border)" : "var(--border-soft)"),
-        display: "flex", alignItems: "center", justifyContent: "space-between",
+        // v18.18.0 (Patryk): Clear keeps the right where a long selection wraps
+        // it under the summary (DESIGN.md, "A control keeps its side"). It is a
+        // RowSlot, whose own margin cancels the gap, so the summary takes the
+        // slack (`marginRight: "auto"`) and the row packs to its end.
+        display: "flex", alignItems: "center", justifyContent: "flex-end",
         gap: 8, flexWrap: "wrap",
         boxShadow: "var(--shadow-card)"
       }}>
         {/* v18.14.0 (correction 35, Patryk): as tall as Clear, because a horizontal
             fold cannot ease the row's height, which stepped 6px at both ends of it. */}
-        <div style={{ minHeight: H.control, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <div style={{ minHeight: H.control, display: "flex", flexDirection: "column", justifyContent: "center", marginRight: "auto" }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>
             {"Selected: " + (selected.length ? selected.join(" + ") : "none")}
           </div>

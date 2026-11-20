@@ -329,7 +329,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
   // NotificationStrip carries a section's tone.
   return (
     <div style={{ padding: "12px 14px", borderRadius: R.card, background: "var(--wa-draft-bg)", border: "1px solid var(--border-card)", marginBottom: 12, boxShadow: "var(--shadow-soft)" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ color: "var(--wa-draft-text)", display: "inline-flex", flexShrink: 0 }}><DraftIcon size={IC.control} /></span>
           {/* v18.0.0 phase 5: FW.medium, not semi. This is the caption NAMING the
@@ -338,7 +338,10 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
               pairing v17.13.0's pass demoted 46 of. */}
           <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--wa-draft-text)" }}>Draft booking — parsed from message</span>
         </div>
-        <OutlineChip title={confTitle} tone={confTone} size="small">{confSays}</OutlineChip>
+        {/* v18.18.0 (Patryk): the chip keeps the right where the caption takes the
+            row (DESIGN.md, "A control keeps its side"). Read from source: no
+            conversation on DEV had a draft to measure. */}
+        <OutlineChip title={confTitle} tone={confTone} size="small" style={{ marginLeft: "auto" }}>{confSays}</OutlineChip>
       </div>
       <div style={{ fontSize: T.lead, color: "var(--wa-draft-text-dim)", lineHeight: 1.6, marginBottom: d.ambiguity ? 8 : 12 }}>
         <span style={{ fontWeight: FW.semi }}>{summary}</span>

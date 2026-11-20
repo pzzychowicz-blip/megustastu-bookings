@@ -471,11 +471,13 @@ export function WalkinForm({
         marginBottom: 14, padding: "12px 14px", borderRadius: R.card,
         background: "var(--bg-card)",
         border: "1px solid " + (wOk ? "var(--suggest-border)" : "var(--border-soft)"),
-        display: "flex", alignItems: "center", justifyContent: "space-between",
+        // v18.18.0 (Patryk): Clear keeps the right where a long selection wraps
+        // it under the summary, as in Assign (DESIGN.md, "A control keeps its side").
+        display: "flex", alignItems: "center", justifyContent: "flex-end",
         gap: 8, flexWrap: "wrap",
         boxShadow: "var(--shadow-card)"
       }}>
-        <div>
+        <div style={{ marginRight: "auto" }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>
             {"Selected: " + (wSel.length ? wSel.join(" + ") : "none")}
           </div>

@@ -2056,10 +2056,21 @@ screen reaches to the right on the next. **It is a preference, not a rule**, so
   buttons placed one by one after a sentence each land wherever the wrap leaves them.
   A group wraps as one and keeps the right. If the group can wrap inside itself, give
   it `justifyContent: "flex-end"` too.
-- **Measured on the banners at 375 × 812 (commit 17):** Running late put No show at
+- **Its mirror, for a trailing item that cannot take the margin:** a `RowSlot` already
+  spends its margin cancelling the row's gap, so the row packs to its end
+  (`justifyContent: "flex-end"`) and the item before it takes the slack
+  (`marginRight: "auto"`). Assign's and Walk-in's Clear, and the opened Summary's
+  actions, are built this way.
+- **Measured at 375 × 812:** on the banners (commit 17), Running late put No show at
   the left and its ✕ at the right, 164px apart, and Not on the grid put Assign at the
-  left. After, both groups end at the row's right edge, 8px between the buttons. At
-  998 and 1440 nothing moved, because those rows never wrapped there.
+  left. In the forms and Settings (commit 18), an edit's Back and Save, Backup's
+  download, the kitchen limit, Drag hold and Admin's Open the log all started a second
+  line at the left; at 320 a new booking's Back and Save did too. After, each ends at
+  its row's right edge. At 998 and 1440 nothing moved, because none of them wrapped.
+- **Not a flip:** controls that sit at the left on every screen stay there when they
+  wrap, which is their side. Admin's people rows are one (the level menu takes the
+  whole line on any screen, so Capabilities and Remove start the next), and so are
+  the two late-booking steppers in Settings → General.
 - **Two places that give it up:** the phone's bottom bar, which holds Walk-in and
   + New where a thumb reaches them (v18.2.0, Patryk's choice), and the switcher's left
   edge on the compact header, which Follow and zoom take (The compact layout, above).

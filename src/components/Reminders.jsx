@@ -149,7 +149,9 @@ export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onTogg
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
+      {/* v18.18.0 (Patryk): New reminder keeps the right if the row wraps
+          (DESIGN.md, "A control keeps its side"). */}
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
         <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>
           {countLabel(list.length, "reminder", "reminders")}
         </div>
@@ -157,7 +159,7 @@ export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onTogg
           onClick={onAdd}
           title={"Make a new reminder" + keyHint("newReminder")}
           className="mgt-hover-scale"
-          style={mkBtn({ minHeight: 36, padding: "6px 14px", background: "var(--accent)" })}
+          style={mkBtn({ minHeight: 36, padding: "6px 14px", background: "var(--accent)", marginLeft: "auto" })}
         >
           + New reminder
         </button>
