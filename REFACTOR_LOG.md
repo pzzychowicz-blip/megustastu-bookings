@@ -42140,3 +42140,6 @@ commit of its own; what it disproved is listed after them.
 - **GLOSSARY.md had no row for the hover description (fix 2).** The version gives every control one, and the term is used by
   DESIGN.md, the atoms' `description` prop and `check:style` Rule 14, but the vocabulary file did not name it (CLAUDE.md: "A version
   that adds a user-visible surface adds its row there, in the same PR"). The row is in section 4, Labels and chips.
+- **A comment sent readers to the wrong file (fix 3).** App's note above `reshuffleBtn` said `reshuffleOffer` is in
+  `lib/manual-assign.js`; commit 16 moved it to `lib/booking-logic.js` on purpose, because importing it from manual-assign.js into
+  `shortcuts.js` moved ~21 kB out of the entry. The comment now names the right file and says not to move it back.

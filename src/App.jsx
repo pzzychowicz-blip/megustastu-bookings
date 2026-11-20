@@ -3200,7 +3200,8 @@ export function BookingApp({uid}){
   const suggestOn=!!(inefficient&&optimizerActiveFor(viewDate,autoOptimizer)&&bookingDefaults.reshuffleSuggestEnabled&&viewDate>=today);
   const ineffShow=!reshuffled&&suggestOn&&dismissedIneff!==viewDate;
   // Where the button shows and whether it is orange: `reshuffleOffer`
-  // (lib/manual-assign.js). Dismissing the notice does not grey it (Patryk).
+  // (lib/booking-logic.js; never manual-assign.js, see its note). Dismissing
+  // the notice does not grey it (Patryk).
   // `todayStr()`, not `today`: handing `today` to any call during render made
   // the React Compiler give up on BookingApp (21 errors, measured; src/CLAUDE.md).
   const reshuffleBtn=reshuffleOffer({viewDate:viewDate,today:todayStr(),autoOptimizer:autoOptimizer,suggest:suggestOn});
