@@ -1228,7 +1228,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                 // phone (a 440px one is 38px short of sharing the line), beside
                 // it in the 600px-and-up card.
                 return (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: R.inset, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: R.inset, background: "var(--bg-input)", border: "1px solid var(--border-soft)" }}>
                     {/* Phase 55 (round 3's L-3): a paused rule looks like a
                         paused reminder one tab over — BOTH lines at PAUSED_FADE
                         and an outline "Paused" tag. It faded the name alone (to

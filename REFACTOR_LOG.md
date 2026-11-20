@@ -42087,3 +42087,40 @@ every call.
   `src/components/CLAUDE.md` (`RowSlot`'s margin is taken).
 - **Gate:** 490.40 kB / 145.32 kB gz (from 490.38) · 4800 tests (from 4789) · lint 63 problems (0 errors, 63
   warnings) · style OK, hover descriptions 0 of ceiling 0.
+
+### Commit 19 — More's cells keep their edge on a desktop, and the phone's sheet is solid
+
+- **The report (Patryk, 2026-11-20):** five screenshots of More, two from Chrome on his Mac and three from an iPhone. On
+  the Mac the Week rows and the Month grid were barely there; on the iPhone they were clear white cards, and the page
+  ghosted through behind them ("Afternoon", "Timeline List Plan").
+- **Measured: the WIDTH, not the device.** The same Chrome at 375 × 812 drew the iPhone's look and at 1024 the Mac's.
+  `Overlay` is a full-screen sheet below 600px (`--bg-sheet-mobile`, rgba(240, 243, 248, 0.98)) and a card from 600px up
+  (`--bg-sheet`, rgba(255, 255, 255, 0.98), over the 25% scrim). The cells are `--bg-cal-cell` #fbfcfd with
+  `--border-input`, a 40% white rim. Computed styles and their composites, read in the page: a cell is **1.01:1** against
+  the card (edge 1.00) and **1.09:1** against the phone sheet (edge 1.10). It began with v18.14.0's L6
+  (`5a2ecae8`), which raised the card from 0.72 to 0.98; against the 0.72 card a cell was about 1.19:1. v18.18.0 had
+  changed none of More's colours. Dark is not affected: 1.28:1 on the card, 1.55:1 on the sheet.
+- **Patryk's choice: `--border-soft`** over `--field-edge` (#c3cad6, 1.63:1, shown to him beside it in a live preview).
+  It is the hairline DESIGN.md already gave a surface inside a near-opaque sheet, and the edge of every `Section` on the
+  same card (1.30:1 there). Then, on reading the two loose ends of the report, he put both into this commit:
+  - **the same rim in five more files** — `Summary.jsx` (the notes rows and `ShiftChip`), `PlanView.jsx` (the table
+    popover's rows), `FloorPlanEditor.jsx` (the inspector), `CustomersSettings.jsx` (the four totals) and `Settings.jsx`
+    (a standing booking's row) — all `--border-soft` now;
+  - **the phone's sheet solid**: `--bg-sheet-mobile` is #f0f3f8 / #1c1c1e, the colour 0.98 drew over `--bg-app` (and the
+    values Increase Contrast already gave it, so that block no longer names the token). `MOBILE_BAR` shares the token and
+    is solid with it. `--bg-sheet` stays at 0.98: under its scrim and blur nothing legible comes through.
+- **Measured after, live on DEV**, edge against what is around it, before → after: More's Week rows, 41 Month cells, the
+  key and the Stats tiles 1.00 → 1.30 on the card; the Week rows 1.10 → 1.19 on the phone sheet, which now reads
+  rgb(240, 243, 248) at alpha 1 with nothing behind it showing (screenshot at 375 × 812); Dark on the phone sheet 2.10.
+  The Summary's shift totals and notes rows 1.04 → 1.25; Plan's popover rows 1.09 → 1.17; Customers' totals and the
+  floor plan inspector 1.03 → 1.26. A standing booking's row could not be drawn (DEV has no standing bookings); it has
+  the totals' fill on the same Section, so the same composite. Before is the same element read with the old rim.
+- **Kept:** `--border-input` itself. Dark's `--field-edge` is `var(--border-input)`, so the token stays and only the
+  components stop drawing it.
+- **Pins:** `tests/week-view.test.js` (the four edges are `EDGE`, `--border-soft`, and no `--border-input` is left);
+  `tests/contrast.test.js` (the phone's sheet is solid at its old composite in both themes; no component, and nothing
+  App reads, draws `--border-input`). Each fails on the tree before this commit.
+- **Docs:** DESIGN.md (two new rules under "A surface that carries data is OPAQUE", the field-edge paragraph, the
+  Increase Contrast list, and `MOBILE_BAR`'s sheet).
+- **Gate:** 490.40 kB / 145.33 kB gz (from 145.32) · 4804 tests (from 4800) · lint 63 problems (0 errors, 63
+  warnings) · style OK, hover descriptions 0 of ceiling 0.

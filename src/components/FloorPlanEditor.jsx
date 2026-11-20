@@ -480,7 +480,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
       <Reveal show={!!inspector} inert={!inspector}>
         {inspector ? (
           <div style={{ paddingTop: 14 }}>
-            <div style={{ padding: "12px 14px", borderRadius: R.card, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+            <div style={{ padding: "12px 14px", borderRadius: R.card, background: "var(--bg-input)", border: "1px solid var(--border-soft)" }}>
               {inspector}
             </div>
           </div>

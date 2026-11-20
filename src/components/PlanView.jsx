@@ -98,7 +98,7 @@ function TablePopover({ id, queue, canWalkin, popRef, onClose, onPick, onWalkinH
             onClick={() => { if (!leaving) { skipExit(); onPick(b); } }}
             aria-label={b.time + " " + (b.name || "(no name)") + ", " + guestsLabel(b.size) + ", " + b.status}
             title={"Open " + (b.name || "(no name)") + "'s booking to edit it"}
-            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", font: "inherit", color: "inherit", padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, "--row-bg": "var(--bg-input)", "--row-bg-hover": "var(--bg-hover-card)", border: "1px solid var(--border-input)" }}>
+            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", font: "inherit", color: "inherit", padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, "--row-bg": "var(--bg-input)", "--row-bg-hover": "var(--bg-hover-card)", border: "1px solid var(--border-soft)" }}>
             <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
             <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
             {/* v18.2.0 phase 43 (C2): the party size as the List card's

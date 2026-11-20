@@ -288,20 +288,20 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
       <Section>
         {/* v16.3.0: insight totals */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
+          <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-soft)", borderRadius: R.inset }}>
             <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)" }}>{totalCustomers}</div>
             <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>customers</div>
           </div>
-          <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
+          <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-soft)", borderRadius: R.inset }}>
             <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--success-text)" }}>{totalVisits}</div>
             <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>completed visits</div>
           </div>
-          <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
+          <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-soft)", borderRadius: R.inset }}>
             <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--warn-text)" }}>{noShowCustomers}</div>
             <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>with a no-show</div>
           </div>
           {phonelessNoShowCount > 0 ? (
-            <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
+            <div style={{ flex: "1 1 90px", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-soft)", borderRadius: R.inset }}>
               <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--warn-text)" }}>{phonelessNoShowCount}</div>
               <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>no-shows with no phone</div>
             </div>

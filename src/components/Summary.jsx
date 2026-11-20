@@ -141,7 +141,7 @@ function NoteRow({ n, cols, last, onEdit }) {
         width: "100%", boxSizing: "border-box", textAlign: "left",
         padding: "8px 12px", marginBottom: last ? 0 : SP.snug, cursor: "pointer",
         "--row-bg": "var(--bg-input)", "--row-bg-hover": "var(--bg-hover-card)",
-        border: "1px solid var(--border-input)", borderRadius: R.inset,
+        border: "1px solid var(--border-soft)", borderRadius: R.inset,
         fontSize: T.body, color: "var(--text-primary)"
       }}>
       <span style={{ ...NOTE_TIME_FONT, width: cols.time, flexShrink: 0 }}>{n.time}</span>
@@ -484,7 +484,7 @@ function ShiftChip({ label, covers, count }) {
     <div style={{
       flex: "1 1 160px", minWidth: 150,
       padding: "8px 12px",
-      background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset
+      background: "var(--bg-input)", border: "1px solid var(--border-soft)", borderRadius: R.inset
     }}>
       <div style={{ fontSize: T.small, fontWeight: FW.medium, color: "var(--text-muted)", marginBottom: 2 }}>{label}</div>
       <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)" }}>{coversLabel(covers)}</div>

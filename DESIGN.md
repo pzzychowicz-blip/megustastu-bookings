@@ -270,8 +270,9 @@ explaining why is usually the one to read.
   back: a field at rest is that same quiet edge, about 1.6:1 on a Section, and 3:1 is
   what Increase Contrast gives (`--text-muted`). This is his decision against the
   letter of 1.4.11, recorded so it is not raised again. `--field-edge` is the field's
-  own token, because `--border-input` also rims stat cells and rows that are not
-  controls. `mkInp` reads it, so `DateField` and `SearchField` do; so do
+  own token, because the stat cells and rows that are not fields took another edge,
+  `--border-soft` since v18.18.0 (below, "A surface inside a sheet"), and
+  `--border-input` is left only as Dark's field edge. `mkInp` reads it, so `DateField` and `SearchField` do; so do
   `LayoutSettings`' two small inputs, the WhatsApp composer and the header's date pill.
   A new field built without `mkInp` takes it by hand. Focus stays the 2px
   `--focus-ring`, a long way from the edge. Dark keeps its rim, because its fill is
@@ -308,8 +309,8 @@ explaining why is usually the one to read.
   reaches the restaurant's phones: `prefers-reduced-transparency` did not match
   on iOS 26.5 (measured), and `forced-colors` is Windows only. One `@media`
   block after the dark tokens flips two things. **The glass goes opaque**:
-  `--tl-card-bg`, `--bg-sheet`, `--bg-sheet-mobile`, and in dark `--tl-popup-bg`
-  (light's is already opaque). Each value is that token's composite over
+  `--tl-card-bg`, `--bg-sheet`, and in dark `--tl-popup-bg` (light's is already
+  opaque, and so is `--bg-sheet-mobile` in both since v18.18.0). Each value is that token's composite over
   `--bg-app`, so a surface keeps its colour and only stops showing what is
   behind it — the page header ghosted faintly through the iPhone booking sheet
   in dark. A change to the token does not carry its composite along:
@@ -519,6 +520,28 @@ explaining why is usually the one to read.
   `--bg-cal-cell` now, the solid colour a cell had over a plain page. Glass is
   for chrome; anything whose colour MEANS something sits on a solid fill. The
   busyness shading got the key it never had, drawn from the same `HEAT` scale.
+- **A surface inside a sheet takes `--border-soft` as its edge, never the white rim
+  (v18.18.0, commit 19, Patryk).** `--border-input` is a 40% white line, and
+  v18.14.0 raised the desktop card to 98% white. From 600px up the Week rows, the
+  Month grid, the Stats tiles and the key then measured 1.01:1 against the card,
+  edge 1.00:1, so a Mac or the tablet showed none of them, while the phone's grey
+  sheet (1.09:1) kept them: the same screen read differently by width alone. Six
+  files drew the rim; all take `--border-soft` now, the edge every `Section` on
+  that card already had. Measured edge against what is around it, before → after:
+  More's cells 1.00 → 1.30 on the card and 1.10 → 1.19 on the phone; the Summary's
+  shift totals and notes rows 1.04 → 1.25; Plan's popover rows 1.09 → 1.17;
+  Customers' tiles and the floor plan inspector 1.03 → 1.26 (the standing-booking
+  rows share their fill and Section; DEV had none to draw). Dark barely moves (12%
+  white to 10%). `tests/contrast.test.js` fails a component that draws
+  `--border-input`; the token stays because Dark's `--field-edge` is it.
+- **The phone's sheet is solid (v18.18.0, commit 19, Patryk).** `--bg-sheet-mobile`
+  was 0.98 with no blur, so the page ghosted through on an iPhone: the Summary's
+  "Afternoon" and the header's view switcher behind More (1.04:1, and visible on a
+  flat sheet). It is now the colour 0.98 drew over `--bg-app` (#f0f3f8, #1c1c1e),
+  so the sheet's colour does not move, and Increase Contrast, which had those
+  values already, no longer names it. `MOBILE_BAR` shares the token and is solid
+  with it. The desktop card stays at 0.98 under its scrim and blur, where nothing
+  legible comes through.
 - **A Cancel is never red.** Layout's rename and add-table Cancel shared the
   remove button's red × (`X_BTN`); it is the stepper's neutral now (`CANCEL_X`).
 - **A paused item fades its TEXT, never its controls (v18.2.0, S5).** A paused
@@ -585,8 +608,8 @@ explaining why is usually the one to read.
   and "+ New" wrapped onto a second header row of their own, and the header and
   date row took ~455 of an 812px screen before the grid began. Below 600px they
   are `MOBILE_BAR` (App.jsx): fixed to the bottom, two equal thumb-width
-  buttons, the OPAQUE `--bg-sheet-mobile` (0.98 — `--bg-sheet`, at 0.72 until
-  v18.14.0, let a timeline row show through) with a hairline and `--shadow-soft`, NO blur (the
+  buttons, the OPAQUE `--bg-sheet-mobile` (solid since v18.18.0, 0.98 before it;
+  `--bg-sheet`, at 0.72 until v18.14.0, let a timeline row show through) with a hairline and `--shadow-soft`, NO blur (the
   ≤4 budget), z 100 — over the page and the toasts, under every modal. A spacer
   of the same height ends `<main>` so the last row is never under it.
 - **The Summary sits beside the date controls only on one line (v18.2.0).** The

@@ -32,6 +32,17 @@ describe("X2 — the calendar is opaque, and its shading has a key", () => {
     expect(Week).not.toMatch(/background: "var\(--bg-input\)"/);
   });
 
+  // v18.18.0 commit 19 (Patryk): measured, a cell was 1.01:1 against the
+  // desktop card (98% white since v18.14.0) with the white rim, so a desktop or
+  // tablet showed no rows and no grid; the phone's grey sheet kept them
+  // (1.09:1). The edge is --border-soft, 1.30:1 on the card, at all four sites.
+  it("edges every cell with --border-soft, never the white rim that vanished on the desktop card", () => {
+    expect(Week).toMatch(/const EDGE = "var\(--border-soft\)";/);
+    expect(Week).not.toMatch(/--border-input/);
+    expect(Week.match(/\(isFocused \|\| isSel \? "var\(--accent\)" : EDGE\)/g)).toHaveLength(2);
+    expect(Week.match(/border: "1px solid " \+ EDGE/g)).toHaveLength(2);
+  });
+
   it("fades an out-of-month day's number, never the cell, which would be see-through again", () => {
     expect(Week).not.toMatch(/opacity: c\.inMonth \? 1 : 0\.4/);
     expect(Week).toMatch(/<div style=\{\{ position: "relative", opacity: c\.inMonth \? 1 : OUT_OF_MONTH \}\}>/);

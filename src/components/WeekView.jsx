@@ -105,6 +105,14 @@ const MODE_TITLE = {
 };
 
 const CELL = "var(--bg-cal-cell)";
+// v18.18.0 commit 19 (Patryk): every cell's edge is EDGE, the hairline DESIGN.md
+// gives a surface inside a near-opaque sheet. It was --border-input, a white
+// rim, and v18.14.0 raised the desktop card to 98% white: a cell measured
+// 1.01:1 against the card from 600px up, so on a desktop or tablet the week's
+// rows and the month's grid were not there, while the phone's grey sheet
+// (1.09:1) kept them. --border-soft is 1.30:1 on the card, the edge every
+// Section on that card already has, and 1.18:1 on the phone's sheet.
+const EDGE = "var(--border-soft)";
 // The busiest in-month day's shading (the accent at up to 30%), shared by the
 // cells and the key under them so the key cannot describe a different scale.
 const HEAT = 0.3;
@@ -284,7 +292,7 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
                 padding: "10px 12px", borderRadius: R.inset, cursor: "pointer",
                 width: "100%", boxSizing: "border-box", textAlign: "left",
                 "--row-bg": CELL, "--row-bg-hover": "var(--bg-hover-card)",
-                border: "1px solid " + (isFocused || isSel ? "var(--accent)" : "var(--border-input)"),
+                border: "1px solid " + (isFocused || isSel ? "var(--accent)" : EDGE),
                 boxShadow: isFocused ? "0 0 0 2px var(--accent)" : "none"
               }}
             >
@@ -327,7 +335,7 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
     // columns the top three span two each and the bottom two span three.
     const stat = function(val, label, color, i){
       return (
-        <div key={label} style={{ gridColumn: isMobile ? (i < 3 ? "span 2" : "span 3") : "auto", minWidth: 0, padding: "8px 10px", background: CELL, border: "1px solid var(--border-input)", borderRadius: R.inset }}>
+        <div key={label} style={{ gridColumn: isMobile ? (i < 3 ? "span 2" : "span 3") : "auto", minWidth: 0, padding: "8px 10px", background: CELL, border: "1px solid " + EDGE, borderRadius: R.inset }}>
           <div style={{ fontSize: T.title, fontWeight: FW.bold, color: color || "var(--text-primary)" }}>{val}</div>
           <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>{label}</div>
         </div>
@@ -412,7 +420,7 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
                       minHeight: 54,   /* @canvas */ padding: "6px 4px 4px", borderRadius: R.inset, cursor: "pointer",
                       boxSizing: "border-box", textAlign: "center",
                       background: CELL,
-                      border: "1px solid " + (isFocused || isSel ? "var(--accent)" : "var(--border-input)"),
+                      border: "1px solid " + (isFocused || isSel ? "var(--accent)" : EDGE),
                       boxShadow: isFocused ? "0 0 0 2px var(--accent)" : "none"
                     }}
                   >
@@ -438,7 +446,7 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
             cells draw: the accent at up to HEAT (30%) over the cell. */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10, fontSize: T.small, color: "var(--text-muted)" }}>
           <span>Fewer covers</span>
-          <span aria-hidden="true" style={{ width: 64, height: 8, borderRadius: 4,   /* @canvas */ border: "1px solid var(--border-input)", background: "linear-gradient(to right, " + CELL + ", color-mix(in srgb, var(--accent) " + (HEAT * 100) + "%, " + CELL + "))" }} />
+          <span aria-hidden="true" style={{ width: 64, height: 8, borderRadius: 4,   /* @canvas */ border: "1px solid " + EDGE, background: "linear-gradient(to right, " + CELL + ", color-mix(in srgb, var(--accent) " + (HEAT * 100) + "%, " + CELL + "))" }} />
           <span>More</span>
         </div>
       </div>
