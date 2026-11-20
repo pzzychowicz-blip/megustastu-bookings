@@ -133,6 +133,7 @@ export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown
         <span style={{minWidth:0}}>{(!undoInfo?"":undoInfo.label?undoInfo.label:undoInfo.noShow?"Marked no-show":undoInfo.kind==="delete"?"Booking deleted":undoInfo.kind==="edit"?"Booking updated":"Booking cancelled")+(undoInfo&&undoNote?" · "+undoNote:"")}</span>
         <button
           onClick={function(e){e.stopPropagation();onUndo();}}
+          title="Take back the change this message names"
           className="mgt-hover-scale mgt-press"
           style={mkBtn({fontSize: T.body,minHeight:H.compact,padding:"4px 12px",background:"var(--accent)",flexShrink:0})}>Undo</button>
       </span>,{pointerEvents:"auto",padding:"6px 10px 6px 14px"})},

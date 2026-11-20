@@ -41656,3 +41656,26 @@ its ceiling exactly. One older fixture gained a `title`. `tests/shortcuts.test.j
 shape, "" for an unknown id, every `keyHint("…")` in `src/` naming a row (it failed on a throwaway file calling `keyHint("nope")`
 and passed its `keyHint("inbox")`), and the own sections printing as they did. `tests/shortcuts-tab.test.js` and
 `tests/wa-inbox-layout.test.js`: their pins on the inbox's rows read `lib/shortcuts.js` now.
+
+### Commit 9 — Part 2, batch 2: the header and the shell
+
+- **What:** a hover description on every control of the header, the date row, the compact header's Follow and zoom, the Optimiser
+  controls, the Summary, the split menu, the Undo toast and the notification strip with its eight banners and the parked write's
+  Discard. **Rule 14: 410 → 364.**
+- **Keys come from the table:** Walk-in (W), + New (N), WhatsApp (I), Find (/), the gear (?), ← and →, Today (D), the three views
+  (T, L, P), Follow (F), zoom (−, 0, =), the Optimiser (O), Reshuffle (R), the Summary's toggle (S) and More (M). The three keys
+  typed by hand in these files ("WhatsApp inbox (I)", "Previous day (←)", "Next day (→)", the Summary's "(M)") are gone.
+- **Four existing titles rewritten to the rules:** the view buttons had a tooltip only while split view could be used (they now
+  name the view, and add the split gesture where it works; `tests/a11y.test.js`'s pin on `title={gesturesOn` holds, unchanged);
+  the connection dot said only its state, and now adds what opening it offers; the waitlist badge leads with what it opens; the
+  gear puts a crash count first, so the key stays last.
+- **Names are untouched:** every control described here has visible text or an `aria-label`, so its `title` is its description,
+  never its name.
+- **Left for their batches:** App's confirm dialogs (batch 4), the Settings overlay's Close (batch 5), the inbox's archive and
+  delete confirms (batch 6).
+- **Measured on DEV** (reloaded, read from the live DOM): every header, date-row and toolbar control carries its title as written,
+  the keys printed by `keyHint`, e.g. "Go to the day before (←)" and "Show the List: the day's bookings as cards; right-click or
+  hold to add it to a split view (L)".
+
+No test changed: `keyHint` ids are literals (the views' are taken once at module scope), which `tests/shortcuts.test.js` asks of
+every call.

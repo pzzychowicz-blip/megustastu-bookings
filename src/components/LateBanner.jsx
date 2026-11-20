@@ -56,12 +56,14 @@ export function LateBanner({ lateMap, bookings, nowMins, today = "", onNoShow, o
           <button
             onClick={function () { onNoShow(id); }}
             aria-label={"No show (" + who + ")"}
+            title={"Cancel " + who + "'s booking as a no-show"}
             className="mgt-hover-scale"
             style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange, display: "inline-flex", alignItems: "center", gap: 6 })}><NoShowIcon size={IC.control} />No show</button>
         </Presence>
         <button
           onClick={function () { onDismiss(id); }}
           aria-label={"Dismiss the running-late alert for " + who}
+          title={"Hide this alert for " + who}
           className="mgt-hover-scale mgt-press"
           style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.quiet })}><CloseIcon size={IC.control} /></button>
       </div>

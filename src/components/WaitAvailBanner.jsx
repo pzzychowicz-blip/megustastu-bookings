@@ -46,11 +46,13 @@ export function WaitAvailBanner({ entries, availability, onBook, onDismiss, }) {
         <button
           onClick={function () { onBook(w); }}
           aria-label={"Book (" + who + ", " + guestsLabel(w.size) + ")"}
+          title={"Open a booking for " + who + " on the free table"}
           className="mgt-hover-scale"
           style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: "var(--app-walkin)" })}>Book</button>
         <button
           onClick={function () { onDismiss(id); }}
           aria-label={"Dismiss the table-free alert for " + who}
+          title={"Hide this alert for " + who}
           className="mgt-hover-scale mgt-press"
           style={mkBtn({ fontSize: T.body, width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", background: BTN.quiet })}><CloseIcon size={IC.control} /></button>
       </div>

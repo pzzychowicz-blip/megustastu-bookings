@@ -7,6 +7,7 @@
 
 import { BTN, T } from "../lib/constants";
 import { mkBtn, Reveal } from "./atoms";
+import { keyHint } from "../lib/shortcuts";
 
 // v18.14.0 (correction 26, Patryk): "Following" at T.small with 10px of padding, 75.2
 // measured and rounded up. Follow keeps that width, or a tap on it moved the three zoom
@@ -36,6 +37,7 @@ export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, follo
           setFollowNow(false);
         }
       }}
+      title={"Keep the now-line in view as the time passes" + keyHint("follow")}
       className="mgt-hover-scale mgt-press"
       style={mkBtn({
         minHeight: 36, minWidth: FOLLOW_W, padding: "4px 10px", fontSize: T.small,
@@ -64,6 +66,7 @@ export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, follo
       <button
         onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
         aria-label="Zoom out"
+        title={"Zoom the timeline out, to see more hours" + keyHint("zoomOut")}
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.quiet })}
       >
@@ -82,6 +85,7 @@ export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, follo
       <button
         onClick={() => { setZoom(1); setFollowNow(false); }}
         aria-label={zoomLevel(zoom) + (zoom !== 1 ? " · Whole day" : "") + " (reset zoom)"}
+        title={"Show the whole day again, at 1×" + keyHint("zoomReset")}
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 36, padding: "4px 10px", fontSize: T.small, background: BTN.quiet, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
       >
@@ -97,6 +101,7 @@ export function TimelineZoomControls({ zoom, setZoom, maxZoom, followZoom, follo
       <button
         onClick={() => setZoom((z) => Math.min(maxZoom, z + 0.5))}
         aria-label="Zoom in"
+        title={"Zoom the timeline in, to see fewer hours larger" + keyHint("zoomIn")}
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.quiet })}
       >

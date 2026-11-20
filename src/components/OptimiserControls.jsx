@@ -7,6 +7,7 @@
 
 import { BTN, T } from "../lib/constants";
 import { mkBtn, Presence } from "./atoms";
+import { keyHint } from "../lib/shortcuts";
 
 // Reshuffle is only shown when the optimizer is OFF — when ON it runs
 // continuously, no manual trigger needed.
@@ -15,6 +16,7 @@ export function OptimiserControls({ autoOptimizer, setAutoOptimizer, onReshuffle
     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
       <button
         onClick={() => setAutoOptimizer(!autoOptimizer)}
+        title={"Turn the Optimiser on or off for today: it re-seats unlocked bookings after each change" + keyHint("optimiser")}
         className="mgt-hover-scale"
         style={mkBtn({
           minHeight: 36, padding: "4px 12px", fontSize: T.small,
@@ -31,6 +33,7 @@ export function OptimiserControls({ autoOptimizer, setAutoOptimizer, onReshuffle
       <Presence show={!autoOptimizer} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span">
         <button
           onClick={onReshuffle}
+          title={"Re-seat today's unlocked bookings from scratch, once" + keyHint("reshuffle")}
           className="mgt-hover-scale"
           style={mkBtn({ minHeight: 36, padding: "4px 12px", fontSize: T.small, background: BTN.orange })}
         >

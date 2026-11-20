@@ -104,6 +104,7 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, pa
         </span>
         <button
           onClick={function () { window.location.reload(); }}
+          title="Load the app again, to try reaching the bookings"
           className="mgt-hover-scale mgt-press"
           style={mkBtn({ background: BTN.today, fontSize: T.body, padding: "4px 12px", minHeight: 32 })}>Reload</button>
       </>
@@ -158,12 +159,14 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, pa
           {parked.length ? (
             <button
               className="mgt-hover-scale"
+              title="Try saving the held change again"
               style={mkBtn({ fontSize: T.body, background: BTN.orange, minHeight: H.compact, padding: "4px 12px" })}
               onClick={onRetryParked}>Retry</button>
           ) : null}
           {writeWarning ? (
             <button
               className="mgt-hover-scale"
+              title="Hide this warning"
               style={mkBtn({ fontSize: T.body, background: BTN.quiet, minHeight: H.compact, padding: "4px 12px" })}
               onClick={onDismissWarning}>Dismiss</button>
           ) : null}
@@ -234,9 +237,11 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, pa
         <span style={{ flex: 1, minWidth: 0, color: "var(--warn-text)" }}>Moving some bookings would free up more capacity.</span>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}><button
           onClick={onDismissIneff}
+          title="Hide this suggestion"
           className="mgt-hover-scale"
           style={mkBtn({ fontSize: T.body, minHeight: 36, padding: "6px 14px", background: BTN.quiet })}>Dismiss</button><button
           onClick={onReshuffle}
+          title="Re-seat the day's unlocked bookings to free more tables"
           className="mgt-hover-scale"
           style={{ background: BTN.orange, color: "var(--text-on-accent)", border: "1px solid var(--border-glass)", borderRadius: R.pill, padding: "6px 14px", cursor: "pointer", fontSize: T.body, fontWeight: FW.semi, minHeight: 36, boxShadow: "var(--shadow-btn)" }}>Reshuffle</button></div>
       </>

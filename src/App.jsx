@@ -72,6 +72,7 @@ import { dueOccurrences, withOccurrences } from "./lib/recurring";
 import { planDelete, planUndo, planCustomerDelete, withUndoDelta, landedSentence, deleteWords, cancelWords } from "./lib/delete-undo";
 import { CONFIRM_MODALS, markArmed, armSettled } from "./lib/arm-guard";
 import { afterIdle } from "./lib/after-frame";
+import { keyHint } from "./lib/shortcuts";
 import { planSettle, settleEffects, carryTransform } from "./lib/voucher-settle";
 import { useSchemaGate } from "./hooks/useSchemaGate";
 import UpdateRequired from "./components/UpdateRequired";
@@ -4101,7 +4102,7 @@ export function BookingApp({uid}){
               It is deliberately outside <header>, so `inert` while a modal is
               open does not reach it — a skip link inside an inert subtree is
               silently unfocusable, the same trap as a live region in one. */}
-          <a className="mgt-skip" href="#mgt-main">Skip to bookings</a><header
+          <a className="mgt-skip" href="#mgt-main" title="Jump past the header to the bookings">Skip to bookings</a><header
           /* v17.12.0: `inert` while a modal is open — see the <main> note below. */
           inert={anyModal}
           ref={headerRef}
@@ -4113,7 +4114,7 @@ export function BookingApp({uid}){
               On a phone the block is the whole first row and ends with the
               connection dot (phase 79). */}<div ref={headTitleRef} style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:isMobile?"1 1 100%":undefined}}><button
               onClick={function(){setShowSettings(true);}}
-              title={"Settings & keyboard shortcuts"+(crashWord?" · "+crashWord:"")}
+              title={(crashWord?crashWord+" · ":"")+"Open Settings and the keyboard shortcuts"+keyHint("help")}
               aria-label={"Settings & keyboard shortcuts"+(crashWord?", "+crashWord:"")}
               className="mgt-hover-scale"
               style={GEAR_BTN}><CogIcon size={IC.chrome} /><CountBadge n={crashes.count} plus={crashes.more} float background="var(--app-danger-solid)" /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile||compact?T.title:T.display,fontWeight: FW.bold,margin:0,whiteSpace:compact?"nowrap":undefined}}>{generalSettings.restaurantName}</h1>{compact?null:<div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{/* v18.2.0: separators. The double spaces between the three facts were
@@ -4141,9 +4142,11 @@ export function BookingApp({uid}){
               chose the bar. Tablet and desktop are unchanged. */}{isMobile?null:<><button
               onClick={openWalkin}
               className="mgt-hover-scale"
+              title={"Seat a party that came in without a booking"+keyHint("walkin")}
               style={mkSolidBtn("var(--app-walkin)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>Walk-in</button><button
               onClick={openNew}
               className="mgt-hover-scale"
+              title={"Make a new booking"+keyHint("newBooking")}
               style={mkSolidBtn("var(--app-new)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>+ New</button></>}{/* v18.0.0 phase 5: the WA entry point is gated on the MODULE, not on
               WA_SANDBOX. Same guarantee — the module ships off, so a build on PROD
               Firebase (including a main-project Vercel preview of this branch) reads
@@ -4152,13 +4155,13 @@ export function BookingApp({uid}){
             {whatsappOn?<button
               onClick={function(){setShowInbox(true);}}
               className="mgt-hover-scale"
-              title="WhatsApp inbox (I)"
+              title={"Open the WhatsApp inbox"+keyHint("inbox")}
               style={mkSolidBtn("var(--wa-green)",{position:"relative",padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>WhatsApp<CountBadge n={wa.unreadCount} float background="var(--wa-unread-dot)" /></button>:null}{/* v17.9.0 (Patryk): Find-a-booking moved here from the date-nav
               toolbar, between "+ New" and the dot. Searching is an ACTION, and
               this is the row of them — it reads as the counterpart to adding a
               booking rather than as view chrome. */}<button
               onClick={function(){setShowSearch(true);}}
-              title="Find a booking"
+              title={"Find a booking on any date, by name, phone or tag"+keyHint("find")}
               aria-label="Find a booking"
               className="mgt-hover-scale"
               style={CHROME_BTN}><SearchIcon size={IC.chrome} /></button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
@@ -4172,9 +4175,11 @@ export function BookingApp({uid}){
             style={MOBILE_BAR}><button
               onClick={openWalkin}
               className="mgt-hover-scale"
+              title="Seat a party that came in without a booking"
               style={mkSolidBtn("var(--app-walkin)",{flex:1,fontSize: T.body})}>Walk-in</button><button
               onClick={openNew}
               className="mgt-hover-scale"
+              title="Make a new booking"
               style={mkSolidBtn("var(--app-new)",{flex:1,fontSize: T.body})}>+ New</button></div>:null}</header><div
           /* v17.9.0 (Patryk): the date controls are 40px and the collapsed
              Summary card beside them is 58, so `flex-start` left them sitting
@@ -4197,18 +4202,19 @@ export function BookingApp({uid}){
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.quiet})}
               aria-label="Previous day"
-              title="Previous day (←)"
+              title={"Go to the day before"+keyHint("prevDay")}
               ><ChevronLeftIcon size={IC.chrome} /></button><button
               onClick={function(){goToDate(stepDate(viewDate,1));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.quiet})}
               aria-label="Next day"
-              title="Next day (→)"
+              title={"Go to the day after"+keyHint("nextDay")}
               ><ChevronRightIcon size={IC.chrome} /></button><DateField
               /* v18.0.0 session 7: the weekday inside the pill ("Fri
                  11/09/2026"). The pill's look moved onto DateField's wrapper
                  unchanged; the input's own name rides in inputProps. */
               inputProps={{"aria-label":"Viewed date"}}
+              description="Pick the day to show"
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
               style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:dateCtrlMotion}}>{clockNote?<span
@@ -4218,13 +4224,14 @@ export function BookingApp({uid}){
               style={{display:"inline-flex",alignItems:"center",minHeight:H.control,fontSize: T.small,fontWeight: FW.semi,color:"var(--text-secondary)",whiteSpace:"nowrap"}}>{clockNote}</span>:null}<Presence show={viewDate!==todayStr()} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
               onClick={function(){goToDate(todayStr());}}
               className="mgt-hover-scale"
+              title={"Go back to today"+keyHint("today")}
               style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence>{/* v16.0.0: waitlist badge — lives in the Today slot (to Today's right when
               Today is visible); the flex:1 Summary sibling absorbs the width change.
               Orange = a table currently fits someone waiting; slate = just waiting. */}
             <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
               onClick={function(){setShowWaitlist(true);}}
               aria-label={"Waitlist — "+countLabel(dayWaiting.length,"waiting")+(dayWaitAvail?", a table is free now":"")}
-              title={"Waitlist — "+countLabel(dayWaiting.length,"waiting")+(dayWaitAvail?", a table is free now":"")}
+              title={"Open the day's waitlist"+(dayWaitAvail?": a table is free for someone waiting":"")}
               className="mgt-hover-scale"
               /* v17.10.0: the waitlist wears the PENDING amber, not the burnt
                  orange it shared with No show / Reassign / Reshuffle / the swap

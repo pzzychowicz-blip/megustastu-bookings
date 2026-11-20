@@ -203,7 +203,7 @@ export function AlertPanel({ role = "danger", tone, tint, icon: Icon, title, cou
             // `--row-bg-hover: var(--bg-veil)`, a neutral veil that lightens
             // the pane's severity tint rather than replacing it with the
             // class's accent wash. `R.inset` gives the tint a shape.
-            <button /* @no-lift a header-wide item — a 1.08 lift runs into the action buttons beside it, the strip lid's reason */ type="button" aria-expanded={!!expanded} className="mgt-ac-row mgt-nopress" style={{
+            <button /* @no-lift a header-wide item — a 1.08 lift runs into the action buttons beside it, the strip lid's reason */ type="button" aria-expanded={!!expanded} title="Show or hide this section's rows" className="mgt-ac-row mgt-nopress" style={{
               "--row-bg-hover": "var(--bg-veil)", borderRadius: R.inset,
               flex: "1 1 auto", minWidth: 0,
               display: "flex", alignItems: "center", flexWrap: "wrap", gap: SP.base,

@@ -29,6 +29,7 @@ import { OptimiserControls } from "./OptimiserControls";
 // v17.9.0: the local `hh` was one of six copies of this label — see lib/time-grid.js.
 import { hourLabel as hh } from "../lib/time-grid";
 import { PrintIcon } from "./Icons";
+import { keyHint } from "../lib/shortcuts";
 function coversLabel(n){ return countLabel(n, "cover", "covers"); }
 function bookingsLabel(n){ return countLabel(n, "booking", "bookings"); }
 
@@ -316,19 +317,21 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
             {onSpecialHours ? (
               <button
                 onClick={onSpecialHours}
+                title="Give this day hours of its own, or close it"
                 className="mgt-hover-scale mgt-press"
                 style={mkBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 12px", background: BTN.quiet })}>Hours for this day</button>
             ) : null}
             {onPrint ? (
               <button
                 onClick={onPrint}
+                title="Print the day sheet, the timeline or both"
                 className="mgt-hover-scale mgt-press"
                 style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.quiet, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={IC.control} />Print</button>
             ) : null}
             {onOpenWeek ? (
               <button
                 onClick={onOpenWeek}
-                title="Week & month at a glance (M)"
+                title={"See the week and the month at a glance, with their numbers" + keyHint("more")}
                 className="mgt-hover-scale mgt-press"
                 style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.quiet })}>More</button>
             ) : null}
@@ -377,6 +380,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
         <button /* @no-lift pre-existing, not reviewed for v18.0.0 */
           onClick={onToggle}
           aria-expanded={open}
+          title={"Show or hide the day's numbers and notes" + keyHint("summary")}
           /* v18.4.0 (Patryk): no press dip, Collapsible's reason: this button
              is the width of the headline, and at 96% its text slid inward and
              back on every tap. The panel's own tint answers the press. */
@@ -457,6 +461,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
           <button /* @no-lift pre-existing, not reviewed for v18.0.0 */
             onClick={onToggle}
             aria-label={open ? "Collapse summary" : "Expand summary"}
+            title={"Show or hide the day's numbers and notes" + keyHint("summary")}
             style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: T.small, color: "var(--text-muted)", fontWeight: FW.bold, flexShrink: 0,
               /* v17.8.0: was padding "4px 2px", giving a 13x21px hit area — the
                  smallest target in the app, on the control that opens the day's

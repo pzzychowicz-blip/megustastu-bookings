@@ -59,6 +59,7 @@ export function UnsettledBanner({ bookings, vouchersByCode, currency = "€", on
         </span>
         <button
           onClick={function () { onOpen(b.id); }}
+          title="Say how much of the voucher the bill used"
           className="mgt-hover-scale"
           // The visible text LEADS and the disambiguator follows (v17.15.4):
           // "Settle" is what a voice-control user can say, and the name is what

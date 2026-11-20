@@ -82,10 +82,12 @@ export function ClashBanner({ pairs, bookings, onAssign, onDismiss, swapKey }) {
         <span style={{ fontSize: T.body, color: "var(--danger-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{msg}</span>
         <button
           onClick={function () { onAssign(later.id); }}
+          title={"Choose other tables for " + laterWho + " by hand"}
           className="mgt-hover-scale"
           style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.tables })}>{"Assign " + laterWho}</button>
         <button
           onClick={function () { onDismiss(rowId); }}
+          title={"Hide this warning about " + firstWho + " and " + laterWho}
           /* v17.15.6: the PAIR, matching `clashRowId`'s own identity — a clash
              is about two parties, and dismissing "Pau vs Rita" must read
              differently from "Rita vs a third party", which is the very

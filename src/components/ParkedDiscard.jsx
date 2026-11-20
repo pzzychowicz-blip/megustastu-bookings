@@ -22,6 +22,7 @@ export function ParkedDiscard({ onDiscard }) {
     <div style={{ minWidth: PARKED_ARMED_W, display: "flex", justifyContent: "flex-end" }}>
       <button
         className="mgt-hover-scale"
+        title={armed ? "Drop this change for good: it is never saved" : "Drop the change that could not be saved (asks again first)"}
         style={mkBtn({ fontSize: T.body, background: BTN.quiet, minHeight: H.compact, padding: "4px 12px" })}
         onClick={function () {
           if (armed) {

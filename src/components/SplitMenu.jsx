@@ -101,9 +101,11 @@ export function SplitMenu({ view, onConfirm, onClose, sideBySideOk = true }) {
       {step === 1 ? (
         <div style={row}>
           <button className={noSide ? "mgt-nopress" : "mgt-hover-scale"} disabled={noSide}
+            title="Show two views beside each other, left and right"
             style={dirBtn({ background: BTN.quiet, ...(noSide ? { opacity: 0.45, cursor: "default" } : null) })}
             onClick={() => { if (live && !noSide) { setDir("v"); setStep(2); } }}><SplitSideIcon size={IC.chrome} />Side by side</button>
           <button className="mgt-hover-scale" style={dirBtn({ background: BTN.quiet })}
+            title="Show two views one above the other"
             onClick={() => { if (live) { setDir("h"); setStep(2); } }}><SplitStackIcon size={IC.chrome} />Top and bottom</button>
         </div>
       ) : (
@@ -111,11 +113,13 @@ export function SplitMenu({ view, onConfirm, onClose, sideBySideOk = true }) {
           <div style={row}>
             {others.map((v) => (
               <button key={v} className={tlBlocked(v) ? "mgt-nopress" : "mgt-hover-scale"} disabled={tlBlocked(v)}
+                title={"Show " + LABEL[v] + " in the second pane, beside " + LABEL[view]}
                 style={btn({ background: BTN.quiet, ...(tlBlocked(v) ? { opacity: 0.45, cursor: "default" } : null) })}
                 onClick={() => { if (live && !tlBlocked(v)) { skipExit(); onConfirm({ a: view, b: v, dir: dir, ratio: 0.5 }); } }}>{LABEL[v]}</button>
             ))}
           </div>
           <button type="button" className="mgt-hover-scale"
+            title="Go back to choosing how to split the screen"
             style={mkBtn({ background: BTN.quiet, minHeight: H.touch, padding: "6px 14px", marginTop: 8, fontSize: T.small, display: "inline-flex", alignItems: "center", gap: 4 })}
             onClick={() => { if (live) { setStep(1); setDir(null); } }}><ChevronLeftIcon size={IC.inline} />Back</button>
         </>

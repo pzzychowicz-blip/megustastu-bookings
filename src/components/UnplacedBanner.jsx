@@ -51,6 +51,7 @@ export function UnplacedBanner({ items, onAssign, swapKey }) {
         <span style={{ fontSize: T.body, color: "var(--danger-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{msg}</span>
         <button
           onClick={function () { onAssign(b.id); }}
+          title={"Choose tables for " + who + " by hand"}
           className="mgt-hover-scale"
           style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.tables })}>{"Assign " + who}</button>
       </div>
