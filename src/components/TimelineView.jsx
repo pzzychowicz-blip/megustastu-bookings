@@ -1863,6 +1863,12 @@ export const TimelineView = memo(function TimelineView({
   onDropPreview = null, // v18.14.0 (H5): what a drop on a row would do (App's previewDrop)
   onDropCheck = null,   // v18.14.0 (correction 17): the same, with the real plan (App's checkDrop)
   onReshuffle = () => {},
+  // v18.18.0 commit 16: App's `reshuffleOffer`, as two SCALARS for React.memo.
+  // `reshuffleOn` draws Reshuffle (today and every later day, never a past one),
+  // `reshuffleLit` paints it orange (today with the Optimiser off, or while the
+  // "Tables could be reshuffled" check fires).
+  reshuffleOn = false,
+  reshuffleLit = false,
   // v17.6.0: separation between bookings, in minutes (0 = feature off). A SCALAR
   // from App rather than the TURN_BUFFER live binding, because React.memo cannot
   // see a live binding — the same reason hoursSig/layoutSig exist.
@@ -2968,8 +2974,10 @@ export const TimelineView = memo(function TimelineView({
       zoom={zoom} setZoom={setZoom} maxZoom={maxZoom} followZoom={followZoom}
       followNow={followNow} setFollowNow={setFollowNow} isToday={isToday} />
   );
-  const optBtns = isToday ? (
-    <OptimiserControls autoOptimizer={autoOptimizer} setAutoOptimizer={setAutoOptimizer} onReshuffle={onReshuffle} />
+  // v18.18.0 commit 16: on today and every later day (App decides, `reshuffleOn`);
+  // the Optimiser toggle inside it is today's alone.
+  const optBtns = reshuffleOn ? (
+    <OptimiserControls autoOptimizer={autoOptimizer} setAutoOptimizer={setAutoOptimizer} onReshuffle={onReshuffle} isToday={isToday} lit={reshuffleLit} />
   ) : null;
 
   // ── Legend chips (status colours + indoor/outdoor + blocked) ─────────────

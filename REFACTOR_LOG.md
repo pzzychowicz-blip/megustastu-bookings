@@ -41374,7 +41374,7 @@ full evening with a hand-placed party the optimiser cannot seat).
 Gate on the last fix: main entry 479.00 kB, gzip 141.65 kB (141.39 before the run) · Tests 4681 passed (4669 before) · Lint 63 problems
 (0 errors, 63 warnings) · style invariants OK. No rule changed and nothing stored changed shape (`SCHEMA` stays).
 
-## v18.18.0 — a swap that seats each party only where it needs, the day's notes in the Summary, four interface fixes, the switch's wording, and a description on every control
+## v18.18.0 — a swap that seats each party only where it needs, the day's notes in the Summary, four interface fixes, the switch's wording, a description on every control, and Reshuffle on every day ahead
 
 **Date:** 2026-11-19 · **Branch:** `feat/v18.18.0-summary-notes-and-swap`
 
@@ -41873,3 +41873,93 @@ every call.
   account lacks Move tables, and putting a deny on the one DEV account would have taken drags away from it.
 - **Docs:** GLOSSARY gains the **Reshuffle button** row, which it never had. `src/CLAUDE.md`'s hook-order list gains
   the line on a handler inside a render-time call.
+
+### Commit 16 — Reshuffle on today and every later day, orange when the check finds a better seating
+
+- **What (Patryk, 2026-11-20):** since v18.17.0 the Optimiser keeps the day (`applyOptKeep`). On a later day, and on
+  today with the switch ON, a save places only its own party, so the seating drifts from the best fit, and the fresh
+  pass (`planReshuffle` → `applyOpt`) came only from Reshuffle, which showed on today with the switch OFF. Reshuffle now
+  shows on today and every later day, whatever the switch says. A past day gets nothing, the notice included.
+- **One rule:** `reshuffleOffer({viewDate, today, autoOptimizer, suggest})` (`lib/booking-logic.js`) → `null` before
+  today, else `{lit}`. App draws from it (`reshuffleBtn`): TimelineView takes `reshuffleOn` / `reshuffleLit`, the
+  Summary `showOptimiser={toolbarFolded&&!!reshuffleBtn}` and `reshuffleLit`, scalars because the Summary is a memo.
+  The `R` key asks the same function, so the key and the button cannot disagree.
+- **Grey, and orange while it would help:** `BTN.quiet` at rest, `BTN.orange` on today with the Optimiser off (as it
+  always was) or while the notice's check fires. App's `suggestOn` is that check: `checkInefficent`, a day the
+  Optimiser owns, the Settings switch "Reshuffle suggestions", and today or later. Dismiss hides only the notice; the
+  button stays orange (Patryk). While the check lights it, its description adds ": moving some would free up more
+  capacity".
+- **Order:** Reshuffle first, then today's toggle, so Reshuffle keeps one place on every day. It no longer slides in
+  with the switch, so its `Presence` is gone (`index.css`'s slide comment now names the Today button alone).
+- **The notice** reads `suggestOn` too (`ineffShow=!reshuffled&&suggestOn&&dismissedIneff!==viewDate`). It had no
+  date floor and could show on a past day, since `optimizerActiveFor` is true there.
+- **The confirm** names the day away from today ("Reshuffle all bookings on Sun 22.11?", `formatDay`), and "Seated
+  bookings will not be moved." shows on today only, the one day that can have seated parties.
+- **Undo (Patryk's requirement on the plan):** no Undo code changed. Every way in ends in `forceReshuffle` →
+  `saveMove(…,"reshuffle",…)`, which arms the pill when the write lands, for the Settings time; `planUndo` restores the
+  snapshots verbatim, with no Optimiser pass, and takes the view to the reshuffled day. What was missing was proof
+  beyond one hand-made round trip on today. `tests/delete-undo.test.js` ("a Reshuffle, undone") now runs App's
+  pipeline end to end (`planReshuffle`, `withUndoDelta` with `undoDelta`'s sync, `planUndo`): a later day with four
+  parties moved; Reshuffle and unlock (tables, `_locked`, `_manual` and history all back, the "unlocked by Reshuffle"
+  line gone); today with a seated party running over (kept out of the snapshots by the sync, everyone else back); a
+  day with nothing to gain (no snapshots, so no pill); a held write replayed on a fresher list (undoes to that list).
+  **The fixtures go through `sanitize`**: hand-made rows lack the flags a pass writes (`_conflict`, `_manual`,
+  `_locked`), and the seated party read as moved until they did (measured in a probe).
+- **Two traps, both measured:**
+  1. **The React Compiler.** The first gate read 21 errors (`preserve-manual-memoization`, BookingApp skipped). Linting
+     App.jsx variants through stdin: the render-time `reshuffleOffer({...})` call was the trigger, and inside it,
+     App's `today` (`const today = todayStr()`). `reshuffleOffer({today:today})`, `reshuffleOffer(today)` and even
+     `formatDay(today)` gave 21 or 22 errors; `today:todayStr()`, `String(today)` or a literal gave 0 and HEAD's 6
+     warnings. App passes `todayStr()` there. `src/CLAUDE.md`'s hook-order line now covers `today` beside commit 15's
+     handler.
+  2. **The chunks.** `reshuffleOffer` first lived in `manual-assign.js`. `shortcuts.js` importing it from there moved
+     ~21 kB out of the main entry, and the 10 kB `customers` chunk with it, into the shared `atoms` chunk: entry
+     489.61 → 468.82 kB, `atoms` 127.47 → 159.11 kB, about +0.9 kB in all (both builds compared chunk by chunk, the
+     commit 15 tree built from `git archive`). The build runs no React Compiler, so the drop was not the trap above.
+     Moved to `booking-logic.js`, beside `optimizerActiveFor` and `unlockOffered`, which `shortcuts.js` already imports:
+     entry 489.95 kB, `atoms` 127.69 kB, `customers` 9.99 kB, the split as at commit 15.
+- **Pins:** new in `tests/manual-assign.test.js`, `reshuffleOffer`'s five cases, and App's `suggestOn`, `ineffShow`,
+  `reshuffleBtn`, both views' scalars, the order in `OptimiserControls`, the confirm's two sentences, and
+  `forceReshuffle`'s call (it passes no switch, so today ON and OFF and every later day get one pass). New in
+  `tests/quiet-buttons.test.js`, the fill ternary inside `mkBtn` on a `mgt-hover-scale` button. New in
+  `tests/shortcuts.test.js`, `R` on today and later days with either switch, nothing on a past day, and agreement with
+  `reshuffleOffer` on every day three either side of today. **Test edits:** `tests/compact-shell.test.js`'s
+  `showOptimiser` pin (it named `viewDate===todayStr()`, the condition that changed); `tests/shortcuts.test.js`'s
+  "O toggles the optimiser today; R asks to reshuffle only while it is off", split into the O test, unchanged, and
+  the new R tests, because its R half asserted the old rule. The `OptimiserControls` call keeps its first three
+  attributes, so `compact-shell`'s Summary pin stands as it was.
+- **Gate:** 489.95 kB / 145.28 kB gz · 4787 tests (from 4767) · lint 63 problems (0 errors, 63 warnings) · style OK,
+  hover descriptions 0 of ceiling 0.
+- **Measured on DEV, 1024×768 (the Browser pane)**, with Sun 22.11 staged by direct writes (`updatedAt` raised,
+  `baseUpdatedAt` the stored one, as another device would) and restored to the byte afterwards:
+  - Today, Optimiser OFF: `[Reshuffle]` orange, then `[Optimiser: OFF]`, description "Re-seat today's unlocked
+    bookings from scratch, once (R)". ON: Reshuffle grey (quiet fill, secondary ink, the field edge), toggle green.
+  - Sun 22.11: Reshuffle grey and alone at the same x (29), "this day's"; `R` opened "Reshuffle all bookings on Sun
+    22.11?" with no seated sentence.
+  - Iván Serrano staged 1 → 7, Marta Ruiz 2 → 6 locked by hand: the confirm offered "Reshuffle and unlock 1". The
+    plain Reshuffle moved Iván 7 → 1 and kept Marta (read from the database), pill "Tables re-optimised. · Undo";
+    Undo put Iván back on 7.
+  - "Reshuffle and unlock 1": Iván → 1, Marta → 2, unlocked, with "unlocked by Reshuffle"; pill "Tables
+    re-optimised, 1 unlocked. · Undo". Previous day to Sat 21.11, then Undo: the view went back to 22.11, Iván on 7,
+    Marta on 6, locked and hand-placed, and the history line gone.
+  - Nuria Soler (3) staged on 7+8 with the 4-top free: the notice showed and both Reshuffles were orange, the
+    toolbar's description adding the reason. Dismiss: notice gone, button still orange. Settings "Reshuffle
+    suggestions" off: grey, plain description; on again: orange, notice still dismissed for the day. The Shortcuts
+    tab lists "Reshuffle (today and later days)".
+  - Reshuffle then: Nuria → 9, Iván → 1, and the check stopped firing (grey). Undo: both back, orange again. **The
+    check does not fire right after a Reshuffle**, so the plan's stop-and-ask did not arise.
+  - A past day (Thu 19.11): no Reshuffle, no toggle, `R` opens nothing, no notice.
+- **Measured with a headless rig** (Chromium on a copy of the manual's capture profile, this worktree on :5179, the
+  profile's dark theme):
+  - **998×507, DPR 2, touch (the restaurant tablet):** the toolbar is folded; the opened Summary shows `[Reshuffle]`
+    orange and `[Optimiser: OFF]` at x 31 and 116 on today, and Reshuffle grey and alone at x 31 on 22.11. A real
+    pointer press on the Summary's Reshuffle, then the confirm's: Iván (staged on 7 again) → 1. **The pill was on
+    screen and reachable**: 58×32 at 546,361 inside 998×507, and topmost at its centre. A real click on Undo put Iván
+    back on 7 (database).
+  - **375×812:** the toolbar's left, x 25, with the toggle at 110 on today, alone on 22.11.
+  - **Not measured:** the grey ↔ orange ease itself. The hidden pane runs no frames, and one reading caught "Optimiser:
+    OFF" still green mid-transition; it was re-read after a forced frame.
+- **Docs:** GLOSSARY (Reshuffle button, inefficiency section, optimiser toggle); DESIGN.md (a control that is always
+  there wears the orange only while it would help); `src/components/CLAUDE.md` (OptimiserControls, the Summary's
+  `showOptimiser`); `src/lib/CLAUDE.md` (`reshuffleOffer`, and why it lives in `booking-logic.js`); `src/CLAUDE.md`
+  (the hook-order line).

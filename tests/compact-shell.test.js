@@ -52,7 +52,9 @@ describe("the toolbar has one home at a time", () => {
   it("the card drops its row exactly when the header and the Summary take it", () => {
     expect(Timeline).toMatch(/\{toolbarFolded \? null : \(/);
     expect(App).toMatch(/show=\{toolbarFolded\}/);
-    expect(App).toMatch(/showOptimiser=\{toolbarFolded&&viewDate===todayStr\(\)\}/);
+    // v18.18.0 commit 16: on the Reshuffle button's days (`reshuffleOffer`, today
+    // and every later day), where it was today only.
+    expect(App).toMatch(/showOptimiser=\{toolbarFolded&&!!reshuffleBtn\}/);
   });
   // v18.14.2 (Patryk): a phone wraps Follow and zoom under the Optimiser, and alone on
   // a line `space-between` leaves an item at the start.

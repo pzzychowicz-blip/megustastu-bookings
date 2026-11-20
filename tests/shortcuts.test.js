@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { resolveShortcut, shortcutDocs, ownShortcutDocs, keyHint, OWN_SHORTCUT_SECTIONS, SHORTCUT_LAYERS, SHORTCUT_GATES, SUMMARY_KEY, WEEK_KEY } from "../src/lib/shortcuts";
 import { todayStr, addDays } from "../src/lib/day";
+import { reshuffleOffer } from "../src/lib/booking-logic";
 
 const TODAY = todayStr();
 const ENV = { sandbox: false, today: TODAY, settingsTabs: () => ["general", "reminders", "admin"] };
@@ -308,13 +309,36 @@ describe("Timeline only", () => {
     expect(press("f", { view: "timeline", followNow: true }).calls).toEqual([["setFollowNow", false]]);
     expect(press("f", other).none).toBe(true);
   });
-  it("O toggles the optimiser today; R asks to reshuffle only while it is off", () => {
+  it("O toggles the optimiser today, and does nothing on another day", () => {
     expect(press("o", { view: "timeline" }).calls[0][1](true)).toBe(false);
     expect(press("o", other).none).toBe(true);
-    // v18.18.0 commit 15: through App's one door, which asks Move tables.
-    expect(press("r", { view: "timeline", autoOptimizer: false }).calls).toEqual([["openReshuffle"]]);
-    expect(press("r", { view: "timeline", autoOptimizer: true }).none).toBe(true);
-    expect(press("r", Object.assign({ autoOptimizer: false }, other)).none).toBe(true);
+  });
+  // v18.18.0 commit 16 (Patryk): R works where the Reshuffle button shows, today
+  // and every later day, whatever the switch says. Until then it was today with
+  // the Optimiser OFF only, and this test said so.
+  it("R asks to reshuffle on today and every later day, whatever the switch says", () => {
+    // Commit 15: through App's one door, which asks Move tables.
+    [true, false].forEach((on) => {
+      expect(press("r", { view: "timeline", autoOptimizer: on }).calls, "today " + on).toEqual([["openReshuffle"]]);
+      expect(press("r", Object.assign({ autoOptimizer: on }, other)).calls, "tomorrow " + on).toEqual([["openReshuffle"]]);
+      expect(press("r", { view: "timeline", viewDate: addDays(TODAY, 30), autoOptimizer: on }).calls, "a month on " + on).toEqual([["openReshuffle"]]);
+    });
+  });
+  it("R does nothing on a past day", () => {
+    [true, false].forEach((on) => {
+      const past = press("r", { view: "timeline", viewDate: addDays(TODAY, -1), autoOptimizer: on });
+      expect(past.calls, "yesterday " + on).toEqual([]);
+      expect(past.none, "yesterday " + on).toBe(true);
+    });
+  });
+  it("R and the button ask one rule (`reshuffleOffer`), on every day either side of today", () => {
+    for (let d = -3; d <= 3; d++) {
+      [true, false].forEach((on) => {
+        const viewDate = addDays(TODAY, d);
+        const offered = reshuffleOffer({ viewDate, today: TODAY, autoOptimizer: on }) !== null;
+        expect(press("r", { view: "timeline", viewDate, autoOptimizer: on }).calls.length, d + " " + on).toBe(offered ? 1 : 0);
+      });
+    }
   });
 });
 

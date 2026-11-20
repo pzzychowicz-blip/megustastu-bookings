@@ -151,8 +151,9 @@ export function planReassign(ctx){
 
 // ── planReshuffle: the Reshuffle button (v18.17.0) ───────────────────────────
 // A full optimiser pass over the day on screen, whatever the Optimiser switch
-// says: that is what the button is for, and it is only offered while the switch
-// is off.
+// says: that is what the button is for. It is offered on today and every later
+// day (`reshuffleOffer`, booking-logic.js, v18.18.0); until then only on today
+// with the switch off.
 //
 //   planReshuffle(ctx) → { refuse } | { transform, done }
 //   ctx: {viewDate, tableBlocks, today, nowMins, unlock?, bookings?, user?, stamp?}

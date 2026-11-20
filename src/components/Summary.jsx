@@ -197,7 +197,7 @@ const FIT_SCROLL = {
 // v18.18.0: `guestTags` is App's `guestTagMap` memo and `tagList` its state,
 // so both change only with what they read; `onEdit` is `VA.onEdit`; `fit` is a
 // boolean.
-export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, unplacedCount = 0, currency, onToggle, onOpenWeek, onPrint, onSpecialHours, compact = false, showOptimiser = false, autoOptimizer = true, setAutoOptimizer, onReshuffle , bodySlot = null, guestTags = null, tagList = null, onEdit = null, fit = false}) {
+export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, unplacedCount = 0, currency, onToggle, onOpenWeek, onPrint, onSpecialHours, compact = false, showOptimiser = false, reshuffleLit = false, autoOptimizer = true, setAutoOptimizer, onReshuffle , bodySlot = null, guestTags = null, tagList = null, onEdit = null, fit = false}) {
   // v18.18.0: another day opens at its top, its notes first, rather than
   // wherever the last day's panel was scrolled to.
   const scrollRef = useRef(null);
@@ -307,7 +307,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                 keep their places at the right. */}
             {showOptimiser ? (
               <div style={{ marginRight: "auto" }}>
-                <OptimiserControls autoOptimizer={autoOptimizer} setAutoOptimizer={setAutoOptimizer} onReshuffle={onReshuffle} />
+                <OptimiserControls autoOptimizer={autoOptimizer} setAutoOptimizer={setAutoOptimizer} onReshuffle={onReshuffle} isToday={isToday} lit={reshuffleLit} />
               </div>
             ) : null}
             {/* v18.10.0: this date's own hours — a special day (closed, or

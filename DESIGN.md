@@ -948,6 +948,14 @@ explaining why is usually the one to read.
   reaching for accent, check the hue is actually free — the app's slots are green
   seated/success, amber confirmed/pending, burnt orange warn, red danger, purple
   indoor, teal outdoor, graphite `--tag-flag` for booking flags.
+- **A control that is always there wears the orange only while pressing it
+  would help (v18.18.0, Patryk).** Reshuffle used to appear on today with the
+  Optimiser off, orange, the one moment it was needed. Since it shows on every
+  day ahead it is quiet at rest (`BTN.quiet`, inside `mkBtn`, so the grey brings
+  its own ink) and burnt orange when the day has something to gain: today with
+  the Optimiser off, or while the "Tables could be reshuffled" check fires. A
+  colour that is always on carries no news. The flip eases as one change through
+  `.mgt-hover-scale`'s shared transition; `tests/quiet-buttons.test.js` pins it.
 
 - **Notifications are ONE surface (v17.8.0).** Every in-flow banner
   (`BannerRows` + Late/Overlap/WaitAvail, `AppBanners`, the reminder banner) and

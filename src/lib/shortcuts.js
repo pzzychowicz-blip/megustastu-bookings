@@ -48,7 +48,7 @@
 
 import { VIEW_ORDER } from "./constants";
 import { stepDate } from "./day";
-import { seatingClosed } from "./booking-logic";
+import { seatingClosed, reshuffleOffer } from "./booking-logic";
 
 // v14.6.0: "S" toggles the Summary panel. In List view with a booking focused,
 // S marks it Seated instead — that row is in an earlier layer. Rebind here and
@@ -227,7 +227,10 @@ export const SHORTCUT_LAYERS = [
   ] },
 
   // ── Timeline only ──────────────────────────────────────────────────────────
-  // F, O and R act on TODAY only, and take the key either way.
+  // F and O act on TODAY only. R acts on the Reshuffle button's days, today and
+  // every later one (v18.18.0 commit 16), by asking the button's own rule,
+  // `reshuffleOffer`, so the key and the button cannot disagree. All three take
+  // the key either way.
   { name: "timeline", active: (K) => K.view === "timeline", rows: [
     { id: "follow", keys: ["f"], caps: ["F"], label: "Toggle Follow (today only)", run: (K, ev, env) => {
       if (!isToday(K, env)) return SWALLOW;
@@ -241,8 +244,9 @@ export const SHORTCUT_LAYERS = [
     { id: "zoomReset", keys: ["0"], caps: ["0"], label: "Reset zoom to 1×", run: () => hit((K) => { K.setTimelineZoom(1); K.setFollowNow(false); }) },
     { id: "optimiser", keys: ["o"], caps: ["O"], label: "Toggle Optimiser (today)", run: (K, ev, env) => (isToday(K, env) ? hit((K2) => K2.setAutoOptimizer((p) => !p)) : SWALLOW) },
     // v18.18.0 commit 15: through App's `openReshuffle`, the one door, which
-    // asks Move tables before the confirm opens.
-    { id: "reshuffle", keys: ["r"], caps: ["R"], label: "Reshuffle (today, optimiser OFF)", run: (K, ev, env) => (isToday(K, env) && !K.autoOptimizer ? hit((K2) => K2.openReshuffle()) : SWALLOW) },
+    // asks Move tables before the confirm opens. Commit 16: wherever the button
+    // shows, whatever the Optimiser switch says.
+    { id: "reshuffle", keys: ["r"], caps: ["R"], label: "Reshuffle (today and later days)", run: (K, ev, env) => (reshuffleOffer({ viewDate: K.viewDate, today: env.today, autoOptimizer: K.autoOptimizer }) ? hit((K2) => K2.openReshuffle()) : SWALLOW) },
   ] },
 ];
 

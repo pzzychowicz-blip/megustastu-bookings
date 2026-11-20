@@ -1310,7 +1310,9 @@ html[data-holding] * {
 .mgt-sheet-in  { animation: mgt-sheet-in var(--t-move) var(--ease-out) both; }
 .mgt-sheet-out { animation: mgt-sheet-out var(--t-move) var(--ease-in) both; }
 
-/* Slide in (L→R) / slide out (→L) — Reshuffle + Today buttons (via Presence). */
+/* Slide in (L→R) / slide out (→L) — the Today button (via Presence). Reshuffle
+   slid in on these too until v18.18.0, when it stopped coming and going with the
+   Optimiser switch: it now shows on today and every later day. */
 @keyframes mgt-slide-in  { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
 @keyframes mgt-slide-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(-12px); } }
 .mgt-slide-in  { animation: mgt-slide-in var(--t-move) var(--ease-out) both; display: inline-flex; }

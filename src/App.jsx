@@ -36,7 +36,7 @@ import {
   histEntry,
   statusOrder,
   getKitchenLoad,
-  optimizerActiveFor, syncLiveDurations, bookingsAfterAction,
+  optimizerActiveFor, reshuffleOffer, syncLiveDurations, bookingsAfterAction,
   checkInefficent, findClashes, clashRowId,
   nowTime, newBookingTime,
   lateState, freeingSoon,
@@ -3193,7 +3193,17 @@ export function BookingApp({uid}){
   // v18.17.0 (B): how many of the viewed day's bookings a plain Reshuffle will
   // leave where they are, for the confirm. Asked only while it is open.
   const reshuffleLocked=confirmReshuffle?lockedOn(bookings,viewDate):0;
-  const ineffShow=!reshuffled&&inefficient&&dismissedIneff!==viewDate&&optimizerActiveFor(viewDate,autoOptimizer)&&bookingDefaults.reshuffleSuggestEnabled;
+  // v18.18.0 commit 16: the "Tables could be reshuffled" check, as both the
+  // notice and the Reshuffle button's orange read it. Today and later days only:
+  // a past day's service is over, and neither is offered there (it could show on
+  // one, since `optimizerActiveFor` is true for every day but today-OFF).
+  const suggestOn=!!(inefficient&&optimizerActiveFor(viewDate,autoOptimizer)&&bookingDefaults.reshuffleSuggestEnabled&&viewDate>=today);
+  const ineffShow=!reshuffled&&suggestOn&&dismissedIneff!==viewDate;
+  // Where the button shows and whether it is orange: `reshuffleOffer`
+  // (lib/manual-assign.js). Dismissing the notice does not grey it (Patryk).
+  // `todayStr()`, not `today`: handing `today` to any call during render made
+  // the React Compiler give up on BookingApp (21 errors, measured; src/CLAUDE.md).
+  const reshuffleBtn=reshuffleOffer({viewDate:viewDate,today:todayStr(),autoOptimizer:autoOptimizer,suggest:suggestOn});
   // Overlap warnings banner — shows when one or more seated guests are overstaying
   // into the start time of a booking on the same table (one-tap Reassign per row).
   // v17.0.0 round 7: converted to the Running-late (LateBanner) pattern —
@@ -3803,6 +3813,8 @@ export function BookingApp({uid}){
     autoOptimizer={autoOptimizer}
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={VA.onReshuffle}
+    reshuffleOn={!!reshuffleBtn}
+    reshuffleLit={!!reshuffleBtn&&reshuffleBtn.lit}
     toolbarFolded={toolbarFolded}
     largeText={largeText}
     indoorTint={indoorTint}
@@ -3914,7 +3926,8 @@ export function BookingApp({uid}){
     onPrint={VA.onPrint}
     onSpecialHours={can("hoursEdit")?VA.onSpecialHours:null}
     compact={compact}
-    showOptimiser={toolbarFolded&&viewDate===todayStr()}
+    showOptimiser={toolbarFolded&&!!reshuffleBtn}
+    reshuffleLit={!!reshuffleBtn&&reshuffleBtn.lit}
     autoOptimizer={autoOptimizer}
     setAutoOptimizer={setAutoOptimizer}
     onReshuffle={VA.onReshuffle} />;
@@ -4449,7 +4462,8 @@ export function BookingApp({uid}){
               onClick={function(){if(!armSettled())return;setConfirmReshuffle(false);forceReshuffle();}}
               title={"Re-seat the day's unlocked bookings; locked and seated ones stay"+keyHint("confirm")}
               className="mgt-hover-scale"
-              style={mkSolidBtn(BTN.orange)}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Reshuffle all bookings?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:reshuffleLocked>0?8:18}}>Confirmed bookings may be moved to different tables to improve efficiency. Seated bookings will not be moved.</div>{reshuffleLocked>0?<div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{countLabel(reshuffleLocked,"booking is locked","bookings are locked")+" to tables. Reshuffle does not move a locked booking, unless you unlock it here."}</div>:null}</Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
+              style={mkSolidBtn(BTN.orange)}>Reshuffle</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>{/* v18.18.0 commit 16: away from today it names the day, and the seated
+              sentence is today's alone, the one day that can have seated parties. */}{"Reshuffle all bookings"+(viewDate===today?"":" on "+formatDay(viewDate))+"?"}</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:reshuffleLocked>0?8:18}}>{"Confirmed bookings may be moved to different tables to improve efficiency."+(viewDate===today?" Seated bookings will not be moved.":"")}</div>{reshuffleLocked>0?<div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{countLabel(reshuffleLocked,"booking is locked","bookings are locked")+" to tables. Reshuffle does not move a locked booking, unless you unlock it here."}</div>:null}</Overlay>:null}</ModalPresence><ModalPresence show={showSettings}>{// v14 preview 3: Settings modal. Opened by the cog icon in TimelineView's
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.

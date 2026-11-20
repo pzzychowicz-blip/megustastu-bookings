@@ -1392,6 +1392,30 @@ export function optimizerActiveFor(date,autoOptimizerState){
   if(date===today&&autoOptimizerState===false) return false;
   return true;
 }
+// ── reshuffleOffer: where the Reshuffle button shows, and when it is orange ──
+// v18.18.0 commit 16 (Patryk). Since v18.17.0 the Optimiser keeps the day
+// (`applyOptKeep`): on every later day, and on today with the switch ON, a save
+// places only its own party, so the day drifts from the best fit and a fresh
+// pass happens only through Reshuffle (`planReshuffle`, manual-assign.js). So the
+// button is offered on today and every later day, whatever the switch says. A
+// past day's service is over, and it is offered nothing there.
+//
+//   reshuffleOffer({viewDate, today, autoOptimizer, suggest}) → null | { lit }
+//
+// `lit` is the orange: today with the Optimiser off (the only way the day gets
+// optimised then, orange as it always was), or `suggest`, App's "Tables could
+// be reshuffled" check with the Settings switch on. Dismissing the notice does
+// not reach this: it hides the notice for the day and the button stays orange.
+// Grey otherwise. Dates are "YYYY-MM-DD", so they compare as strings.
+// It lives here, beside `optimizerActiveFor` and `unlockOffered`, because the R
+// key asks it too (lib/shortcuts.js), and shortcuts.js already imports this file:
+// importing manual-assign.js there moved ~21 kB out of the entry, and the 10 kB
+// `customers` chunk with it, into the shared `atoms` chunk (measured, v18.18.0).
+// The weight did not change; the entry's size is a number the ship run compares.
+export function reshuffleOffer(o){
+  if(!o||typeof o.viewDate!=="string"||typeof o.today!=="string"||o.viewDate<o.today) return null;
+  return {lit:(o.viewDate===o.today&&o.autoOptimizer===false)||o.suggest===true};
+}
 // v17.16.2 (CT-2B-02): was `b.date===today`, which no-op'd across midnight so a
 // party seated 23:30 stopped accruing at 00:00. The filter is replaced by, not
 // merely removed from, the liveness test: `pastCloseMins === null` means this
