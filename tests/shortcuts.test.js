@@ -311,7 +311,8 @@ describe("Timeline only", () => {
   it("O toggles the optimiser today; R asks to reshuffle only while it is off", () => {
     expect(press("o", { view: "timeline" }).calls[0][1](true)).toBe(false);
     expect(press("o", other).none).toBe(true);
-    expect(press("r", { view: "timeline", autoOptimizer: false }).calls).toEqual([["setConfirmReshuffle", true]]);
+    // v18.18.0 commit 15: through App's one door, which asks Move tables.
+    expect(press("r", { view: "timeline", autoOptimizer: false }).calls).toEqual([["openReshuffle"]]);
     expect(press("r", { view: "timeline", autoOptimizer: true }).none).toBe(true);
     expect(press("r", Object.assign({ autoOptimizer: false }, other)).none).toBe(true);
   });

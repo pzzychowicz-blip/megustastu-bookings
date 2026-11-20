@@ -2469,6 +2469,12 @@ export function BookingApp({uid}){
     setConfirmKitchen(null);doSave();
   }
 
+  // v18.18.0 commit 15: the ONE door to the Reshuffle confirm. Reshuffle moves
+  // every unlocked party of the day, so it asks what a drag, Assign and Unlock
+  // ask, at the press and before the confirm opens. Every way in calls this:
+  // the button on the Timeline and in the Summary (`VA.onReshuffle`), the
+  // "Tables could be reshuffled" notice, and R. It never had a check at all.
+  function openReshuffle(){if(refused("bookingAssign"))return;setConfirmReshuffle(true);}
   // v18.14.0 (H5): undoable, through `saveMove`. Nothing moved means no pill, so
   // the toast still answers the press.
   // v18.17.0 (D): WHAT it writes is `planReshuffle` (lib/manual-assign.js), which
@@ -2745,7 +2751,7 @@ export function BookingApp({uid}){
     setManualTarget:setManualTarget,
     showPrefPicker:showPrefPicker,setShowPrefPicker:setShowPrefPicker,
     confirmDel:confirmDel,setConfirmDel:setConfirmDel,
-    setConfirmReshuffle:setConfirmReshuffle,
+    setConfirmReshuffle:setConfirmReshuffle,openReshuffle:openReshuffle,
     setConfirmCancel:setConfirmCancel,
     confirmKitchen:confirmKitchen,setConfirmKitchen:setConfirmKitchen,
     setVoucherAsk:setVoucherAsk,
@@ -3461,7 +3467,11 @@ export function BookingApp({uid}){
       onDiscardParked:discardParked,
       ineffShow:ineffShow,
       onDismissIneff:function(){setDismissedIneff(viewDate);},
-      onReshuffle:function(){setConfirmReshuffle(true);},
+      // v18.18.0 commit 15: through the ref, not `openReshuffle` itself. Bare or
+      // wrapped in a closure here, in a call made during render, it made the React
+      // Compiler give up on all of BookingApp (21 preserve-manual-memoization
+      // errors, measured); read off `viewActionsRef` at the tap, it did not.
+      onReshuffle:function(){viewActionsRef.current.openReshuffle();},
       // v17.8.0 strip audit: two notices that were living elsewhere. The load
       // failure was a floating toast (persistent + unrecoverable, so the wrong
       // layer); the closed-day notice was drawn twice, inside TimelineView and
@@ -3654,7 +3664,7 @@ export function BookingApp({uid}){
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only the code's own change resumes; the door is read from its ref, and both doors read the form from formRef
   useEffect(function(){const door=resumeDoorRef.current;if(!door)return;resumeDoorRef.current=null;if(door==="waitlist") addFormToWaitlist();else doSave();},[form.phone]);
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,newAtCell,openEdit,updateStatus,doCancelBooking,unlockBooking,dropOnTable,previewDrop,checkDrop,retimeBooking,previewRetime,checkRetime,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
+  viewActionsRef.current={openNew,newAtCell,openEdit,updateStatus,doCancelBooking,unlockBooking,dropOnTable,previewDrop,checkDrop,retimeBooking,previewRetime,checkRetime,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,openReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -3672,7 +3682,7 @@ export function BookingApp({uid}){
       onManual:function(id){R.current.setManualTarget(id);},
       onBlock:function(id){R.current.setBlockTarget(id);},
       onDelete:function(id){R.current.requestDelete(id);},
-      onReshuffle:function(){R.current.setConfirmReshuffle(true);},
+      onReshuffle:function(){R.current.openReshuffle();},
       onNew:function(){R.current.openNew();},
       onNewAt:function(tableId,time){R.current.newAtCell(tableId,time);},
       onToggleFinished:function(next){R.current.toggleShowFinished(next);},

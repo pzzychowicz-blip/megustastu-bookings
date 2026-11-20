@@ -41841,3 +41841,35 @@ every call.
   `/wa-connect` (its own build, and it works only on an https deployment Meta lists).
 - **Docs:** DESIGN.md's rule already says Rule 14 fails a control without one, so it needed no change; the ceiling note in
   `scripts/check-style-invariants.mjs` now records that batch 7 set it to 0. No surface was added, so GLOSSARY is unchanged.
+
+### Commit 15 — Reshuffle asks for Move tables
+
+- **What (Patryk, 2026-11-20, planning the version's last two features):** Reshuffle moves every unlocked party of the
+  day, and it was the one action that moves tables without asking the **Move tables** capability (`bookingAssign`): a
+  drag, Assign, Reassign and Unlock all ask it, and Reshuffle asked nothing. It asks now, at the press, before the
+  confirm opens. Staff hold Move tables by default (`STAFF`, `lib/roles.js`), so nobody's access changes on the day it
+  ships; an account with a deny on it gets "You don't have permission to move tables." and no confirm.
+- **One door:** App's new `openReshuffle()` is the only place the confirm opens (`refused("bookingAssign")`, then
+  `setConfirmReshuffle(true)`). The three ways in call it: the button on the Timeline and in the compact Summary
+  (`VA.onReshuffle` → `viewActionsRef.current.openReshuffle`, which replaces `setConfirmReshuffle` there), the "Tables
+  could be reshuffled" notice's button, and `R` (the shortcut table calls `K.openReshuffle()`; K keeps
+  `setConfirmReshuffle`, which Escape closes the confirm through). `forceReshuffle` is unchanged, so the Undo every
+  Reshuffle arms through `saveMove` is untouched.
+- **The notice's opener goes through the ref, and why (measured):** the first gate read 21 lint errors, all
+  `react-hooks/preserve-manual-memoization` across App.jsx: the React Compiler had given up on BookingApp. Linting
+  App.jsx variants through stdin settled it: HEAD 0 errors; HEAD plus `openReshuffle` in K, or in
+  `viewActionsRef.current` and `VA`, 0; plus the notice's prop as `function(){openReshuffle();}` or as `openReshuffle`
+  bare, 21. As `function(){viewActionsRef.current.openReshuffle();}`, 0 errors and HEAD's 6 warnings. The notice's
+  props go to `appBannerSections`, a call made during render, which `openReshuffle` must not reach. Why it trips the
+  compiler was not established, so `src/CLAUDE.md`'s hook-order list records the measurement, not a reason.
+- **The capability's line** in the Capabilities pop-up says it now: "Assign, drag or reshuffle bookings onto other
+  tables." (was "Assign or drag a booking to another table."), since it is what an admin reads when deciding who
+  holds it.
+- **Pins:** `tests/shortcuts.test.js`, R now records `["openReshuffle"]` (edited: the pin covered the whole call). New
+  in `tests/manual-assign.test.js`: `openReshuffle` asks first, `setConfirmReshuffle(true)` appears exactly once in
+  App, and each of the three openers goes through it.
+- **Measured on DEV** (an admin account, Today after the cutoff, "Optimiser: OFF"): the Timeline's Reshuffle and `R`
+  each opened "Reshuffle all bookings?". **Read from source and pinned, not measured:** the refusal itself. No DEV
+  account lacks Move tables, and putting a deny on the one DEV account would have taken drags away from it.
+- **Docs:** GLOSSARY gains the **Reshuffle button** row, which it never had. `src/CLAUDE.md`'s hook-order list gains
+  the line on a handler inside a render-time call.

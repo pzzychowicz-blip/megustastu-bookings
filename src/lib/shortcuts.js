@@ -240,7 +240,9 @@ export const SHORTCUT_LAYERS = [
     { id: "zoomOut", keys: ["-"], caps: ["−"], label: "Zoom out", run: () => hit((K) => K.setTimelineZoom((z) => Math.max(1, z - 0.5))) },
     { id: "zoomReset", keys: ["0"], caps: ["0"], label: "Reset zoom to 1×", run: () => hit((K) => { K.setTimelineZoom(1); K.setFollowNow(false); }) },
     { id: "optimiser", keys: ["o"], caps: ["O"], label: "Toggle Optimiser (today)", run: (K, ev, env) => (isToday(K, env) ? hit((K2) => K2.setAutoOptimizer((p) => !p)) : SWALLOW) },
-    { id: "reshuffle", keys: ["r"], caps: ["R"], label: "Reshuffle (today, optimiser OFF)", run: (K, ev, env) => (isToday(K, env) && !K.autoOptimizer ? hit((K2) => K2.setConfirmReshuffle(true)) : SWALLOW) },
+    // v18.18.0 commit 15: through App's `openReshuffle`, the one door, which
+    // asks Move tables before the confirm opens.
+    { id: "reshuffle", keys: ["r"], caps: ["R"], label: "Reshuffle (today, optimiser OFF)", run: (K, ev, env) => (isToday(K, env) && !K.autoOptimizer ? hit((K2) => K2.openReshuffle()) : SWALLOW) },
   ] },
 ];
 

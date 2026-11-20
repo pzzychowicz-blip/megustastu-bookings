@@ -589,3 +589,26 @@ describe("planReshuffle: Reshuffle and unlock N", () => {
   });
 });
 
+
+// ── v18.18.0 commit 15: Reshuffle asks for Move tables ───────────────────────
+// Reshuffle moves every unlocked party of the day, and it was the one action
+// that moves tables without asking `bookingAssign`: a drag, Assign, Reassign and
+// Unlock all ask it. App's `openReshuffle` is the one door to the confirm, and
+// it asks at the press, so the refusal comes before the confirm opens.
+describe("Reshuffle asks for Move tables", () => {
+  it("one door opens the confirm, and it asks first", () => {
+    const app = appCode();
+    expect(app).toContain('function openReshuffle(){if(refused("bookingAssign"))return;setConfirmReshuffle(true);}');
+    // Nothing else opens it, so no way in can skip the question.
+    expect(app.match(/setConfirmReshuffle\(true\)/g)).toHaveLength(1);
+  });
+
+  it("every way in goes through it: the notice, the views' button and the keyboard", () => {
+    const app = appCode();
+    // The notice's goes through the ref: `openReshuffle` itself in that render-time
+    // call made the React Compiler give up on BookingApp (src/CLAUDE.md, hook order).
+    expect(app).toContain("onReshuffle:function(){viewActionsRef.current.openReshuffle();},");
+    expect(app).toContain("onReshuffle:function(){R.current.openReshuffle();},");
+    expect(app).toContain("setConfirmReshuffle:setConfirmReshuffle,openReshuffle:openReshuffle,");
+  });
+});

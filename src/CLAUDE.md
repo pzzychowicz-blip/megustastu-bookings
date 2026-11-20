@@ -116,6 +116,7 @@ A wrong order throws during render and the build passes over it. `no-use-before-
 - **A function a hook returns is no longer hoisted**: anything using it in render, or passing it on, sits below that hook.
 - **`useKeyboardShortcuts` and `viewActionsRef.current=` stay below every domain hook**, and `useTagSettings` above `useWhatsApp`. `useShellPrefs` sits between `setSplitMenuFor` and `activeView`: App's mount effect stays above it, so `<body>`'s baseline is set before the `shellFixed` effect.
 - **A hoisted function handed to a hook must not read a const that hook returns**: that cycle makes the compiler give up (v18.4.9). Use a `VA` wrapper. No `VA` function is called during render.
+- **Nor is a handler put into the arguments of a call made DURING render** (v18.18.0, measured, mechanism not established): `openReshuffle`, bare or wrapped in a closure, in `appBannerSections`' props made the compiler give up on all of BookingApp, 21 `preserve-manual-memoization` errors. `function(){viewActionsRef.current.openReshuffle();}` there did not. Lint each opener separately (`eslint --stdin --stdin-filename src/App.jsx`) when a count jumps.
 - **Moving a hook moves its effects**, and effects fire in declaration order. Nothing automated checks that: walk the domain on DEV.
 - **The keyboard ctx stays one flat literal**: `tests/modal-stack.test.js` reads its keys from the text, so a spread would blind it.
 
