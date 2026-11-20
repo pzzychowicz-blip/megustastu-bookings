@@ -15,6 +15,7 @@ import { formatDay } from "../../lib/day";
 import { guestsLabel } from "../../lib/booking-logic";
 import { tagLabels } from "../../lib/tags";
 import { R, T, FW, IC, M, H, SP, RIM_SOLID } from "../../lib/constants";
+import { keyHint } from "../../lib/shortcuts";
 import { DraftIcon, WarnIcon } from "./WaIcons";
 import { CloseIcon, CheckIcon, ChevronRightIcon, AlertIcon, WaitIcon } from "../Icons";
 
@@ -85,7 +86,7 @@ function DraftCheck({ conv, check, onAcceptAt, onTheWaitlist, onAddToWaitlist, o
             {alts.length ? (
               <div role="group" aria-label="Accept at another time" style={row}>
                 <span style={{ fontSize: T.body, color: "var(--wa-draft-text-dim)" }}>Accept at:</span>
-                {alts.map((t) => <TimeChip key={t} time={t} onPick={onAcceptAt} />)}
+                {alts.map((t) => <TimeChip key={t} time={t} onPick={onAcceptAt} description={"Open a new booking from this request at " + t} />)}
               </div>
             ) : null}
             {offerWaitlist || canSuggest ? (
@@ -98,6 +99,7 @@ function DraftCheck({ conv, check, onAcceptAt, onTheWaitlist, onAddToWaitlist, o
                   // control's class, so the done state neither lifts nor dips.
                   <OutlineChip as="button" tone={onTheWaitlist ? "success" : "neutral"}
                     aria-disabled={onTheWaitlist ? "true" : undefined}
+                    title={onTheWaitlist ? undefined : "Put this party on the waitlist"}
                     onClick={onTheWaitlist ? undefined : onAddToWaitlist}
                     className={onTheWaitlist ? "mgt-nopress" : "mgt-hover-scale mgt-press"}
                     style={Object.assign({}, CHECK_BTN, { minWidth: WAIT_W, justifyContent: "center" }, onTheWaitlist ? { cursor: "default" } : null)}>
@@ -291,7 +293,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", flexShrink: 0 }}>
           {/* Confidence level — always shown, immediately left of Accept. */}
           <OutlineChip title={confTitle} tone={confTone} size="small">{confSays}</OutlineChip>
-          <button onClick={() => onAccept()} className="mgt-hover-scale mgt-press" style={smallBtn("var(--wa-btn-open)")}>Accept</button>
+          <button onClick={() => onAccept()} title={"Open a new booking filled in from this request" + keyHint("inboxAccept")} className="mgt-hover-scale mgt-press" style={smallBtn("var(--wa-btn-open)")}>Accept</button>
           {/* Secondary = OUTLINE (see the full card's note): one saturated pill
               per pane, so the eye can find the primary without reading. */}
           {/* v17.15.3: the neutral twin of the linked-booking card's fix — the
@@ -302,7 +304,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
               `check:style` could not see it: the weight was an ARGUMENT to this
               local factory, not a `fontWeight:` property, and the gate reads
               properties. A shape hides from it; only reading does not. */}
-          <OutlineChip as="button" tone="neutral" onClick={onDismiss} className="mgt-hover-scale mgt-press" style={{ padding: "6px 12px", fontSize: T.body, fontWeight: FW.semi, minHeight: H.chrome }}>Dismiss</OutlineChip>
+          <OutlineChip as="button" tone="neutral" onClick={onDismiss} title={"Dismiss this request, booking nothing" + keyHint("inboxDismiss")} className="mgt-hover-scale mgt-press" style={{ padding: "6px 12px", fontSize: T.body, fontWeight: FW.semi, minHeight: H.chrome }}>Dismiss</OutlineChip>
           </div>
         </div>
         {/* v18.8.0 phase 8: the check, as one wrapping row under the bar. */}
@@ -355,6 +357,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
         <button
           onClick={() => onAccept()}
+          title={"Open a new booking filled in from this request" + keyHint("inboxAccept")}
           className="mgt-hover-scale mgt-press"
           style={mkSolidBtn("var(--wa-btn-open)", { minHeight: H.touch, boxShadow: "var(--shadow-btn)" })}
         >Accept &amp; open</button>
@@ -368,6 +371,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
             an outline button is not one. */}
         <button
           onClick={onDismiss}
+          title={"Dismiss this request, booking nothing" + keyHint("inboxDismiss")}
           className="mgt-hover-scale mgt-press"
           style={{ background: "transparent", border: "2px solid var(--border-soft)", borderRadius: R.pill, padding: "10px 18px", cursor: "pointer", fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-secondary)", minHeight: 44 }}
         >Dismiss</button>

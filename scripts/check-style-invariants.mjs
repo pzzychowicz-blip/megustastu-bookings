@@ -220,7 +220,7 @@
 //
 // Excluded: the WhatsApp simulator (sandbox builds only, stripped from
 // production by vite.config.js's `stripSimulator`).
-const HOVER_CEILING = 56;
+const HOVER_CEILING = 12;
 const DESCRIBED_ATOMS = ["Toggle", "Stepper", "MiniStepper", "HourStepper", "TimeChip", "SearchField", "DateField", "CountryPicker", "TagChips"];
 const HOVER_SKIP = [/[\\/]WaSimulator\.jsx$/];
 const CONTROL_ROLES = /^(button|switch|menuitem|menuitemradio|menuitemcheckbox|tab|option|link|checkbox|radio)$/;

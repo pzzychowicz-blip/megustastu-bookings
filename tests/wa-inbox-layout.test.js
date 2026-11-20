@@ -54,12 +54,12 @@ describe("W1 — the draft bar never hides what it asks you to accept", () => {
 describe("W2 — two jobs, two names, two marks", () => {
   it("the header's button edits the templates, under the edit pencil", () => {
     // v18.16.0 (follow-up): a row of the WHATSAPP mark's menu, word and pencil.
-    expect(Inbox).toContain('{ id: "templates", label: "Edit templates", icon: EditIcon, rule: !onOpenSim, title: "Edit templates (T)",');
+    expect(Inbox).toContain('{ id: "templates", label: "Edit templates", icon: EditIcon, rule: !onOpenSim, title: "Edit the quick-reply templates" + keyHint("inboxTemplates"),');
     expect(Inbox).not.toMatch(/title="Templates"/);
   });
 
   it("the composer's button inserts one, under the document mark", () => {
-    expect(Composer).toMatch(/aria-label="Insert template"\s*title="Insert template \(E\)"/);
+    expect(Composer).toMatch(/aria-label="Insert template"\s*title=\{"Show or hide the templates to put into this reply" \+ keyHint\("inboxInsert"\)\}/);
     expect(Composer).toMatch(/><TemplatesIcon size=\{IC\.chrome\} \/><\/button>/);
     expect(Composer).not.toMatch(/title="Templates"/);
   });
@@ -84,7 +84,7 @@ describe("W3 — the words are on the buttons, not in a tooltip", () => {
   it("the header's Edit templates and Simulator carry their words", () => {
     // v18.16.0 (follow-up): rows of the WHATSAPP mark's menu, which draws a row's
     // icon before its word (ConversationMenu).
-    expect(Inbox).toContain('{ id: "sim", label: "Simulator", icon: FlaskIcon, rule: true, title: "WhatsApp simulator (X)", onPick: onOpenSim }');
+    expect(Inbox).toContain('{ id: "sim", label: "Simulator", icon: FlaskIcon, rule: true, title: "Open the WhatsApp simulator" + keyHint("simulator"), onPick: onOpenSim }');
     expect(Inbox).not.toContain("HEAD_TEXT_BTN");
   });
 });

@@ -4629,16 +4629,20 @@ export function BookingApp({uid}){
           const bk=conv&&conv.acceptedBookingId?bookings.find(function(b){return b.id===conv.acceptedBookingId;}):null;
           return <Overlay /* @static-height one sentence, chosen from the linked booking when it opens and not after */ onClose={function(){setConfirmArchive(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
+              title={"Keep the conversation where it is"+keyHint("close")}
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmArchive(null);}}>Back</button><button
               onClick={function(){if(!armSettled())return;wa.doArchive(confirmArchive);setConfirmArchive(null);}}
+              title={"Archive the conversation"+(bk?", leaving its booking as it is":"")}
               className="mgt-hover-scale"
               style={mkSolidBtn(BTN.orange,{minHeight:H.touch})}>Archive anyway</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Archive conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{bk?("This conversation is linked to a booking on "+formatDay(bk.date)+" at "+bk.time+". Archiving won't cancel the booking."):"Archive this conversation?"}</div></Overlay>;
         })():null}{confirmDeleteConv?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmDeleteConv(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
+              title={"Keep the conversation"+keyHint("close")}
               style={mkBtn({minHeight:44,padding:"10px 18px",background:BTN.quiet})}
               onClick={function(){setConfirmDeleteConv(null);}}>Back</button><button
               onClick={function(){if(armSettled())wa.doDeleteConversation(confirmDeleteConv);}}
+              title="Delete the conversation and its messages for good"
               className="mgt-hover-scale"
               style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
           ctx={{waSettings:waSettings,conversations:wa.conversations,messagesMap:wa.messagesMap,watchMessages:wa.watchMessages,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.simAppendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend,patchMessage:wa.patchMessage,contacts:wa.contacts,waLink:wa.waLink,simSetContacts:wa.simSetContacts}}

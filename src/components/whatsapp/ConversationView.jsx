@@ -17,6 +17,7 @@ import { ReplyComposer } from "./ReplyComposer";
 import { LinkedBookingCard } from "./LinkedBookingCard";
 import { IntentBanner } from "./IntentBanner";
 import { BTN, R, T, FW, IC, H, M, SP } from "../../lib/constants";
+import { keyHint } from "../../lib/shortcuts";
 import { formatDay, todayStr } from "../../lib/day";
 import { guestsLabel } from "../../lib/booking-logic";
 import { onWaitlistFor } from "../../lib/draft-check";
@@ -280,7 +281,7 @@ export function ConversationView({
   // copy taking its border from --suggest and its text from --success.
   const regularChip = match && match.regularCount >= 1
     ? (pastList.length
-      ? <OutlineChip tone="success" size="small" as="button" className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)}><span>{regularChipLabel(match.regularCount, regularMin)}</span><TurnChevron open={histOpen} size={IC.inline} /></OutlineChip>
+      ? <OutlineChip tone="success" size="small" as="button" className="mgt-hover-scale mgt-press" title="Show or hide this guest's past visits" onClick={() => setHistOpen(!histOpen)}><span>{regularChipLabel(match.regularCount, regularMin)}</span><TurnChevron open={histOpen} size={IC.inline} /></OutlineChip>
       : <OutlineChip tone="success" size="small">{regularChipLabel(match.regularCount, regularMin)}</OutlineChip>)
     : null;
   // Body rendered whenever there are other visits to show; Reveal (below) eases
@@ -325,11 +326,11 @@ export function ConversationView({
   // conversation (useWhatsApp.handleUnarchive clears both).
   const running = recheck === "running";
   const menuRows = {
-    archive: { label: "Archive", icon: ArchiveIcon, title: "Archive conversation", onPick: () => { if (onArchive) onArchive(conv.phoneKey); } },
-    restore: { label: conv.muted ? "Customer again" : "Restore", icon: RestoreIcon, title: conv.muted ? "A customer after all: back to the inbox, and replied to and read again" : "Restore conversation", onPick: () => { if (onUnarchive) onUnarchive(conv.phoneKey); } },
+    archive: { label: "Archive", icon: ArchiveIcon, title: "Archive this conversation" + keyHint("inboxArchive"), onPick: () => { if (onArchive) onArchive(conv.phoneKey); } },
+    restore: { label: conv.muted ? "Customer again" : "Restore", icon: RestoreIcon, title: (conv.muted ? "A customer after all: back to the inbox, and replied to and read again" : "Move this conversation back to the Inbox") + keyHint("inboxRestore"), onPick: () => { if (onUnarchive) onUnarchive(conv.phoneKey); } },
     recheck: { label: running ? "Checking…" : "Re-check", icon: RecheckIcon, turning: running, inactive: running, title: running ? "Checking…" : "Re-check this conversation for requested changes", onPick: runRecheck },
     mute: { label: "Not a customer", icon: MuteIcon, title: "Not a customer: archive it, and stop replying to and reading its messages", onPick: () => onMute(conv.phoneKey) },
-    delete: { label: "Delete", icon: TrashIcon, danger: true, title: "Delete conversation", onPick: () => { if (onDelete) onDelete(conv.phoneKey); } },
+    delete: { label: "Delete", icon: TrashIcon, danger: true, title: "Delete this conversation and its messages (asks first)", onPick: () => { if (onDelete) onDelete(conv.phoneKey); } },
   };
   const menuItems = conversationMenuIds(conv, { recheck: !!onRecheck, mute: !!onMute }).map((id) => ({ id, ...menuRows[id] }));
   const headerActionBtns = (

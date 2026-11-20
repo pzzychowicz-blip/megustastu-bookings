@@ -106,6 +106,7 @@ export function ConversationRow({ conv, active, onClick, bookings, contacts, fli
       tabIndex={departing ? -1 : (roving ? 0 : -1)}
       aria-label={describeConversation(conv, { bookings, contacts }) + (draftLine ? ", unsent draft" : "")}
       aria-current={active && !selectMode ? "true" : undefined}
+      title={(selectMode ? "Select or unselect the conversation with " : "Open the conversation with ") + displayName}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return;
         if (e.key !== "Enter" && e.key !== " ") return;
@@ -139,6 +140,7 @@ export function ConversationRow({ conv, active, onClick, bookings, contacts, fli
       <RowSlot show={!!selectMode} gap={10} speed={ROW_FOLD}>{selectMode ? (
         <input /* @no-lift readOnly + pointerEvents:none — the ROW is the control, and this is painted state */
           type="checkbox"
+          title={"Select or unselect the conversation with " + displayName}
           checked={!!checked}
           readOnly
           /* Not a tab stop. This checkbox is decorative in the strict sense —

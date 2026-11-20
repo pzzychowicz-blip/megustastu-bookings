@@ -41788,3 +41788,37 @@ every call.
   to Alicia Ortiz's tags…"), the tag name box, and two in the reminder editor (a time and a weekday). Not on screen, read from
   source and Rule 14: the fired reminder's toast, an invitation's Withdraw and Apply, the module-off confirm, Delete customer
   armed, and the crash download.
+
+### Commit 13 — Part 2, batch 6: WhatsApp
+
+- **What:** a hover description on every control in the WhatsApp inbox: the panel's search box and button, Close, select mode's
+  Archive / Restore / Delete / Cancel and the bulk-delete confirm; a conversation row and its select-mode checkbox (named for the
+  guest, and saying "Open" or "Select or unselect" by mode); the Regular chip that opens past visits; the draft card's Accept,
+  Dismiss, "Accept at" time chips and Add to waitlist, in both its layouts; the linked booking's Open and Cancel; a failed
+  message's Retry; the photo viewer's Save photo and Done; the composer's template chips, its EN / ES switch, Insert template,
+  the reply box, the file picker and Send; the templates editor's Edit, Delete (resting and armed), Cancel, Save template, Close,
+  Save all, its four fields and + Add template; and App's two inbox confirms (archive a conversation whose booking is upcoming,
+  delete a conversation). **Rule 14: 56 → 12**, the hand-off's 40 sites plus the four confirms it named in App.
+- **Descriptions handed through data, converted by hand** (Rule 14 cannot see an object field): the mark menu's four rows
+  ("Inbox (←)" became "Show the Inbox conversations (← / →)", and the simulator and Edit templates rows the same way) and the
+  conversation menu's Archive, Restore and Delete. Every key in them now comes from `keyHint`.
+- **Keys named only where answered:** ← → on the two tab rows, X on the simulator, T on Edit templates, / on the search button,
+  E on Insert template, A and D on the draft's Accept and Dismiss, H and R on Archive and Restore (on the open conversation and,
+  in select mode, on the selection: `shortcuts.js` says both), and Esc on the inbox's Close, select mode's Cancel, the bulk
+  confirm's Back, the photo's Done, the templates editor's Close (InboxPanel's own Escape closes the editor first) and both App
+  confirms' Back. No Enter anywhere: `enterAction` covers none of the WhatsApp modals.
+- **The bulk confirm follows the count**: "Delete 2 conversations and their messages, for good", "Delete 1 conversation and its
+  messages, for good", through `countLabel`. `tests/count-label.test.js` flagged the first wording (`+ " messages …"` reads as a
+  typed count) and the word moved inside the ternary rather than being allowed.
+- **Pins: three edited in `tests/wa-inbox-layout.test.js`, each a whole-literal pin whose title half changed** (the Edit
+  templates row, the Simulator row, and the composer's `aria-label` then `title`). The labels and icons those tests are about
+  are still pinned as they were.
+- **Measured on DEV** (read from the live DOM): the panel, the rows in both modes, both menus on an Inbox and an Archived
+  conversation, a draft card, the composer with its chips open, the linked booking card, select mode on both tabs, the bulk
+  confirm at one and at two, the conversation delete confirm, and the templates editor's list, armed Delete and edit form. The
+  EN / ES switch was reworded on reading: "Show the templates in English" undersold it, since it also picks the language a
+  chip puts into the reply. **Not on screen, read from source and Rule 14:** App's archive confirm (it opens only for a
+  conversation linked to an UPCOMING booking, and DEV has none; archiving Hanna's past booking went straight through, and she
+  was restored), the "Accept at" time chips (no DEV draft offers other times), the photo viewer, Retry and the file picker.
+- **The 12 left are batch 7's:** LoginScreen 3, ErrorBoundary 2, UpdateRequired 1, `/wa-connect`'s ConnectPage 5 and
+  `atoms.jsx:1069`.

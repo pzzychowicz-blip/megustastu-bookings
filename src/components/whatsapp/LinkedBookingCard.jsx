@@ -54,6 +54,7 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
     <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 6, flexShrink: 0 }}>
       <button
         onClick={onOpen}
+        title="Open the linked booking to edit it"
         className="mgt-hover-scale mgt-press"
         style={mkSolidBtn("var(--wa-btn-open)", { padding: "8px 14px", minHeight: H.chrome, fontSize: T.body, boxShadow: "var(--shadow-btn)", whiteSpace: "nowrap" })}
       >Open booking</button>
@@ -80,6 +81,7 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
           as="button"
           tone="danger"
           onClick={onCancel}
+          title="Cancel the linked booking (asks first)"
           className="mgt-hover-scale mgt-press"
           style={{ padding: "8px 14px", minHeight: H.chrome, fontSize: T.body, fontWeight: FW.semi, whiteSpace: "nowrap" }}
         >Cancel booking</OutlineChip>
