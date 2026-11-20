@@ -11,11 +11,11 @@
 // were run side by side over 300,000 random keys and states per seed.
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { resolveShortcut, shortcutDocs, SHORTCUT_LAYERS, SHORTCUT_GATES, SUMMARY_KEY, WEEK_KEY } from "../src/lib/shortcuts";
+import { resolveShortcut, shortcutDocs, ownShortcutDocs, keyHint, OWN_SHORTCUT_SECTIONS, SHORTCUT_LAYERS, SHORTCUT_GATES, SUMMARY_KEY, WEEK_KEY } from "../src/lib/shortcuts";
 import { todayStr, addDays } from "../src/lib/day";
 
 const TODAY = todayStr();
@@ -398,5 +398,66 @@ describe("every key in the table is listed on the Shortcuts tab", () => {
     rows.filter((r) => r.keys.every((k) => /^[a-z]$/.test(k)) && r.keys.length === 1).forEach((r) => {
       expect(r.caps, r.label).toEqual([(r.shift ? "⇧" : "") + r.keys[0].toUpperCase()]);
     });
+  });
+});
+
+// ── A key in a hover description comes from here (v18.18.0) ──────────────────
+// A control's `title` ends with `keyHint(id)`, so every row a control can name
+// has an id, ids are unique across the table and the own sections, and every
+// id the app asks for is a row. check:style Rule 14 fails a key typed by hand.
+describe("keyHint: the key a hover description names", () => {
+  const all = SHORTCUT_LAYERS.flatMap((l) => l.rows).concat(OWN_SHORTCUT_SECTIONS.flatMap((s) => s.rows));
+
+  it("every row has an id, and no two rows share one", () => {
+    expect(all.filter((r) => typeof r.id !== "string" || !r.id).map((r) => r.label)).toEqual([]);
+    const seen = new Set();
+    const dup = all.filter((r) => (seen.has(r.id) ? true : (seen.add(r.id), false))).map((r) => r.id);
+    expect(dup).toEqual([]);
+  });
+
+  it("prints the row's caps as the Shortcuts tab does, in parentheses after a space", () => {
+    expect(keyHint("inbox")).toBe(" (I)");
+    expect(keyHint("find")).toBe(" (/)");
+    expect(keyHint("darkMode")).toBe(" (⇧D)");
+    expect(keyHint("prevDay")).toBe(" (←)");
+    expect(keyHint("inboxSearch")).toBe(" (/)");
+    expect(keyHint("close")).toBe(" (Esc)");
+    expect(keyHint("moreWeek")).toBe(" (W)");
+    expect(keyHint("listMove")).toBe(" (↑ / ↓)");
+  });
+
+  it("gives nothing for an id that is not a row, rather than throwing in render", () => {
+    expect(keyHint("no-such-row")).toBe("");
+    expect(keyHint(undefined)).toBe("");
+  });
+
+  it("every keyHint call in src/ names a row", () => {
+    const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
+    const files = [];
+    (function walk(d) {
+      for (const n of readdirSync(d)) {
+        const p = join(d, n);
+        if (statSync(p).isDirectory()) walk(p); else if (/\.(js|jsx)$/.test(n)) files.push(p);
+      }
+    })(SRC);
+    const ids = new Set(all.map((r) => r.id));
+    const bad = [];
+    files.forEach((f) => {
+      const code = stripComments(readFileSync(f, "utf8")).join("\n");
+      for (const m of code.matchAll(/keyHint\(([^)]*)\)/g)) {
+        if (/function keyHint/.test(code.slice(Math.max(0, m.index - 9), m.index + 8))) continue;
+        const lit = m[1].match(/^\s*"([^"]+)"\s*$/);
+        if (!lit || !ids.has(lit[1])) bad.push(f.slice(SRC.length + 1) + ": keyHint(" + m[1] + ")");
+      }
+    });
+    expect(bad).toEqual([]);
+  });
+
+  it("the own sections print as they did when they were written in the tab", () => {
+    const more = ownShortcutDocs().find((s) => s.title === "More popover (Week / Month)");
+    expect(more.rows[0]).toEqual({ keys: ["W", "M"], label: "Week / Month view" });
+    const inbox = ownShortcutDocs().find((s) => s.title === "WhatsApp Inbox");
+    expect(inbox.when).toBe("whatsapp");
+    expect(inbox.rows).toHaveLength(11);
   });
 });

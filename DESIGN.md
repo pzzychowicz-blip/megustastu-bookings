@@ -643,6 +643,33 @@ explaining why is usually the one to read.
   menu, word and mark as a menu row draws them.
   A bare ✕ for Close and a bare ⋯ for More are the exceptions: everybody reads
   them, and Re-check keeps its word on the ⋯ menu's row (v18.14.0).
+- **Every control carries a hover description (v18.18.0, Patryk).** A mouse
+  resting on a button, field, switch, link or chip is told what it does, in the
+  browser's own tooltip: the `title` attribute, or `description` on an atom that
+  draws the control (`Toggle`, the steppers, `TimeChip`, `SearchField`,
+  `DateField`). Mouse only, so the tablets and phones never see it, and the rule
+  above still holds: the meaning is on the control, and the tooltip says more.
+  `check:style` Rule 14 fails a control without one. How a description reads:
+  - **What happens, starting with a verb, on one line, with no full stop**:
+    "Save the booking and close the form".
+  - **It says more than the visible words, never only those.** For a field, it
+    says what goes in it ("Guest's phone number, with the country code").
+  - **It names the item where several controls share a word**: "Move 9 up in
+    Prefer", not "Move up".
+  - **It never states the control's state.** `aria-pressed` and `aria-checked`
+    say that, and a tooltip reading "On" is wrong half the time.
+  - **A key comes last, from the shortcut table**: `"Open the WhatsApp inbox" +
+    keyHint("inbox")` reads "Open the WhatsApp inbox (I)". Never type the key:
+    Rule 14 fails "(I)" written by hand, because the table can move it.
+  - **A stepper's description is what it steps**, and its buttons read
+    "Decrease …" and "Increase …" of it ("Increase the seats at table 3, one at
+    a time").
+  - **On SVG** the attribute does nothing; the element takes a `<title>` child,
+    first inside it.
+
+  A `title` is also the accessible DESCRIPTION, and the NAME of a control that
+  has no text and no `aria-label`: there Label in Name still applies, so the
+  description starts with the word the control is known by.
 - **A day is written ONE way: "Thu 24.09" (v18.2.0, C1).** Weekday, day and
   month, and the year only when it is not this year: "Fri 15.01.2027". It is
   `formatDay` in `lib/day.js`, and nothing else writes a date on screen. The

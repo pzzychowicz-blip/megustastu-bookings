@@ -208,7 +208,11 @@ const HOUR_STEP_BTN = mkStep(H.chrome);
 // visible heading above them and already required; `who` prefixes the row's
 // identity where the stepper repeats (the duration tiers: "Tier 2: stay for"),
 // LayoutSettings' `bandName(b, i) + ": …"` shape.
-function HourStepper({ label, who, value, onDec, onInc, disableDec, disableInc, fmt }) {
+//
+// `description` (v18.18.0, Part 2): both buttons' hover tooltip, "Decrease …" and
+// "Increase …" of it — what is stepped and by how much, said more fully than the
+// heading. MiniStepper below takes it the same way.
+function HourStepper({ label, who, value, onDec, onInc, disableDec, disableInc, fmt, description }) {
   const display = fmt ? fmt(value) : hourLabel(value);
   const name = (who ? who + ": " : "") + label;
   return (
@@ -219,6 +223,7 @@ function HourStepper({ label, who, value, onDec, onInc, disableDec, disableInc, 
           onClick={onDec} disabled={disableDec}
           className={disableDec ? undefined : "mgt-hover-scale"}
           aria-label={"Decrease " + name}
+          title={description ? "Decrease " + description : undefined}
           style={{ ...HOUR_STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}
         >
           −
@@ -230,6 +235,7 @@ function HourStepper({ label, who, value, onDec, onInc, disableDec, disableInc, 
           onClick={onInc} disabled={disableInc}
           className={disableInc ? undefined : "mgt-hover-scale"}
           aria-label={"Increase " + name}
+          title={description ? "Increase " + description : undefined}
           style={{ ...HOUR_STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}
         >
           +
@@ -340,7 +346,7 @@ const MINI_STEP_BTN = mkStep(H.compact);
 // steppers (the opening and closing hours once per weekday), and all 42
 // buttons announced "−" and "+" and nothing else. A stepper rendered per ROW
 // carries the row's identity ("Mon opening time").
-function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt, label }) {
+function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt, label, description }) {
   // v16.3.0: fmt is now optional (defaults to the HH:00 time format used by the
   // Opening-hours editor); the Standing-bookings horizon passes a plain number.
   const fmtFn = fmt || hourLabel;
@@ -348,10 +354,12 @@ function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt, label }
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
         aria-label={"Decrease " + label}
+        title={description ? "Decrease " + description : undefined}
         style={{ ...MINI_STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
       <span style={{ minWidth: 46, textAlign: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>{fmtFn(value)}</span>
       <button onClick={onInc} disabled={disableInc} className={disableInc ? undefined : "mgt-hover-scale"}
         aria-label={"Increase " + label}
+        title={description ? "Increase " + description : undefined}
         style={{ ...MINI_STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}>+</button>
     </div>
   );

@@ -19,7 +19,9 @@ const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("
 const Draft = read("components/whatsapp/DraftCard.jsx");
 const Inbox = read("components/whatsapp/InboxPanel.jsx");
 const Composer = read("components/whatsapp/ReplyComposer.jsx");
-const Shortcuts = read("components/Shortcuts.jsx");
+// v18.18.0: the inbox's keys are data in lib/shortcuts.js (`OWN_SHORTCUT_SECTIONS`),
+// which the Shortcuts tab and the hover descriptions both read.
+const Shortcuts = read("lib/shortcuts.js");
 const View = read("components/whatsapp/ConversationView.jsx");
 const Row = read("components/whatsapp/ConversationRow.jsx");
 
@@ -63,8 +65,8 @@ describe("W2 — two jobs, two names, two marks", () => {
   });
 
   it("the keyboard list uses the same two names", () => {
-    expect(Shortcuts).toMatch(/\{ keys: \["T"\],\s*label: "Edit templates" \}/);
-    expect(Shortcuts).toMatch(/\{ keys: \["E"\],\s*label: "Insert a template \(show or hide\)" \}/);
+    expect(Shortcuts).toContain('{ id: "inboxTemplates", caps: ["T"], label: "Edit templates" }');
+    expect(Shortcuts).toContain('{ id: "inboxInsert", caps: ["E"], label: "Insert a template (show or hide)" }');
   });
 });
 
@@ -189,7 +191,7 @@ describe("W5 — the phone's inbox", () => {
   it("archives on H, not Backspace, and the shortcut sheet agrees", () => {
     expect(Inbox).toContain('if (k === "h" && tab === "inbox") {');
     expect(Inbox).not.toContain('e.key === "Backspace"');
-    expect(Shortcuts).toContain('{ keys: ["H"],        label: "Archive (Inbox; selection in select mode)" },');
+    expect(Shortcuts).toContain('{ id: "inboxArchive", caps: ["H"], label: "Archive (Inbox; selection in select mode)" },');
   });
 
   // v18.17.0 (Patryk): the select checkbox eases in and out on the list's fold.

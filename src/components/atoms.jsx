@@ -2423,7 +2423,13 @@ export function SmallTag({ label, style }) {
 // ("Active" / "Inactive") makes one control read as two. It has no default: a
 // default here would be a silent twenty-first answer to a question every call
 // site has to answer for itself, which is `ModalTitle`'s `background` lesson.
-export function Toggle({ on, onClick, label, disabled = false }) {
+//
+// `description` (v18.18.0, Part 2) is its hover tooltip, the switch's `title`:
+// what turning it on does, a verb first ("Show the Summary panel open when the
+// app starts"). No default, for `label`'s reason; check:style Rule 14 fails a
+// call site without one. It never states the switch's state — `aria-checked`
+// says that, and a tooltip that read "On" would be wrong half the time.
+export function Toggle({ on, onClick, label, description, disabled = false }) {
   return (
     <button
       onClick={onClick}
@@ -2436,6 +2442,7 @@ export function Toggle({ on, onClick, label, disabled = false }) {
       role="switch"
       aria-checked={!!on}
       aria-label={label}
+      title={description}
       className="mgt-hover-scale"
       style={{
         width: 48, height: 26,   /* @canvas */ borderRadius: R.pill,
@@ -2524,7 +2531,11 @@ export function Kbd({ k }) {
 // where a browser has none); a tap on the input keeps its native behaviour.
 // `weekdayShort` is "" for exactly what the input refuses to display, so a blank
 // date — Book Again opens with one — shows no weekday either.
-export function DateField({ value, onChange, style, inputProps }) {
+//
+// `description` (v18.18.0, Part 2) is the hover tooltip, on the pill AND the
+// input: the pill's weekday and padding are the control too, and a tooltip is
+// read from the element under the mouse. What the date is for, a verb first.
+export function DateField({ value, onChange, style, inputProps, description }) {
   const inputRef = useRef(null);
   const wd = weekdayShort(value);
   // v18.0.0 session 8: read-only is read off `inputProps` rather than taken as
@@ -2541,6 +2552,7 @@ export function DateField({ value, onChange, style, inputProps }) {
   return (
     <div
       className="mgt-hover-scale mgt-datefield"
+      title={description}
       onClick={ro ? undefined : openPicker}
       style={Object.assign({ display: "flex", alignItems: "center", gap: SP.snug, cursor: ro ? "default" : "pointer" }, style)}
     >
@@ -2551,6 +2563,7 @@ export function DateField({ value, onChange, style, inputProps }) {
         type="date"
         value={value}
         onChange={onChange}
+        title={description}
         {...inputProps}
         style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", color: "inherit", font: "inherit", padding: SP.none, margin: SP.none, boxShadow: "none" }}
       />
@@ -2600,7 +2613,11 @@ export function DateField({ value, onChange, style, inputProps }) {
 // mkInp already produces, so a SearchField and a DateField still line up on one
 // row. Sizing by what a mistake COSTS (the v17.9.0 rule) puts this well under
 // the 44px floor: a mis-tap here costs retyping a word.
-export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, style }) {
+//
+// `description` (v18.18.0, Part 2) is the field's hover tooltip: what the search
+// looks through, a verb first ("Search guests by name, phone or tag"). The ✕
+// carries its own.
+export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, description, style }) {
   const base = mkInp();
   const has = String(value == null ? "" : value).length > 0;
   // The ✕ unmounts the moment it does its job, so whatever had focus goes with
@@ -2642,6 +2659,7 @@ export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, 
         value={value}
         onChange={onChange}
         aria-label={ariaLabel}
+        title={description}
         placeholder={placeholder}
         style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", color: "inherit", font: "inherit", padding: SP.none, margin: SP.none, boxShadow: "none" }}
       />
@@ -2654,6 +2672,7 @@ export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, 
             if (ownRef.current) ownRef.current.focus();
           }}
           aria-label="Clear search"
+          title="Empty the search box"
           style={{
             flexShrink: 0, display: "grid", placeItems: "center",
             width: H.chip, height: H.chip, padding: SP.none,

@@ -130,15 +130,22 @@ const pickName = (i) => "pick rule " + (i + 1);
 // so there is no word being taken away — these controls were unaddressable
 // before and are addressable now. A stepper labelled with real WORDS would
 // have to lead with them.
-function Stepper({ value, onDec, onInc, disableDec, disableInc, label, width = 30 }) {
+//
+// `description` (v18.18.0, Part 2) is the hover tooltip of both buttons, as
+// "Decrease …" and "Increase …" of it: what is stepped, said more fully than
+// `label` ("the seats at table 3, one at a time"). check:style Rule 14 asks every
+// call site for one.
+function Stepper({ value, onDec, onInc, disableDec, disableInc, label, description, width = 30 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
         aria-label={"Decrease " + label}
+        title={description ? "Decrease " + description : undefined}
         style={{ ...STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
       <span style={{ minWidth: width, textAlign: "center", fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)" }}>{value}</span>
       <button onClick={onInc} disabled={disableInc} className={disableInc ? undefined : "mgt-hover-scale"}
         aria-label={"Increase " + label}
+        title={description ? "Increase " + description : undefined}
         style={{ ...STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}>+</button>
     </div>
   );

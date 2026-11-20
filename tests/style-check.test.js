@@ -204,7 +204,7 @@ describe("check:style — height scale", () => {
   });
 
   it("passes an on-scale height inside a builder, as it does anywhere", () => {
-    const r = run({ "a.jsx": "const x = <button className=\"mgt-hover-scale\" style={mkBtn({ fontSize: T.body, minHeight: 32, padding: \"4px 12px\" })} />;\n" });
+    const r = run({ "a.jsx": "const x = <button className=\"mgt-hover-scale\" title=\"Save the booking\" style={mkBtn({ fontSize: T.body, minHeight: 32, padding: \"4px 12px\" })} />;\n" });
     expect(r.code).toBe(0);
   });
 });
@@ -712,5 +712,104 @@ describe("Rule 13 — <input type=\"search\"> with the hover lift", () => {
   it("does not fire on prose naming the pairing", () => {
     const r = run({ "a.jsx": '// never give <input type="search"> the mgt-hover-scale class\nexport const x = 1;\n' });
     expect(r.out).not.toMatch(/\[search-hover-lift\]/);
+  });
+});
+
+// ── Rule 14: every control carries a hover description (v18.18.0) ──────────
+//
+// A fixture directory has a ceiling of 0, so one undescribed control fails it;
+// the app's own tree is held to HOVER_CEILING while Part 2 works through it.
+// Asserted on the bracketed labels, for Rule 10's reason above.
+describe("Rule 14 — a hover description on every control", () => {
+  const LIFT = 'className="mgt-hover-scale"';
+  // Rule 14's three labels, and not Rule 10's `[hover-lift]`.
+  const HOVER = /\[hover-(?:description|typed-key|ceiling)\]/;
+
+  it.each([
+    ["a <button>", `<button ${LIFT} onClick={f}>Save</button>`],
+    ["an <input>", `<input ${LIFT} value={v} />`],
+    ["a <select>", `<select ${LIFT} value={v} />`],
+    ["a <textarea>", `<textarea ${LIFT} value={v} />`],
+    ["a link", '<a href="#main">Skip</a>'],
+    ["a role=button", '<div role="button" tabIndex={0} onClick={f}>Open</div>'],
+    ["a role in an expression", '<div role={on ? "switch" : undefined} onClick={f} />'],
+    ["a focusable tag", "<div tabIndex={sel ? 0 : -1} onKeyDown={f} />"],
+    ["a chip drawn as a button", '<OutlineChip as="button" onClick={f}>Tag</OutlineChip>'],
+  ])("catches %s with no title", (_l, jsx) => {
+    const r = run({ "a.jsx": `const x = ${jsx};\n` });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/\[hover-description\]/);
+  });
+
+  it.each(["Toggle", "Stepper", "MiniStepper", "HourStepper", "TimeChip", "SearchField", "DateField"])(
+    "asks <%s>'s call site for a description, not a title", (atom) => {
+      const bare = run({ "a.jsx": `const x = <${atom} title="no" label="x" />;\n` });
+      expect(bare.out).toMatch(/\[hover-description\]/);
+      const ok = run({ "a.jsx": `const x = <${atom} description="Turn the thing on" label="x" />;\n` });
+      expect(ok.out).not.toMatch(HOVER);
+    });
+
+  it("is silent on described controls, in any shape the codebase writes them", () => {
+    const r = run({ "a.jsx": [
+      "const x = (",
+      `  <div><button ${LIFT} title="Save the booking and close the form" onClick={f}>Save</button>`,
+      `  <input ${LIFT} title={"Name of the guest " + who} />`,
+      '  <input /* @no-lift never drawn */ type="hidden" value={v} />',
+      '  <span role="status">fine</span>',
+      '  <div tabIndex={-1} />',
+      '  <OutlineChip tone="neutral">a tag</OutlineChip>',
+      '  <g role="button" tabIndex={0}><title>Open table 3</title><rect /></g>',
+      "  </div>",
+      ");",
+    ].join("\n") + "\n" });
+    expect(r.out).not.toMatch(HOVER);
+    expect(r.code).toBe(0);
+  });
+
+  it("reads a multi-line tag whole, and an SVG element only by its first child", () => {
+    const r = run({ "a.jsx": [
+      "const x = (",
+      "  <button",
+      `    ${LIFT}`,
+      "    onClick={f}",
+      '    title="Close the form"',
+      "  />",
+      ");",
+      'const y = <g role="button" tabIndex={0}><rect /><title>late</title></g>;',
+    ].join("\n") + "\n" });
+    expect(r.out.match(/\[hover-description\]/g)).toHaveLength(1);
+    expect(r.out).toMatch(/a\.jsx:8/);
+  });
+
+  it("is not fooled by a comparison or by prose", () => {
+    const r = run({ "a.jsx": "// a <button> needs a title\nconst n = i<count ? 1 : 0;\nexport const z = a<b;\n" });
+    expect(r.out).not.toMatch(HOVER);
+  });
+
+  it("catches a key typed into a description, and takes keyHint's", () => {
+    const typed = run({ "a.jsx": `const x = <button ${LIFT} title="Open the WhatsApp inbox (I)" />;\n` });
+    expect(typed.out).toMatch(/\[hover-typed-key\]/);
+    const esc = run({ "a.jsx": `const x = <button ${LIFT} title={"Close (Esc)"} />;\n` });
+    expect(esc.out).toMatch(/\[hover-typed-key\]/);
+    const hinted = run({ "a.jsx": `const x = <button ${LIFT} title={"Open the WhatsApp inbox" + keyHint("inbox")} />;\n` });
+    expect(hinted.out).not.toMatch(HOVER);
+    const words = run({ "a.jsx": `const x = <button ${LIFT} title="Tables (joined) for the party" />;\n` });
+    expect(words.out).not.toMatch(HOVER);
+  });
+
+  it("skips the WhatsApp simulator, which production never ships", () => {
+    const r = run({ "WaSimulator.jsx": `const x = <button ${LIFT}>Send</button>;\n` });
+    expect(r.out).not.toMatch(HOVER);
+  });
+
+  it("holds the app's own tree to its ceiling, exactly", () => {
+    // Run with no directory: the real src/, the real HOVER_CEILING. A count
+    // over it is an undescribed control; under it, a batch that forgot to lower it.
+    let out;
+    try { out = execFileSync("node", [SCRIPT], { encoding: "utf8" }); }
+    catch (e) { out = (e.stdout || "") + (e.stderr || ""); }
+    const m = out.match(/hover descriptions: (\d+) left of ceiling (\d+)/);
+    expect(m, out.slice(-600)).not.toBe(null);
+    expect(Number(m[1])).toBe(Number(m[2]));
   });
 });

@@ -41617,3 +41617,42 @@ generated layouts, rules and days, wherever it says false (121 rules), `findBest
 all 4,338 cases, and where it says true the switch changes 690 of them, so the comparison can see a difference. Three wrong versions
 (Avoid tables left out, the largest party read for the smallest, always false) each fail it. And Settings asks it on the stored
 tables, with the new words.
+
+### Commit 8 — Part 2, batch 1: the hover-description rule, `keyHint`, and the atoms' `description`
+
+- **What (Patryk, 2026-11-19, the Table priorities and Hover descriptions plan's Part 2):** every control describes what it does
+  in the browser's own tooltip, the way the inbox's search shows "Search conversations (/)". Mouse only; the tablets never show it.
+  This batch is the groundwork; batches 2–6 describe the screens, and batch 7 sets the ceiling to 0.
+- **`check:style` Rule 14** (`scripts/check-style-invariants.mjs`), Rule 10's tag reader one level wider. A control is a
+  `<button>`, `<input>` (not hidden), `<select>`, `<textarea>`, an `<a href>`, any tag with an interactive `role` (a quoted
+  literal, or the quoted strings of an expression) or a `tabIndex` that is not a literal −1, an `<OutlineChip as="button">`,
+  and the call site of an atom that draws one (`Toggle`, `Stepper`, `MiniStepper`, `HourStepper`, `TimeChip`, `SearchField`,
+  `DateField`), which owes `description` rather than `title`. An SVG element passes with a `<title>` child first inside it. It also
+  counts a key typed into a description in parentheses ("(I)", "(Esc)"). The WhatsApp simulator is skipped.
+  - **The ceiling is exact both ways** on the app's own tree (over: a control added undescribed; under: a batch that forgot to
+    lower it, which would let the next one in free); a fixture directory's is 0. `MGT_HOVER_LIST=1 npm run check:style` lists
+    every site. The OK line ends with the count.
+  - **Measured on this tree:** 421 to start (414 undescribed, 7 typed keys: App's inbox, ← and → buttons, the Summary's More,
+    the inbox's search and its Close, the composer's Insert template). The atoms' own controls now carry their `title`, so the
+    commit lands at **410**.
+  - **What it cannot see:** a description handed through an object or a prop that is not `title`/`description` (the inbox's
+    menu rows carry `title: "Edit templates (T)"` in data). Batch 6 converts those by hand.
+- **`keyHint(id)`** (`lib/shortcuts.js`) → `" (I)"`: the row's caps as the Shortcuts tab prints them. Every row of the table has
+  an `id` (39), and the keys handled elsewhere (the inbox, More, the table picker, Esc and Enter) moved out of `Shortcuts.jsx`
+  into `OWN_SHORTCUT_SECTIONS` as data (25 rows), so a tooltip and the tab read one list. W and M became two rows with one label,
+  each with an id, and still print as one line (`docRows`, now shared with the table's sections). An unknown id gives "" rather
+  than throwing in render.
+- **The atoms take `description`, with no default:** `Toggle` (the switch's `title`), `DateField` (the pill and the input, since
+  the weekday is the control too), `SearchField` (the field; its ✕ reads "Empty the search box"), `TimeChip`, and the three
+  steppers, whose two buttons read "Decrease …" and "Increase …" of it.
+- **DESIGN.md:** "Every control carries a hover description", beside "A control's meaning is on the control", with how a
+  description reads.
+- **Measured on DEV:** Settings › Shortcuts draws every section and row as before, W / M on one line.
+
+`tests/style-check.test.js`: Rule 14 on each kind of control, an atom asked for `description` and not `title`, the shapes that
+pass (an expression title, a hidden input, `tabIndex={-1}`, a plain chip, an SVG `<title>`), a multi-line tag read whole and an SVG
+title that is not first, a comparison and prose, typed keys against `keyHint`, the simulator skipped, and the app's tree held to
+its ceiling exactly. One older fixture gained a `title`. `tests/shortcuts.test.js`: unique ids across both lists, `keyHint`'s
+shape, "" for an unknown id, every `keyHint("…")` in `src/` naming a row (it failed on a throwaway file calling `keyHint("nope")`
+and passed its `keyHint("inbox")`), and the own sections printing as they did. `tests/shortcuts-tab.test.js` and
+`tests/wa-inbox-layout.test.js`: their pins on the inbox's rows read `lib/shortcuts.js` now.
