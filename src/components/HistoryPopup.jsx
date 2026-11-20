@@ -21,6 +21,7 @@
 import { BTN, S, R, T, FW } from "../lib/constants";
 import { Overlay, mkBtn } from "./atoms";
 import { formatDay, formatDaysIn, localDay, clockTime } from "../lib/day";
+import { keyHint } from "../lib/shortcuts";
 
 export function HistoryPopup({ booking, onClose }) {
   // Defensive check — the parent should already guarantee this, but the
@@ -80,6 +81,7 @@ export function HistoryPopup({ booking, onClose }) {
           className="mgt-hover-scale"
           style={mkBtn({ minHeight: 40, padding: "8px 18px", background: BTN.quiet })}
           onClick={onClose}
+          title={"Close the history and go back to the booking" + keyHint("close")}
         >
           Close
         </button>

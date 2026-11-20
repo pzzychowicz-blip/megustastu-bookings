@@ -30,6 +30,7 @@ import { S, BTN, R, T, FW, IC, H, TIMELINE_TABLES } from "../lib/constants";
 import { hourLabel } from "../lib/time-grid";
 import { ChevronLeftIcon, ChevronRightIcon } from "./Icons";
 import { todayStr, addDays, isReadableDate, formatDay } from "../lib/day";
+import { keyHint } from "../lib/shortcuts";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];   // week-list rows
 const WDS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];          // month-grid header
@@ -94,6 +95,15 @@ function sameMonth(a, b){
 // --bg-input, half-transparent over a translucent sheet, so the page behind the
 // modal showed through and the timeline's orange blocks tinted days amber —
 // measured, days 18–20 and 25–27 amber over the Timeline, grey over the List.
+// v18.18.0 (Part 2 batch 3): the mode buttons' hover descriptions, built once
+// here because `keyHint` takes a string literal (tests/shortcuts.test.js), and
+// `modeBtn` is handed the mode as a variable.
+const MODE_TITLE = {
+  week: "Show the week, a day to a row" + keyHint("moreWeek"),
+  month: "Show the month as a calendar, shaded by covers" + keyHint("moreMonth"),
+  stats: "Show the month's numbers: covers, busy hours and tables" + keyHint("moreStats"),
+};
+
 const CELL = "var(--bg-cal-cell)";
 // The busiest in-month day's shading (the accent at up to 30%), shared by the
 // cells and the key under them so the key cannot describe a different scale.
@@ -186,6 +196,7 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
       <button
         onClick={function(){ switchMode(m); }}
         className="mgt-hover-scale"
+        title={MODE_TITLE[m]}
         aria-pressed={active}
         style={{ ...segStyle(active), padding: "6px 18px", minHeight: H.compact }}
       >
@@ -198,11 +209,11 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
   const footer = (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <button onClick={function(){ isWeek ? goWeek(-1) : goMonth(-1); }} aria-label={isWeek ? "Previous week" : "Previous month"} title={isWeek ? "Previous week" : "Previous month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.quiet })} ><ChevronLeftIcon size={IC.chrome} /></button>
-        <button onClick={goToday} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "6px 14px", background: BTN.today })}>{isWeek ? "This week" : "This month"}</button>
-        <button onClick={function(){ isWeek ? goWeek(1) : goMonth(1); }} aria-label={isWeek ? "Next week" : "Next month"} title={isWeek ? "Next week" : "Next month"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.quiet })} ><ChevronRightIcon size={IC.chrome} /></button>
+        <button onClick={function(){ isWeek ? goWeek(-1) : goMonth(-1); }} aria-label={isWeek ? "Previous week" : "Previous month"} title={isWeek ? "Show the week before" : "Show the month before"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.quiet })} ><ChevronLeftIcon size={IC.chrome} /></button>
+        <button onClick={goToday} title={(isWeek ? "Go back to this week" : "Go back to this month") + keyHint("moreToday")} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "6px 14px", background: BTN.today })}>{isWeek ? "This week" : "This month"}</button>
+        <button onClick={function(){ isWeek ? goWeek(1) : goMonth(1); }} aria-label={isWeek ? "Next week" : "Next month"} title={isWeek ? "Show the week after" : "Show the month after"} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, minWidth: 40, padding: "6px 12px", fontSize: T.title, background: BTN.quiet })} ><ChevronRightIcon size={IC.chrome} /></button>
       </div>
-      <button onClick={onClose} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: BTN.quiet })}>Close</button>
+      <button onClick={onClose} title={"Close More and stay on this day" + keyHint("close")} className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: BTN.quiet })}>Close</button>
     </div>
   );
 
@@ -263,6 +274,7 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
             <button /* @no-lift a day row as wide as the card: .mgt-ac-row tints it through --row-bg */
               key={r.date}
               onClick={function(){ onPick(r.date); }}
+              title={"Go to " + formatDay(r.date) + " and close More"}
               // v18.4.0 (Patryk): a wide row takes the tint and neither the lift nor the press dip (DESIGN.md, Press feedback).
               className="mgt-ac-row mgt-nopress"
               style={{
@@ -391,6 +403,7 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
                   <button
                     key={c.date}
                     onClick={function(){ onPick(c.date); }}
+                    title={"Go to " + formatDay(c.date) + " and close More"}
                     className="mgt-hover-scale"
                     style={{
                       position: "relative", overflow: "hidden",

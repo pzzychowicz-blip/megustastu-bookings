@@ -441,6 +441,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             if(!e) return null;
             const selT = sel && sel.type === "table" && sel.key === t.id;
             return <TableGlyph key={t.id} id={t.id} entry={e}
+              description={"Drag to move table " + t.id + " on the plan"}
               fill="var(--bg-card)" stroke={selT ? "var(--accent)" : "var(--fp-outline)"} strokeWidth={selT ? 3 : 2}
               onPointerDown={function(ev){ startDrag(ev, "table", t.id, e); }} />;
           })}

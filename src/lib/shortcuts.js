@@ -336,6 +336,9 @@ export const OWN_SHORTCUT_SECTIONS = [
   { title: "More popover (Week / Month)", rows: [
     { id: "moreWeek", caps: ["W"], label: "Week / Month view" },
     { id: "moreMonth", caps: ["M"], label: "Week / Month view" },
+    // v18.18.0 (Patryk): WeekView's handler always took S for Stats, and the
+    // tab never listed it; the row is here so the Stats button can name it.
+    { id: "moreStats", caps: ["S"], label: "Stats view" },
     { id: "moreMove", caps: ["↑", "↓"], label: "Move day focus" },
     { id: "morePrevNext", caps: ["←", "→"], label: "Prev / next (week, or day in Month)" },
     { id: "moreToday", caps: ["T"], label: "This week / month (today)" },

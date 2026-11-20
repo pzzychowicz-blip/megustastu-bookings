@@ -28,6 +28,7 @@
 import { useEffect, useRef } from "react";
 import { S, STATUS_BTN_BG, BLOCK_INK, BTN, R, T, FW, IC } from "../lib/constants";
 import { seatingClosed, unlockOffered } from "../lib/booking-logic";
+import { statusTitle } from "../lib/status-change";
 import { useArmAfterRelease } from "../hooks/useArmAfterRelease";
 import { LockIcon, NoShowIcon, StatusIcon, TrashIcon } from "./Icons";
 import { mkBtn, mkDangerBtn, PopupShell, useModalPresence } from "./atoms";
@@ -164,6 +165,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
                 onStatus(booking.id, st);
                 onClose();
               }}
+              title={statusTitle(st, booking.name)}
             >
               <StatusIcon status={st} size={IC.control} />{st}
             </button>
@@ -186,6 +188,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
               onNoShow(booking.id);
               onClose();
             }}
+            title={"Cancel " + (booking.name || "(no name)") + "'s booking as a no-show"}
           >
             <NoShowIcon size={IC.control} />No show
           </button>
@@ -198,7 +201,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
           <button
             className="mgt-hover-scale"
             style={mkBtn({ fontSize: T.lead, fontWeight: FW.bold, padding: "10px 18px", minHeight: 44, flex: "1 1 auto", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 })}
-            title="Let the optimiser move this booking again"
+            title={"Let the optimiser move " + (booking.name || "(no name)") + "'s booking again"}
             onClick={() => {
               if (!armed || leaving) return;
               skipExit();
@@ -223,6 +226,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
               onDelete(booking.id);
               onClose();
             }}
+            title={"Delete " + (booking.name || "(no name)") + "'s booking (asks again first)"}
           >
             <TrashIcon size={IC.control} />Delete
           </button>

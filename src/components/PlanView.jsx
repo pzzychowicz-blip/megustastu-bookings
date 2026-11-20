@@ -97,6 +97,7 @@ function TablePopover({ id, queue, canWalkin, popRef, onClose, onPick, onWalkinH
             type="button" key={b.id} className="mgt-ac-row mgt-nopress"
             onClick={() => { if (!leaving) { skipExit(); onPick(b); } }}
             aria-label={b.time + " " + (b.name || "(no name)") + ", " + guestsLabel(b.size) + ", " + b.status}
+            title={"Open " + (b.name || "(no name)") + "'s booking to edit it"}
             style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", font: "inherit", color: "inherit", padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, "--row-bg": "var(--bg-input)", "--row-bg-hover": "var(--bg-hover-card)", border: "1px solid var(--border-input)" }}>
             <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
             <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
@@ -123,6 +124,7 @@ function TablePopover({ id, queue, canWalkin, popRef, onClose, onPick, onWalkinH
         <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
           <button className="mgt-hover-scale"
             onClick={() => { if (!leaving) { skipExit(); onWalkinHere(); } }}
+            title={"Seat a party that came in without a booking at table " + id}
             style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-walkin)" })}>Walk-in here</button>
         </div>
       ) : null}
@@ -324,6 +326,14 @@ export const PlanView = memo(function PlanView({
       .filter((b) => (b.status === "confirmed" || b.status === "pending") && (b.tables || []).indexOf(id) >= 0 && toMins(b.time) >= slider)
       .sort((a, b) => toMins(a.time) - toMins(b.time));
     return upcoming[0] || null;
+  }
+
+  // v18.18.0 (Part 2 batch 3): a table's hover description. Right-click opens
+  // the status card of the party `targetBookingFor` finds, so it is offered
+  // only when there is one, and names them.
+  function glyphTitle(id) {
+    const b = targetBookingFor(id);
+    return "Show table " + id + "'s bookings" + (b ? "; right-click to change " + (b.name || "(no name)") + "'s status" : "");
   }
 
   // ── Popups ───────────────────────────────────────────────────────────────────
@@ -758,6 +768,7 @@ export const PlanView = memo(function PlanView({
           {isToday ? (
             <button className="mgt-hover-scale"
               onClick={() => { setSliderTouched(false); setSlider(clampExact(nowMins)); reCentre(true); }}
+              title="Show the tables as they are now, and keep following the time"
               style={mkBtn({ fontSize: T.small, minHeight: 28, padding: "2px 10px", background: atNow ? S.accent : BTN.quiet })}>Now</button>
           ) : null}
         </span>
@@ -863,6 +874,7 @@ export const PlanView = memo(function PlanView({
               const rim = avail && !avail.fits ? { stroke: "var(--warn-text)", dash: "6 4" } : null;
               return (
                 <TableGlyph key={t.id} id={t.id} entry={e} ariaLabel={a11yLabel}
+                  description={glyphTitle(t.id)}
                   fill={f.fill} stroke={rim ? rim.stroke : f.stroke} strokeWidth={2} strokeDasharray={rim ? rim.dash : f.dash}
                   // v17.1.1: occupancy colour changes fade with the timeline's
                   // Seated→Completed timing (.mgt-fade-overlay). CSS can't

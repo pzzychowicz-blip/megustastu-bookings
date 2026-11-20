@@ -34,6 +34,7 @@
 // would be a second answer to a question that has one.
 
 import { mkBtn } from "./atoms";
+import { keyHint } from "../lib/shortcuts";
 import { S, T, FW } from "../lib/constants";
 
 /**
@@ -58,11 +59,11 @@ export function EmptyDay({ closed = false, onNew, onWalkin }) {
       {onNew || onWalkin ? (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 2 }}>
           {onNew ? (
-            <button className="mgt-hover-scale" onClick={onNew}
+            <button className="mgt-hover-scale" onClick={onNew} title={"Make a new booking" + keyHint("newBooking")}
               style={mkBtn({ background: "var(--accent)", padding: "8px 18px" })}>New booking</button>
           ) : null}
           {onWalkin ? (
-            <button className="mgt-hover-scale" onClick={function () { onWalkin(null); }}
+            <button className="mgt-hover-scale" onClick={function () { onWalkin(null); }} title={"Seat a party that came in without a booking" + keyHint("walkin")}
               style={mkBtn({ background: "var(--app-walkin)", padding: "8px 18px" })}>Walk-in</button>
           ) : null}
         </div>

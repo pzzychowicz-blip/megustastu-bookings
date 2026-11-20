@@ -41679,3 +41679,40 @@ and passed its `keyHint("inbox")`), and the own sections printing as they did. `
 
 No test changed: `keyHint` ids are literals (the views' are taken once at module scope), which `tests/shortcuts.test.js` asks of
 every call.
+
+### Commit 10 — Part 2, batch 3: the three views and their popups
+
+- **What:** a hover description on the Timeline's blocks, their Assign handle and the cell marker; the List card, its next-step
+  button, Assign, No show and ⋯; the Plan's tables, its table popover's rows and Walk-in here, and Now; the quick-status card's
+  buttons; the More popover (its three modes, the period arrows, This week / This month, Close, and every day row and month cell);
+  Find a booking (the field, each result, Done); the history's Close; and the empty day's New booking and Walk-in, which no batch
+  had named (Patryk: EmptyDay here, the fired reminder's toast with batch 5, LoginScreen, ErrorBoundary, UpdateRequired, the
+  `/wa-connect` page and the suggestion-row atom with batch 7). **Rule 14: 364 → 340.**
+- **One sentence for a status tap:** `statusTitle(status, name)` (`lib/status-change.js`) says what a tap does to whose booking
+  ("Mark Hanna as seated at their tables", "Confirm Ana's booking"). The List card's next step and the quick-status card read it,
+  so the two surfaces that offer the same tap describe it in the same words.
+- **The Plan's tables are SVG:** `TableGlyph` takes `description` and draws it as a `<title>`, first inside its `<g>`. Measured in
+  headless Chromium through CDP `Accessibility.getPartialAXTree`, not the automation tree: with an `aria-label` the label stays
+  the NAME and the `<title>` becomes the DESCRIPTION; without one the `<title>` would be the name. Every Plan table passes an
+  `aria-label`. A table offers "right-click to change Ana's status" only where `targetBookingFor` finds a party, and names them.
+  The floor-plan editor passes "Drag to move table N on the plan" (Patryk): the same measurement shows a `<g>` with a `<title>`
+  becomes a named group (it was generic), which a screen reader meets in a drawing it could not act on before either; an empty
+  `<title>` still makes it a group, so there was no silent option.
+- **The block's title carries the tags:** the block's `role="button"` wrapper is most of the block and the innermost `title` wins,
+  so its description ("Open Mike's booking to edit it; right-click for its status, drag to move it") ends with the tags the
+  outer `title` shows, or a mouse would find them only over the rail's edges. The mouse's words: a tooltip is never seen on a
+  tablet, so it says right-click, not hold.
+- **Two existing titles rewritten to the rules:** the Assign handle ("Assign tables" → "Choose tables for Mike by hand", batch 2's
+  wording for the same act) and the waitlist ghost, which read "Waiting: Ana, 4 guests, at 19:00. Tap to book." and now reads
+  "Book Ana from the waitlist: 4 guests, at 19:00" (Patryk). `tests/party-size.test.js` pinned the old opening words, and its
+  pattern moved with them; it still asks for `guestsLabel`. The More popover's arrows said only "Previous week".
+- **S was the More popover's undocumented key** (Patryk): `WeekView` switched to Stats on S, and the shortcut table had no row
+  for it, so the Shortcuts tab never listed it and the Stats button could not name it. `moreStats` is that row.
+- **Names are untouched:** every control described here has visible text or an `aria-label` (the ⋯ keeps "More actions", which
+  `tests/a11y.test.js` pins), so each `title` is a description. The week view's mode buttons put `title` before `aria-pressed`
+  so `tests/week-view.test.js`'s pin on `aria-pressed={active}` then `style` holds.
+- **Measured on DEV** (reloaded, read from the live DOM): blocks, handles, a List card and its buttons, the Plan's tables (the
+  `<title>` first in each `<g>`), its popover rows and Walk-in here, the quick-status card, More's modes ("Show the month's
+  numbers: covers, busy hours and tables (S)") and days, Find a booking's field, result and Done ("Close Find a booking (Esc)"),
+  the history's Close and an empty day's New booking ("Make a new booking (N)"; a future day offers no Walk-in). The waitlist
+  ghost and the cell marker were not on screen; their source is read by the tests above and Rule 14.

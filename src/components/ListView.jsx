@@ -36,6 +36,7 @@ import { useRevealRows } from "../hooks/useRevealRows";
 import { useLeavingOrder } from "../hooks/useLeavingOrder";
 import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf, countLabel, offZone, offZoneLabel } from "../lib/booking-logic";
 import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
+import { statusTitle } from "../lib/status-change";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey, formatPhone, bookingTags } from "../lib/customers";
 import { filterByTags, dayTagChips, toggleTagId, tagNames, liveTagIds } from "../lib/tag-filter";
@@ -823,6 +824,7 @@ export const ListView = memo(function ListView({
             className="mgt-hover-scale"
             style={mkBtn({ background: STATUS_BTN_BG[nextSt], color: BLOCK_INK[nextSt] || "var(--text-on-accent)", textTransform: "capitalize", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: NEXT_COL })}
             onClick={stopped(() => onStatus(b.id, nextSt))}
+            title={statusTitle(nextSt, b.name)}
           >
             <StatusIcon status={nextSt} size={IC.control} />{nextSt}
           </button>
@@ -840,7 +842,7 @@ export const ListView = memo(function ListView({
             className="mgt-hover-scale"
             aria-label="More actions"
             aria-expanded={menuFor === b.id}
-            title="More actions"
+            title={"Show more for " + (b.name || "(no name)") + "'s booking: the other statuses and Delete"}
             style={mkBtn({ background: BTN.quiet, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "4px 12px" })}
             onClick={stopped(() => setMenuFor(b.id))}
           >
@@ -886,6 +888,7 @@ export const ListView = memo(function ListView({
                page under a finger that just tapped is the bug it was added to
                avoid. */
             onClick={(e) => { if (endsASelection(e.currentTarget)) return; onSelect(b.id); onEdit(b); }}
+            title={"Open " + (b.name || "(no name)") + "'s booking to edit it"}
             /* /code-review (v17.12.0): the card is focusable now, and the
                browser focuses on mousedown — which SCROLLS the card into view,
                measured at up to 297px. Timeline and Plan answer that with
@@ -1104,9 +1107,9 @@ export const ListView = memo(function ListView({
                   late card only grows leftwards. */}
               <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }}>
                 <RowSlot show={!!acts.noShow} gap={6}>{acts.noShow ? (
-                  <button className="mgt-hover-scale" style={mkBtn({ background: BTN.orange, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onNoShow(b.id))}><NoShowIcon size={IC.control} />No show</button>
+                  <button className="mgt-hover-scale" style={mkBtn({ background: BTN.orange, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onNoShow(b.id))} title={"Cancel " + (b.name || "(no name)") + "'s booking as a no-show"}><NoShowIcon size={IC.control} />No show</button>
                 ) : null}</RowSlot>
-                <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onManual(b.id))}><AssignIcon size={IC.control} />Assign</button>
+                <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onManual(b.id))} title={"Choose tables for " + (b.name || "(no name)") + " by hand"}><AssignIcon size={IC.control} />Assign</button>
                 {nextBtn}
                 {moreBtn}
               </div>
