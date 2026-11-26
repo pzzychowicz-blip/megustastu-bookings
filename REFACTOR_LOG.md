@@ -42248,3 +42248,21 @@ Pins moved: `tests/list-card.test.js` (`cardActionsOf`'s body, and `omitBookAgai
   (confirmed), B → nothing; ↓ to Olga Ferrer (completed), B → "Book again".
 
 `tests/shortcuts.test.js`: both rows over seated, completed and confirmed, with no selection, in the Plan, and under a modal.
+
+### Commit 5 — Book again in Find a booking
+
+- **What:** a seated or completed result has a green **Book again** beside it. Each result row is a whole `<button>`, so the button
+  is its SIBLING in a flex wrapper, never inside it. App's `onBookAgain` closes the panel and then calls `bookAgain`, so the form
+  never opens over the search.
+- **Layout, measured first, chosen by Patryk:** on the tablet (1024 wide) the row was 670px with 540 of content for "o", and a long
+  name can take the name column to its 190 cap, so a 117px button beside it leaves the name about 80px less. He chose a reserved
+  column over a mark-only square or a line under each result: **every row keeps `AGAIN_COL` (117, the List slot's measured width)
+  while any result offers Book again**, so the name gives up the same room on every row and the columns stay in line; with no such
+  result the column is not there. On a phone the button takes a line of its own under the result, full width.
+- **On DEV:** "olga" on the tablet: ten results, four confirmed with the empty column and six completed with Book again, every row
+  545 wide and every status badge at x 582. Book again on the 22.11 result → the search closed and one dialog, "Book again" for Olga
+  Ferrer. At 375 wide: the row 339 wide and Book again 339 wide, 8px under it; Escape in the search box still closes the panel.
+- **Found on the way, not changed:** results are capped at 30, upcoming first, so a short query ("o") listed no past visit at all.
+  Typing more of the name reaches them, which is how the search already worked.
+
+`tests/book-again.test.js`: the sibling, the reserved column and App's order.

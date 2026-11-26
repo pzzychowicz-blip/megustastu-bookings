@@ -184,3 +184,20 @@ describe("a completed List card shows Book again in its next step's slot", () =>
     expect(btn).toContain("onClick={stopped(() => onBookAgain(b))}");
   });
 });
+
+describe("Find a booking offers Book again on a seated or completed result", () => {
+  const Find = comp("SearchPanel.jsx");
+  it("as a SIBLING of the result's row, never inside its button", () => {
+    const at = Find.indexOf("const again = againCol && bookAgainOffered(b) ? (");
+    expect(at).toBeGreaterThan(-1);
+    expect(Find).toContain("{row}{again}");
+    expect(Find).toContain("onClick={function () { onBookAgain(b); }}");
+  });
+  it("every row reserves the column while any result offers it, so the columns stay in line", () => {
+    expect(Find).toContain("const againCol = onBookAgain && results.some(bookAgainOffered);");
+    expect(Find).toContain(') : againCol && !isMobile ? <span aria-hidden="true" style={{ width: AGAIN_COL, flexShrink: 0 }} /> : null;');
+  });
+  it("App closes the panel first, then opens the form", () => {
+    expect(appCode()).toContain("onBookAgain={function(b){setShowSearch(false);bookAgain(b);}}");
+  });
+});
