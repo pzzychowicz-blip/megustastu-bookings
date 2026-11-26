@@ -2556,8 +2556,11 @@ after, it went from the ~1.69× on screen to 1.95×, one notch).
   a styling box between them and the content, and the cache keeps the box: the
   copy that leaves is empty. `BannerRows` had a padding wrapper there, so every
   row whose data left with its id (a reminder marked Done, a dismissed waiting
-  party) folded as 0px in one frame while its neighbour jumped. Put the styling
-  on the `Reveal` itself, and pass the content, or null, as its child. The other
+  party) folded as 0px in one frame while its neighbour jumped. So a styling
+  box goes in only as `row ? <div …>{row}</div> : null`, and the cache keeps the
+  box with the row in it. A line between rows keeps its WIDTH and changes only
+  its colour: a border that comes and goes is a 1px step on the rows under it
+  (the code review of v18.19.0 found two in `BannerRows`). The other
   half of the same rule: the wrapper must STAY MOUNTED. A badge rendered only
   while a count is above zero has no exit to play, so `CountBadge` is mounted
   with 0 and decides for itself.

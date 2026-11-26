@@ -42395,3 +42395,22 @@ asked for all three in this version.
   into its done state in the Browser pane, which refuses the clipboard write even to a real click (the click landed on
   the button, and `Copied` never came); the draft card's Add to waitlist was not pressed, since it writes the DEV
   waitlist. `tests/motion.test.js` holds the atom and both sites.
+
+### `/code-review and ship` — findings
+
+The review (high) raised two, both 1px steps in the strip's rows, and both were confirmed and fixed in one commit, since
+one change answers both:
+
+- **An arriving row's hairline stepped the rows under it 1px** (raised against this version). The motion sweep's
+  `BannerRows` fix had moved the padding and hairline onto the `Reveal`'s outer box, outside the clipped track, so a
+  second or later row's 1px border counted from its first frame.
+- **The survivor of a first row leaving dropped its line and jumped 1px** (older than this version). The line is keyed
+  on the row's place among OPEN rows, so the survivor went from `i = 1` to `i = 0` in the render that starts the fold.
+  The fold measured earlier showed it: the second reminder moved 226 → 225 at 29ms while the leaving row was still 52px.
+
+The wrapper is back inside the clip, rendered as `row ? <div …>{row}</div> : null`, so `Reveal`'s cache keeps it with
+the row in it, and every row's top border is always 1px with only its colour changing (`transparent` on the first open
+row, faded on `M.move`). The first row sits 1px lower under the section title than before, the price of a line that
+never resizes. Measured with the real `BannerRows` in a scratch root: a third row arriving held the content below at 202
+for the first frames, then eased to 243 (40px row + its line); the first row leaving held the survivor at 162 at 16ms,
+then eased to 121. `tests/motion.test.js` holds both; DESIGN.md's "Adding motion" says it as a rule.

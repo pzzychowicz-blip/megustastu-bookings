@@ -34,6 +34,7 @@
 //   tint        — the pane's background wash (default: the soft overlap amber)
 
 import { Reveal } from "./atoms";
+import { M } from "../lib/constants";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { useLeavingOrder } from "../hooks/useLeavingOrder";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
@@ -78,31 +79,40 @@ export function BannerRows({ ids, renderRow, swapKey }) {
           // section header: a line appearing exactly where the design says none.
           const visible = order.filter(function (x) { return openIds.has(x); });
           const i = visible.indexOf(id);
+          const row = renderRow(id);
           return (
             // v18.19.0 (the motion sweep): a leaving row is inert, as FoldRows'
             // are, so a second tap during its fold cannot land on the copy.
-            <Reveal key={id} show={openIds.has(id)} inert={!openIds.has(id)}
-              // The hairline lives HERE, not on the row, so a banner's row
-              // components stay pure content and every banner separates its
-              // rows identically. `i > 0` keeps it off the first row, whose
-              // separation from the header is already the header's padding.
-              // NOTIF_GUTTER puts row text on the same left edge as the
-              // section title rather than under the mark — imported from the
-              // strip that defines that geometry, never re-derived here.
-              //
-              // v18.19.0 (the motion sweep): on the Reveal, no longer on a
-              // wrapper inside it, so the row is the Reveal's own child and its
-              // cache (`last`) keeps the ROW. A caller's `renderRow` reads its
-              // own data, which for most rows leaves with the id (a reminder
-              // marked Done, a dismissed waiting party), so it answers null for
-              // the leaving copy; with the wrapper as the child, Reveal kept the
-              // wrapper and folded an empty box. Measured on DEV with two
-              // reminders: Done on the first dropped its row to 0px in the first
-              // frame and the one under it jumped 53px. The padding is
-              // horizontal only, and a leaving row is never `i > 0`, so nothing
-              // here holds height while it folds.
-              style={{ padding: "0 " + NOTIF_PAD_X + "px 0 " + NOTIF_GUTTER + "px", ...(i > 0 ? { borderTop: "1px solid var(--border-soft)" } : null) }}>
-              {renderRow(id)}
+            <Reveal key={id} show={openIds.has(id)} inert={!openIds.has(id)}>
+              {/* The hairline lives HERE, not on the row, so a banner's row
+                  components stay pure content and every banner separates its
+                  rows identically. NOTIF_GUTTER puts row text on the same left
+                  edge as the section title rather than under the mark —
+                  imported from the strip that defines that geometry, never
+                  re-derived here.
+
+                  v18.19.0 (the motion sweep): the wrapper is NULL when the row
+                  is. A caller's `renderRow` reads its own data, which for most
+                  rows leaves with the id (a reminder marked Done, a dismissed
+                  waiting party), and Reveal draws a leaving copy from its last
+                  truthy child. With the wrapper always there, the cache kept
+                  the wrapper and folded an empty box: measured on DEV with two
+                  reminders, Done dropped the first to 0px in one frame and the
+                  second jumped 53px. Now the cache holds the wrapper WITH the row.
+
+                  And the hairline is always 1px wide; only its colour says
+                  whether it shows (`i > 0`, faded on M.move). Its width
+                  changing was a layout step on two edges: the survivor of a
+                  first row leaving dropped its line and jumped 1px as the fold
+                  began (226 → 225 at 29ms, measured), and the code review of
+                  this version found the arriving row's line, when it sat on the
+                  Reveal, outside the clip. Inside the clip and never resized,
+                  it can only ease. */}
+              {row ? (
+                <div style={{ padding: "0 " + NOTIF_PAD_X + "px 0 " + NOTIF_GUTTER + "px", borderTop: "1px solid", borderTopColor: i > 0 ? "var(--border-soft)" : "transparent", transition: "border-top-color " + M.move }}>
+                  {row}
+                </div>
+              ) : null}
             </Reveal>
           );
         })}

@@ -420,8 +420,17 @@ describe("the strip's row sections fold the row as it looked", () => {
   const rows = code(join(ROOT, "src/components/BannerRows.jsx"), "utf8");
   const reminders = code(join(ROOT, "src/hooks/useReminders.jsx"), "utf8");
 
-  it("the row is the Reveal's own child, so its cache keeps the row", () => {
-    expect(rows).toMatch(/<Reveal key=\{id\} show=\{openIds\.has\(id\)\} inert=\{!openIds\.has\(id\)\}\s+style=\{\{ padding:[^\n]*\}\}>\s*\{renderRow\(id\)\}\s*<\/Reveal>/);
+  it("the wrapper is null when the row is, so Reveal's cache keeps the wrapper WITH the row", () => {
+    expect(rows).toContain("const row = renderRow(id);");
+    expect(rows).toMatch(/<Reveal key=\{id\} show=\{openIds\.has\(id\)\} inert=\{!openIds\.has\(id\)\}>\s*(?:\{\s*\}\s*)?\{row \? \(\s*<div style=\{\{[^\n]*\}\}>\s*\{row\}\s*<\/div>\s*\) : null\}\s*<\/Reveal>/);
+  });
+
+  it("the hairline never changes width, only colour, so no row steps 1px (code review)", () => {
+    // Measured with the real BannerRows in a scratch root: a third row arriving
+    // held the content below at 202 for the first frames, then eased to 243;
+    // the first row leaving held the survivor at 162, then eased to 121.
+    expect(rows).toContain('borderTop: "1px solid", borderTopColor: i > 0 ? "var(--border-soft)" : "transparent", transition: "border-top-color " + M.move');
+    expect(rows).not.toMatch(/i > 0 \? \{ borderTop:/);
   });
 
   it("rows are drawn in the caller's order, a leaving one kept in place", () => {
