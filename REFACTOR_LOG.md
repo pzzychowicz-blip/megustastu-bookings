@@ -42266,3 +42266,15 @@ Pins moved: `tests/list-card.test.js` (`cardActionsOf`'s body, and `omitBookAgai
   Typing more of the name reaches them, which is how the search already worked.
 
 `tests/book-again.test.js`: the sibling, the reserved column and App's order.
+
+### Verification across the version
+
+- **Gate at each commit** (main entry gz · tests · lint · style): 145.38 kB · 4805 · 0 errors, 63 warnings · OK → 145.56 · 4810 → 145.66
+  · 4812 → 145.68 · 4814 → **145.69 kB · 4817 passed · 0 errors, 63 warnings · OK** (the lint cap, unchanged).
+- **Dark theme on DEV:** the completed card's slot sits in the finished card's fade like Assign beside it, and its ⋯ card shows
+  Confirmed · Cancelled · Delete. `--app-success-solid` under `--text-on-accent` was already a registered pair in
+  `tests/contrast.test.js` (the form's Book again), so no new pair.
+- **Console:** no error after a clean reload and a walk through the List. One `keyHint is not defined` was logged while the List's
+  call was in and its import not yet (the hot-reloaded module of that moment), and never again.
+- **Not checkable here:** a real finger's hold on a block or table, then lifting onto Book again (`useArmAfterRelease`), is the
+  tablet's and the iPhone's to settle after merge.
