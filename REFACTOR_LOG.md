@@ -42328,3 +42328,25 @@ simulators; every finding fixed here, nothing to ROADMAP.
   come up, the answer goes, and they crossfade back. One reading there is not explained and was not changed: in about one run
   in three, a single sampled frame reads both layers at 0.00 between the words and the answer. The previous `AvailLine` does
   the same at 6× (control run), `useDeferredCompute` sets its value and `pending` in one update, and it never appears at 1×.
+- **The phone's bottom bar covered the end of every view** (iPhone 18 Pro Max, iOS 27.0 simulator, Safari, Lock navigation
+  on). Found when the List on Sun 29.11 showed no "Completed & cancelled" fold even scrolled to its end. Measured on the phone
+  through a scratch eval channel: `<main>` at its end, the fold at 745–775 under the bar from 735, and the bar's 61px spacer at
+  407–468, part-way down the List. In the fixed shell the column between `<main>` and the view (the toast anchor, the view's
+  wrapper, `SlideView fill`) was `flex: 1; min-height: 0` at every level, so a single view was clamped to the room left (469px)
+  and OVERFLOWED that box to 846px; `<main>` scrolled the overflow, and the spacer, placed after the box, never reached the end.
+  The Timeline (content to 784) and the Plan (to 772) lost the same strip. Only a split needs the clamp (each pane scrolls
+  itself), so without one the two wrappers keep `min-height: auto` and `SlideView` takes no `fill`; with one, nothing changed.
+  After a reload on the phone: all three views end with the spacer last (711–772) above the bar, the fold at 672–702, the
+  Timeline's sticky ruler held at `<main>`'s top through a full scroll, and the completed card's Book again in its slot. On
+  the iPad Pro 13 (iOS 27.0) nothing overflows in either orientation. In the Browser pane at 998 × 507 a Timeline/List split
+  still gives two 195px panes, the first scrolling its own 750px. `tests/mobile-bar.test.js` holds it.
+- **Passed on the iPhone simulator, nothing to fix:** the hold card on a seated block (at ~455ms, the release keeps it open
+  and presses nothing) offering Confirmed · Completed · Cancelled · Book again, and its Book again opening the form with the
+  Return guest line and the date left blank; Back on an untouched form closes with no question; Find a booking with the
+  on-screen keyboard up (Done stays above it), Book again on a row of its own under the completed visit, closing the search
+  before the form; the form's Save bar above the full keyboard; the time picker opening on the field's own time; More's sheet
+  solid with a solid footer; the inbox search opening in one tap, filtering as typed with the keyboard up, the header in
+  place; the List's ⋯ on a seated card offering Book again and not repeating Completed. On the iPad: the hold card at
+  ~430–450ms, Book again with its mark in the form's footer, the header. A tap on a hold card's scrim sometimes produced no
+  click from injected taps, and a plain probe page did the same (1 click in 5 with no hold at all), so that is the
+  simulator's tap injection, not the app.

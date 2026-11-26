@@ -4332,7 +4332,7 @@ export function BookingApp({uid}){
                   thing `inert` is meant to describe. This is the same finding
                   as notifAnnounce living outside <main>, one level down. */}<div inert={anyModal}><Reveal speed="move" show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
                   children, so the pane fades out fully drawn instead of blanking a
-                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} swapKey={viewDate} />:null}</Reveal></div><div ref={toastAnchorRef} style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
+                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} swapKey={viewDate} />:null}</Reveal></div><div ref={toastAnchorRef} style={shellFixed?{position:"relative",flex:1,minHeight:split?0:"auto",display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}
                 loadStalled={loadStalled}
                 resyncing={resyncing}
@@ -4355,9 +4355,18 @@ export function BookingApp({uid}){
                    than decorative: SlideView takes `fill` and resolves its own
                    flex:1/minHeight:0 against its PARENT, so an intervening plain
                    block would collapse the chain and the panes would size to
-                   content. It therefore carries the same three properties. */
+                   content. It therefore carries the same three properties.
+                   v18.19.0 (iPhone check): only a SPLIT needs the chain to
+                   clamp. A single view scrolls in <main>, and clamped it
+                   OVERFLOWED this box, so the phone bar's spacer below it
+                   landed part-way down the view and the last 49px of every
+                   view stayed under the bar, the List's "Completed &
+                   cancelled" fold with them. Without a split, this box and the
+                   toast anchor above it keep `minHeight: auto` (they grow to
+                   their content and still fill a short day), and SlideView
+                   takes no `fill`. */
                 inert={anyModal}
-                style={shellFixed?{flex:1,minHeight:0,display:"flex",flexDirection:"column"}:undefined}><SlideView key={slide.k} dir={slide.dir} fill={shellFixed}>{split?<SplitLayout
+                style={shellFixed?{flex:1,minHeight:split?0:"auto",display:"flex",flexDirection:"column"}:undefined}><SlideView key={slide.k} dir={slide.dir} fill={shellFixed&&!!split}>{split?<SplitLayout
                 dir={split.dir}
                 ratio={split.ratio}
                 onRatio={setSplitRatio}
