@@ -35,6 +35,7 @@
 
 import { Reveal } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
+import { useLeavingOrder } from "../hooks/useLeavingOrder";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 
 export function BannerRows({ ids, renderRow, swapKey }) {
@@ -49,6 +50,12 @@ export function BannerRows({ ids, renderRow, swapKey }) {
   // swapKey already covers. Undefined here means the original behaviour,
   // unchanged.
   const { renderIds, openIds } = useRevealRows(ids, swapKey);
+  // v18.19.0 (the motion sweep): drawn in the CALLER's order, each leaving row
+  // kept where it was (`useLeavingOrder`, as the List and the waitlist draw
+  // theirs). `renderIds` is arrival-ordered, and reminders, which came here as
+  // a plain map sorted by time, would have put a reminder given an earlier time
+  // below the ones already up.
+  const order = useLeavingOrder(ids, renderIds);
 
   if (renderIds.length === 0) return null;
 
@@ -62,27 +69,40 @@ export function BannerRows({ ids, renderRow, swapKey }) {
           collapsing per-banner cannot bound the total height, which was the
           whole point. */}
       <div>
-        {renderIds.map(function (id) {
+        {order.map(function (id) {
           // v17.8.0 review fix: the hairline keys on this row's position among
           // the rows that are actually OPEN, not its index in renderIds — which
           // retains a departing row for ~350ms while its Reveal collapses. With
           // the raw index, marking the first of two late bookings as a no-show
           // left the survivor wearing a borderTop that ended up flush under the
           // section header: a line appearing exactly where the design says none.
-          const visible = renderIds.filter(function (x) { return openIds.has(x); });
+          const visible = order.filter(function (x) { return openIds.has(x); });
           const i = visible.indexOf(id);
           return (
-            <Reveal key={id} show={openIds.has(id)}>
-              {/* The hairline lives HERE, not on the row, so a banner's row
-                  components stay pure content and every banner separates its
-                  rows identically. `i > 0` keeps it off the first row, whose
-                  separation from the header is already the header's padding.
-                  NOTIF_GUTTER puts row text on the same left edge as the
-                  section title rather than under the mark — imported from the
-                  strip that defines that geometry, never re-derived here. */}
-              <div style={{ padding: "0 " + NOTIF_PAD_X + "px 0 " + NOTIF_GUTTER + "px", ...(i > 0 ? { borderTop: "1px solid var(--border-soft)" } : null) }}>
-                {renderRow(id)}
-              </div>
+            // v18.19.0 (the motion sweep): a leaving row is inert, as FoldRows'
+            // are, so a second tap during its fold cannot land on the copy.
+            <Reveal key={id} show={openIds.has(id)} inert={!openIds.has(id)}
+              // The hairline lives HERE, not on the row, so a banner's row
+              // components stay pure content and every banner separates its
+              // rows identically. `i > 0` keeps it off the first row, whose
+              // separation from the header is already the header's padding.
+              // NOTIF_GUTTER puts row text on the same left edge as the
+              // section title rather than under the mark — imported from the
+              // strip that defines that geometry, never re-derived here.
+              //
+              // v18.19.0 (the motion sweep): on the Reveal, no longer on a
+              // wrapper inside it, so the row is the Reveal's own child and its
+              // cache (`last`) keeps the ROW. A caller's `renderRow` reads its
+              // own data, which for most rows leaves with the id (a reminder
+              // marked Done, a dismissed waiting party), so it answers null for
+              // the leaving copy; with the wrapper as the child, Reveal kept the
+              // wrapper and folded an empty box. Measured on DEV with two
+              // reminders: Done on the first dropped its row to 0px in the first
+              // frame and the one under it jumped 53px. The padding is
+              // horizontal only, and a leaving row is never `i > 0`, so nothing
+              // here holds height while it folds.
+              style={{ padding: "0 " + NOTIF_PAD_X + "px 0 " + NOTIF_GUTTER + "px", ...(i > 0 ? { borderTop: "1px solid var(--border-soft)" } : null) }}>
+              {renderRow(id)}
             </Reveal>
           );
         })}

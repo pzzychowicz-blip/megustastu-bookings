@@ -42354,3 +42354,22 @@ simulators; every finding fixed here, nothing to ROADMAP.
   a device with no keyboard. Older than this version; on Patryk's word the line is left out where `isMobile` (the switch the
   sheet's own layout already reads) and kept on a tablet, which can have a keyboard attached. In the Browser pane: absent at
   440px wide, present at 998. `tests/week-view.test.js` holds it.
+
+### The motion sweep — three moments that should ease (Patryk, before the ship run)
+
+`/find-animation-opportunities` over the whole repo kept three places that changed in a frame and rejected five. Patryk
+asked for all three in this version.
+
+- **The reminder rows fold like the strip's other sections.** They were the strip's one row section drawn as a plain
+  map, so a reminder marked Done or snoozed went in a frame and every row under it jumped. They go through `BannerRows`
+  now (`useReminders.jsx`'s `reminderRow`, keyed on `fireKey`). Doing so found a defect in `BannerRows` that every row
+  section shared: the row sat in a padding wrapper INSIDE its `Reveal`, so `Reveal`'s cache (`last`) kept the wrapper.
+  A caller whose `renderRow` answers null once the id has gone (its data left with it: a reminder done, a waiting party
+  dismissed) folded an empty box. Measured on DEV with two reminders: Done on the first dropped it to 0px in the first
+  frame and the row under it jumped 53px. The padding and the hairline moved onto the `Reveal`'s own style, so the row is
+  its direct child and the cache keeps it. After: 52 → 0 over ~510ms on the ease-out curve, the next row easing up the
+  same 53px, the leaving copy keeping its text to the end. Two more changes rode along: a leaving row is now `inert`, as
+  `FoldRows`' are, so a second tap during the fold cannot land on the copy; and the rows are drawn in the caller's order
+  through `useLeavingOrder` (`useRevealRows` returns them in arrival order, which put a reminder whose time was moved
+  earlier below the later ones). The padding is horizontal only and a leaving row never carries the hairline, so nothing
+  on the outer box holds height while it folds. `tests/motion.test.js` holds all three.

@@ -406,3 +406,31 @@ describe("a customer's tag words belong to the closed row", () => {
     expect(customers).toContain("<Reveal show={open}>");
   });
 });
+
+// ── v18.19.0 (the motion sweep): the reminder rows fold like the strip's others ─
+// Reminders were the one row section of the notification strip that was a plain
+// map, so a reminder marked Done or snoozed vanished in a frame and the rows
+// under it jumped. They go through BannerRows now. Doing so found a defect in
+// BannerRows itself: the row was wrapped in a padding div inside its Reveal, so
+// Reveal's cache kept the WRAPPER, and a caller whose `renderRow` answers null
+// for a departed id (its data left with it) folded an empty box. Measured on DEV
+// with two reminders: Done dropped the first to 0px in one frame and the second
+// jumped 53px; after, the row eased 52 → 0 over ~510ms, the next row with it.
+describe("the strip's row sections fold the row as it looked", () => {
+  const rows = code(join(ROOT, "src/components/BannerRows.jsx"), "utf8");
+  const reminders = code(join(ROOT, "src/hooks/useReminders.jsx"), "utf8");
+
+  it("the row is the Reveal's own child, so its cache keeps the row", () => {
+    expect(rows).toMatch(/<Reveal key=\{id\} show=\{openIds\.has\(id\)\} inert=\{!openIds\.has\(id\)\}\s+style=\{\{ padding:[^\n]*\}\}>\s*\{renderRow\(id\)\}\s*<\/Reveal>/);
+  });
+
+  it("rows are drawn in the caller's order, a leaving one kept in place", () => {
+    expect(rows).toContain("const order = useLeavingOrder(ids, renderIds);");
+    expect(rows).toContain("{order.map(function (id) {");
+  });
+
+  it("the reminder rows go through BannerRows, never a plain map", () => {
+    expect(reminders).toMatch(/<BannerRows ids=\{activeReminderBanners\.map\(function\(ab\)\{return ab\.fireKey;\}\)\} renderRow=\{reminderRow\} \/>/);
+    expect(reminders).not.toMatch(/activeReminderBanners\.map\(function\(ab\)\{\s*return\s*\(?\s*</);
+  });
+});

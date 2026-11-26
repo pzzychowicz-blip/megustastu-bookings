@@ -39,7 +39,7 @@ git history, `git show 18f3ee66:src/components/CLAUDE.md`). The visual system is
 
 - **LateBanner.jsx** — the "Running late" section: one row per today's late confirmed booking (`BannerRows`), per-row ✕ (App's dismissal Set; List and Timeline keep the unfiltered `lateMap`). No show → `doCancelBooking(id, true)`.
 
-- **BannerRows.jsx** — the shared per-row lifecycle (`useRevealRows`) for the row sections, taking `renderRow(id)`. **It renders ROWS ONLY**: the pane, header and collapse are `NotificationStrip`'s, so one collapse bounds the strip's total height.
+- **BannerRows.jsx** — the shared per-row lifecycle (`useRevealRows`) for the row sections, taking `renderRow(id)`. **It renders ROWS ONLY**: the pane, header and collapse are `NotificationStrip`'s, so one collapse bounds the strip's total height. **The row is the `Reveal`'s DIRECT child** (v18.19.0; padding and hairline on the `Reveal`'s style), so a leaving row folds as it looked when the caller's `renderRow` answers null for a departed id: with a wrapper in between, `Reveal`'s cache kept the wrapper and folded an empty box. Leaving rows are `inert`, drawn in the caller's order (`useLeavingOrder`). Callers: the late, overlap, table-free, clash, unplaced and unsettled sections, and since v18.19.0 the reminders (`useReminders.jsx`).
 
 - **UnplacedBanner.jsx** — the strip's "Not on the grid" section, from App's `unplacedItems` (`unplacedOf`, the one rule the row, this section and the Summary share). Each row names its reason (`unplacedPhrase`) and offers Assign (`setManualTarget`). Scoped to the VIEWED date. **No ✕**: it clears itself when the booking is placed, and dismissing it would hide what it exists to show. Its mark is `UnplacedIcon`, dashed (dashes mean "not really there").
 

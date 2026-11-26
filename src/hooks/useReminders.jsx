@@ -30,7 +30,7 @@ import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { BTN, R, T, FW, H } from "../lib/constants";
 import { mkBtn, SmallTag } from "../components/atoms";
-import { NOTIF_GUTTER, NOTIF_PAD_X } from "../components/NotificationStrip";
+import { BannerRows } from "../components/BannerRows";
 import { genId } from "../lib/booking-logic";
 import { dbError } from "../lib/dbError";
 // v18.0.0 session 8: the activity log. `reminderFires` is deliberately NOT
@@ -245,17 +245,27 @@ export function useReminders({ nowMins, setWriteWarning, reminderEditor, setRemi
   // v17.8.0: this is a SECTION BODY now, not a pane. NotificationStrip owns the
   // one pane every notification shares (see NotificationStrip.jsx) and draws
   // the dot + "Reminder" title + count header, so each row here supplies only
-  // its time, text and actions. NOTIF_GUTTER (imported from the strip, not
-  // re-derived) lines the rows up with the section titles above them, and rows
-  // are hairline-separated like every other
-  // section's. `reminderCount` is exported alongside because the strip needs the
-  // count as data for its collapsed summary.
+  // its time, text and actions. The rows line up with the section titles above
+  // them (NOTIF_GUTTER, applied by BannerRows since v18.19.0) and are
+  // hairline-separated like every other section's. `reminderCount` is exported
+  // alongside because the strip needs the count as data for its collapsed summary.
+  //
+  // v18.19.0 (the motion sweep): the rows go through BannerRows, as the strip's
+  // six other row sections do. They were a plain map, the one section whose rows
+  // did not fold: with two reminders up, Done on the first took its row out in
+  // one frame and moved the second row's Done up under the finger. BannerRows
+  // owns the padding to the section's gutter and the hairline between rows, so a
+  // row here is its content and its 8px of height; a leaving row is the copy its
+  // Reveal kept, inert until it is gone.
   const reminderCount=activeReminderBanners.length;
-  const reminderBanners=reminderCount?<div>{activeReminderBanners.map(function(ab,i){
+  const reminderByKey={};
+  activeReminderBanners.forEach(function(ab){reminderByKey[ab.fireKey]=ab;});
+  function reminderRow(fireKey){
+      const ab=reminderByKey[fireKey];
+      if(!ab) return null;
       return (
         <div
-          key={ab.fireKey}
-          style={{padding:"8px "+NOTIF_PAD_X+"px 8px "+NOTIF_GUTTER+"px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",...(i>0?{borderTop:"1px solid var(--border-soft)"}:null)}}><div
+          style={{padding:"8px 0",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}><div
             style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0,flexWrap:"wrap"}}>{/* v17.8.0: a SOLID chip on ListView's `locked` pattern — SmallTag, the
               fill carrying the colour, --text-on-accent text, a neutral
               --border-glass rim. As dimmed amber text it was the same colour and
@@ -275,7 +285,8 @@ export function useReminders({ nowMins, setWriteWarning, reminderEditor, setRemi
               className="mgt-hover-scale mgt-press"
               style={mkBtn({fontSize: T.body,minHeight:H.chrome,padding:"6px 14px",background:"var(--app-success-solid)"})}>Done</button></div></div>
       );
-    })}</div>:null;
+  }
+  const reminderBanners=reminderCount?<BannerRows ids={activeReminderBanners.map(function(ab){return ab.fireKey;})} renderRow={reminderRow} />:null;
 
   return {
     reminders,
