@@ -255,13 +255,18 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
           at its full height before the observer clips it to the old one. */}
       <AutoHeight watch={mode + "|" + ref}>{isStats ? statsBody() : isWeek ? weekBody() : monthBody()}</AutoHeight>
 
-      <div style={{ marginTop: 18, fontSize: T.small, color: "var(--text-faint)", textAlign: "center" }}>
-        {isStats
-          ? "W/M/S view · ←→ month · T this month"
-          : isWeek
-            ? "W/M/S view · ↑↓ day · ←→ week · T today · Enter open"
-            : "W/M/S view · ↑↓←→ day · footer arrows month · T today · Enter open"}
-      </div>
+      {/* v18.19.0 (iPhone check, Patryk): the key hints are for a keyboard, and a
+          phone has none, so the phone's sheet leaves them out. A tablet keeps
+          them: one can have a keyboard attached. */}
+      {isMobile ? null : (
+        <div style={{ marginTop: 18, fontSize: T.small, color: "var(--text-faint)", textAlign: "center" }}>
+          {isStats
+            ? "W/M/S view · ←→ month · T this month"
+            : isWeek
+              ? "W/M/S view · ↑↓ day · ←→ week · T today · Enter open"
+              : "W/M/S view · ↑↓←→ day · footer arrows month · T today · Enter open"}
+        </div>
+      )}
     </Overlay>
   );
 

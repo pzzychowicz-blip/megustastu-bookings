@@ -42350,3 +42350,7 @@ simulators; every finding fixed here, nothing to ROADMAP.
   ~430–450ms, Book again with its mark in the form's footer, the header. A tap on a hold card's scrim sometimes produced no
   click from injected taps, and a plain probe page did the same (1 click in 5 with no hold at all), so that is the
   simulator's tap injection, not the app.
+- **More's sheet showed key hints on a phone** ("W/M/S view · ↑↓ day · ←→ week · T today · Enter open", under the week), on
+  a device with no keyboard. Older than this version; on Patryk's word the line is left out where `isMobile` (the switch the
+  sheet's own layout already reads) and kept on a tablet, which can have a keyboard attached. In the Browser pane: absent at
+  440px wide, present at 998. `tests/week-view.test.js` holds it.
