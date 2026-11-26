@@ -1306,6 +1306,19 @@ html[data-holding] * {
 @keyframes mgt-pop-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-4px) scale(.97); } }
 .mgt-pop-in  { animation: mgt-pop-in var(--t-move) var(--ease-out) both; }
 .mgt-pop-out { animation: mgt-pop-out var(--t-move) var(--ease-in) both; }
+/* v18.19.0 (the motion sweep): a count badge arriving on a control (CountBadge's
+   `float`: the WhatsApp button's unread count, the gear's crashes, a Settings
+   tab's alert, the inbox's Needs action). A 0 to 1 is a signal, the kind the
+   connection dot already eases its colour for, so it grows in from 0.6 about
+   its centre and shrinks back the same way when the count goes. The number
+   changing while it shows stays instant: that is data being read. Same
+   duration, curves and `both` as the pop pair, and the `-out` name puts it
+   under tests/motion.test.js' EXIT_MS guard. Under reduced motion it cuts,
+   as every keyframe pair does. */
+@keyframes mgt-badge-in  { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+@keyframes mgt-badge-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(.6); } }
+.mgt-badge-in  { animation: mgt-badge-in var(--t-move) var(--ease-out) both; }
+.mgt-badge-out { animation: mgt-badge-out var(--t-move) var(--ease-in) both; }
 /* v18.18.0: the same pair for a popover that opens UPWARD from its trigger
    (CountryPicker's `above`, the phone refusal's "Other code..."). The trigger is
    below it, so "toward the trigger" is 4px down. */

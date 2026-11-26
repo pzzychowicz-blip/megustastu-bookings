@@ -42373,3 +42373,16 @@ asked for all three in this version.
   through `useLeavingOrder` (`useRevealRows` returns them in arrival order, which put a reminder whose time was moved
   earlier below the later ones). The padding is horizontal only and a leaving row never carries the hairline, so nothing
   on the outer box holds height while it folds. `tests/motion.test.js` holds all three.
+- **A count badge arrives and leaves.** `CountBadge` (the WhatsApp unread count, the gear's crashes, a Settings tab's
+  alert, the inbox's Needs action, "Open the log" and the Crashes chip) appeared and vanished in a frame. A floating one
+  now rides a `Presence` on a new pair, `mgt-badge-in/out` (scale from 0.6 and a fade, on `--t-move`, `--ease-out` in
+  and `--ease-in` out), with its corner position moved onto the wrapper so it still takes no room. An inline one rides a
+  horizontal `Reveal` on `move`, so the label beside it eases over instead of jumping once the fade ends; `Reveal` took
+  a `tag` prop for it, since a `<button>` holds no `<div>`. The pill is the wrapper's direct child and null at zero, so
+  the wrapper's cache shows the last count while it leaves (the reminder rows' lesson, one commit earlier). A number
+  changing while the badge shows stays instant: that is data being read. Settings' tab bar mounted its badge only on an
+  alert, which would have cut the exit, so it now passes 0; `tests/motion.test.js` fails any conditional mount.
+  Measured on DEV with the real atom in a scratch root (Patryk's own unread and crash counts left alone): float 0.6 → 1
+  and opacity 0 → 1 over ~260ms, out over ~254ms still reading "4"; inline 65 → 89px over ~300ms, the next element
+  easing with it, inert while leaving; 3 → 4 replayed nothing. In the app, the WhatsApp badge and the Admin tab's sit
+  where they sat (−6/−6 from the padding box).

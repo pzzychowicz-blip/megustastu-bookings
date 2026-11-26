@@ -434,3 +434,61 @@ describe("the strip's row sections fold the row as it looked", () => {
     expect(reminders).not.toMatch(/activeReminderBanners\.map\(function\(ab\)\{\s*return\s*\(?\s*</);
   });
 });
+
+// ── v18.19.0 (the motion sweep): a count badge arrives and leaves ─────────────
+// CountBadge appeared and vanished in a frame (the WhatsApp unread count, the
+// gear's crashes, a Settings tab's alert, the inbox's Needs action, and two
+// inline counts). Measured on DEV with the real atom mounted in a scratch root:
+// a float badge scaled 0.6 → 1 and faded in over ~260ms and out over ~254ms,
+// showing its last number to the end; an inline one widened 65 → 89px over
+// ~300ms with the next element easing along, and was inert while leaving; a
+// number change (3 → 4) replayed nothing.
+describe("a count badge arrives and leaves", () => {
+  const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+  const badge = atoms.slice(atoms.indexOf("export function CountBadge"), atoms.indexOf("export function InlineAlert"));
+
+  it("float rides a Presence on the badge pair, positioned on the wrapper", () => {
+    expect(badge).toMatch(/<Presence show=\{on\} tag="span" inClass="mgt-badge-in" outClass="mgt-badge-out"\s+style=\{\{ position: "absolute", top: -6, right: -6, display: "inline-flex" \}\}>\s*\{pill\}\s*<\/Presence>/);
+  });
+
+  it("inline rides a horizontal span Reveal, so the label beside it eases", () => {
+    expect(badge).toContain('<Reveal horizontal tag="span" speed="move" show={on} inert={!on}>{pill}</Reveal>');
+  });
+
+  it("the pill is the wrapper's own child and null at zero, so the last count is cached", () => {
+    expect(badge).toMatch(/const pill = on \? \(/);
+    expect(badge).not.toMatch(/if \(!\(typeof n === "number" && n > 0\)\) return null;/);
+  });
+
+  it("the pair exists, scale and fade only, on the move token", () => {
+    expect(html).toMatch(/@keyframes mgt-badge-in\s*\{ from \{ opacity: 0; transform: scale\(\.6\); \} to \{ opacity: 1; transform: none; \} \}/);
+    expect(html).toMatch(/@keyframes mgt-badge-out\s*\{ from \{ opacity: 1; transform: none; \} to \{ opacity: 0; transform: scale\(\.6\); \} \}/);
+    expect(html).toContain(".mgt-badge-in  { animation: mgt-badge-in var(--t-move) var(--ease-out) both; }");
+    expect(html).toContain(".mgt-badge-out { animation: mgt-badge-out var(--t-move) var(--ease-in) both; }");
+  });
+
+  it("no caller mounts a badge conditionally, which would cut its exit", () => {
+    const dir = join(ROOT, "src");
+    const files = [];
+    (function walk(d) {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        if (e.isDirectory()) walk(join(d, e.name));
+        else if (/\.jsx?$/.test(e.name)) files.push(join(d, e.name));
+      }
+    })(dir);
+    const offenders = [];
+    for (const f of files) {
+      const src = code(f, "utf8");
+      // A ternary or && whose branch IS the badge. ActivityLogModal's
+      // `k === "crash" ?` picks which chip carries one, a fixed fact per chip,
+      // never a count, so it is the one shape allowed.
+      const re = /(\?|&&)\s*<CountBadge\b/g;
+      let m;
+      while ((m = re.exec(src))) {
+        const before = src.slice(Math.max(0, m.index - 20), m.index);
+        if (!/k === "crash" $/.test(before)) offenders.push(f.slice(ROOT.length + 1));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
