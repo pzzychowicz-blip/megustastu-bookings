@@ -42307,3 +42307,12 @@ simulators; every finding fixed here, nothing to ROADMAP.
   at all when the landing comes after its 10s; a second device deleting under a held drag clears the row's hint; the inbox's
   merged title row and composer above the keyboard; a double tap on a country code and on Add to waitlist each do it once.
   Not reachable from here: a slow connection, since CDP's throttling does not reach Firebase's WebSocket.
+- **The view switcher moved on every pick.** First seen on the PROD app as a 1px step of its left edge between List and
+  Timeline, then measured on the DEV tab to the hundredth: the chosen segment is bold (`segStyle`, 600 → 700), which widened
+  it by 0.2–0.4px, and the group is anchored on its right, so its left edge and the labels moved by up to 0.38px on each pick.
+  The label is now a `SegLabel` (atoms): a hidden bold copy in the same grid cell holds the bold width at every weight, out of
+  the name (`aria-hidden`, `visibility: hidden`). After a reload the group and all three segments read identically in
+  Timeline, List and Plan (463.35–651.21), 36px tall as before, and CDP's accessibility tree still names each from its
+  contents, once ("Timeline", "List", "Plan"). `tests/segmented.test.js` holds it.
+- **Also passed:** the time-zone picker in Settings → General with the keyboard up (231px: the search and a list three rows
+  tall inside the dialog), and Book again in a completed List card's slot opening "Book again" for its guest by touch.

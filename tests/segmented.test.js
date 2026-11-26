@@ -21,6 +21,15 @@ describe("the view switcher", () => {
     expect(Switcher).toMatch(/aria-pressed=\{isActive\(v\)\}/);
   });
 
+  // v18.19.0 (tablet check): the chosen label is bold, so picking a view resized two
+  // segments and the right-anchored group's left edge moved up to 0.38px. SegLabel
+  // holds the bold width at every weight, with the copy out of the name.
+  it("keeps every segment's width when the chosen view changes (SegLabel)", () => {
+    expect(Switcher).toContain("<SegLabel>{v}</SegLabel></button>");
+    expect(Atoms).toMatch(/export function SegLabel\(\{ children \}\)/);
+    expect(Atoms).toContain('<span aria-hidden="true" style={{ gridArea: "1 / 1", fontWeight: FW.bold, visibility: "hidden" }}>{children}</span>');
+  });
+
   it("paints its segments with segStyle, never with the accent fill", () => {
     expect(Switcher).toMatch(/segStyle\(isActive\(v\)\)/);
     expect(Switcher, "the chosen view is solid blue again — it reads as '+ New'").not.toMatch(/S\.accent/);

@@ -312,6 +312,21 @@ export const SEG_TRACK = {
   display: "inline-flex", gap: 2, padding: 2, borderRadius: R.pill,
   background: "var(--bg-tabbar)", boxShadow: "inset 0 0 0 1px var(--border-soft)"
 };
+// v18.19.0 (tablet check): the label of a segment whose neighbours must not move.
+// The chosen segment is BOLD (segStyle), which is wider, so picking another view
+// resized two buttons: the header's switcher is anchored on its right, and its
+// left edge and labels moved by up to 0.38px on each change (measured on the
+// tablet, 600 → 700 at T.body). A hidden bold copy in the same grid cell holds
+// the bold width at every weight. It is `aria-hidden` and `visibility: hidden`,
+// so the name is still the visible text, once.
+export function SegLabel({ children }) {
+  return (
+    <span style={{ display: "inline-grid" }}>
+      <span style={{ gridArea: "1 / 1" }}>{children}</span>
+      <span aria-hidden="true" style={{ gridArea: "1 / 1", fontWeight: FW.bold, visibility: "hidden" }}>{children}</span>
+    </span>
+  );
+}
 export function segStyle(active) {
   return {
     borderRadius: R.pill, border: "none", cursor: "pointer",
