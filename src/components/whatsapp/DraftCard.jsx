@@ -6,7 +6,7 @@
 // here — the IntentBanner in ConversationView takes over.
 
 import { useState } from "react";
-import { Reveal, mkSolidBtn, OutlineChip, InlineAlert } from "../atoms";
+import { Reveal, mkSolidBtn, OutlineChip, InlineAlert, IconSwap } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { TimeChip } from "../TimeChip";
 import { clampConfidence, availabilityReply } from "../../lib/whatsapp";
@@ -103,7 +103,8 @@ function DraftCheck({ conv, check, onAcceptAt, onTheWaitlist, onAddToWaitlist, o
                     onClick={onTheWaitlist ? undefined : onAddToWaitlist}
                     className={onTheWaitlist ? "mgt-nopress" : "mgt-hover-scale mgt-press"}
                     style={Object.assign({}, CHECK_BTN, { minWidth: WAIT_W, justifyContent: "center" }, onTheWaitlist ? { cursor: "default" } : null)}>
-                    {onTheWaitlist ? <CheckIcon size={IC.inline} /> : <WaitIcon size={IC.inline} />}
+                    {/* v18.19.0: the mark cross-fades (IconSwap); the words stay a plain swap, in the box WAIT_W already holds. */}
+                    <IconSwap on={onTheWaitlist} offIcon={<WaitIcon size={IC.inline} />} onIcon={<CheckIcon size={IC.inline} />} />
                     {onTheWaitlist ? "On the waitlist" : "Add to waitlist"}
                   </OutlineChip>
                 ) : null}

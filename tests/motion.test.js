@@ -492,3 +492,31 @@ describe("a count badge arrives and leaves", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+// ── v18.19.0 (the motion sweep): a control confirming itself cross-fades ─────
+// Copy → check on a voucher's number, Add to waitlist → On the waitlist on the
+// WhatsApp draft card: the mark swapped in a frame. Measured on DEV with the
+// real atom in a scratch root: both directions cross-fade over ~145ms (the old
+// mark to opacity 0 and scale 0.6, the new one from there), the control's width
+// unchanged. The voucher button's own press could not be driven in the Browser
+// pane: it refuses the clipboard write, so the button never reaches "Copied".
+describe("a control confirming itself cross-fades its mark", () => {
+  const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+  const swap = atoms.slice(atoms.indexOf("export function IconSwap"), atoms.indexOf("export function TurnChevron"));
+
+  it("IconSwap stacks both marks in one cell, easing opacity and transform on M.tap", () => {
+    expect(swap).toContain('gridArea: "1 / 1"');
+    expect(swap).toContain('transition: "opacity " + M.tap + ", transform " + M.tap');
+    expect(swap).toContain('opacity: on ? 0 : 1, transform: on ? "scale(.6)" : "none"');
+    expect(swap).toContain('opacity: on ? 1 : 0, transform: on ? "none" : "scale(.6)"');
+  });
+
+  it("both sites use it, and neither swaps its mark with a ternary", () => {
+    const vouchers = code(join(ROOT, "src/components/VouchersSettings.jsx"), "utf8");
+    expect(vouchers).toContain("<IconSwap on={done} offIcon={<CopyIcon size={IC.chrome} />} onIcon={<CheckIcon size={IC.chrome} />} />");
+    expect(vouchers).not.toMatch(/done \? <CheckIcon/);
+    const card = code(join(ROOT, "src/components/whatsapp/DraftCard.jsx"), "utf8");
+    expect(card).toContain("<IconSwap on={onTheWaitlist} offIcon={<WaitIcon size={IC.inline} />} onIcon={<CheckIcon size={IC.inline} />} />");
+    expect(card).not.toMatch(/onTheWaitlist \? <CheckIcon/);
+  });
+});

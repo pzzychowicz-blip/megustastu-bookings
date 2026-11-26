@@ -42386,3 +42386,12 @@ asked for all three in this version.
   and opacity 0 → 1 over ~260ms, out over ~254ms still reading "4"; inline 65 → 89px over ~300ms, the next element
   easing with it, inert while leaving; 3 → 4 replayed nothing. In the app, the WhatsApp badge and the Admin tab's sit
   where they sat (−6/−6 from the padding box).
+- **A control confirming itself cross-fades its mark.** Copy on a voucher's number turns into a check for 2s, and Add to
+  waitlist on the WhatsApp draft card into On the waitlist; both swapped the mark in a frame. A new atom, `IconSwap`,
+  keeps both marks in one grid cell, always mounted, and cross-fades them on `M.tap` (opacity, and a 0.6 scale on the
+  mark going out and the one coming in), so under reduced motion it is the house's short fade. The draft card's words
+  stay a plain swap, in the `WAIT_W` box that already holds them still. Measured on DEV with the real atom in a scratch
+  root: both directions over ~145ms, the control's width unchanged. The voucher button itself could not be pressed
+  into its done state in the Browser pane, which refuses the clipboard write even to a real click (the click landed on
+  the button, and `Copied` never came); the draft card's Add to waitlist was not pressed, since it writes the DEV
+  waitlist. `tests/motion.test.js` holds the atom and both sites.

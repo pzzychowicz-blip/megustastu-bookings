@@ -1361,6 +1361,26 @@ export function Reveal({ show, children, style, horizontal = false, end = false,
   );
 }
 
+// ── IconSwap — a control confirming itself in place (v18.19.0) ──────────────
+// Two buttons say "done" by changing their mark: Copy becomes a check on a
+// voucher's number, and Add to waitlist becomes On the waitlist on the WhatsApp
+// draft card. The mark used to be swapped in a frame. Both now sit in ONE grid
+// cell, always mounted, and cross-fade on `M.tap`: the old one fades and shrinks
+// to 0.6 as the new one grows from it. Transform and opacity only, so under
+// reduced motion it is the house's short fade. The marks are decoration (each
+// control is named by its text or its aria-label), hence `aria-hidden`.
+// TurnChevron's rule still stands for a disclosure: ONE mark that turns, never
+// two swapped. This is for two different marks, which nothing can turn between.
+export function IconSwap({ on, offIcon, onIcon }) {
+  const cell = { gridArea: "1 / 1", display: "inline-flex", transition: "opacity " + M.tap + ", transform " + M.tap };
+  return (
+    <span aria-hidden="true" style={{ display: "inline-grid", placeItems: "center" }}>
+      <span style={{ ...cell, opacity: on ? 0 : 1, transform: on ? "scale(.6)" : "none" }}>{offIcon}</span>
+      <span style={{ ...cell, opacity: on ? 1 : 0, transform: on ? "none" : "scale(.6)" }}>{onIcon}</span>
+    </span>
+  );
+}
+
 // ── TurnChevron — a disclosure's mark (v18.14.0, correction 30) ──────────────
 // One drawing that turns with its panel, on the notification strip's speed, where a
 // ternary of two icons swapped in a frame. It points right and turns down; with
