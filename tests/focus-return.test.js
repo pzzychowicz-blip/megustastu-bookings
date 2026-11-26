@@ -71,7 +71,7 @@ describe("the wiring", () => {
   });
 
   it("a ⋯ pick hands focus back in the handler, before the confirm makes the page inert", () => {
-    // v18.17.0: four picks, with Unlock.
-    expect(popup.match(/skipExit\(\);\s*handBack\(\);/g).length).toBe(4);
+    // v18.17.0: four picks, with Unlock. v18.19.0: five, with Book again.
+    expect(popup.match(/skipExit\(\);\s*handBack\(\);/g).length).toBe(5);
   });
 });

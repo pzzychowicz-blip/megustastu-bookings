@@ -1844,6 +1844,8 @@ export const TimelineView = memo(function TimelineView({
   // the day being VIEWED. liveBarDur needs both to put now on a booking's axis.
   today = "",
   late = NO_MARKS, freeing = NO_MARKS, onNoShow = () => {}, onUnlock = null,
+  // v18.19.0: Book again, handed to the quick-status card (App's VA.onBookAgain).
+  onBookAgain = null,
   zoom = 1, setZoom,
   // v17.2.0: per-device Timeline settings (App's tlSettings — scalars, memo-safe).
   followZoom = 4,      // zoom the Follow button jumps to (was hard-coded 4)
@@ -3036,6 +3038,7 @@ export const TimelineView = memo(function TimelineView({
           onStatus={onStatus}
           onNoShow={onNoShow}
           onUnlock={onUnlock}
+          onBookAgain={onBookAgain}
           onClose={() => setQuickStatus(null)} />
       ) : null}
     </ModalPresence>

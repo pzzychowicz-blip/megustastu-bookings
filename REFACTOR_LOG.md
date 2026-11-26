@@ -42199,3 +42199,21 @@ form's button wears too. The plan is `/Users/patrykzychowicz/.claude/plans/i-hav
   3.4 radius and at 14px closed into a "G" with its head merged; without the rule it takes r 4.3 and its head stands clear.
 - **The form's button** wears it (`inline-flex`, gap 6, the Delete button's shape beside it). Seen on DEV (Olga Ferrer, completed,
   22.11): "Book again" with the mark, 117 × 35.
+
+### Commit 2 — Book again on the quick-status card
+
+- **What:** the card a hold or right-click opens on a Timeline block or a Plan table, and the List card's ⋯ opens by click, now
+  offers **Book again** for a seated or completed booking (`onBookAgain && bookAgainOffered(booking)`): green, `BookAgainIcon`, after
+  Unlock and before Delete. App adds `bookAgain` to `viewActionsRef` and one stable wrapper, `VA.onBookAgain`, which the three views
+  take as `onBookAgain` (they are `React.memo`) and hand to their card.
+- **A pick like the others:** `armed` / `leaving` guard, `skipExit()`, `handBack()`, then `bookAgain`, then close. The form is a modal,
+  so focus goes back to the opener before it makes the page inert (the card's v18.3.1 rule).
+- **No key in its description:** `B` is not live while the card is open, so the title names no key.
+- **On DEV (2026-11-26):** a walk-in seated at table 4 today. Right-click on its Timeline block → Confirmed · Completed · Cancelled ·
+  Book again; Book again → the form titled "Book again" with "Return guest · Walk-in 1 · Thu 26.11 11:57 — set a date". Right-click on
+  table 4 in the Plan → the same card with Book again.
+
+`tests/book-again.test.js`: the predicate over every status, the form asking it, App's wrapper and its three mounts, each view handing
+it to the card, and the card's guard and pick order.
+- **Pins moved, each because the card has a fifth pick:** `tests/focus-return.test.js` counts `skipExit(); handBack();` (4 → 5) and
+  `tests/motion.test.js` lists the picks one skip each (`onBookAgain(booking)` added).

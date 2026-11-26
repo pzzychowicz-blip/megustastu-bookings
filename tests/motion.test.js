@@ -217,7 +217,7 @@ describe("exit holds outlast their animations", () => {
     expect(tl).toMatch(/if \(handOffQuick\) handOffQuick\(\); else setQuickStatus\(null\);/);
     expect((tl.match(/handOffQuick=\{handOffQuick\}/g) || []).length, "both live block sites get the hand-off").toBe(2);
     const sites = [
-      ["src/components/QuickStatusPopup.jsx", ["onStatus(booking.id, st)", "onNoShow(booking.id)", "onUnlock(booking.id)", "onDelete(booking.id)"]],
+      ["src/components/QuickStatusPopup.jsx", ["onStatus(booking.id, st)", "onNoShow(booking.id)", "onUnlock(booking.id)", "onBookAgain(booking)", "onDelete(booking.id)"]],
       ["src/components/PlanView.jsx", ["onPick(b)", "onWalkinHere()"]],
       ["src/components/SplitMenu.jsx", ["onConfirm({"]],
     ];

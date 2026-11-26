@@ -293,6 +293,9 @@ export const ListView = memo(function ListView({
   // v17.15.5: `clashes[id]` = {names, tables} for a booking double-booked with
   // another — App's `clashMap`, the same memo TimelineView takes.
   late = {}, clashes = {}, onNoShow = () => {}, onUnlock = null,
+  // v18.19.0: Book again — the ⋯ card's button and a completed card's slot
+  // (App's VA.onBookAgain).
+  onBookAgain = null,
   selectedId = null, onSelect = () => {}, focusReq = 0,
   // v18.0.0: code -> voucher, so a card can say whether an attached voucher is
   // still unsettled. A STABLE object from App's memo, per the React.memo rule.
@@ -1218,6 +1221,7 @@ export const ListView = memo(function ListView({
               onStatus={onStatus}
               onNoShow={onNoShow}
               onUnlock={onUnlock}
+              onBookAgain={onBookAgain}
               onDelete={onDelete}
               omitStatus={onCard.next}
               omitNoShow={onCard.noShow}

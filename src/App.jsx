@@ -3675,7 +3675,7 @@ export function BookingApp({uid}){
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only the code's own change resumes; the door is read from its ref, and both doors read the form from formRef
   useEffect(function(){const door=resumeDoorRef.current;if(!door)return;resumeDoorRef.current=null;if(door==="waitlist") addFormToWaitlist();else doSave();},[form.phone]);
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,newAtCell,openEdit,updateStatus,doCancelBooking,unlockBooking,dropOnTable,previewDrop,checkDrop,retimeBooking,previewRetime,checkRetime,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,openReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
+  viewActionsRef.current={openNew,newAtCell,openEdit,bookAgain,updateStatus,doCancelBooking,unlockBooking,dropOnTable,previewDrop,checkDrop,retimeBooking,previewRetime,checkRetime,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,openReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint,openSpecialDay,viewDate};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -3683,6 +3683,8 @@ export function BookingApp({uid}){
       onStatus:function(id,s){R.current.updateStatus(id,s);},
       onNoShow:function(id){R.current.doCancelBooking(id,true);},
       onUnlock:function(id){R.current.unlockBooking(id);},
+      // v18.19.0: Book again from the quick-status card (all three views) and the List card's slot.
+      onBookAgain:function(b){R.current.bookAgain(b);},
       onDropOnTable:function(id,targetId){return R.current.dropOnTable(id,targetId);},
       onDropPreview:function(id,targetId){return R.current.previewDrop(id,targetId);},
       onDropCheck:function(id,targetId){return R.current.checkDrop(id,targetId);},
@@ -3751,6 +3753,7 @@ export function BookingApp({uid}){
     onStatus={VA.onStatus}
     onNoShow={VA.onNoShow}
     onUnlock={VA.onUnlock}
+    onBookAgain={VA.onBookAgain}
     onWalkin={VA.onWalkin}
     gesturesEnabled={planGestures}
     isMobile={isMobile}
@@ -3802,6 +3805,7 @@ export function BookingApp({uid}){
     guestTags={guestTags}
     onNoShow={VA.onNoShow}
     onUnlock={VA.onUnlock}
+    onBookAgain={VA.onBookAgain}
     zoom={timelineZoom}
     setZoom={VA.onSetZoom}
     followZoom={tlSettings.followZoom}
@@ -3859,6 +3863,7 @@ export function BookingApp({uid}){
     clashes={clashMap}
     onNoShow={VA.onNoShow}
     onUnlock={VA.onUnlock}
+    onBookAgain={VA.onBookAgain}
     selectedId={selectedListId}
     focusReq={listFocusReq}
     onSelect={VA.onSelect}
