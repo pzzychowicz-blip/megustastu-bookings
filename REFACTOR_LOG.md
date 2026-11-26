@@ -42278,3 +42278,18 @@ Pins moved: `tests/list-card.test.js` (`cardActionsOf`'s body, and `omitBookAgai
   call was in and its import not yet (the hot-reloaded module of that moment), and never again.
 - **Not checkable here:** a real finger's hold on a block or table, then lifting onto Book again (`useArmAfterRelease`), is the
   tablet's and the iPhone's to settle after merge.
+
+### Tablet and simulator checks — findings fixed in this version
+
+Patryk asked for every device check carried since the last tablet session (v18.14.2, 2026-11-02) to be run on the
+restaurant tablet, PROD only looked at and everything that writes on a DEV tab served from this branch, and then on the iOS 27
+simulators; every finding fixed here, nothing to ROADMAP.
+
+- **A toast left without its words.** Carried check (v18.14.0): with an Undo pill up, a Reshuffle that moves nobody says "No
+  tables needed moving." above the pill. It does: sampled every 250ms, the sentence held the slot for 3s and the drop's pill came
+  back with its timer still running, gone at 10s. The same samples showed the pill's exit reading a bare **"Undo"** at 0.62
+  opacity: `StatusToasts` rebuilt each toast from its props on every render, and on the way out `undoInfo` is already null, so the
+  sentence emptied before the fade. `Presence` holds the last children it drew, but only when it is handed none, and it never was.
+  Now a toast that is off hands `Toast` nothing (`t.on?t.node:null`); an outranked toast that is still on keeps its live node. On
+  the tablet afterwards, "Sofía Navarro moved to 5." stayed whole down to 0.07 opacity. A drag message's exit had the same fault
+  (an empty pane). `tests/drop-plan.test.js` holds both halves.
