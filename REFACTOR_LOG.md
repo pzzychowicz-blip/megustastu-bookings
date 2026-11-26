@@ -42177,3 +42177,25 @@ mechanism commit 16 measured with `manual-assign.js`. **Not a stale install eith
 - ROADMAP: no entry is resolved by this version, and none was added.
 - **Gate after the review:** 490.47 kB / 145.32 kB gz · 4805 tests (from 4804, fix 1's) · lint 63 problems (0 errors, 63
   warnings) · style OK, hover descriptions 0 of ceiling 0.
+
+## v18.19.0 — Book again, one tap from wherever the booking is
+
+**Date:** 2026-11-26 · **Branch:** `feat/v18.19.0-book-again-everywhere`
+
+**Why:** Patryk, 2026-11-26: Book again (a new booking pre-filled from a seated or completed visit) should be quicker to reach.
+**Measured first:** before this version it had ONE door, the edit form's footer (`BookingFormModal`'s `bookAgainBtn`, and `B` while
+that form is open). The hold / right-click card, the List card and Find a booking had none, so a guest booking again meant finding
+and opening their visit first. He chose the doors in one round of questions (the hold / right-click card, a completed List card's
+slot, `B` on a selection, Find a booking; not Customers), kept the statuses at seated and completed, and asked for a mark that the
+form's button wears too. The plan is `/Users/patrykzychowicz/.claude/plans/i-have-this-idea-proud-pinwheel-of-a0afe4e6-de79-48f2-95b4-6bd5a58d3bd8.md`.
+**Behavioural change: yes**, each commit below. What the form opens with is unchanged (`againDraft`).
+
+### Commit 1 — one predicate, the mark, and the form's button
+
+- **`bookAgainOffered(b)`** (`lib/booking-logic.js`, beside `nextStatusOf`): seated or completed. The form's button and its `B` row
+  each wrote the condition out; both ask this now, and so does every door added below.
+- **`BookAgainIcon`** (`Icons.jsx`): a calendar (body and two rings) with a clockwise return arrow across its face. **Judged
+  rasterised at 14px** (`IC.control`) against three other drawings, as the file asks: with a calendar's header rule the arrow had a
+  3.4 radius and at 14px closed into a "G" with its head merged; without the rule it takes r 4.3 and its head stands clear.
+- **The form's button** wears it (`inline-flex`, gap 6, the Delete button's shape beside it). Seen on DEV (Olga Ferrer, completed,
+  22.11): "Book again" with the mark, 117 × 35.

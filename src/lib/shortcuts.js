@@ -48,7 +48,7 @@
 
 import { VIEW_ORDER } from "./constants";
 import { stepDate } from "./day";
-import { seatingClosed, reshuffleOffer } from "./booking-logic";
+import { seatingClosed, reshuffleOffer, bookAgainOffered } from "./booking-logic";
 
 // v14.6.0: "S" toggles the Summary panel. In List view with a booking focused,
 // S marks it Seated instead — that row is in an earlier layer. Rebind here and
@@ -151,7 +151,7 @@ export const SHORTCUT_LAYERS = [
     { id: "formClear", keys: ["c"], caps: ["C"], label: "Clear tables assignment", run: clearFormTables },
     { id: "bookAgain", keys: ["b"], caps: ["B"], label: "Book Again (edit only, seated / completed)", when: (K) => !!K.editId, run: (K) => {
       const cur = editing(K);
-      if (!cur || (cur.status !== "seated" && cur.status !== "completed")) return SWALLOW;
+      if (!bookAgainOffered(cur)) return SWALLOW;
       return hit((K2) => K2.bookAgain(cur));
     } },
     { id: "history", keys: ["h"], caps: ["H"], label: "View history (edit only)", when: (K) => !!K.editId, run: (K) => {

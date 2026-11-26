@@ -295,6 +295,15 @@ export function nextStatusOf(b,todayS,nowMins){
   if(b.status==="seated") return "completed";
   return null;
 }
+// v18.19.0: may this booking be booked again? A party that has sat down or
+// finished — the visit happened, so its guest, size and plan are worth copying
+// into a new booking (`againDraft`). The ONE answer for every door to Book
+// again: the form's button and its B, the quick-status card, the List card's
+// slot and B on a selection, B on a focused Timeline block and Find a booking.
+// Before v18.19.0 the form and its shortcut each wrote the condition out.
+export function bookAgainOffered(b){
+  return !!b&&(b.status==="seated"||b.status==="completed");
+}
 export function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
 // ── Turnaround buffer (v17.6.0) ───────────────────────────────────────────────
 // The separation between bookings (Settings → General; off by default, so
