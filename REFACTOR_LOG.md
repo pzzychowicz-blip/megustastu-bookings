@@ -42316,3 +42316,15 @@ simulators; every finding fixed here, nothing to ROADMAP.
   contents, once ("Timeline", "List", "Plan"). `tests/segmented.test.js` holds it.
 - **Also passed:** the time-zone picker in Settings → General with the keyboard up (231px: the search and a list three rows
   tall inside the dialog), and Book again in a completed List card's slot opening "Book again" for its guest by touch.
+- **The availability line blinked on every change of the time** (carried check "Checking the tables… without flicker"; fixed
+  on Patryk's word). Per frame on the tablet, 12 guests at a full 21:00: the answer held at 1.00 for the ~90ms check, the first
+  frame after it read **0.08** (the compositor had run the fade-out while the main thread was busy), then it eased back over
+  ~110ms; the words never showed, being delayed. v18.14.0 round 10 recorded "the answer dips and returns" on the Mac; on the
+  tablet it was a near-blank. The same frames showed the sentence naming the NEW time beside the OLD answer's times while it
+  faded, because the sentence was built from the draft and only the times were held. Two changes: `AvailLine` hides the
+  answer after the same `--t-tap` grace the words wait (`ANSWER_HIDE`; a fold does not wait), and `useLineBand` holds the
+  sentence with its answer (`words`). On the tablet afterwards, three changes of the time at 1×: the answer 1.00 on every
+  frame, and the sentence switching in place when the answer lands (~95ms); the walk-in the same at 13:15, and its fold when 13:30 had a table starts at once, as a fold should. At 6× CPU the slow path is unchanged: the words
+  come up, the answer goes, and they crossfade back. One reading there is not explained and was not changed: in about one run
+  in three, a single sampled frame reads both layers at 0.00 between the words and the answer. The previous `AvailLine` does
+  the same at 6× (control run), `useDeferredCompute` sets its value and `pending` in one update, and it never appears at 1×.

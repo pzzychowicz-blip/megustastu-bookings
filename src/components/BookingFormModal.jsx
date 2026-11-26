@@ -486,7 +486,9 @@ export function BookingFormModal({
   // v18.14.0 (correction 10, Patryk): the line keeps its band while a refused answer is
   // re-checked (`useLineBand`).
   const answeredNo=formAvail&&!formAvail.ok?formAvail:null;
-  const {answer:lineAvail,shown:lineShown,checking:lineChecking}=useLineBand(answeredNo,availScan.pending);
+  // v18.19.0: the sentence is held with the answer it describes (`useLineBand`'s `words`).
+  const lineSaid=answeredNo?(answeredNo.refusal||"No table for "+(Number(form.size)||2)+" at "+form.time):"";
+  const {answer:lineAvail,shown:lineShown,checking:lineChecking,words:lineWords}=useLineBand(answeredNo,availScan.pending,lineSaid);
 
   // ── v18.0.0 session 8 (items 2b, 7): this guest's other vouchers ───────────
   // Read once per mount, like the picker's own and the Vouchers tab's: expiry is
@@ -717,7 +719,7 @@ export function BookingFormModal({
   // v18.14.0 (H3): this is the footer's availability line now (`AvailLine`, whose
   // header says why), and the body's banner is gone.
   const availLine=lineAvail?<AvailLine
-    text={lineAvail.refusal||"No table for "+(Number(form.size)||2)+" at "+form.time}
+    text={lineWords}
     warn={!!lineAvail.refusal}
     sugg={lineAvail.sugg}
     checking={lineChecking}
