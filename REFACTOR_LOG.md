@@ -42217,3 +42217,20 @@ form's button wears too. The plan is `/Users/patrykzychowicz/.claude/plans/i-hav
 it to the card, and the card's guard and pick order.
 - **Pins moved, each because the card has a fifth pick:** `tests/focus-return.test.js` counts `skipExit(); handBack();` (4 → 5) and
   `tests/motion.test.js` lists the picks one skip each (`onBookAgain(booking)` added).
+
+### Commit 3 — a completed List card's slot
+
+- **What:** a completed card had no next-step button. Now `cardActionsOf` returns `again: !next && bookAgainOffered(b)`, and where
+  it is set the slot holds **Book again** (green, `BookAgainIcon`, `minWidth: NEXT_COL`, through `stopped()` so the card does not
+  also open the edit form). Its ⋯ passes `omitBookAgain`, the same idea as `omitStatus`, so the card never offers it twice. A seated
+  card keeps Completed in the slot and offers Book again behind ⋯ (commit 2).
+- **`NEXT_COL` 116 → 117, measured:** with `minWidth` released on DEV, "Book again" with its mark was **116.28px**, the slot's widest
+  label ("Completed" is 115.7). At 116 that card's Assign would have stood 0.3px off the column, so the column rose a pixel on every
+  card. Read back at 117: the slot is 117.
+- **On DEV (22.11):** Olga Ferrer's completed card → Assign · Book again · ⋯; its ⋯ → Confirmed · Cancelled · Delete (no Book again);
+  Book again → one dialog, "Book again", "Return guest · Olga Ferrer · Sun 22.11 13:30 — set a date", the edit form not opened.
+  The card in the finished fold sits 15px inside the active cards (card 31–993 against 16–1008), which is the fold's own inset and
+  predates this version.
+
+Pins moved: `tests/list-card.test.js` (`cardActionsOf`'s body, and `omitBookAgain` at the ⋯ mount) and `tests/list-columns.test.js`
+(`NEXT_COL` 117, with the measurement). `tests/book-again.test.js`: the slot's condition, its width and `stopped()`.

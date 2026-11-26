@@ -165,7 +165,22 @@ describe("the quick-status card offers Book again", () => {
   });
   it("the card shows it where bookAgainOffered says so, and acts like every other pick", () => {
     const q = comp("QuickStatusPopup.jsx");
-    expect(q).toContain("onBookAgain && bookAgainOffered(booking) ?");
+    expect(q).toContain("onBookAgain && !omitBookAgain && bookAgainOffered(booking) ?");
     expect(q.replace(/\s+/g, "")).toContain("if(!armed||leaving)return;skipExit();handBack();onBookAgain(booking);onClose();");
+  });
+});
+
+describe("a completed List card shows Book again in its next step's slot", () => {
+  const List = comp("ListView.jsx");
+  it("only where there is no next step, and the ⋯ card then leaves it out", () => {
+    expect(List).toContain("again: !next && bookAgainOffered(b)");
+    expect(List).toContain(") : acts.again && onBookAgain ? (");
+    expect(comp("QuickStatusPopup.jsx")).toContain("onBookAgain && !omitBookAgain && bookAgainOffered(booking) ?");
+  });
+  it("NEXT_COL wide like the status buttons, through stopped() so the card does not also open", () => {
+    const at = List.indexOf(") : acts.again && onBookAgain ? (");
+    const btn = List.slice(at, List.indexOf("</button>", at));
+    expect(btn).toContain("minWidth: NEXT_COL");
+    expect(btn).toContain("onClick={stopped(() => onBookAgain(b))}");
   });
 });

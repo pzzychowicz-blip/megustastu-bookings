@@ -53,6 +53,8 @@ import { mkBtn, mkDangerBtn, PopupShell, useModalPresence } from "./atoms";
 //   omitStatus — the status its own button moves the booking to (the card's
 //                `nextStatusOf`), left out of the status row.
 //   omitNoShow — the opener shows No show itself, so this card does not.
+//   omitBookAgain (v18.19.0) — the opener shows Book again itself (a completed
+//                List card, in its next step's slot).
 // The timeline and the plan pass neither: their block and table carry no
 // status buttons, so this card is the only place those actions live.
 // v18.19.0: one more, App's Book again, passed by all three mounts.
@@ -60,7 +62,7 @@ import { mkBtn, mkDangerBtn, PopupShell, useModalPresence } from "./atoms";
 //                 (`bookAgainOffered`), after Unlock and before Delete. It
 //                 opens the new-booking form, a modal, so like every pick it
 //                 skips the exit and hands focus back first.
-export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, onStatus, onNoShow, onClose, onDelete = null, onUnlock = null, onBookAgain = null, startArmed = false, omitStatus = null, omitNoShow = false }) {
+export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, onStatus, onNoShow, onClose, onDelete = null, onUnlock = null, onBookAgain = null, startArmed = false, omitStatus = null, omitNoShow = false, omitBookAgain = false }) {
   // v17.16.12: this popup opens at 400ms INTO a hold, centred on the viewport,
   // so the finger that opened it is sitting on the card it just conjured. Until
   // that finger lifts, every control here is inert — see useArmAfterRelease for
@@ -221,7 +223,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
         {/* v18.19.0: Book again, in the form's green and the mark it wears
             there, on this card's pill geometry. A pick like the rest: the card
             is gone the frame the form opens. */}
-        {onBookAgain && bookAgainOffered(booking) ? (
+        {onBookAgain && !omitBookAgain && bookAgainOffered(booking) ? (
           <button
             className="mgt-hover-scale"
             style={mkBtn({ background: "var(--app-success-solid)", fontSize: T.lead, fontWeight: FW.bold, padding: "10px 18px", minHeight: 44, flex: "1 1 auto", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 })}
