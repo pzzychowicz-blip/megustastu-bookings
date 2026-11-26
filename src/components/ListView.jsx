@@ -44,6 +44,8 @@ import { TagChips } from "./TagChips";
 import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, RowSlot, useFlip, InlineAlert, ALERT_TONES, textWidth, reduceMotionOn, ModalPresence } from "./atoms";
 import { AssignIcon, BookAgainIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
+// v18.19.0: the Book again slot names its key (B on a selected card).
+import { keyHint } from "../lib/shortcuts";
 
 // ── The card's flag rail (v17.15.5) ──────────────────────────────────────────
 // The same facts TimelineBlock draws on its right-hand rail, in the same order
@@ -844,7 +846,7 @@ export const ListView = memo(function ListView({
             className="mgt-hover-scale"
             style={mkBtn({ background: "var(--app-success-solid)", color: "var(--text-on-accent)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: NEXT_COL })}
             onClick={stopped(() => onBookAgain(b))}
-            title={"Start a new booking for " + (b.name || "(no name)") + ", their details filled in"}
+            title={"Start a new booking for " + (b.name || "(no name)") + ", their details filled in" + keyHint("listBookAgain")}
           >
             <BookAgainIcon size={IC.control} />Book again
           </button>

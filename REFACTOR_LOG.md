@@ -42234,3 +42234,17 @@ it to the card, and the card's guard and pick order.
 
 Pins moved: `tests/list-card.test.js` (`cardActionsOf`'s body, and `omitBookAgain` at the ⋯ mount) and `tests/list-columns.test.js`
 (`NEXT_COL` 117, with the measurement). `tests/book-again.test.js`: the slot's condition, its width and `stopped()`.
+
+### Commit 4 — `B` on a selected List card and on a focused Timeline block
+
+- **What:** two rows in `lib/shortcuts.js`. `listBookAgain` in the List layer, beside A / E / S / C / D: B books the selected card's
+  guest again. `bookAgainFocused` in the global layer, beside `newAfter` (N on a focused block): with a Timeline block focused
+  (`env.focusedBlock`), B books that booking's guest again. Both ask `bookAgainOffered` and are TAKEN and ignored on any other booking,
+  as S is on a pending card, so the key never falls through to something else. The global row sits below the "any modal" stop like
+  every global key, and the Shortcuts tab lists both from the table.
+- **The List slot names its key:** the completed card's Book again carries `keyHint("listBookAgain")` (" (B)"). The quick-status
+  card's does not, since B is not live while that card is open.
+- **On DEV:** the seated walk-in's block focused on today's Timeline, B → "Book again". On 22.11's List, ↓ to Inés Romero
+  (confirmed), B → nothing; ↓ to Olga Ferrer (completed), B → "Book again".
+
+`tests/shortcuts.test.js`: both rows over seated, completed and confirmed, with no selection, in the Plan, and under a modal.

@@ -270,6 +270,26 @@ describe("global keys", () => {
     expect(press("n", { view: "plan" }, { env: { focusedBlock } }).calls).toEqual([["openNew"]]);
     expect(press("n", null, { env: { focusedBlock: null } }).calls).toEqual([["openNew"]]);
   });
+  // v18.19.0: B books a guest again from a selected List card or a focused
+  // Timeline block, where bookAgainOffered says so (seated or completed).
+  it("B on a selected List card books that guest again, seated or completed only", () => {
+    const listDay = [booking("s", { status: "seated" }), booking("c", { status: "completed" }), booking("k", { status: "confirmed" })];
+    const on = (id) => press("b", { view: "list", listDay, selectedListId: id });
+    expect(on("s").calls).toEqual([["bookAgain", listDay[0]]]);
+    expect(on("c").calls).toEqual([["bookAgain", listDay[1]]]);
+    // taken and ignored on a confirmed card, and nothing without a selection
+    expect([on("k").prevented, on("k").calls]).toEqual([true, []]);
+    expect(press("b", { view: "list", listDay }).calls).toEqual([]);
+  });
+  it("B on a focused Timeline block books that guest again, seated or completed only", () => {
+    const bookings = [booking("s", { status: "seated" }), booking("k", { status: "confirmed" })];
+    const at = (id, view) => press("b", { view: view || "timeline", bookings }, { env: { focusedBlock: { id, tableId: "4" } } });
+    expect(at("s").calls).toEqual([["bookAgain", bookings[0]]]);
+    expect([at("k").prevented, at("k").calls]).toEqual([true, []]);
+    // a block has focus only in the Timeline, and a modal stops it like every global key
+    expect(at("s", "plan").calls).toEqual([]);
+    expect(press("b", { bookings, anyModal: true, topModalId: "week" }, { env: { focusedBlock: { id: "s", tableId: "4" } } }).calls).toEqual([]);
+  });
   it("…and never through a modal, like the plain N", () => {
     expect(press("n", { anyModal: true, topModalId: "week" }, { env: { focusedBlock: { id: "b7", tableId: "5" } } }).calls).toEqual([]);
   });

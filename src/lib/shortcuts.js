@@ -199,6 +199,14 @@ export const SHORTCUT_LAYERS = [
       return hit((K2) => K2.updateStatus(sel.id, "completed"));
     } },
     { id: "listCancel", keys: ["c"], shift: true, caps: ["⇧C"], label: "Cancel booking", when: (K) => !!selected(K), run: (K) => { const sel = selected(K); return hit((K2) => K2.updateStatus(sel.id, "cancelled")); } },
+    // v18.19.0: B books the selected guest again (a seated or completed card,
+    // `bookAgainOffered`, the answer every Book again door asks); on any other
+    // card the key is taken and does nothing, as S is on a pending one.
+    { id: "listBookAgain", keys: ["b"], caps: ["B"], label: "Book again (seated / completed)", when: (K) => !!selected(K), run: (K) => {
+      const sel = selected(K);
+      if (!bookAgainOffered(sel)) return TAKEN;
+      return hit((K2) => K2.bookAgain(sel));
+    } },
     // Through App's `requestDelete`, which carries the bookingDelete gate.
     { id: "listDelete", keys: ["d"], caps: ["D"], label: "Delete booking", when: (K) => !!selected(K), run: (K) => { const sel = selected(K); return hit((K2) => K2.requestDelete(sel.id)); } },
   ] },
@@ -217,6 +225,14 @@ export const SHORTCUT_LAYERS = [
     // else. `env.focusedBlock` is the hook's reading of the DOM.
     { id: "newAfter", keys: ["n"], caps: ["N"], label: "New booking after the focused one (Timeline)", when: (K, ev, env) => K.view === "timeline" && !!env.focusedBlock, run: (K, ev, env) => hit((K2) => K2.openNewAfter(env.focusedBlock.id, env.focusedBlock.tableId)) },
     { id: "newBooking", keys: ["n"], caps: ["N"], label: "New booking", run: () => hit((K) => K.openNew()) },
+    // v18.19.0: with a Timeline block focused, B books that guest again (seated or
+    // completed, `bookAgainOffered`). Taken and ignored on any other block, so it
+    // never falls through to a global B.
+    { id: "bookAgainFocused", keys: ["b"], caps: ["B"], label: "Book again: the focused booking (Timeline, seated / completed)", when: (K, ev, env) => K.view === "timeline" && !!env.focusedBlock, run: (K, ev, env) => {
+      const b = (K.bookings || []).find((x) => x.id === env.focusedBlock.id);
+      if (!bookAgainOffered(b)) return TAKEN;
+      return hit((K2) => K2.bookAgain(b));
+    } },
     { id: "walkin", keys: ["w"], caps: ["W"], label: "Walk-in", run: () => hit((K) => K.openWalkin()) },
     { id: "summary", keys: [SUMMARY_KEY], caps: ["S"], label: "Toggle Summary panel", run: () => hit((K) => K.setSummaryOpen((o) => !o)) },
     { id: "more", keys: [WEEK_KEY], caps: ["M"], label: "Open More (Week / Month)", run: () => hit((K) => K.setShowWeek(true)) },
