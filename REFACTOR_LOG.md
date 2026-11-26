@@ -42293,3 +42293,17 @@ simulators; every finding fixed here, nothing to ROADMAP.
   Now a toast that is off hands `Toast` nothing (`t.on?t.node:null`); an outranked toast that is still on keeps its live node. On
   the tablet afterwards, "Sofía Navarro moved to 5." stayed whole down to 0.07 opacity. A drag message's exit had the same fault
   (an empty pane). `tests/drop-plan.test.js` holds both halves.
+- **A List card's note arrived with a jump.** Carried check (v18.14.0): flags arrive without a jump. They do: Unlock from a
+  card's ⋯ faded its Locked flag out over about 200ms before its slot closed. The note under the flags did not: a note added in
+  the form grew the card from 97 to 128px in one frame, sampled every frame, and every card under it jumped. The note's cell is
+  now a `Reveal`, which renders nothing while closed, so a card with no note has no third row; it leaves on the copy it kept.
+  On the tablet after a reload: clearing the note 128 → 97 and adding it 97 → 128, each over about 400ms.
+- **Passed on the tablet, nothing to fix** (DEV tab, 998 × 507): keeping the day (an edit and a time change move nobody else
+  and claim no re-optimise); the inbox search's magnifier raises the keyboard and an empty search closes on blur; H archives
+  and Backspace does nothing; ⋯ by touch opens, keeps focus where it was, and closes on a tap outside; a sideways drag of an
+  Optimiser-placed booking keeps its table with no lock; the time drag's edge scroll (once the finger reaches the band);
+  Undo after a drag; a refused drop right after a move speaks over the pill and the pill comes back; the availability line
+  and Save above the keyboard in the form (231px) and the walk-in (289px); the Undo pill offline (armed on landing) and not
+  at all when the landing comes after its 10s; a second device deleting under a held drag clears the row's hint; the inbox's
+  merged title row and composer above the keyboard; a double tap on a country code and on Add to waitlist each do it once.
+  Not reachable from here: a slow connection, since CDP's throttling does not reach Firebase's WebSocket.

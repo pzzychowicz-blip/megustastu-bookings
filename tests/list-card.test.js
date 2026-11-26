@@ -95,6 +95,13 @@ describe("the card and the popup", () => {
     expect(tag).toMatch(/omitBookAgain=\{onCard\.again\}/);
   });
 
+  // v18.19.0 (tablet check): a note added in the form grew the card 97 → 128px in one
+  // frame. Its cell is a Reveal, as each flag's is (FlagSlot), so it eases both ways.
+  it("the card's note eases in and out", () => {
+    expect(List).toContain("<Reveal show={!!notesEl} style={{ gridColumn: 2, gridRow: 3, minWidth: 0 }}>{notesEl}</Reveal>");
+    expect(List, "the bare conditional is back").not.toMatch(/\{notesEl \? <div/);
+  });
+
   it("the popup honours both omissions, and defaults to omitting nothing", () => {
     expect(Popup).toMatch(/\.filter\(\(st\) => st !== omitStatus\)/);
     expect(Popup).toMatch(/\{!omitNoShow && \(booking\.status === "confirmed" \|\| booking\.status === "pending"\) && late\[booking\.id\] === "noshow"/);

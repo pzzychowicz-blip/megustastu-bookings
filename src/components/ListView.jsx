@@ -1136,7 +1136,12 @@ export const ListView = memo(function ListView({
                 {moreBtn}
               </div>
             </div>
-            {notesEl ? <div style={{ gridColumn: 2, gridRow: 3, minWidth: 0 }}>{notesEl}</div> : null}
+            {/* v18.19.0 (tablet check): the note eases in and out, as the flags above
+                it have since correction 25. A note added in the form grew the card
+                from 97 to 128px in ONE frame, and every card under it jumped. A
+                closed Reveal renders nothing, so a card with no note has no row 3;
+                a note that has gone leaves on the copy the Reveal kept. */}
+            <Reveal show={!!notesEl} style={{ gridColumn: 2, gridRow: 3, minWidth: 0 }}>{notesEl}</Reveal>
             </div>
             </div>
           </div>
