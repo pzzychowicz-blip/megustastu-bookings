@@ -2205,8 +2205,11 @@ log, Remove person and the invitations, WhatsApp's Disconnect and Check usage.
   goes: the neutral dot and the Undo button, which then does nothing. Only a
   refusal is amber with no button (v18.20.0 /code-review: the last Undo and Close
   faded it in the refusal's look, measured on DEV).
-- **Taps on one control in a row are one step**, matched by the setting and the leaf
-  the save changed, never by time. A step taken back to where it started is gone.
+- **Taps on one control in a row are one step**, matched by the setting, the leaf
+  the save changed and the control that made it, never by time. A step taken back to
+  where it started is gone. Two switches writing one value (Automatic dark mode, then
+  Dark mode) and a list's item taken off before another is put on (a guest's VIP,
+  then Allergy) are two steps (v18.20.0 /code-review: they merged, measured).
 - **Refuse and say why**: when the stored setting is no longer what this device wrote,
   the pill says "Changed on another device, can't undo" in the warning tone for 3.5s,
   the refusal toast's time, drops THAT setting's steps (each older one chains from
