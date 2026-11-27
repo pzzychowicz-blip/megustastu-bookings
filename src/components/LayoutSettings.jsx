@@ -91,6 +91,10 @@ const ACT_BTN = mkBtn({ padding: "6px 12px", minHeight: 32, background: "var(--a
 // right on every width (DESIGN.md, "A control keeps its side"). It was left,
 // under the last row of a list whose ✕s all sit at the right.
 const ADD_ROW = { display: "flex", justifyContent: "flex-end", marginTop: 8 };
+// v18.19.1 (Patryk): a label and the stepper it names, as ONE flex item, so a
+// wrapping rule row breaks between pairs and never inside one. A combo rule's
+// "priority" stayed at the end of line 1 while its stepper started line 2.
+const PAIR = { display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0, whiteSpace: "nowrap" };
 // The neutral face the five add buttons share.
 const ADD_BTN = { ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" };
 // A table id is joined into combo keys with "|" (comboKey), so it must be
@@ -919,12 +923,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           return (
             <div key={i} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)", marginTop: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>Party of</span>
-                <Stepper value={b.min} disableDec={b.min <= 1} disableInc={b.min >= b.max} label={bandName(b, i) + ": smallest party size"} description={"the smallest party in size rule " + (i + 1) + ", one guest at a time"}
-                  onDec={function () { setBand(i, { min: b.min - 1 }); }} onInc={function () { setBand(i, { min: b.min + 1 }); }} />
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>to</span>
-                <Stepper value={b.max} disableDec={b.max <= b.min} disableInc={b.max >= 30} label={bandName(b, i) + ": largest party size"} description={"the largest party in size rule " + (i + 1) + ", one guest at a time"}
-                  onDec={function () { setBand(i, { max: b.max - 1 }); }} onInc={function () { setBand(i, { max: b.max + 1 }); }} />
+                <span style={PAIR}>
+                  <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>Party of</span>
+                  <Stepper value={b.min} disableDec={b.min <= 1} disableInc={b.min >= b.max} label={bandName(b, i) + ": smallest party size"} description={"the smallest party in size rule " + (i + 1) + ", one guest at a time"}
+                    onDec={function () { setBand(i, { min: b.min - 1 }); }} onInc={function () { setBand(i, { min: b.min + 1 }); }} />
+                </span>
+                <span style={PAIR}>
+                  <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>to</span>
+                  <Stepper value={b.max} disableDec={b.max <= b.min} disableInc={b.max >= 30} label={bandName(b, i) + ": largest party size"} description={"the largest party in size rule " + (i + 1) + ", one guest at a time"}
+                    onDec={function () { setBand(i, { max: b.max - 1 }); }} onInc={function () { setBand(i, { max: b.max + 1 }); }} />
+                </span>
                 <button onClick={function () { removeBand(i); }} className="mgt-hover-scale"
                   title={"Remove size rule " + (i + 1)} aria-label={"Remove " + bandName(b, i)}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
@@ -1001,12 +1009,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   {known ? null : <option value={r.key}>{String(r.key).split("|").join(" + ")}</option>}
                   {declared.map(function (d) { return <option key={d.key} value={d.key}>{d.label}</option>; })}
                 </select>
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>party</span>
-                <Stepper value={r.min} disableDec={r.min <= 1} disableInc={r.min >= r.max} label={comboName(r, i) + ": smallest party size"} description={"the smallest party combo rule " + (i + 1) + " applies to, one guest at a time"}
-                  onDec={function () { setRule(i, { min: r.min - 1 }); }} onInc={function () { setRule(i, { min: r.min + 1 }); }} />
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>to</span>
-                <Stepper value={r.max} disableDec={r.max <= r.min} disableInc={r.max >= 30} label={comboName(r, i) + ": largest party size"} description={"the largest party combo rule " + (i + 1) + " applies to, one guest at a time"}
-                  onDec={function () { setRule(i, { max: r.max - 1 }); }} onInc={function () { setRule(i, { max: r.max + 1 }); }} />
+                <span style={PAIR}>
+                  <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>party</span>
+                  <Stepper value={r.min} disableDec={r.min <= 1} disableInc={r.min >= r.max} label={comboName(r, i) + ": smallest party size"} description={"the smallest party combo rule " + (i + 1) + " applies to, one guest at a time"}
+                    onDec={function () { setRule(i, { min: r.min - 1 }); }} onInc={function () { setRule(i, { min: r.min + 1 }); }} />
+                </span>
+                <span style={PAIR}>
+                  <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>to</span>
+                  <Stepper value={r.max} disableDec={r.max <= r.min} disableInc={r.max >= 30} label={comboName(r, i) + ": largest party size"} description={"the largest party combo rule " + (i + 1) + " applies to, one guest at a time"}
+                    onDec={function () { setRule(i, { max: r.max - 1 }); }} onInc={function () { setRule(i, { max: r.max + 1 }); }} />
+                </span>
                 <button onClick={function () { setRule(i, { avoid: !r.avoid }); }} className="mgt-hover-scale"
                   title={r.avoid ? "Prefer combo rule " + (i + 1) + "'s tables again" : "Avoid combo rule " + (i + 1) + "'s tables, using them only as a last resort"}
                   aria-label={(r.avoid ? "Avoid" : "Prefer") + " (" + comboName(r, i) + ")"}
@@ -1014,11 +1026,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   {r.avoid ? "Avoid" : "Prefer"}
                 </button>
                 {r.avoid ? null : (
-                  <>
+                  <span style={PAIR}>
                     <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>priority</span>
                     <Stepper value={r.weight} disableDec={r.weight <= 1} disableInc={r.weight >= 10} label={comboName(r, i) + ": priority"} description={"combo rule " + (i + 1) + "'s priority, one step at a time"}
                       onDec={function () { setRule(i, { weight: r.weight - 1 }); }} onInc={function () { setRule(i, { weight: r.weight + 1 }); }} />
-                  </>
+                  </span>
                 )}
                 <button onClick={function () { removeRule(i); }} className="mgt-hover-scale"
                   title={"Remove combo rule " + (i + 1)} aria-label={"Remove " + comboName(r, i)}
@@ -1079,12 +1091,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   {tableIds.indexOf(r.table) >= 0 ? null : <option value={r.table}>{r.table}</option>}
                   {tableIds.map(function (id) { return <option key={id} value={id}>{id}</option>; })}
                 </select>
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>from a party of</span>
-                <Stepper value={r.fromSize} disableDec={r.fromSize <= 1} disableInc={r.fromSize >= 30} label={swapName(r, i) + ": party size it is taken from"} description={"the party size swap rule " + (i + 1) + " takes table " + r.table + " from, one guest at a time"}
-                  onDec={function () { setSwap(i, { fromSize: r.fromSize - 1 }); }} onInc={function () { setSwap(i, { fromSize: r.fromSize + 1 }); }} />
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>for a party of</span>
-                <Stepper value={r.toSize} disableDec={r.toSize <= 1} disableInc={r.toSize >= 30} label={swapName(r, i) + ": party size it is given to"} description={"the party size swap rule " + (i + 1) + " gives table " + r.table + " to, one guest at a time"}
-                  onDec={function () { setSwap(i, { toSize: r.toSize - 1 }); }} onInc={function () { setSwap(i, { toSize: r.toSize + 1 }); }} />
+                <span style={PAIR}>
+                  <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>from a party of</span>
+                  <Stepper value={r.fromSize} disableDec={r.fromSize <= 1} disableInc={r.fromSize >= 30} label={swapName(r, i) + ": party size it is taken from"} description={"the party size swap rule " + (i + 1) + " takes table " + r.table + " from, one guest at a time"}
+                    onDec={function () { setSwap(i, { fromSize: r.fromSize - 1 }); }} onInc={function () { setSwap(i, { fromSize: r.fromSize + 1 }); }} />
+                </span>
+                <span style={PAIR}>
+                  <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>for a party of</span>
+                  <Stepper value={r.toSize} disableDec={r.toSize <= 1} disableInc={r.toSize >= 30} label={swapName(r, i) + ": party size it is given to"} description={"the party size swap rule " + (i + 1) + " gives table " + r.table + " to, one guest at a time"}
+                    onDec={function () { setSwap(i, { toSize: r.toSize - 1 }); }} onInc={function () { setSwap(i, { toSize: r.toSize + 1 }); }} />
+                </span>
                 <button onClick={function () { removeSwap(i); }} className="mgt-hover-scale"
                   title={"Remove swap rule " + (i + 1)} aria-label={"Remove " + swapName(r, i)}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>

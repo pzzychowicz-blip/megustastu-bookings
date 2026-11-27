@@ -42437,3 +42437,11 @@ shape or a key.
   row of their own, `ADD_ROW` (`display: flex`, `justifyContent: flex-end`), so they keep the right on every width (DESIGN.md, "A
   control keeps its side"). The five shared one hand-copied face, now `ADD_BTN`.
 - **On DEV (1440):** each button's right edge is its row's, 872, which is also the right edge of the rows' ✕ (size rule 1's).
+
+### Commit 2 — a label stays with its stepper
+
+- **What:** every label and the stepper it names is ONE flex item, `PAIR` (`inline-flex`, `flexShrink: 0`, `nowrap`): a size rule's
+  "Party of [n]" and "to [n]", a combo rule's "party [n]", "to [n]" and "priority [n]", a swap rule's "from a party of [n]" and "for a
+  party of [n]". A wrapping row breaks between pairs, never inside one. The screenshot's fault was a combo rule's "priority" at the end
+  of line 1 with its stepper starting line 2.
+- **On DEV (375 × 812, Table priorities open):** 54 pairs, every label on its stepper's line, none past its row's right edge.
