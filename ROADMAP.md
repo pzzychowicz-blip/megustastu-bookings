@@ -19,6 +19,23 @@ session and keeping it in sync.
 
 ## Deferred
 
+- **An emptied layout list comes back as the default's** (v18.19.1 /code-review, pre-existing).
+  Removing every cross-group combo or every join group saves an empty array, RTDB drops
+  it, and `sanitizeLayout` (`useLayout.js`) reads the absent field as `DEFAULT_LAYOUT`'s:
+  13 combos or 4 groups reappear on the echo, and Settings' Undo then says "Changed on
+  another device". The fix is the `v`-marker shape `priorities` and `pickRules` already
+  use, which changes what is stored (`SCHEMA` +1).
+
+- **Rule rows keep their keys by position after a change from outside** (v18.19.1
+  /code-review). `useListKeys` follows a drag and a remove made in the tab, but an Undo
+  (or another device) reorders or restores rules without telling it, so a restored rule
+  takes its neighbour's key and the last row is keyed as new. Cosmetic (which row's
+  entrance plays); the fix is keying rows by content, which changes how every row mounts.
+
+- **The Settings footer grows 6px on a phone while a two-line Undo pill shows**
+  (v18.19.1 /code-review, measured: pill 46px, Close 40px). A look decision for Patryk:
+  one line with an ellipsis, a shorter label, or a footer that is always 46px.
+
 - **Undo across the rest of Settings (v18.20.0, Patryk 2026-11-27).** v18.19.1 gave
   Settings → Layout its Undo (`useSettingsUndo`, `lib/settings-undo.js`, the pill in the
   dialog's footer). The rest of Settings is to follow on its own branch with its own plan:

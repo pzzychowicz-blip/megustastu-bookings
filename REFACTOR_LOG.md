@@ -42552,3 +42552,19 @@ event in the pane while Patryk dragged size rules by hand. Two faults:
   of the row below. `tests/reorder.test.js` +3.
 - **Re-measured with Patryk's hand**: eleven drags, size rules and combo rules, up and down, every one saved, one of them
   again with the lost capture reported before the release.
+
+### /code-review fixes (the ship run)
+
+The review raised eight; each was checked before it was acted on.
+- **Fixed, one commit each, all re-checked on DEV:**
+  - a keyboard move of a size rule closes the chip picker (it is keyed by the rule's index, and only a pointer drag
+    closed it); measured: picker open under rule 2, ↑ on its grip, the picker's 12 choices gone;
+  - a stepper merge needs the save to start from the last step's `after`, so a value another device set between two taps
+    keeps the Undo's refusal (`tests/settings-undo.test.js` +1);
+  - `finish` clears the drag BEFORE its save (src/CLAUDE.md, teardown first);
+  - a grip is not focused on mousedown (src/CLAUDE.md, a focused element is scrolled into view under the pointer);
+  - Ctrl+Z acts only while Settings is the top of the modal stack; measured: with the discard confirm up, Ctrl+Z left the
+    kitchen limit at 4, and the pill's Undo then took it back to 3.
+- **To ROADMAP, real but out of scope:** emptied join groups or cross-group combos coming back as the default's
+  (pre-existing; the fix changes what is stored), rule keys staying positional after an Undo (cosmetic; the fix rekeys every
+  row), and the phone footer growing 6px under a two-line pill (a look decision).
