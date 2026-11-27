@@ -34,7 +34,7 @@ import { emitActivity } from "../lib/activitySink";
 // they want the optimizer to stop. So it's clamped to 0–24 (00:00–24:00) and is
 // NOT tied to weekRange (unlike the shift split), which would otherwise silently
 // rewrite it whenever opening hours change. Defensive against malformed data.
-function sanitizeOptimizer(raw){
+export function sanitizeOptimizer(raw){
   const src = raw && typeof raw === "object" ? raw : {};
   let c = Math.round(Number(src.cutoff));
   if(!Number.isFinite(c)) c = 15;
@@ -70,7 +70,7 @@ export function useOptimizerSettings(){
   function saveOptimizerSettings(partial){
     if(!loaded.current){
       console.warn("[SAFE] Refused to write optimizer settings — initial read has not completed yet.");
-      return;
+      return null;
     }
     const prev = optimizerSettings;
     const next = sanitizeOptimizer({ ...prev, ...(partial || {}) });
@@ -79,6 +79,9 @@ export function useOptimizerSettings(){
       const entry = settingsWriteEntry("settings/optimizer", prev, next);
       if (entry) emitActivity([entry]);
     });
+    // v18.20.0: what was stored, sanitized, for Settings' Undo (null above:
+    // a refused save records nothing).
+    return next;
   }
 
   return { optimizerSettings, saveOptimizerSettings };

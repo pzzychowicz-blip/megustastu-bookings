@@ -288,7 +288,8 @@ export function useRoles({ uid, userEmail, setWriteWarning }) {
       return prev.map(function (r) { return r.uid === targetUid ? merged : r; })
         .concat(stored ? [] : [merged]);
     });
-    return ok ? { ok: true } : { ok: false, error: "Couldn't save that change." };
+    // v18.20.0: `row` is what was written, for Settings' Undo to record.
+    return ok ? { ok: true, row: merged } : { ok: false, error: "Couldn't save that change." };
   }, [saveRoles, uid]);
 
   // Ticking one cell in the capability grid. `on` is the QUESTION THE SCREEN
@@ -430,8 +431,17 @@ export function useRoles({ uid, userEmail, setWriteWarning }) {
       const entry = settingsWriteEntry("settings/admin", prev, next);
       if (entry) emitActivity([entry]);
     });
-    return true;
+    // v18.20.0: what it stored (the writer contract Settings' Undo records by);
+    // false above is a refusal. Every caller reads it as a truthy "dispatched".
+    return next;
   }, [setWriteWarning]);
+
+  // v18.20.0: Settings' Undo writes a whole stored node back. Through writeAdmin,
+  // so the loaded guard, the rev CAS and the activity entry all apply.
+  const restoreAdmin = useCallback(function (v) {
+    return writeAdmin(v,
+      "Couldn't undo that change — you may not have permission, or another device changed it first.");
+  }, [writeAdmin]);
 
   // ── The enforcement flag ──────────────────────────────────────────────────
   const setEnforceRoles = useCallback(function (on) {
@@ -472,6 +482,7 @@ export function useRoles({ uid, userEmail, setWriteWarning }) {
     activityRetentionDays: adminSettings.activityRetentionDays, setActivityRetention,
     waRetentionDays: adminSettings.waRetentionDays, setWaRetention,
     modules, hasModule, setModuleEnabled,
+    adminSettings, restoreAdmin,
     roles, invites, rows, rolesReady: ready,
     setRole, setCapability, removeUser, inviteUser, withdrawInvite, applyInvite,
   };

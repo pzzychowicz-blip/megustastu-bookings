@@ -64,7 +64,7 @@ export function useRecurring({ setWriteWarning }) {
     if (!loaded.current) {
       console.warn("[SAFE] Refused to write recurring — initial read has not completed yet.");
       if (!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
-      return false;
+      return null;
     }
     // Captured ABOVE the mirror assignment below — one line later and `prev`
     // and `computed` are the same object.
@@ -79,7 +79,10 @@ export function useRecurring({ setWriteWarning }) {
       const entry = settingsWriteEntry("recurring", prev, computed, { auto: isSilent === true });
       if (entry) emitActivity([entry]);
     });
-    return true;
+    // v18.20.0: what was stored, sanitized, for Settings' Undo (null above).
+    // `removeRules`, `setRulesActive` and `addSkipDate` callers ask only
+    // whether it went out, and read it as truthy.
+    return computed;
   }
 
   useEffect(function () {
@@ -101,12 +104,12 @@ export function useRecurring({ setWriteWarning }) {
     return rule;
   }
   function updateRule(id, patch) {
-    saveRecurring(function (prev) {
+    return saveRecurring(function (prev) {
       return Object.assign({}, prev, { rules: prev.rules.map(function (r) { return r.id === id ? Object.assign({}, r, patch) : r; }) });
     });
   }
   function removeRule(id) {
-    saveRecurring(function (prev) { return Object.assign({}, prev, { rules: prev.rules.filter(function (r) { return r.id !== id; }) }); });
+    return saveRecurring(function (prev) { return Object.assign({}, prev, { rules: prev.rules.filter(function (r) { return r.id !== id; }) }); });
   }
   // v18.5.1: several at once, in one write, and the answer returned. v18.6.0:
   // Delete customer calls it once the anonymise has landed (it pauses them
@@ -149,8 +152,8 @@ export function useRecurring({ setWriteWarning }) {
       }) });
     }, isSilent);
   }
-  function setEnabled(on) { saveRecurring(function (prev) { return Object.assign({}, prev, { enabled: !!on }); }); }
-  function setHorizon(weeks) { saveRecurring(function (prev) { return Object.assign({}, prev, { horizonWeeks: clampInt(weeks, 4, 1, 12) }); }); }
+  function setEnabled(on) { return saveRecurring(function (prev) { return Object.assign({}, prev, { enabled: !!on }); }); }
+  function setHorizon(weeks) { return saveRecurring(function (prev) { return Object.assign({}, prev, { horizonWeeks: clampInt(weeks, 4, 1, 12) }); }); }
 
   return { recurring, saveRecurring, addRule, updateRule, removeRule, removeRules, setRulesActive, addSkipDate, setEnabled, setHorizon };
 }

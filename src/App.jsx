@@ -371,7 +371,7 @@ import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
 // occasion tags a booking can carry. Its decisions are lib/tags.js.
 import { useTagSettings } from "./hooks/useTagSettings";
 // v18.11.0: Book from the waitlist keeps the occasion tags the list still has.
-import { knownTagIds } from "./lib/tags";
+import { knownTagIds, sanitizeTagList, cleanTagIds } from "./lib/tags";
 // v18.0.0 session 8: the activity log. `useActivityLog` installs the module-level
 // sink every writer emits into.
 import { useActivityLog, redactGuest } from "./hooks/useActivityLog";
@@ -461,7 +461,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.19.1"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.20.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1203,6 +1203,7 @@ export function BookingApp({uid}){
     // module-owned surface asks, and it is checked BEFORE `can`: a module that
     // is off is hidden from everybody including an admin.
     modules, hasModule, setModuleEnabled,
+    adminSettings, restoreAdmin, roles,
     setRole, setCapability, removeUser, inviteUser, withdrawInvite, applyInvite,
   } = useRoles({
     uid: uid,
@@ -1241,7 +1242,7 @@ export function BookingApp({uid}){
   // saveAllDays are wired to the Settings General-tab 7-day editor below.
   // v18.10.0: and the special days (`hourExceptions`), which `hoursFor` reads.
   // `hoursSig` is both halves as ONE object, the memoised views' repaint key.
-  const { weekHours, exceptions: hourExceptions, hoursSig, saveDayHours, saveAllDays, saveException, removeException } = useOperatingHours(viewDate);
+  const { weekHours, exceptions: hourExceptions, hoursSig, saveDayHours, saveAllDays, saveException, removeException, restoreHours } = useOperatingHours(viewDate);
   // v18.2.0: then stretch the viewed day's grid to its latest booking's end
   // (constants.js `extendActiveGrid` — display only, never shorter). Same
   // render-time module mutation as the line above, and it must come AFTER it,
@@ -1285,9 +1286,6 @@ export function BookingApp({uid}){
   // TABLE_GROUPS bindings on each snapshot. saveLayout is wired to the Settings
   // Layout tab. See ./hooks/useLayout.js.
   const { layout, saveLayout } = useLayout();
-  // v18.19.1 (Patryk): every save the Layout tab makes is a step its Undo pill
-  // can take back, until Settings closes (lib/settings-undo.js).
-  const settingsUndo = useSettingsUndo({ open: showSettings, onTop: topModal(modalStack) === "settings", layout: layout, saveLayout: saveLayout });
   // ── WhatsApp Inbox hook (sandbox) ─────────────────────────────────────────
   // Owns conversations/messages/templates (DEV Firebase) + every inbox handler.
   // Form/view handoff setters flow in (controlled pattern, like useWalkin). The
@@ -1385,9 +1383,10 @@ export function BookingApp({uid}){
   const setConfirmReminderDel = setModalFns.reminderdel;
   const {
     reminders,
+    saveReminders,
     reminderDirty,
     saveReminderFromEditor,
-    doDeleteReminder,
+    doDeleteReminder: deleteReminderNow,
     openNewReminder, openEditReminder,
     deleteReminder, toggleReminderActive,
     reminderBanners, reminderCount,
@@ -1433,7 +1432,7 @@ export function BookingApp({uid}){
   // the reason `hoursSig`, `layoutSig` and `turnBuffer` are all scalars too.
   const vouchersOn = hasModule("vouchers");
   // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
-  const { recurring, addRule, updateRule, removeRule, removeRules, setRulesActive, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
+  const { recurring, saveRecurring, addRule, updateRule, removeRule, removeRules, setRulesActive, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
   // ── v18.0.0 session 8: the activity log ────────────────────────────────────
   // Installing the sink is the whole of the write side here — every writer in
   // the app already emits into it, and until this runs `emitActivity` is a
@@ -1505,6 +1504,7 @@ export function BookingApp({uid}){
     cellBook,onToggleCellBook,
     vibrateOnDrag,onToggleVibrate,
     dragHold,onSetDragHold,
+    shellPrefOf,setShellPref,
     split,focusedPane,setFocusedPane,applySplit,fitTimeline,
     confirmSplit,swapSides,toggleSplitDir,exitSplit,setSplitRatio,
     splitSideBySideOk,shellFixed,
@@ -1983,6 +1983,129 @@ export function BookingApp({uid}){
     activityOpen,activityRetentionDays,endBackupOpen,isAdmin,refused,
     setActivityOpen,setConfirmDiscard,setShowSettings,setWriteWarning,
   });
+  // v18.19.1 (Patryk): every save Settings → Layout makes is a step its Undo
+  // pill can take back, until Settings closes. v18.20.0 (Patryk): every tab,
+  // in one history (lib/settings-undo.js). Below `useSettingsPanel` for
+  // `settingsTab`, and below every writer hook it is handed: a hook's arguments
+  // are read at the call. `nodes` maps each node family to how it is read and
+  // written back (hooks/useSettingsUndo.js says what an adapter is).
+  const settingsUndo = useSettingsUndo({
+    open: showSettings, onTop: topModal(modalStack) === "settings", tab: settingsTab,
+    nodes: {
+      "settings/layout": { value: function(){return layout;}, restore: function(k,b){return !!saveLayout(b);} },
+      // v18.20.0: Settings → General. Each writer returns what it stored, and
+      // an Undo hands the whole node back to it (a partial merge of a whole
+      // sanitized node is that node).
+      "settings/operatingHours": { value: function(){return hoursSig;}, restore: function(k,b){return !!restoreHours(b);} },
+      "settings/dayShifts": { value: function(){return dayShifts;}, restore: function(k,b){return !!saveDayShifts(b);} },
+      "settings/optimizer": { value: function(){return optimizerSettings;}, restore: function(k,b){return !!saveOptimizerSettings(b);} },
+      "settings/bookingDefaults": { value: function(){return bookingDefaults;}, restore: function(k,b){return !!saveBookingDefaults(b);} },
+      "settings/general": { value: function(){return generalSettings;}, restore: function(k,b){return !!saveGeneralSettings(b);} },
+      "recurring": { value: function(){return recurring;}, restore: function(k,b){return !!saveRecurring(b);} },
+      // Settings → Customers. `saveTagList` answers a boolean (its test pins
+      // that), so the list it stored is its own sanitizer's reading of the
+      // list it was given.
+      "settings/tags": {
+        value: function(){return tagList;},
+        after: function(k,ret,b,args){return ret?sanitizeTagList(args[0]):null;},
+        restore: function(k,b){return saveTagList(b);},
+      },
+      // Settings → Vouchers. A voucher is read by its stored status, the one
+      // thing Void / un-void changes; Undo voids or un-voids it back.
+      "voucher": {
+        value: function(k){const v=vouchersByCode[k];return v?v.status:null;},
+        after: function(k,ret,b,args){return ret?(args[1]===false?"open":"void"):null;},
+        restore: function(k,b){return !!voidVoucher(k,b==="void");},
+      },
+      "settings/voucherDefaults": { value: function(){return voucherDefaults;}, restore: function(k,b){return !!saveVoucherDefaults(b);} },
+      "settings/whatsapp": { value: function(){return waSettings;}, restore: function(k,b){return !!saveWaSettings(b);} },
+      // Settings → App: one node per pref, "app:<name>" (useShellPrefs' shellPrefOf
+      // names them). Each setter returns the value it set, false included, so a
+      // null alone is a refusal (Dark mode while Automatic is on).
+      // Settings → Admin. A person's row is compared on what the panel edits,
+      // never its stamps (the per-child CAS moves `updatedAt` on every echo).
+      "settings/admin": { value: function(){return adminSettings;}, restore: function(k,b){return !!restoreAdmin(b);} },
+      "role": {
+        value: function(k){const r=roles.find(function(x){return x.uid===k;});return r?{role:r.role,extras:r.extras,denies:r.denies}:null;},
+        after: function(k,ret){return ret&&ret.ok&&ret.row?{role:ret.row.role,extras:ret.row.extras,denies:ret.row.denies}:null;},
+        context: function(k,args){const r=roles.find(function(x){return x.uid===k;});return {name:r?(r.name||r.email):"",cap:typeof args[1]==="string"?args[1]:null,on:args[2]===true};},
+        // setRole, so wouldRemoveOwnAdmin still refuses an Undo that would take
+        // your own admin access away.
+        restore: function(k,b){return !!b&&setRole(k,b).ok===true;},
+      },
+      "app": { value: function(k){return shellPrefOf(k);}, after: function(k,ret){return ret==null?null:ret;}, restore: function(k,b){return setShellPref(k,b);} },
+      // Settings → Reminders: the whole list, on one rev pair.
+      "reminders": { value: function(){return reminders;}, restore: function(k,b){return !!saveReminders(b);} },
+      // A guest's tags live on their bookings (`guestTagMap`), keyed by
+      // identity. A tap is one "+id" / "-id"; Undo is the opposite tap, through
+      // the same save (Patryk). `ctx` names the guest and the tags for the pill.
+      "guestTags": {
+        value: function(k){return guestTags[k]||[];},
+        after: function(k,ret,b,args){
+          if(!ret) return null;
+          const e=String(args[1]||""), id=e.slice(1);
+          return cleanTagIds(e[0]==="+"?b.concat([id]):b.filter(function(x){return x!==id;}));
+        },
+        context: function(k,args){
+          const labels={};
+          (tagList.guest||[]).forEach(function(t){labels[t.id]=t.label;});
+          return { name: args[2]||"", labels: labels };
+        },
+        restore: function(k,b,a){
+          const taps=a.filter(function(id){return b.indexOf(id)<0;}).map(function(id){return "-"+id;})
+            .concat(b.filter(function(id){return a.indexOf(id)<0;}).map(function(id){return "+"+id;}));
+          let ok=taps.length>0;
+          taps.forEach(function(t){ if(!saveCustomerTag(k,t)) ok=false; });
+          return ok;
+        },
+      },
+    },
+    // Each Settings save, `[node, save]`, handed back wrapped as
+    // `settingsUndo.save.<name>`. A `refused(...)` gate stays INSIDE its save,
+    // so a refused save writes nothing and records nothing.
+    savers: {
+      dayHours:["settings/operatingHours",function(i,p){if(refused("hoursEdit"))return null;return saveDayHours(i,p);}],
+      allDays:["settings/operatingHours",function(d){if(refused("hoursEdit"))return null;return saveAllDays(d);}],
+      shifts:["settings/dayShifts",function(p){if(refused("hoursEdit"))return null;return saveDayShifts(p);}],
+      optimizer:["settings/optimizer",saveOptimizerSettings],
+      bookingDefaults:["settings/bookingDefaults",saveBookingDefaults],
+      general:["settings/general",saveGeneralSettings],
+      recurringEnabled:["recurring",function(on){if(refused("recurringManage"))return null;return setRecurringEnabled(on);}],
+      recurringHorizon:["recurring",function(w){if(refused("recurringManage"))return null;return setRecurringHorizon(w);}],
+      updateRule:["recurring",function(id,f){if(refused("recurringManage"))return null;return updateRule(id,f);}],
+      removeRule:["recurring",function(id){if(refused("recurringManage"))return null;return removeRule(id);}],
+      layout:["settings/layout",saveLayout],
+      tagList:["settings/tags",function(l){return refused("settingsWrite")?false:saveTagList(l);}],
+      customerTag:[function(key){return key?"guestTags:"+key:null;},saveCustomerTag],
+      voidVoucher:[function(code){const c=normalizeCode(code);return c?"voucher:"+c:null;},function(c,on){return refused("voucherVoid")?false:voidVoucher(c,on);}],
+      voucherDefaults:["settings/voucherDefaults",saveVoucherDefaults],
+      waSettings:["settings/whatsapp",saveWaSettings],
+      // Settings → Admin (Remove person, Invite, Withdraw and Apply invite stay
+      // outside, Patryk). Capabilities are ticked in RolesModal, over Settings.
+      enforceRoles:["settings/admin",setEnforceRoles], module:["settings/admin",setModuleEnabled],
+      activityRetention:["settings/admin",setActivityRetention], waRetention:["settings/admin",setWaRetention],
+      role:[function(u){return u?"role:"+u:null;},setRole], capability:[function(u){return u?"role:"+u:null;},setCapability],
+      // Settings → App
+      dark:["app:theme",onToggleDark], autoTheme:["app:theme",onToggleAutoTheme],
+      appWidth:["app:appWidth",onSetAppWidth], appWidthFit:["app:appWidth",onToggleAppWidthFit],
+      reduceMotion:["app:reduceMotion",onToggleReduceMotion], sw:["app:swEnabled",onToggleSw],
+      planGestures:["app:planGestures",onTogglePlanGestures], planAvail:["app:planAvail",onTogglePlanAvail],
+      navLock:["app:navLocked",onToggleNavLock], splitEnabled:["app:splitEnabled",onToggleSplitEnabled],
+      tlSetting:["app:timeline",onSetTlSetting], largeText:["app:largeText",onToggleLargeText],
+      indoorTint:["app:indoorTint",onToggleIndoorTint], cellBook:["app:cellBook",onToggleCellBook],
+      vibrate:["app:vibrateOnDrag",onToggleVibrate], dragHold:["app:dragHold",onSetDragHold],
+      // The editor's Save and the delete confirm are reached by Enter too (the
+      // keyboard ctx below), so both doors take these, never the raw saves.
+      reminderSave:["reminders",saveReminderFromEditor],
+      reminderDelete:["reminders",deleteReminderNow],
+      reminderToggle:["reminders",toggleReminderActive],
+      specialDay:["settings/operatingHours",function(i,x){if(refused("hoursEdit"))return false;return saveException(i,x);}],
+      removeSpecialDay:["settings/operatingHours",function(i){if(refused("hoursEdit"))return false;return removeException(i);}],
+    },
+  });
+  // The reminder delete confirm's action, by both its doors (the button and
+  // Enter), is the tracked one; `deleteReminderNow` is the raw write.
+  const doDeleteReminder=settingsUndo.save.reminderDelete;
   // v17.0.0: "Delete customer" now ANONYMIZES instead of deleting — the
   // bookings remain for statistics (covers, day/range stats, phone-less
   // no-show tile) as name "Data removed" with phone/notes/history wiped and
@@ -2749,7 +2872,7 @@ export function BookingApp({uid}){
     can:can,hasModule:hasModule,setRolesFor:setRolesFor,setActivityOpen:setActivityOpen,requestDelete:requestDelete,
     // v14 p7: reminder editor state for Esc/Enter handling.
     reminderEditor:reminderEditor,
-    saveReminderFromEditor:saveReminderFromEditor,
+    saveReminderFromEditor:settingsUndo.save.reminderSave,
     // v14 p7 fix: reminder-delete confirm state.
     confirmReminderDel:confirmReminderDel,setConfirmReminderDel:setConfirmReminderDel,
     doDeleteReminder:doDeleteReminder,
@@ -4496,7 +4619,11 @@ export function BookingApp({uid}){
         // resets to 'general' on close so reopens feel fresh.
         showSettings?<Overlay /* @static-height the tab body eases inside SettingsContent's own AutoHeight watch={cur} */ onClose={requestCloseSettings} maxWidth={SETTINGS_CARD_W} anchor="top" footer={/* v18.19.1 (Patryk): three columns, so the Undo pill is centred on the
               dialog while it fits and Close keeps the right column; the pill never
-              covers it. */<div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",columnGap:8}}><div style={{gridColumn:2,minWidth:0}}><SettingsUndoToast pill={settingsUndo.pill} onUndo={settingsUndo.undo} /></div><button
+              covers it.
+              v18.20.0 (Patryk): on a phone the row is always the height of a
+              TWO-LINE pill, so a step arriving never grows the dialog by 6px
+              (measured at 375 wide: Close 40, the pill 46). Wider, the pill is one
+              line and fits the 40 Close already sets. */<div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",columnGap:8,minHeight:isMobile?46:undefined /* @canvas */}}><div style={{gridColumn:2,minWidth:0}}><SettingsUndoToast pill={settingsUndo.pill} onUndo={settingsUndo.undo} /></div><button
               className="mgt-hover-scale"
               style={{...mkBtn({minHeight:40,padding:"8px 18px",background:BTN.quiet}),gridColumn:3,justifySelf:"end"}}
               title={"Close Settings, asking first if a box holds an unsaved change"+keyHint("close")}
@@ -4504,74 +4631,74 @@ export function BookingApp({uid}){
             appVersion={__APP_SIGNATURE__.version}
             onDirty={setSettingsDirty}
             isDark={isDark}
-            onToggleDark={onToggleDark}
+            onToggleDark={settingsUndo.save.dark}
             autoTheme={themePref===undefined}
-            onToggleAutoTheme={onToggleAutoTheme}
+            onToggleAutoTheme={settingsUndo.save.autoTheme}
             appWidth={appWidth}
-            onSetAppWidth={onSetAppWidth}
+            onSetAppWidth={settingsUndo.save.appWidth}
             appWidthFit={appWidthFit}
-            onToggleAppWidthFit={onToggleAppWidthFit}
+            onToggleAppWidthFit={settingsUndo.save.appWidthFit}
             reduceMotion={reduceMotion}
-            onToggleReduceMotion={onToggleReduceMotion}
+            onToggleReduceMotion={settingsUndo.save.reduceMotion}
             swEnabled={swEnabled}
-            onToggleSw={onToggleSw}
+            onToggleSw={settingsUndo.save.sw}
             navLocked={navLocked}
-            onToggleNavLock={onToggleNavLock}
+            onToggleNavLock={settingsUndo.save.navLock}
             splitEnabled={splitEnabled}
-            onToggleSplitEnabled={onToggleSplitEnabled}
+            onToggleSplitEnabled={settingsUndo.save.splitEnabled}
             planGestures={planGestures}
             planAvail={planAvail}
-            onTogglePlanAvail={onTogglePlanAvail}
-            onTogglePlanGestures={onTogglePlanGestures}
+            onTogglePlanAvail={settingsUndo.save.planAvail}
+            onTogglePlanGestures={settingsUndo.save.planGestures}
             tlSettings={tlSettings}
-            onSetTlSetting={onSetTlSetting}
+            onSetTlSetting={settingsUndo.save.tlSetting}
             largeText={largeText}
-            onToggleLargeText={onToggleLargeText}
+            onToggleLargeText={settingsUndo.save.largeText}
             indoorTint={indoorTint}
-            onToggleIndoorTint={onToggleIndoorTint}
+            onToggleIndoorTint={settingsUndo.save.indoorTint}
             cellBook={cellBook}
-            onToggleCellBook={onToggleCellBook}
+            onToggleCellBook={settingsUndo.save.cellBook}
             vibrateOnDrag={vibrateOnDrag}
-            onToggleVibrate={onToggleVibrate}
+            onToggleVibrate={settingsUndo.save.vibrate}
             dragHold={dragHold}
-            onSetDragHold={onSetDragHold}
+            onSetDragHold={settingsUndo.save.dragHold}
             weekHours={weekHours}
-            onSaveDayHours={function(i,p){if(refused("hoursEdit"))return;saveDayHours(i,p);}}
-            onSaveAllDays={function(d){if(refused("hoursEdit"))return;saveAllDays(d);}}
+            onSaveDayHours={settingsUndo.save.dayHours}
+            onSaveAllDays={settingsUndo.save.allDays}
             exceptions={hourExceptions}
             onOpenSpecialDay={function(id){openSpecialDay(null,id||null);}}
             weekRange={weekRange()}
             splitHour={dayShifts.split}
             shiftsEnabled={dayShifts.enabled}
-            onSaveShifts={function(p){if(refused("hoursEdit"))return;saveDayShifts(p);}}
+            onSaveShifts={settingsUndo.save.shifts}
             optimizerCutoff={optimizerSettings.cutoff}
             optimizerAutoSwitch={optimizerSettings.autoSwitch}
-            onSaveOptimizer={saveOptimizerSettings}
+            onSaveOptimizer={settingsUndo.save.optimizer}
             bookingDefaults={bookingDefaults}
-            onSaveBookingDefaults={saveBookingDefaults}
+            onSaveBookingDefaults={settingsUndo.save.bookingDefaults}
             generalSettings={generalSettings}
-            onSaveGeneralSettings={saveGeneralSettings}
+            onSaveGeneralSettings={settingsUndo.save.general}
             onBackup={doBackup}
             backupStatus={backupStatus}
             recurring={recurring}
-            onSetRecurringEnabled={function(on){if(refused("recurringManage"))return;setRecurringEnabled(on);}}
-            onSetRecurringHorizon={function(w){if(refused("recurringManage"))return;setRecurringHorizon(w);}}
-            onUpdateRule={function(id,f){if(refused("recurringManage"))return;updateRule(id,f);}}
-            onRemoveRule={function(id){if(refused("recurringManage"))return;removeRule(id);}}
+            onSetRecurringEnabled={settingsUndo.save.recurringEnabled}
+            onSetRecurringHorizon={settingsUndo.save.recurringHorizon}
+            onUpdateRule={settingsUndo.save.updateRule}
+            onRemoveRule={settingsUndo.save.removeRule}
             layout={layout}
-            onSaveLayout={settingsUndo.saveLayoutStep}
+            onSaveLayout={settingsUndo.save.layout}
             bookings={bookings}
             waitlist={waitlist}
             onDeleteCustomer={deleteCustomer}
             guestTags={guestTags}
-            onSetCustomerTag={saveCustomerTag}
+            onSetCustomerTag={settingsUndo.save.customerTag}
             vouchers={vouchers}
             voucherDefaults={voucherDefaults}
             onIssueVoucher={function(a){return refused("voucherIssue")?{ok:false,error:"You don't have permission to issue vouchers."}:issueVoucher(a);}}
-            onVoidVoucher={function(c,on){return refused("voucherVoid")?false:voidVoucher(c,on);}}
-            onSaveVoucherDefaults={saveVoucherDefaults}
+            onVoidVoucher={settingsUndo.save.voidVoucher}
+            onSaveVoucherDefaults={settingsUndo.save.voucherDefaults}
             tagList={tagList}
-            onSaveTagList={function(l){return refused("settingsWrite")?false:saveTagList(l);}}
+            onSaveTagList={settingsUndo.save.tagList}
             tagError={tagError}
             onClearTagError={clearTagError}
             tab={settingsTab}
@@ -4581,12 +4708,12 @@ export function BookingApp({uid}){
             myUid={uid}
             roleRows={roleRows}
             enforceRoles={enforceRoles}
-            onSetEnforceRoles={setEnforceRoles}
+            onSetEnforceRoles={settingsUndo.save.enforceRoles}
             modules={modules}
             hasModule={hasModule}
-            onSetModule={setModuleEnabled}
+            onSetModule={settingsUndo.save.module}
             moduleWarning={moduleWarning}
-            onSetRole={setRole}
+            onSetRole={settingsUndo.save.role}
             onRemoveUser={removeUser}
             onInvite={inviteUser}
             onWithdrawInvite={withdrawInvite}
@@ -4597,16 +4724,16 @@ export function BookingApp({uid}){
             moreCrashes={crashes.more}
             customerSeek={customerSeek}
             activityRetentionDays={activityRetentionDays}
-            onSetActivityRetention={setActivityRetention}
+            onSetActivityRetention={settingsUndo.save.activityRetention}
             waRetentionDays={waRetentionDays}
-            onSetWaRetention={setWaRetention}
+            onSetWaRetention={settingsUndo.save.waRetention}
             reminders={reminders}
             onAddReminder={openNewReminder}
             onEditReminder={openEditReminder}
             onDeleteReminder={deleteReminder}
-            onToggleReminder={toggleReminderActive}
+            onToggleReminder={settingsUndo.save.reminderToggle}
             waSettings={waSettings}
-            onSaveWaSettings={saveWaSettings}
+            onSaveWaSettings={settingsUndo.save.waSettings}
             waLink={wa.waLink} /></Suspense></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmReminderDel}>{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
         // window.confirm which is blocked in sandboxed preview environments).
         // Renders on top of Settings in DOM order so it visually covers the list.
@@ -4622,7 +4749,7 @@ export function BookingApp({uid}){
         reminderEditor?<ReminderEditor
           draft={reminderEditor.draft}
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
-          onSave={saveReminderFromEditor}
+          onSave={settingsUndo.save.reminderSave}
           onCancel={requestCloseReminderEditor}
           isNew={reminderEditor.id==="new"} />:null}</ModalPresence><ModalPresence show={!!specialDay}>{/* v18.10.0: the special-day editor. Opened from Settings too, so it
           stacks above it the way the reminder editor does (z=250 vs 200). */
@@ -4631,8 +4758,8 @@ export function BookingApp({uid}){
           exceptions={hourExceptions}
           bookings={bookings}
           today={todayStr()}
-          onSave={function(id,d){if(refused("hoursEdit"))return false;return saveException(id,d);}}
-          onRemove={function(id){if(refused("hoursEdit"))return false;return removeException(id);}}
+          onSave={function(id,d){return settingsUndo.save.specialDay(id,d)||false;}}
+          onRemove={function(id){return settingsUndo.save.removeSpecialDay(id)||false;}}
           onDirty={setSpecialDirty}
           onClose={function(done){if(done)setSpecialDay(null);else requestCloseSpecialDay();}} /></Suspense></div>:null}</ModalPresence>{/* v18.0.0 phase 5 review: `whatsappOn &&`, not `showInbox`
           alone. Gating only the ENTRY POINTS left an inbox that was already open
@@ -4710,7 +4837,7 @@ export function BookingApp({uid}){
           selectedUid={rolesFor}
           myUid={uid}
           onSelect={setRolesFor}
-          onToggleCap={setCapability}
+          onToggleCap={settingsUndo.save.capability}
           onClose={function(){setRolesFor(null);}} /></Suspense></div>:null}</ModalPresence><ModalPresence show={!!activityOpen}>{// v18.0.0 session 8: the activity log — opened from the Admin tab, so it
         // sits above the Settings overlay on the same idiom as the capability
         // grid beside it: a positioned wrapper makes the stacking context and

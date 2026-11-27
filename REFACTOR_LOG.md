@@ -42568,3 +42568,201 @@ The review raised eight; each was checked before it was acted on.
 - **To ROADMAP, real but out of scope:** emptied join groups or cross-group combos coming back as the default's
   (pre-existing; the fix changes what is stored), rule keys staying positional after an Undo (cosmetic; the fix rekeys every
   row), and the phone footer growing 6px under a two-line pill (a look decision).
+
+## v18.20.0 — Undo across all of Settings
+
+**Date:** 2026-11-27 · **Branch:** `feat/v18.20.0-settings-undo`
+
+**Why:** Patryk, 2026-11-27, during v18.19.1: "all changes must be reversable by Undo button. These and in general all settings in
+Settings." v18.19.1 gave Settings → Layout its Undo; this version gives it to every other tab, as ONE history for the whole dialog,
+under his four rules (every step back to when Settings opened; taps on one control in a row as one step; the pill until Settings
+closes, naming the next step; refused with a reason when another device changed that node). The plan, with the inventory of every
+save path in Settings (its writer, node and guard) and his answers to four rounds of questions, is
+`/Users/patrykzychowicz/.claude/plans/sequential-baking-dijkstra-of-39f32d15-ba65-4519-9eb9-5ffb570a64d8.md`.
+**His decisions:** excluded are Delete customer, Issue voucher, every button that changes no setting (backup, the log's Open, Clear
+and crash download, WhatsApp's Disconnect and usage), and Admin's Remove person and invites; a person's level and capabilities, the
+whole App tab and a guest's tag taps are in; a refusal drops only that node's steps; the pill names a step's tab while you are on
+another; one node per step; standing bookings switched on and undone keep the bookings they made; the pill says the control's
+visible name and what happened; a retention Undo restores the number only; the phone footer is always the two-line pill's height.
+**No `SCHEMA` raise, no rules change**: nothing stored changes shape, and no node is added.
+
+### Commit 1 — one history, keyed by node
+
+- **`lib/settings-undo.js`**: a step is `{node, tab, before, after, label, paths}`. `recordStep(stack, step, describe)` merges only
+  within one NODE (same leaf, starting from the top's `after`, as before); `undoStep(stack, currentOf)` reads each node as stored
+  and, refusing, drops that node's steps and keeps the rest (`{refuse, rest}`); `pillText(step, tab, tabLabel)` leads with the
+  tab's name while you are on another.
+- **`lib/settings-undo-labels.js`** (new): what the pill calls a step, per node. Layout's sentences moved here unchanged
+  (`describeLayoutStep`); a node with no describer says "Setting changed".
+- **`hooks/useSettingsUndo.js`**: `nodes` maps a node family to an adapter (`value`, `restore`, optional `after`), and
+  `track(node, save)` wraps a save so it records. A save records through a state updater, so two saves in one handler both land.
+  Ctrl+Z stays off while a refusal is being said. App calls it below `useSettingsPanel`, for `settingsTab`.
+- **`tests/settings-undo.test.js`**: v18.19.1's 14 cases kept assertion for assertion (only the call shape changed), plus 5:
+  two nodes never merge, a node's taps merge across another node's step, Undo restores each node's own `before` newest first,
+  a refusal drops only its node's steps, and the tab prefix.
+- **On DEV (1440 × 900):** Layout's kitchen limit 3 → 4 → 5 is one step, "Kitchen limit changed"; on General the pill reads
+  "Layout · Kitchen limit changed"; Undo takes it back to 3, measured again 3 → 4 → Undo → 3.
+
+### Commit 2 — General
+
+- **What:** every General save records a step: opening hours, Copy to all days and special days (`settings/operatingHours`, with
+  a new `restoreHours`), shifts, the optimiser, booking defaults, general settings, and standing bookings (on, Generate ahead, a
+  rule paused, resumed or deleted). The writers return what they stored (`persist` returns `{week, exceptions}`; the others their
+  sanitized `next`; `saveRecurring` its `computed`), or a falsy value when a guard refused, so nothing is recorded. The hours'
+  refusal stays `false`, as `tests/special-days.test.js` pins and SpecialDayModal's `!== false` reads.
+- **The savers are handed to the hook** (`savers` → `settingsUndo.save.<name>`), not wrapped by a `track(...)` call in App's
+  JSX: each such call passed a closure over App's refs to a function called during render, which the React Compiler reports
+  (`react-hooks/refs`, lint 63 → 70, measured). The refusal's notice timer became a token in state for the same reason.
+- **`track` records nothing while Settings is closed** (the special-day editor also opens from the day itself).
+- **Labels** (`settings-undo-labels.js`): "Monday's hours changed", "Hours copied to all days", "Special day added", "Shifts
+  switched off", "Daily cutoff changed", "Booking duration 2 changed", "Larger parties' stay changed", "Running late switched
+  off", "Restaurant name changed", "Pinned country added", "Standing booking for Ana paused", among others; 3 tests.
+- **On DEV (1440 × 900):** Daily cutoff 15:00 → 17:00 in two taps is one step; Overlap warnings off, then Undo → on, Undo →
+  15:00. Refusal: a second tab raised the cutoff 16:00 → 17:00 under this tab's step; Undo said "Changed on another device,
+  can't undo" and left 17:00, and 3.5s later the pill named the Overlap warnings step below it, which Undo then took back.
+
+### Commit 3 — Customers
+
+- **What:** the tag list (`settings/tags`: add, rename, remove) and a guest's tag chips record steps. `saveTagList` keeps its
+  boolean (`tests/tags.test.js` pins it), so its adapter reads the list it stored with the writer's own `sanitizeTagList`. A guest's
+  tags are node `guestTags:<identity>`, read from App's `guestTagMap`; a tap's step is the set after it, and **Undo is the opposite
+  tap** through the same `saveCustomerTag` (Patryk), refused when the guest's tags changed elsewhere.
+- **A step may carry `ctx`**, what its sentence needs that the node does not hold, taken at the save (the adapter's `context`);
+  a merge keeps the first. Customers passes the guest's name as `onSetCustomerTag`'s third argument, which the save ignores.
+- **Labels:** "Tag “Nut allergy” added", "Tag “VIP” renamed", "VIP added for Ana", "VIP removed from Ana"; 3 tests, one of them
+  a tap and its tap back merging to nothing.
+- **On DEV:** Raúl Méndez's Vegan chip → "Vegan added for Raúl Méndez", Undo → unpressed; "Undo test" added to the guest tags →
+  "Tag “Undo test” added", Undo → the row folds away and the list is the five it was.
+
+### Commit 4 — Vouchers
+
+- **What:** Void and Reinstate (node `voucher:<CODE>`, compared by its stored `status` alone, since the per-child CAS stamps
+  differ on every echo; Undo calls `voidVoucher` the other way) and Default validity (`saveVoucherDefaults` now returns what it
+  stored). Issue stays outside (Patryk). Labels: "Voucher YFCN-ZPSX voided" / "… reinstated" (the button's word), "Default
+  validity changed".
+- **On DEV:** Void voucher YFCN-ZPSX → "Voucher YFCN-ZPSX voided"; Undo → the row reads open again.
+
+### Commit 5 — Reminders
+
+- **What:** add and edit (the ReminderEditor over Settings), pause / resume, and delete through its confirm, all on node
+  `reminders` (the whole list, `remindersRev`). `saveReminders` returns the list it stored and is exported, so an Undo writes
+  `before` back through it; `saveReminderFromEditor`, `doDeleteReminder` and `toggleReminderActive` return what they saved.
+  App's raw writer is `deleteReminderNow` and `doDeleteReminder` is now the tracked saver, so the confirm keeps its pinned
+  `if(armSettled())doDeleteReminder(confirmReminderDel);`. Labels name the reminder by its text, cut at a word to fit a
+  phone's pill: "Reminder “Coca-Cola order in the…” paused" / resumed / added / deleted / changed.
+- **On DEV:** paused "Coca-Cola order in the supplier chat" → the pill named it; Undo → active again. Deleted it through the
+  confirm → "… deleted"; Undo → 3 reminders, the reminder back and active, and the pill faded keeping its sentence.
+
+### Commit 6 — WhatsApp
+
+- **What:** Auto-archive and Auto-reply (node `settings/whatsapp`, `whatsappRev`); `saveWaSettings` returns what it stored,
+  null when the loaded guard refuses. Named by their sections' titles ("Auto-archive switched off"), since the switches' own
+  labels are a sentence each. Disconnect and Check usage stay outside (Patryk).
+- **On DEV:** Auto-archive off → "Auto-archive switched off"; Undo → on again, with no refusal or rev error in the console.
+  Auto-reply was left alone: DEV is the sandbox's database, and its auto-reply stays off until the rehearsal.
+
+### Commit 7 — App
+
+- **What:** every control in Settings → App, per account and per device, as node `app:<name>`: theme (Dark mode and
+  Automatic dark mode share `app:theme`, `"auto"` / `"dark"` / `"light"`), `app:appWidth` (`{width: the STORED width or null,
+  fit}`, so Fit to screen and the width stepper are one node), `app:timeline` (the whole `tlSettings`, since lowering Maximum
+  zoom clamps the other two), `app:dragHold`, and ten switches. Every setter in `useShellPrefs` now returns the value it set
+  (Dark mode's refusal while Automatic is on returns null), and two new functions read and write a pref by VALUE,
+  `shellPrefOf` and `setShellPref`: a second flip cannot take back a three-state theme or a fit that also stored a width. The
+  ten plain switches restore by one flip from the other value, which is setting it. Never refused: nothing else writes these
+  while Settings is open (an account's prefs reach another device only at sign-in). Split view switched off leaves the split,
+  as the switch does, and its Undo does not bring the split back (Patryk, 2026-11-27: keep it this way, as with the
+  bookings standing bookings already made). Two wiring pins (`drag-hold`, `app-width-fit`) now expect the
+  tracked saver.
+- **On DEV:** Fit to screen off → "Fit to screen switched off" (width 1050 stored), App width + → "App width changed"; Undo,
+  Undo → Fit on, and both `mgt-appwidth` keys gone again. Automatic dark mode on, Larger text on, Time shown behind the
+  now-line + + (one step, "… changed"); three Undos in order → light theme, Larger text off, 30 min with its key removed.
+
+### Commit 8 — Admin
+
+- **What:** Enforce roles, the module switches and the two retention windows (node `settings/admin`; `writeAdmin` returns
+  the node it stored, and a new `restoreAdmin` writes a whole one back through it), and a person's level and capabilities
+  (node `role:<uid>`, compared as `{role, extras, denies}`, never the per-child CAS stamps; `setRole` returns the row it
+  wrote). The capability grid is RolesModal, over Settings, and records into the same history. An Undo goes through
+  `setRole`, so `wouldRemoveOwnAdmin` still refuses one that would take your own admin access away. Remove person, Invite,
+  Withdraw and Apply invite stay outside (Patryk). Labels: "Enforce roles switched on", "Gift vouchers switched off" (the
+  module's own label), "Activity log retention changed", "Level changed for Rubén", "“Edit bookings” taken from Rubén".
+- **On DEV:** Rubén staff → manager, then the log's retention 365 → 90 days; Undo, Undo → 365, then staff. In the
+  capabilities window, Edit bookings off for Rubén; closed it → the pill named it; Undo → on again in the grid. Enforce roles
+  and the module switches were left alone on DEV (other accounts use it); their sentences are in the tests.
+
+### Commit 9 — the phone footer is always 46px
+
+- **What:** v18.19.1's /code-review measured the Settings footer growing 6px on a phone while a two-line pill showed (Close
+  40, the pill 46), and Patryk chose a footer that is always 46px there. The footer row takes `minHeight: 46` when
+  `isMobile`; wider, the pill is one line and fits the 40 Close sets. The ROADMAP entry is removed.
+- **On DEV:** at 375 × 812, the row reads 46 before any step, 46 with "Reminder “Coca-Cola order in the…” paused" showing,
+  and 46 after the Undo; the card's height did not move. At 1024 wide the row is still 40.
+
+### Commit 10 — fix: an Undo compares a value as RTDB stores it
+
+- **Found on DEV, writing the round-trip guard:** a new One-off reminder, then Undo → "Changed on another device, can't
+  undo". The step's `after` held `recurrence.days: []`; RTDB stores no empty array, so the echo came back without `days`, and
+  `reminders` has no sanitizer to put it back. Any node can meet it: a write of an empty array, object or null reads back
+  as absent.
+- **Fix:** `stableKey` (`lib/settings-undo.js`) compares a value as RTDB stores it: an empty array, an empty object and a
+  null count as absent, at any depth; `false`, `0`, `""` and array order still count. Three tests pin it, the reminder case
+  among them.
+- **On DEV:** a new One-off reminder "Undo probe two", Undo → taken back, no refusal. (The first probe, "Undo probe once",
+  stays on DEV from the refused attempt.)
+
+### Commit 11 — the guards, and the docs
+
+- **`tests/settings-undo-coverage.test.js`**, three guards:
+  1. **Wiring:** every handler App hands `<SettingsContent` is `settingsUndo.save.<name>` or in `NOT_UNDOABLE` with its reason
+     (the exclusions Patryk chose, the handlers that only open a modal, and the two that write nothing). The three modals over
+     Settings are pinned too (`RolesModal`'s `onToggleCap`, `ReminderEditor`'s `onSave`, the special-day save and remove), and
+     every `settingsUndo.save.<name>` App names must be among the savers. Proven: an untracked `onSaveWaSettings`, then
+     `onToggleCellBook`, each failed it by name.
+  2. **Round trip:** each node's sanitizer, applied to its own output as RTDB stores it, gives the same value back, for the
+     default and for a save that empties a list (a value that reads back different refuses every Undo of its node). Eleven
+     nodes plus Layout. Five private sanitizers are exported for it (`sanitizeShifts`, `sanitizeOptimizer`,
+     `sanitizeGeneral`, `sanitizeBookingDefaults`, `sanitizeWa`).
+  3. **Sentences:** every node family App records has a describer (`DESCRIBERS`, now exported), and one setting changed on
+     a keyed node gets its own sentence, never the node's catch-all. `phoneCountry` / `phonePrefix` are skipped: nothing in
+     Settings writes them since v18.2.0.
+- **Found while writing it:** `settings/admin` stores a module as `{enabled: true}`, not `true`, so commit 8's describer
+  would have called every module switch "switched off" (its test used the wrong shape too). Both are fixed, and the test now
+  uses the stored shape for both directions.
+- **Docs:** `src/hooks/CLAUDE.md` (the writers' return contract, `shellPrefOf` / `setShellPref`, the coverage test),
+  `src/lib/CLAUDE.md` (`stableKey`'s RTDB shape, the describer guard), `src/components/CLAUDE.md` (the 46px phone footer),
+  `tests/CLAUDE.md`, DESIGN.md's "Undo in Settings" (every tab, the tab prefix, the per-node refusal, the footer), the
+  GLOSSARY row, and the ROADMAP entry "Undo across the rest of Settings" removed.
+
+### /code-review fixes (the ship run)
+
+The review (`/code-review` at xhigh, over `origin/main...HEAD`) raised five; each was checked before it was acted on, and
+all five were fixed here, one commit each (Patryk, during the run: nothing goes to ROADMAP).
+- **Two controls on one leaf merged into one step** (measured with the real `recordStep`: a guest's VIP off then Allergy on,
+  Automatic dark mode off then Dark mode on, and a pinned country removed then another added each gave ONE step that one
+  Undo took back whole). A step now carries the saver that made it (`via`, the hook's saver name) and a merge needs the same
+  one; at a list's slot the item must be there before, between and after, unless the merge takes the step back to where it
+  started. `tests/settings-undo.test.js` +7. On DEV: Dark mode on, then Automatic on: two steps, each Undo its own switch.
+- **An Undo of a special day logged nothing**: `restoreHours` fell back on the weekday diff, which `settingsWriteEntry`
+  answers null for (measured). `hoursRestoreEntries` (`lib/activity.js`) logs the week's diff and each special day in
+  `specialDayEntry`'s words; `persist` takes one entry or a list. `tests/special-days.test.js` +2. On DEV: "removed a special
+  day · Fri 15.01.2027 · Closed · Undo log probe" in the log after the Undo (the probe stays on DEV as an add and a remove).
+- **A cancelled step faded with an older sentence**: a tap taking the only step back, and Close, faded with `u.text`, which
+  v18.20.0 keeps only for a pill naming no step. Measured on DEV: Tint indoor tables taken back by Undo, then Vibrate on
+  drag flipped twice, and the pill faded saying "Tint indoor tables switched off". Both now take the sentence from the step
+  that went away. **Disproved in part**: the review said the pill would also blink out with an empty sentence, but
+  `Presence` (atoms) keeps its last children while leaving, so an empty sentence fades the pill as it was.
+- **The pill faded in the refusal's look** (pre-existing since v18.19.1): the last Undo, a cancelled step and Close set
+  `undo: false` as it went off, and the toast draws its dot and button from that. Measured on DEV: the dot went from
+  `--text-muted` (#5a6474) to `--warn-text` (#8a4b0a) the frame after the last Undo, and the button went. `undo` is now the
+  pill's look, false only for a refusal; whether a press can act is the stack's length. On DEV the fade keeps the neutral
+  dot and the button, and a press during it changes nothing.
+- **An Undo the writer refused did nothing and said nothing**, and the step stayed on top (read from the code: a bookings
+  write held on a stale gap returns false, `usePersistence.js`, and `undo()` returned there). It is now said like a
+  conflict, "Couldn't undo that change", and that setting's steps go (`undoRefused`). On DEV, through a temporary forced
+  failure reverted before the commit: the sentence in amber, the setting unchanged, then the step left on another setting.
+- **Docs:** `src/lib/CLAUDE.md` (the merge rule, `undoRefused`), `src/hooks/CLAUDE.md` (`restoreHours` logs),
+  `src/components/CLAUDE.md` (`undo` is the pill's look), DESIGN.md's "Undo in Settings" (what one control is, the fade, the
+  writer's refusal).
+- **Gate at the ship run's head:** entry 152.65 kB gz (152.30 before the fixes) · 4922 tests · lint 0 errors, 63 warnings ·
+  style OK. No rules change, so no `test:rules`.

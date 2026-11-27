@@ -95,7 +95,9 @@ describe("in Settings → App", () => {
   });
   it("is handed down from App", () => {
     expect(appCode()).toContain("appWidthFit={appWidthFit}");
-    expect(appCode()).toContain("onToggleAppWidthFit={onToggleAppWidthFit}");
+    // v18.20.0: through Settings' Undo, which records the step and hands the tap on.
+    expect(appCode()).toContain("onToggleAppWidthFit={settingsUndo.save.appWidthFit}");
+    expect(appCode()).toContain('appWidthFit:["app:appWidth",onToggleAppWidthFit]');
     expect(settings).toContain("appWidthFit={appWidthFit} onToggleAppWidthFit={onToggleAppWidthFit}");
   });
 });

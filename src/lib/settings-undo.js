@@ -1,44 +1,81 @@
 // ── settings-undo ────────────────────────────────────────────────────────────
 // v18.19.1 (Patryk): every change made in Settings → Layout can be taken back,
-// one step at a time, back to when Settings opened. The pure core of that
-// history; `useSettingsUndo` keeps the stack, the pill and the timer.
+// one step at a time, back to when Settings opened. v18.20.0 (Patryk): every
+// tab, in ONE history for the whole dialog. The pure core of that history;
+// `useSettingsUndo` keeps the stack, the pill and the key, and what each step
+// is called is `lib/settings-undo-labels.js`.
 //
-// A step is `{before, after, label, paths}`: the stored layout before the save
-// and the layout the save wrote (both SANITIZED, so the two sides of every
-// comparison went through the same function), the sentence the pill shows, and
-// the leaf paths the save changed.
+// A step is `{node, tab, before, after, label, paths}`:
+//  • `node` — WHAT the step changed, one node per step (Patryk, v18.20.0: no
+//    Settings action writes two, and two writes to two nodes cannot be atomic,
+//    so a two-node step could be half undone). A settings path
+//    ("settings/general", "recurring", "reminders") or a family and a key
+//    ("voucher:1234", "guestTags:<identity>", "role:<uid>", "pref:theme").
+//  • `tab` — the Settings tab it was made on, so the pill can name it when
+//    you are on another (`pillText`).
+//  • `before` / `after` — the node's value before the save and the value the
+//    save wrote, both as the node's own writer SANITIZED it, so the two sides
+//    of every comparison went through the same function.
+//  • `label` — what the pill says; `paths` — the leaf paths that changed.
 //
 // Four rules, each Patryk's:
 //  • **Every step, back to when Settings opened.** The stack is forgotten when
 //    Settings closes (the hook's job).
-//  • **Taps on one stepper in a row are one step.** A save that changes exactly
-//    the one leaf the step on top changed is merged into it, keeping the older
-//    `before`. Merged back to where it started, the step is dropped: + then −
-//    is no change. The rule is by LEAF, never by time, so two taps a minute
-//    apart on one stepper still merge and a tap on another stepper never does.
-//  • **The pill names the next step** (`label` of the top).
+//  • **Taps on one control in a row are one step.** A save that changes exactly
+//    the one leaf the step on top changed, of the SAME node, made by the SAME
+//    saver (`via`), is merged into it, keeping the older `before`. Merged back
+//    to where it started, the step is dropped: + then − is no change. By LEAF,
+//    never by time, so two taps a minute apart on one stepper still merge and a
+//    tap on another stepper never does. Two things share a leaf without being
+//    one control (v18.20.0 /code-review, measured): two switches writing one
+//    value (Automatic dark mode, then Dark mode: `via` tells them apart), and a
+//    LIST's slot, which an item taken off the end and another put on both write
+//    (a guest's VIP off, then Allergy on). So at an array index the item must be
+//    there before, between and after (a stepper inside a row), or the merge must
+//    take the step back to where it started.
+//  • **The pill names the next step** (`pillText` of the top).
 //  • **Refuse and say why.** An Undo restores `before` only while the stored
-//    layout is still the `after` this device wrote. Anything else means another
+//    node is still the `after` this device wrote. Anything else means another
 //    device (or a refused write's rollback) changed it since, and restoring
-//    `before` would throw that change away. The refusal also empties the stack:
-//    every older step chains from the one refused, so none could pass either.
+//    `before` would throw that change away. The refusal drops every step of
+//    THAT node, since each older one chains from the one refused and none could
+//    pass either, and keeps the steps of every other node (v18.20.0, Patryk).
 
-// Key-order-insensitive JSON. RTDB hands an object's keys back SORTED, and
-// `sanitizeLayout` copies a map such as `comboCaps` in the order it was given,
-// so the echo of a write and the write itself can differ only in key order.
-// Arrays keep their order: in a layout, order is meaning.
-export function stableKey(v) {
-  if (Array.isArray(v)) return "[" + v.map(stableKey).join(",") + "]";
+// Key-order-insensitive JSON, of a value AS RTDB STORES IT. RTDB hands an
+// object's keys back SORTED, and a sanitizer copies a map such as `comboCaps` in
+// the order it was given, so the echo of a write and the write itself can
+// differ only in key order. Arrays keep their order: in a layout, order is
+// meaning. And RTDB stores no empty array, no empty object and no null
+// (v18.20.0, measured): a one-off reminder's `recurrence.days: []` came back
+// without `days`, and its Undo was refused as "Changed on another device". So
+// those count as absent, at any depth, which is the only equality the echo can
+// answer; a node whose reader has no sanitizer (`reminders`) needs nothing more.
+function asStored(v) {
+  if (v === null || v === undefined) return undefined;
+  if (Array.isArray(v)) {
+    const a = v.map(asStored);
+    return a.length ? a : undefined;
+  }
+  if (typeof v === "object") {
+    const o = {};
+    let any = false;
+    Object.keys(v).forEach(function (k) { const x = asStored(v[k]); if (x !== undefined) { o[k] = x; any = true; } });
+    return any ? o : undefined;
+  }
+  return v;
+}
+function keyOf(v) {
+  if (Array.isArray(v)) return "[" + v.map(keyOf).join(",") + "]";
   if (v && typeof v === "object") {
-    return "{" + Object.keys(v).sort().filter(function (k) { return v[k] !== undefined; })
-      .map(function (k) { return JSON.stringify(k) + ":" + stableKey(v[k]); }).join(",") + "}";
+    return "{" + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ":" + keyOf(v[k]); }).join(",") + "}";
   }
   return v === undefined ? "null" : JSON.stringify(v);
 }
+export function stableKey(v) { return keyOf(asStored(v)); }
 
 // Every leaf path at which `a` and `b` differ, as dotted strings
 // ("tables.3.capacity", "priorities.bands.1.prefer.0"). A path present on one
-// side only is a difference at that path.
+// side only is a difference at that path. Two different scalars differ at "".
 export function changedPaths(a, b, base) {
   const at = base || "";
   const out = [];
@@ -57,104 +94,81 @@ export function changedPaths(a, b, base) {
   return out;
 }
 
-function sameItems(a, b) {
-  if (a.length !== b.length) return false;
-  const ka = a.map(stableKey).sort();
-  const kb = b.map(stableKey).sort();
-  return ka.every(function (k, i) { return k === kb[i]; });
+// The value at a dotted path of `changedPaths` ("" is the value itself).
+function valueAt(v, path) {
+  if (!path) return v;
+  return path.split(".").reduce(function (o, k) { return o && typeof o === "object" ? o[k] : undefined; }, v);
+}
+// Is `path` a list's slot whose item comes or goes across the three values?
+// Then it is not one control (see the merge rule at the top).
+function slotComesOrGoes(path, values) {
+  if (!path) return false;
+  const i = path.lastIndexOf(".");
+  const parent = i < 0 ? "" : path.slice(0, i);
+  if (!values.some(function (v) { return Array.isArray(valueAt(v, parent)); })) return false;
+  return values.some(function (v) { return asStored(valueAt(v, path)) === undefined; });
 }
 
-// A list of things the optimiser reads: added, removed, reordered, or one item
-// changed ("Size rule 2 changed").
-function listLabel(one, many, a, b, paths, prefix) {
-  const x = Array.isArray(a) ? a : [];
-  const y = Array.isArray(b) ? b : [];
-  if (y.length > x.length) return one + " added";
-  if (y.length < x.length) return one + " removed";
-  if (sameItems(x, y)) return many + " reordered";
-  const idx = {};
-  paths.forEach(function (p) { if (p.indexOf(prefix + ".") === 0) idx[p.slice(prefix.length + 1).split(".")[0]] = true; });
-  const ids = Object.keys(idx);
-  return ids.length === 1 ? one + " " + (Number(ids[0]) + 1) + " changed" : many + " changed";
-}
-
-// The sentence the pill shows for a step. `before` and `after` are sanitized
-// layouts; `paths` is `changedPaths(before, after)`.
-export function describeStep(before, after, paths) {
-  const top = {};
-  paths.forEach(function (p) { top[p.split(".")[0]] = true; });
-  const pri = {};
-  paths.forEach(function (p) { if (p.indexOf("priorities.") === 0) pri[p.split(".")[1]] = true; });
-  const tb = before.tables || [];
-  const ta = after.tables || [];
-  if (top.tables) {
-    const ib = tb.map(function (t) { return t.id; });
-    const ia = ta.map(function (t) { return t.id; });
-    if (ia.length > ib.length) return "Table " + ia.filter(function (id) { return ib.indexOf(id) < 0; })[0] + " added";
-    if (ia.length < ib.length) return "Table " + ib.filter(function (id) { return ia.indexOf(id) < 0; })[0] + " removed";
-    const gone = ib.filter(function (id) { return ia.indexOf(id) < 0; });
-    if (gone.length === 1) return "Table " + gone[0] + " renamed";
-    if (sameItems(tb, ta)) return "Tables reordered";
-    const tp = paths.filter(function (p) { return p.indexOf("tables.") === 0; });
-    const rows = {};
-    tp.forEach(function (p) { rows[p.split(".")[1]] = true; });
-    const ri = Object.keys(rows);
-    if (ri.length === 1 && ta[ri[0]]) {
-      const t = ta[ri[0]];
-      if (tp.every(function (p) { return /\.zone$/.test(p); })) return "Table " + t.id + " moved " + (t.zone === "indoor" ? "indoors" : "outdoors");
-      if (tp.every(function (p) { return /\.capacity$/.test(p); })) return "Seat count of table " + t.id + " changed";
-    }
-    return "Tables changed";
-  }
-  if (top.kitchenLimit) return "Kitchen limit changed";
-  if (top.joinGroups) return "Joined tables changed";
-  if (top.comboCaps) return "Combo seats changed";
-  if (top.megaCombos) return listLabel("Cross-group combo", "Cross-group combos", before.megaCombos, after.megaCombos, paths, "megaCombos");
-  if (top.priorities) {
-    const pb = before.priorities || {};
-    const pa = after.priorities || {};
-    if (pri.bands) return listLabel("Size rule", "Size rules", pb.bands, pa.bands, paths, "priorities.bands");
-    if (pri.comboRules) return listLabel("Combo rule", "Combo rules", pb.comboRules, pa.comboRules, paths, "priorities.comboRules");
-    if (pri.swapRules) return listLabel("Swap rule", "Swap rules", pb.swapRules, pa.swapRules, paths, "priorities.swapRules");
-    if (pri.anchors) return listLabel("Anchor", "Anchors", pb.anchors, pa.anchors, paths, "priorities.anchors");
-    if (pri.mixedRequire) return "Cross-zone tables changed";
-    return "Table priorities changed";
-  }
-  if (top.pickRules) {
-    const rb = (before.pickRules && before.pickRules.rules) || [];
-    const ra = (after.pickRules && after.pickRules.rules) || [];
-    return listLabel("Pick rule", "Pick rules", rb, ra, paths, "pickRules.rules");
-  }
-  if (top.floorPlan) return "Floor plan changed";
-  return "Layout changed";
-}
-
-// The stack after a save of `after` over `before`. A save that changed nothing
-// leaves the stack as it was (the same array, so a caller can compare).
-export function recordStep(stack, before, after) {
-  const paths = changedPaths(before, after);
+// The stack after a save. `step` is `{node, tab, before, after, ctx?, via?}`;
+// `describe` is `(node, before, after, paths, ctx) → label` (`describeStep` in
+// lib/settings-undo-labels.js; passed in so this file names no node). `ctx` is
+// what a label needs that the node does not hold (a guest's name, a tag's
+// label), taken when the save was made; a merge keeps the first. `via` names
+// the saver that made it (the hook's saver name), so two controls writing one
+// leaf are never merged. A save that changed nothing leaves the stack as it was
+// (the same array, so a caller can compare).
+export function recordStep(stack, step, describe) {
+  const node = step.node;
+  const paths = changedPaths(step.before, step.after);
   if (!paths.length) return stack;
   const last = stack.length ? stack[stack.length - 1] : null;
   // …and only when this save starts from what the last one wrote: a value
   // another device set between two taps would otherwise vanish into the merge,
   // and the Undo would restore over it without the refusal.
-  if (last && paths.length === 1 && last.paths.length === 1 && last.paths[0] === paths[0]
-      && stableKey(before) === stableKey(last.after)) {
-    const merged = changedPaths(last.before, after);
+  if (last && last.node === node && last.via === step.via && paths.length === 1 && last.paths.length === 1 && last.paths[0] === paths[0]
+      && stableKey(step.before) === stableKey(last.after)) {
+    const merged = changedPaths(last.before, step.after);
     const rest = stack.slice(0, -1);
     if (!merged.length) return rest;
-    return rest.concat([{ before: last.before, after: after, label: describeStep(last.before, after, merged), paths: merged }]);
+    if (!slotComesOrGoes(paths[0], [last.before, step.before, step.after])) {
+      const ctx = last.ctx || step.ctx;
+      return rest.concat([{ node: node, tab: last.tab, via: last.via, before: last.before, after: step.after, ctx: ctx, label: describe(node, last.before, step.after, merged, ctx), paths: merged }]);
+    }
   }
-  return stack.concat([{ before: before, after: after, label: describeStep(before, after, paths), paths: paths }]);
+  return stack.concat([{ node: node, tab: step.tab, via: step.via, before: step.before, after: step.after, ctx: step.ctx, label: describe(node, step.before, step.after, paths, step.ctx), paths: paths }]);
 }
 
-// What an Undo press does, given the stack and the layout as stored now:
-// `{restore, rest}` to write `restore` and keep `rest`, or `{refuse}` with the
-// sentence the pill says instead. null when there is nothing to undo.
+// What an Undo press does, given the stack and `currentOf(node)`, the node as
+// stored now: `{restore, node, label, rest}` to write `restore` to `node` and
+// keep `rest`, or `{refuse, rest}` with the sentence the pill says instead and
+// the stack without that node's steps. null when there is nothing to undo.
 export const UNDO_CONFLICT = "Changed on another device, can't undo";
-export function undoStep(stack, current) {
+function withoutNode(stack, node) { return stack.filter(function (s) { return s.node !== node; }); }
+export function undoStep(stack, currentOf) {
   if (!stack.length) return null;
   const top = stack[stack.length - 1];
-  if (stableKey(current) !== stableKey(top.after)) return { refuse: UNDO_CONFLICT };
-  return { restore: top.before, label: top.label, rest: stack.slice(0, -1) };
+  if (stableKey(currentOf(top.node)) !== stableKey(top.after)) {
+    return { refuse: UNDO_CONFLICT, rest: withoutNode(stack, top.node) };
+  }
+  return { restore: top.before, node: top.node, label: top.label, rest: stack.slice(0, -1) };
+}
+
+// An Undo the node's own writer refused (its loaded guard, a capability, a
+// write held while the data may be stale, your own admin access): said like a
+// conflict, and that node's steps go, since each older one chains through the
+// refused one (v18.20.0 /code-review: it did nothing and said nothing, and the
+// step stayed on top). The writer says its own why where it has one.
+export const UNDO_FAILED = "Couldn't undo that change";
+export function undoRefused(stack, node) {
+  return { refuse: UNDO_FAILED, rest: withoutNode(stack, node) };
+}
+
+// What the pill says for `step` while Settings shows `tab`: the step's label,
+// led by the name of the tab it was made on when that is another (Patryk,
+// v18.20.0: "General · Monday's hours changed"). `tabLabel(id)` names a tab.
+export function pillText(step, tab, tabLabel) {
+  if (!step) return "";
+  if (!step.tab || step.tab === tab) return step.label;
+  const name = tabLabel ? tabLabel(step.tab) : "";
+  return name ? name + " · " + step.label : step.label;
 }

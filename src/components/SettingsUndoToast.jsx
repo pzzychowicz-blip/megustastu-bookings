@@ -16,7 +16,9 @@
 // The region is mounted with the footer, before the first step, because a
 // live region added together with its first message announces nothing.
 // `pill` is `{text, undo, show}` (useSettingsUndo); a pill that goes off keeps
-// its text, so it fades out still saying it.
+// its text, so it fades out still saying it. `undo` is its LOOK, not whether a
+// press can act: only a refusal is amber with no button (v18.20.0 /code-review),
+// and a press with nothing left does nothing.
 import { Toast, ToastPill, mkBtn } from "./atoms";
 import { T, H } from "../lib/constants";
 import { keyHint } from "../lib/shortcuts";

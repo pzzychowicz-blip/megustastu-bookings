@@ -81,6 +81,8 @@ describe("where it is wired", () => {
     expect(settings).toContain("dragHold={dragHold} onSetDragHold={onSetDragHold} />;");
     const app = appCode();
     expect(app).toContain("dragHold={dragHold}");
-    expect(app).toContain("onSetDragHold={onSetDragHold}");
+    // v18.20.0: through Settings' Undo, which records the step and hands the press on.
+    expect(app).toContain("onSetDragHold={settingsUndo.save.dragHold}");
+    expect(app).toContain('dragHold:["app:dragHold",onSetDragHold]');
   });
 });

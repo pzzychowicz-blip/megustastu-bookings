@@ -287,7 +287,7 @@ export function useShellPrefs({
     // /code-review: and it SAYS so. The other caller is ⇧D — global, and listed
     // in Shortcuts — and a bare return there read as a dead key for every
     // account that never chose a theme, which reads as Automatic by default.
-    if(themePref===undefined){flashRefusal("Dark mode follows this device while Automatic dark mode is on — turn it off in Settings → App.");return;}
+    if(themePref===undefined){flashRefusal("Dark mode follows this device while Automatic dark mode is on — turn it off in Settings → App.");return null;}
     const next=!isDark;
     // v17.6.0: localStorage stays as the PRE-MOUNT cache — index.html's
     // no-flash script reads this key before React mounts and long before
@@ -299,6 +299,7 @@ export function useShellPrefs({
     // must not persist — the override exists so a theme can be inspected without
     // touching the signed-in user's saved settings.
     if(!DEV_THEME_FORCED) saveUserPrefs({theme:next?"dark":"light"});
+    return next?"dark":"light";
   }
   // v18.0.0 session 7: the Automatic dark mode switch (Settings → App) — follow this
   // device's light/dark setting, live. Stored on the account as "auto", NEVER as
@@ -313,6 +314,7 @@ export function useShellPrefs({
       try{localStorage.setItem("mgt-theme",dark?"dark":"light");}catch{/* ignore */}
       setThemePref(dark);
       if(!DEV_THEME_FORCED) saveUserPrefs({theme:dark?"dark":"light"});
+      return dark?"dark":"light";
     }else{
       // localStorage holds "auto" rather than dropping the key: the no-flash
       // script already follows the OS for anything that is not "dark"/"light",
@@ -321,19 +323,23 @@ export function useShellPrefs({
       setThemePref(undefined);
       if(!DEV_THEME_FORCED) saveUserPrefs({theme:"auto"});
     }
+    return "auto";
   }
   const [vibrateOnDrag,setVibrateOnDrag]=useState(readVibrate);
   function onToggleVibrate(){
     const next=!vibrateOnDrag;
     setVibrate(next);
     setVibrateOnDrag(next);
+    return next;
   }
   // v18.17.0 (H): Drag hold, per device like Vibrate on drag. The block reads
   // the stored value itself when it sets its timer; this state is for Settings.
   const [dragHold,setDragHoldState]=useState(readDragHold);
   function onSetDragHold(id){
     setDragHold(id);
-    setDragHoldState(readDragHold());
+    const v=readDragHold();
+    setDragHoldState(v);
+    return v;
   }
   const [largeText,setLargeText]=useState(readLargeText);
   function onToggleLargeText(){
@@ -342,6 +348,7 @@ export function useShellPrefs({
       if(next) localStorage.setItem(LARGE_TEXT_KEY,"1"); else localStorage.removeItem(LARGE_TEXT_KEY);
     }catch{/* ignore */}
     setLargeText(next);
+    return next;
   }
   const [indoorTint,setIndoorTint]=useState(readIndoorTint);
   function onToggleIndoorTint(){
@@ -350,6 +357,7 @@ export function useShellPrefs({
       if(next) localStorage.removeItem(INDOOR_TINT_KEY); else localStorage.setItem(INDOOR_TINT_KEY,"0");
     }catch{/* ignore */}
     setIndoorTint(next);
+    return next;
   }
   const [cellBook,setCellBook]=useState(readCellBook);
   function onToggleCellBook(){
@@ -358,6 +366,7 @@ export function useShellPrefs({
       if(next) localStorage.removeItem(CELL_BOOK_KEY); else localStorage.setItem(CELL_BOOK_KEY,"0");
     }catch{/* ignore */}
     setCellBook(next);
+    return next;
   }
   // v17.0.0 correction: per-device app width (see readAppWidth above).
   const [appWidth,setAppWidth]=useState(readAppWidth);
@@ -373,12 +382,13 @@ export function useShellPrefs({
     setAppWidth(v);
     // A width chosen by hand, the stepper's or ⇧+ / ⇧−'s, is no longer the screen's.
     if(appWidthFit) storeFitOff();
+    return {width:v,fit:false};
   }
   function onToggleAppWidthFit(){
     if(!appWidthFit){
       try{localStorage.removeItem(APP_FIT_KEY);}catch{/* ignore */}
       setAppWidthFit(true);
-      return;
+      return {width:storedAppWidth(),fit:true};
     }
     // Off brings the stored width back. With none stored it keeps the width on
     // screen, which it stores, so the app does not jump to the old default (the
@@ -389,6 +399,7 @@ export function useShellPrefs({
       setAppWidth(v);
     }
     storeFitOff();
+    return {width:storedAppWidth(),fit:false};
   }
   // v17.1.0: per-device "Reduce animations" (Settings → General). Theme
   // pattern: localStorage["mgt-reduce-motion"]="1" + <html data-motion> —
@@ -405,6 +416,7 @@ export function useShellPrefs({
     setSwEnabledState(next);   // /code-review: was setSwEnabled_ — one underscore
                                // apart from the writer above, which is a name
                                // that only tells you it is not the other one.
+    return next;
   }
   // ── v17.14.0: the four boolean prefs, driven by PREF_SPEC ───────────────────
   // The localStorage convention (which value is stored, which key is dropped)
@@ -439,23 +451,23 @@ export function useShellPrefs({
     saveUserPrefs({[name]:next});   // v17.6.0: follows the account
     return next;
   }
-  function onToggleReduceMotion(){togglePref("reduceMotion",reduceMotion,setReduceMotion);}
+  function onToggleReduceMotion(){return togglePref("reduceMotion",reduceMotion,setReduceMotion);}
   // v17.1.2: per-device "Plan zoom & pan" (Settings → General). Theme pattern:
   // localStorage["mgt-plan-gestures"]="0" only when OFF (absent = on, the
   // default) — gates PlanView's wheel/pinch zoom, drag pan and double-tap reset.
   const [planGestures,setPlanGestures]=useState(function(){return readPrefLS("planGestures");});
-  function onTogglePlanGestures(){togglePref("planGestures",planGestures,setPlanGestures);}
+  function onTogglePlanGestures(){return togglePref("planGestures",planGestures,setPlanGestures);}
   // v18.2.0 phase 21: "Table availability" on the Plan view (Settings → App,
   // beside Plan zoom & pan). Default ON, so the planGestures shape: only "0"
   // is ever stored. Per person, synced — Patryk's choice over restaurant-wide.
   const [planAvail,setPlanAvail]=useState(function(){return readPrefLS("planAvail");});
-  function onTogglePlanAvail(){togglePref("planAvail",planAvail,setPlanAvail);}
+  function onTogglePlanAvail(){return togglePref("planAvail",planAvail,setPlanAvail);}
   // v17.5.0: per-device "Lock navigation" (Settings → General). Theme pattern,
   // but INVERTED vs planGestures because the default is OFF — only the non-
   // default value is ever stored, so localStorage["mgt-nav-lock"]="1" means on
   // and an absent key means off. Drives the `shellFixed` layout below.
   const [navLocked,setNavLocked]=useState(function(){return readPrefLS("navLocked");});
-  function onToggleNavLock(){togglePref("navLocked",navLocked,setNavLocked);}
+  function onToggleNavLock(){return togglePref("navLocked",navLocked,setNavLocked);}
   // v17.5.0: per-device Split View master switch (Settings → General).
   // v17.5.0 correction: default ON (was off), so the RMB / press-and-hold
   // gesture works out of the box. That puts it back on the house convention —
@@ -466,9 +478,11 @@ export function useShellPrefs({
   function onToggleSplitEnabled(){
     // Only the SWITCH syncs; the saved split LAYOUT (which two views + ratio)
     // stays per-device — PREF_SPEC drops that key, see useUserPrefs.js.
-    if(!togglePref("splitEnabled",splitEnabled,setSplitEnabled)) setSplit(null);
+    const next=togglePref("splitEnabled",splitEnabled,setSplitEnabled);
+    if(!next) setSplit(null);
     // ^ turning the feature off must also leave any active split. React state,
     //   so it stays here rather than in the table.
+    return next;
   }
   // The active split, or null for a single view. Restored per-device.
   const [split,setSplit]=useState(readSplit);
@@ -606,7 +620,7 @@ export function useShellPrefs({
   }
   function onSetTlSetting(name,next){
     const b=TL_SETTING_BOUNDS[name];
-    if(!b) return;
+    if(!b) return null;
     let v=Math.max(b.min,Math.min(b.max,Math.round(next/b.step)*b.step));
     const out=Object.assign({},tlSettings);
     if(name==="maxZoom"){
@@ -620,6 +634,66 @@ export function useShellPrefs({
     }
     persistTl(name,v);
     setTlSettings(out);
+    return out;
+  }
+  // ── v18.20.0: Settings → App's Undo ─────────────────────────────────────────
+  // Every setter above returns the value it set (the writer contract Settings'
+  // Undo records by), and these two read and write a pref by VALUE, so an Undo
+  // sets what was there rather than flipping a switch: a flip cannot take back
+  // Automatic dark mode (three states) or Fit to screen (it also stores a width).
+  // `name` is the step's key: a PREF_SPEC boolean, a device boolean, or one of
+  // theme ("auto" / "dark" / "light"), appWidth ({width: the STORED width or
+  // null, fit}), timeline (the whole tlSettings, since lowering maxZoom clamps
+  // the other two) and dragHold.
+  const DEVICE_FLIPS={largeText:[largeText,onToggleLargeText],indoorTint:[indoorTint,onToggleIndoorTint],cellBook:[cellBook,onToggleCellBook],vibrateOnDrag:[vibrateOnDrag,onToggleVibrate],swEnabled:[swEnabled,onToggleSw]};
+  const ACCOUNT_SETS={reduceMotion:[reduceMotion,setReduceMotion],planGestures:[planGestures,setPlanGestures],planAvail:[planAvail,setPlanAvail],navLocked:[navLocked,setNavLocked],splitEnabled:[splitEnabled,setSplitEnabled]};
+  function shellPrefOf(name){
+    if(name==="theme") return themePref===undefined?"auto":themePref?"dark":"light";
+    if(name==="appWidth") return {width:storedAppWidth(),fit:appWidthFit};
+    if(name==="timeline") return tlSettings;
+    if(name==="dragHold") return dragHold;
+    if(ACCOUNT_SETS[name]) return ACCOUNT_SETS[name][0];
+    if(DEVICE_FLIPS[name]) return DEVICE_FLIPS[name][0];
+    return undefined;
+  }
+  function setShellPref(name,v){
+    if(name==="theme"){
+      try{localStorage.setItem("mgt-theme",v);}catch{/* ignore */}
+      setThemePref(v==="auto"?undefined:v==="dark");
+      if(!DEV_THEME_FORCED) saveUserPrefs({theme:v});
+      return true;
+    }
+    if(name==="appWidth"){
+      try{
+        if(v.width===null) localStorage.removeItem("mgt-appwidth"); else localStorage.setItem("mgt-appwidth",String(v.width));
+        if(v.fit) localStorage.removeItem(APP_FIT_KEY);
+      }catch{/* ignore */}
+      setAppWidth(readAppWidth());
+      // Off through storeFitOff, the one writer of the key's "0".
+      if(v.fit) setAppWidthFit(true); else storeFitOff();
+      return true;
+    }
+    if(name==="timeline"){
+      Object.keys(TL_SETTING_BOUNDS).forEach(function(k){ if(k in v) persistTl(k,v[k]); });
+      setTlSettings(Object.assign({},v));
+      return true;
+    }
+    if(name==="dragHold"){ onSetDragHold(v); return true; }
+    if(ACCOUNT_SETS[name]){
+      writePref(name,v);
+      ACCOUNT_SETS[name][1](v);
+      saveUserPrefs({[name]:v});
+      // Off leaves a split, as the switch does; on does not bring one back.
+      if(name==="splitEnabled"&&!v) setSplit(null);
+      return true;
+    }
+    if(DEVICE_FLIPS[name]){
+      // Each of these is a plain on/off kept by its own key, so one flip from
+      // the other value IS setting it.
+      if(DEVICE_FLIPS[name][0]!==v) DEVICE_FLIPS[name][1]();
+      return true;
+    }
+    return false;
   }
   // v17.14.0: turn a split stacked when the pane holding the Timeline is too
   // narrow for one. Shared by BOTH branches of App's pickView — the swap branch
@@ -668,6 +742,7 @@ export function useShellPrefs({
     cellBook, onToggleCellBook,
     vibrateOnDrag, onToggleVibrate,
     dragHold, onSetDragHold,
+    shellPrefOf, setShellPref,
     split, focusedPane, setFocusedPane, applySplit, fitTimeline,
     confirmSplit, swapSides, toggleSplitDir, exitSplit, setSplitRatio,
     splitSideBySideOk, shellFixed,
