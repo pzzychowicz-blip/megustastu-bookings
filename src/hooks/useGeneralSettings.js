@@ -120,7 +120,7 @@ function cleanText(raw, def, maxLen){
   return s || def;
 }
 
-function sanitizeGeneral(raw){
+export function sanitizeGeneral(raw){
   const src = raw && typeof raw === "object" ? raw : {};
   const d = DEFAULT_GENERAL_SETTINGS;
   // phonePrefix: always starts with "+", digits only after it. v18.1.0 raised

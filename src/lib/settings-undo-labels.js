@@ -248,7 +248,9 @@ export function describeAdminStep(before, after, paths) {
   if (k === "modules") {
     const ids = paths.map(function (p) { return p.split(".")[1]; }).filter(Boolean);
     const m = ids.length === 1 ? moduleMeta(ids[0]) : null;
-    return m ? switchLabel(m.label, (after.modules || {})[ids[0]] === true) : "Modules changed";
+    // Stored as `{vouchers: {enabled: true}}` (lib/modules.js' sanitizeModules).
+    const now = (after.modules || {})[ids[0]];
+    return m ? switchLabel(m.label, !!now && now.enabled === true) : "Modules changed";
   }
   if (k === "activityRetentionDays") return "Activity log retention changed";
   if (k === "waRetentionDays") return "WhatsApp retention changed";
@@ -322,7 +324,7 @@ export function describeRemindersStep(before, after) {
 // cannot name is still a step it can take back. `tests/settings-undo.test.js`
 // fails any node Settings records that falls through to it.
 export const FALLBACK_LABEL = "Setting changed";
-const DESCRIBERS = {
+export const DESCRIBERS = {
   "settings/layout": describeLayoutStep,
   "settings/operatingHours": describeHoursStep,
   "settings/dayShifts": describeShiftsStep,

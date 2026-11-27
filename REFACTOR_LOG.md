@@ -42709,3 +42709,26 @@ visible name and what happened; a retention Undo restores the number only; the p
   among them.
 - **On DEV:** a new One-off reminder "Undo probe two", Undo → taken back, no refusal. (The first probe, "Undo probe once",
   stays on DEV from the refused attempt.)
+
+### Commit 11 — the guards, and the docs
+
+- **`tests/settings-undo-coverage.test.js`**, three guards:
+  1. **Wiring:** every handler App hands `<SettingsContent` is `settingsUndo.save.<name>` or in `NOT_UNDOABLE` with its reason
+     (the exclusions Patryk chose, the handlers that only open a modal, and the two that write nothing). The three modals over
+     Settings are pinned too (`RolesModal`'s `onToggleCap`, `ReminderEditor`'s `onSave`, the special-day save and remove), and
+     every `settingsUndo.save.<name>` App names must be among the savers. Proven: an untracked `onSaveWaSettings`, then
+     `onToggleCellBook`, each failed it by name.
+  2. **Round trip:** each node's sanitizer, applied to its own output as RTDB stores it, gives the same value back, for the
+     default and for a save that empties a list (a value that reads back different refuses every Undo of its node). Eleven
+     nodes plus Layout. Five private sanitizers are exported for it (`sanitizeShifts`, `sanitizeOptimizer`,
+     `sanitizeGeneral`, `sanitizeBookingDefaults`, `sanitizeWa`).
+  3. **Sentences:** every node family App records has a describer (`DESCRIBERS`, now exported), and one setting changed on
+     a keyed node gets its own sentence, never the node's catch-all. `phoneCountry` / `phonePrefix` are skipped: nothing in
+     Settings writes them since v18.2.0.
+- **Found while writing it:** `settings/admin` stores a module as `{enabled: true}`, not `true`, so commit 8's describer
+  would have called every module switch "switched off" (its test used the wrong shape too). Both are fixed, and the test now
+  uses the stored shape for both directions.
+- **Docs:** `src/hooks/CLAUDE.md` (the writers' return contract, `shellPrefOf` / `setShellPref`, the coverage test),
+  `src/lib/CLAUDE.md` (`stableKey`'s RTDB shape, the describer guard), `src/components/CLAUDE.md` (the 46px phone footer),
+  `tests/CLAUDE.md`, DESIGN.md's "Undo in Settings" (every tab, the tab prefix, the per-node refusal, the footer), the
+  GLOSSARY row, and the ROADMAP entry "Undo across the rest of Settings" removed.

@@ -34,7 +34,7 @@ import { emitActivity } from "../lib/activitySink";
 // they want the optimizer to stop. So it's clamped to 0–24 (00:00–24:00) and is
 // NOT tied to weekRange (unlike the shift split), which would otherwise silently
 // rewrite it whenever opening hours change. Defensive against malformed data.
-function sanitizeOptimizer(raw){
+export function sanitizeOptimizer(raw){
   const src = raw && typeof raw === "object" ? raw : {};
   let c = Math.round(Number(src.cutoff));
   if(!Number.isFinite(c)) c = 15;

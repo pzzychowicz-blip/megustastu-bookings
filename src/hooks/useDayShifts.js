@@ -32,7 +32,7 @@ import { emitActivity } from "../lib/activitySink";
 // which would silently rewrite the split based on whichever day is being viewed
 // when this runs (a write-merge hazard). The Summary hides the shift chips on a
 // day whose window excludes the split. Defensive against malformed Firebase data.
-function sanitizeShifts(raw){
+export function sanitizeShifts(raw){
   const src = raw && typeof raw === "object" ? raw : {};
   const wr = weekRange();
   let s = Math.round(Number(src.split));

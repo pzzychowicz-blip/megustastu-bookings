@@ -294,11 +294,13 @@ describe("describeStep: Settings → App", () => {
 });
 
 describe("describeStep: Settings → Admin", () => {
-  const a = { v: 1, enforceRoles: false, modules: { vouchers: true, whatsapp: true }, activityRetentionDays: 365, waRetentionDays: 184 };
+  // The modules map as sanitizeModules stores it (lib/modules.js).
+  const a = { v: 1, enforceRoles: false, modules: { vouchers: { enabled: true }, whatsapp: { enabled: true } }, activityRetentionDays: 365, waRetentionDays: 184 };
   function say(node, b, x, ctx) { return describeAny(node, b, x, changedPaths(b, x), ctx); }
   it("the admin node: the switch, a module by its label, the two retentions", () => {
     expect(say("settings/admin", a, { ...a, enforceRoles: true })).toBe("Enforce roles switched on");
-    expect(say("settings/admin", a, { ...a, modules: { vouchers: false, whatsapp: true } })).toBe("Gift vouchers switched off");
+    expect(say("settings/admin", a, { ...a, modules: { vouchers: { enabled: false }, whatsapp: { enabled: true } } })).toBe("Gift vouchers switched off");
+    expect(say("settings/admin", { ...a, modules: { vouchers: { enabled: true }, whatsapp: { enabled: false } } }, a)).toBe("WhatsApp inbox switched on");
     expect(say("settings/admin", a, { ...a, activityRetentionDays: 90 })).toBe("Activity log retention changed");
     expect(say("settings/admin", a, { ...a, waRetentionDays: 30 })).toBe("WhatsApp retention changed");
   });

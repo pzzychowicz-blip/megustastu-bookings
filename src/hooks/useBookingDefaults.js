@@ -89,7 +89,7 @@ function sanitizeTiers(raw){
   return out.slice(0, MAX_TIERS);
 }
 
-function sanitizeBookingDefaults(raw){
+export function sanitizeBookingDefaults(raw){
   const src = raw && typeof raw === "object" ? raw : {};
   const d = DEFAULT_BOOKING_DEFAULTS;
   // Legacy v16.1.0 flat shape ({t1Max,t1Dur,t2Max,t2Dur,t3Dur}) → tier list.

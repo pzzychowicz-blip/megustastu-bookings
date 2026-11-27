@@ -47,7 +47,7 @@ export const DEFAULT_WA_SETTINGS = {
   autoReply: true,
 };
 
-function sanitizeWa(raw) {
+export function sanitizeWa(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
   const since = Number(src.autoArchiveSince);
   return {

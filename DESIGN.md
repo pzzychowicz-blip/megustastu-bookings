@@ -2180,9 +2180,17 @@ arithmetic `lib/reorder.js`.
   rule 2, party of 3 to 4"); ↑/↓ moves the row one place (←/→ too in a chip row) and
   focus follows the row.
 
-### Undo in Settings (v18.19.1)
-Patryk, 2026-11-27: every change made in Settings → Layout can be taken back, one
-step a press, back to when Settings opened (`useSettingsUndo`, `lib/settings-undo.js`).
+### Undo in Settings (v18.19.1, every tab v18.20.0)
+Patryk, 2026-11-27: every change made in Settings can be taken back, one step a
+press, back to when Settings opened, in ONE history for the whole dialog
+(`useSettingsUndo`, `lib/settings-undo.js`). v18.19.1 covered Layout; v18.20.0 every
+tab, and the modals raised over Settings (special days, the reminder editor, the
+capabilities grid). Kept out, by Patryk: Delete customer, Issue voucher, Backup, the
+log, Remove person and the invitations, WhatsApp's Disconnect and Check usage.
+- **The sentence is the control's visible name and what happened** ("Daily cutoff
+  changed", "Vegan added for Raúl Méndez", "Voucher YFCN-ZPSX voided"), **with the
+  tab first while you are on another** ("General · Daily cutoff changed"). An Undo
+  does not switch tabs.
 - **The pill is the app's Undo pill** (`ToastPill`, a neutral dot, the sentence, an
   accent Undo), **in the dialog's footer, CENTRED, with Close in the right column**
   (`SettingsUndoToast`; the footer is a `1fr auto 1fr` grid). It was first drawn
@@ -2194,11 +2202,14 @@ step a press, back to when Settings opened (`useSettingsUndo`, `lib/settings-und
   it, so it moves when the card eases its height, and Tab reaches it.
 - **No timer.** It stays while there is a step to take back and names the NEXT one
   after each press; with none left it fades, keeping its text as it goes.
-- **Taps on one stepper in a row are one step**, matched by the leaf the save changed,
-  never by time. A step taken back to where it started is gone.
-- **Refuse and say why**: when the stored layout is no longer what this device wrote,
-  the pill says "Changed on another device, can't undo" in the warning tone, drops the
-  history, and fades after 3.5s, the refusal toast's time.
+- **Taps on one control in a row are one step**, matched by the setting and the leaf
+  the save changed, never by time. A step taken back to where it started is gone.
+- **Refuse and say why**: when the stored setting is no longer what this device wrote,
+  the pill says "Changed on another device, can't undo" in the warning tone for 3.5s,
+  the refusal toast's time, drops THAT setting's steps (each older one chains from
+  it) and then names the next step of another, or fades with none left.
+- **On a phone the footer is always 46px**, the two-line pill's height, so a step
+  arriving never grows the dialog (v18.20.0, Patryk; measured: Close 40, the pill 46).
 - Ctrl+Z / ⌘Z does the same while Settings is open, never inside a text box.
 
 ### Motion — two curves, three durations (v17.8.0)
