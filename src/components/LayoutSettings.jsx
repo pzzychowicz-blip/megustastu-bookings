@@ -87,6 +87,12 @@ const SEG_BTN = {
 // primary action everywhere else — --border-glass rim (an accent border on an
 // accent fill was invisible anyway), mkBtn's weight and letter-spacing.
 const ACT_BTN = mkBtn({ padding: "6px 12px", minHeight: 32, background: "var(--accent)" });
+// v18.19.1 (Patryk): the row every "+ Add …" button sits in, so it keeps the
+// right on every width (DESIGN.md, "A control keeps its side"). It was left,
+// under the last row of a list whose ✕s all sit at the right.
+const ADD_ROW = { display: "flex", justifyContent: "flex-end", marginTop: 8 };
+// The neutral face the five add buttons share.
+const ADD_BTN = { ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" };
 // A table id is joined into combo keys with "|" (comboKey), so it must be
 // non-empty AND must not contain that separator — otherwise the key can't be
 // split back to the right ids (comboCaps overrides + rename remap would corrupt).
@@ -680,9 +686,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             </Reveal>
           </div>
         ) : (
-          <button onClick={function () { setAdding(true); }} className="mgt-hover-scale"
-            title="Add a table to the layout"
-            style={{ marginTop: 10, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add table</button>
+          <div style={{ ...ADD_ROW, marginTop: 10 }}>
+            <button onClick={function () { setAdding(true); }} className="mgt-hover-scale"
+              title="Add a table to the layout"
+              style={ADD_BTN}>+ Add table</button>
+          </div>
         )}
       </Collapsible>
       <Collapsible
@@ -973,9 +981,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             </div>
           );
         })}
-        <button onClick={addBand} className="mgt-hover-scale"
-          title="Add a rule for another range of party sizes"
-          style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add size rule</button>
+        <div style={ADD_ROW}>
+          <button onClick={addBand} className="mgt-hover-scale"
+            title="Add a rule for another range of party sizes"
+            style={ADD_BTN}>+ Add size rule</button>
+        </div>
 
         {/* ── Combo preferences ── */}
         <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
@@ -1016,9 +1026,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               </div>
             );
           })}
-          <button onClick={addRule} disabled={!declared.length} className={declared.length ? "mgt-hover-scale" : undefined}
-            title="Add a preference for one combo and a range of party sizes"
-            style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)", opacity: declared.length ? 1 : 0.4, cursor: declared.length ? "pointer" : "not-allowed" }}>+ Add combo rule</button>
+          <div style={ADD_ROW}>
+            <button onClick={addRule} disabled={!declared.length} className={declared.length ? "mgt-hover-scale" : undefined}
+              title="Add a preference for one combo and a range of party sizes"
+              style={{ ...ADD_BTN, opacity: declared.length ? 1 : 0.4, cursor: declared.length ? "pointer" : "not-allowed" }}>+ Add combo rule</button>
+          </div>
         </div>
 
         {/* ── Cross-zone combos ── */}
@@ -1079,9 +1091,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               </div>
             );
           })}
-          <button onClick={addSwap} className="mgt-hover-scale"
-            title="Add a rule that frees a table from one party size for another"
-            style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add swap rule</button>
+          <div style={ADD_ROW}>
+            <button onClick={addSwap} className="mgt-hover-scale"
+              title="Add a rule that frees a table from one party size for another"
+              style={ADD_BTN}>+ Add swap rule</button>
+          </div>
         </div>
       </Collapsible>
       {/* v18.6.1: the pick rules. They were four table ids written into the two
@@ -1119,9 +1133,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             </div>
           );
         })}
-        <button onClick={addPickRule} className="mgt-hover-scale" disabled={tables.length < 3 || pickRules.length >= PICK_RULES_MAX}
-          title="Add a pair of tables that may be picked together only with others"
-          style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add rule</button>
+        <div style={ADD_ROW}>
+          <button onClick={addPickRule} className="mgt-hover-scale" disabled={tables.length < 3 || pickRules.length >= PICK_RULES_MAX}
+            title="Add a pair of tables that may be picked together only with others"
+            style={ADD_BTN}>+ Add rule</button>
+        </div>
       </Collapsible>
       {/* v17.0.0: Floor plan — the Plan view's geometry (settings/layout.floorPlan).
           Drag tables/doors, draw walls, per-table shape/size/rotation/chairs. */}

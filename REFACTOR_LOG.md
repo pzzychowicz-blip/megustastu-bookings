@@ -42414,3 +42414,26 @@ row, faded on `M.move`). The first row sits 1px lower under the section title th
 never resizes. Measured with the real `BannerRows` in a scratch root: a third row arriving held the content below at 202
 for the first frames, then eased to 243 (40px row + its line); the first row leaving held the survivor at 162 at 16ms,
 then eased to 121. `tests/motion.test.js` holds both; DESIGN.md's "Adding motion" says it as a rule.
+
+## v18.19.1 — Settings → Layout: drag to reorder, labels that stay with their steppers, add buttons on the right
+
+**Date:** 2026-11-27 · **Branch:** `fix/v18.19.1-layout-reorder`
+
+**Why:** Patryk, 2026-11-27, from a screenshot of a combo rule: the lists in Settings → Layout whose order the optimiser reads cannot
+be reordered easily; a rule's "priority" label and its stepper land on different lines; and the "+ Add …" buttons sit at the left.
+**Measured first** (`lib/booking-logic.js`): size rules are read first-match (`PRIORITIES.bands.find`), combo rules first-match per
+key and size (`_comboPri`), swap rules in list order (`optimise`'s `swapRules.forEach`), and inside a zone the tables' order is the
+order single tables are tried (`bandSingle`, `ALL_TABLES`) and the Timeline's row order (`buildLayout`, outdoor before indoor).
+Prefer, Anchors and the join groups' chips were ranked by ‹ › and ▲▼ only. He chose, in two rounds: a drag for all of them, by a
+grip that drags at once (↑/↓ on the focused grip); tables listed by zone and dragged within it; group chips within their group;
+every label kept with its stepper; all five add buttons on the right, the centred "Add a combo" box left as it is. Version 18.19.1
+is his. The plan is `/Users/patrykzychowicz/.claude/plans/i-want-a-patch-snug-widget-of-6a89cce3-cb06-44b4-aebf-4bd0e562d3d6.md`.
+**Behavioural change: yes**, each commit below. **No `SCHEMA` raise**: only the ORDER of arrays already stored changes, never a
+shape or a key.
+
+### Commit 1 — the add buttons keep the right
+
+- **What:** + Add table, + Add size rule, + Add combo rule, + Add swap rule and Tables picked together's + Add rule each sit in a
+  row of their own, `ADD_ROW` (`display: flex`, `justifyContent: flex-end`), so they keep the right on every width (DESIGN.md, "A
+  control keeps its side"). The five shared one hand-copied face, now `ADD_BTN`.
+- **On DEV (1440):** each button's right edge is its row's, 872, which is also the right edge of the rows' ✕ (size rule 1's).
