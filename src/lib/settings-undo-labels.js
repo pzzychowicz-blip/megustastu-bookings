@@ -12,6 +12,8 @@
 // sanitized values and `paths` their `changedPaths`.
 import { stableKey } from "./settings-undo";
 import { formatCode } from "./vouchers";
+import { moduleMeta } from "./modules";
+import { CAPABILITIES } from "./roles";
 
 function sameItems(a, b) {
   if (a.length !== b.length) return false;
@@ -235,6 +237,33 @@ export function describeWhatsAppStep(before, after, paths) {
   return keyedLabel(WA_NAMES, ["autoArchiveOnComplete", "autoReply"], "WhatsApp settings changed", before, after, paths);
 }
 
+// ── Settings → Admin ─────────────────────────────────────────────────────────
+// `settings/admin`: the enforcement switch, the module registry and the two
+// retention windows. A module is named by its own label ("WhatsApp inbox").
+export function describeAdminStep(before, after, paths) {
+  const keys = topKeys(paths).filter(function (k) { return k !== "v"; });
+  if (keys.length !== 1) return "Admin settings changed";
+  const k = keys[0];
+  if (k === "enforceRoles") return switchLabel("Enforce roles", after.enforceRoles === true);
+  if (k === "modules") {
+    const ids = paths.map(function (p) { return p.split(".")[1]; }).filter(Boolean);
+    const m = ids.length === 1 ? moduleMeta(ids[0]) : null;
+    return m ? switchLabel(m.label, (after.modules || {})[ids[0]] === true) : "Modules changed";
+  }
+  if (k === "activityRetentionDays") return "Activity log retention changed";
+  if (k === "waRetentionDays") return "WhatsApp retention changed";
+  return "Admin settings changed";
+}
+// `role:<uid>`, `{role, extras, denies}`. The person is named by `ctx.name`
+// (their name, else their email), the capability by its grid label.
+export function describeRoleStep(before, after, paths, node, ctx) {
+  const who = ctx.name || "this person";
+  if ((before || {}).role !== (after || {}).role) return "Level changed for " + who;
+  const cap = ctx.cap ? CAPABILITIES.find(function (c) { return c.id === ctx.cap; }) : null;
+  if (cap) return "“" + cap.label + "” " + (ctx.on ? "given to " : "taken from ") + who;
+  return "Access changed for " + who;
+}
+
 // ── Settings → App ───────────────────────────────────────────────────────────
 // Node "app:<name>", one per pref (useShellPrefs' shellPrefOf). Named by the
 // switch or the row's heading on screen.
@@ -308,6 +337,8 @@ const DESCRIBERS = {
   "reminders": describeRemindersStep,
   "settings/whatsapp": describeWhatsAppStep,
   "app": describeAppStep,
+  "settings/admin": describeAdminStep,
+  "role": describeRoleStep,
 };
 export function describeStep(node, before, after, paths, ctx) {
   const fam = node.indexOf(":") > 0 ? node.slice(0, node.indexOf(":")) : node;

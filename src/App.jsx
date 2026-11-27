@@ -1203,6 +1203,7 @@ export function BookingApp({uid}){
     // module-owned surface asks, and it is checked BEFORE `can`: a module that
     // is off is hidden from everybody including an admin.
     modules, hasModule, setModuleEnabled,
+    adminSettings, restoreAdmin, roles,
     setRole, setCapability, removeUser, inviteUser, withdrawInvite, applyInvite,
   } = useRoles({
     uid: uid,
@@ -2021,6 +2022,17 @@ export function BookingApp({uid}){
       // Settings → App: one node per pref, "app:<name>" (useShellPrefs' shellPrefOf
       // names them). Each setter returns the value it set, false included, so a
       // null alone is a refusal (Dark mode while Automatic is on).
+      // Settings → Admin. A person's row is compared on what the panel edits,
+      // never its stamps (the per-child CAS moves `updatedAt` on every echo).
+      "settings/admin": { value: function(){return adminSettings;}, restore: function(k,b){return !!restoreAdmin(b);} },
+      "role": {
+        value: function(k){const r=roles.find(function(x){return x.uid===k;});return r?{role:r.role,extras:r.extras,denies:r.denies}:null;},
+        after: function(k,ret){return ret&&ret.ok&&ret.row?{role:ret.row.role,extras:ret.row.extras,denies:ret.row.denies}:null;},
+        context: function(k,args){const r=roles.find(function(x){return x.uid===k;});return {name:r?(r.name||r.email):"",cap:typeof args[1]==="string"?args[1]:null,on:args[2]===true};},
+        // setRole, so wouldRemoveOwnAdmin still refuses an Undo that would take
+        // your own admin access away.
+        restore: function(k,b){return !!b&&setRole(k,b).ok===true;},
+      },
       "app": { value: function(k){return shellPrefOf(k);}, after: function(k,ret){return ret==null?null:ret;}, restore: function(k,b){return setShellPref(k,b);} },
       // Settings → Reminders: the whole list, on one rev pair.
       "reminders": { value: function(){return reminders;}, restore: function(k,b){return !!saveReminders(b);} },
@@ -2068,6 +2080,11 @@ export function BookingApp({uid}){
       voidVoucher:[function(code){const c=normalizeCode(code);return c?"voucher:"+c:null;},function(c,on){return refused("voucherVoid")?false:voidVoucher(c,on);}],
       voucherDefaults:["settings/voucherDefaults",saveVoucherDefaults],
       waSettings:["settings/whatsapp",saveWaSettings],
+      // Settings → Admin (Remove person, Invite, Withdraw and Apply invite stay
+      // outside, Patryk). Capabilities are ticked in RolesModal, over Settings.
+      enforceRoles:["settings/admin",setEnforceRoles], module:["settings/admin",setModuleEnabled],
+      activityRetention:["settings/admin",setActivityRetention], waRetention:["settings/admin",setWaRetention],
+      role:[function(u){return u?"role:"+u:null;},setRole], capability:[function(u){return u?"role:"+u:null;},setCapability],
       // Settings → App
       dark:["app:theme",onToggleDark], autoTheme:["app:theme",onToggleAutoTheme],
       appWidth:["app:appWidth",onSetAppWidth], appWidthFit:["app:appWidth",onToggleAppWidthFit],
@@ -4687,12 +4704,12 @@ export function BookingApp({uid}){
             myUid={uid}
             roleRows={roleRows}
             enforceRoles={enforceRoles}
-            onSetEnforceRoles={setEnforceRoles}
+            onSetEnforceRoles={settingsUndo.save.enforceRoles}
             modules={modules}
             hasModule={hasModule}
-            onSetModule={setModuleEnabled}
+            onSetModule={settingsUndo.save.module}
             moduleWarning={moduleWarning}
-            onSetRole={setRole}
+            onSetRole={settingsUndo.save.role}
             onRemoveUser={removeUser}
             onInvite={inviteUser}
             onWithdrawInvite={withdrawInvite}
@@ -4703,9 +4720,9 @@ export function BookingApp({uid}){
             moreCrashes={crashes.more}
             customerSeek={customerSeek}
             activityRetentionDays={activityRetentionDays}
-            onSetActivityRetention={setActivityRetention}
+            onSetActivityRetention={settingsUndo.save.activityRetention}
             waRetentionDays={waRetentionDays}
-            onSetWaRetention={setWaRetention}
+            onSetWaRetention={settingsUndo.save.waRetention}
             reminders={reminders}
             onAddReminder={openNewReminder}
             onEditReminder={openEditReminder}
@@ -4816,7 +4833,7 @@ export function BookingApp({uid}){
           selectedUid={rolesFor}
           myUid={uid}
           onSelect={setRolesFor}
-          onToggleCap={setCapability}
+          onToggleCap={settingsUndo.save.capability}
           onClose={function(){setRolesFor(null);}} /></Suspense></div>:null}</ModalPresence><ModalPresence show={!!activityOpen}>{// v18.0.0 session 8: the activity log — opened from the Admin tab, so it
         // sits above the Settings overlay on the same idiom as the capability
         // grid beside it: a positioned wrapper makes the stacking context and

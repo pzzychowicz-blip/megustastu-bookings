@@ -42676,3 +42676,16 @@ visible name and what happened; a retention Undo restores the number only; the p
 - **On DEV:** Fit to screen off → "Fit to screen switched off" (width 1050 stored), App width + → "App width changed"; Undo,
   Undo → Fit on, and both `mgt-appwidth` keys gone again. Automatic dark mode on, Larger text on, Time shown behind the
   now-line + + (one step, "… changed"); three Undos in order → light theme, Larger text off, 30 min with its key removed.
+
+### Commit 8 — Admin
+
+- **What:** Enforce roles, the module switches and the two retention windows (node `settings/admin`; `writeAdmin` returns
+  the node it stored, and a new `restoreAdmin` writes a whole one back through it), and a person's level and capabilities
+  (node `role:<uid>`, compared as `{role, extras, denies}`, never the per-child CAS stamps; `setRole` returns the row it
+  wrote). The capability grid is RolesModal, over Settings, and records into the same history. An Undo goes through
+  `setRole`, so `wouldRemoveOwnAdmin` still refuses one that would take your own admin access away. Remove person, Invite,
+  Withdraw and Apply invite stay outside (Patryk). Labels: "Enforce roles switched on", "Gift vouchers switched off" (the
+  module's own label), "Activity log retention changed", "Level changed for Rubén", "“Edit bookings” taken from Rubén".
+- **On DEV:** Rubén staff → manager, then the log's retention 365 → 90 days; Undo, Undo → 365, then staff. In the
+  capabilities window, Edit bookings off for Rubén; closed it → the pill named it; Undo → on again in the grid. Enforce roles
+  and the module switches were left alone on DEV (other accounts use it); their sentences are in the tests.
