@@ -436,7 +436,9 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
     // A picker under a size rule is keyed by the rule's index, so a drag closes it.
     onStart: function () { setPriPick(null); },
     onCommit: function (list, from, to) {
-      if (list === "bands") { bandKeys.move(from, to); savePri({ bands: moveItem(priBands, from, to) }); }
+      // The picker is keyed by the rule's INDEX, so it closes here too: `onStart`
+      // only runs for a pointer drag, and ↑/↓ on a grip comes straight here.
+      if (list === "bands") { setPriPick(null); bandKeys.move(from, to); savePri({ bands: moveItem(priBands, from, to) }); }
       else if (list === "rules") { ruleKeys.move(from, to); savePri({ comboRules: moveItem(priRules, from, to) }); }
       else if (list === "swaps") { swapKeys.move(from, to); savePri({ swapRules: moveItem(priSwaps, from, to) }); }
       else if (list.indexOf("tables-") === 0) {
