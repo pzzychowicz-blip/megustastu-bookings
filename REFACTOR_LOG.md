@@ -42503,3 +42503,28 @@ shape or a key.
   an Escape mid-drag (preview 5, 3, 4, saved nothing, Settings stayed open), then → on chip 5 twice, focus following it.
 - **A table's grip reads "Move table 9 among the tables outdoors"**: "the outdoor tables" put a word from `count-label.test.js`'s
   list after a `+ "`, which the sweep reads as a count typed with a plain space.
+
+### Commit 6 — Undo for Settings → Layout
+
+Patryk, mid-version: "all changes must be reversable by Undo button". His answers: the Layout tab now and the rest of Settings
+as v18.20.0 (ROADMAP); the app's pill; every step back to when Settings opened, taps on one stepper in a row as one step;
+the pill until Settings closes, naming the next step; refuse and say why when another device changed the layout.
+
+- **`lib/settings-undo.js`**: `recordStep` (merge by LEAF path, never by time; a merge back to the start drops the step),
+  `undoStep` (restores `before` only while the stored layout is the `after` this device wrote, compared through `stableKey`,
+  since RTDB echoes keys sorted), `describeStep` (the pill's sentence). `tests/settings-undo.test.js`, 13 tests.
+- **`useSettingsUndo`**: records each Layout-tab save that `saveLayout` wrote (it now returns the sanitized config, or null),
+  undoes through `saveLayout` (its guards, rev CAS and activity entry), forgets on close, and takes Ctrl+Z / ⌘Z (a new
+  "Settings" section in the Shortcuts tab).
+- **Where the pill sits, measured and decided twice.** It was built in RefusalToast's place, floating above the dialog. On DEV
+  that put it over the tab body: y 158–204 over the Tables row at 998×507, y 276–322 over the Combos row at 375×812. Because
+  it stays until Settings closes, a tap on that row would hit Undo. Asked again, Patryk chose the footer, left of Close. It is
+  drawn INSIDE the footer, so it follows the card as a section opens and sits in the focus trap.
+- **On DEV:** two + taps on the kitchen limit → one step ("Kitchen limit changed"); a size rule moved by ↓ → "Size rules
+  reordered"; Ctrl+Z took the move back and the pill named the kitchen step; its Undo put the limit back to 3 and the pill
+  left. A second tab as the other device stepped the limit 4 → 5; the first tab's Undo then said "Changed on another device,
+  can't undo", kept 5 and faded after 3.5s, and the second tab's own Undo worked. Closing Settings and reopening showed no pill.
+  In the footer at 375×812, "Seat count of table 1 changed" wraps to two lines (pill 46px, Close 40px), clear of Close. Dark
+  theme at 998×507 checked. Escape still closes Settings with the pill up.
+- **The entry chunk grew 6.3 kB (1.9 kB gz)**: the three new modules minify to 6.75 kB on their own, and no other chunk moved
+  (`atoms` +0.1 kB, the shortcut row).

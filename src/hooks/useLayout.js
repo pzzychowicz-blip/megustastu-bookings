@@ -280,12 +280,12 @@ export function useLayout(){
   function saveLayout(next){
     if(!loaded.current){
       console.warn("[SAFE] Refused to write layout — initial read has not completed yet.");
-      return;
+      return null;
     }
     const cfg = sanitizeLayout(next);
     if(!cfg.tables.length){
       console.warn("[SAFE] Refused to write empty layout.");
-      return;
+      return null;
     }
     // `layout` is still the stored value here — `setLO` below is what replaces
     // it, and React state does not mutate in place.
@@ -296,6 +296,10 @@ export function useLayout(){
       const entry = settingsWriteEntry("settings/layout", prev, cfg);
       if (entry) emitActivity([entry]);
     });
+    // v18.19.1: what was written, sanitized, so Settings' Undo records the
+    // layout as stored rather than the patch it was asked for (null above: a
+    // refused save records nothing).
+    return cfg;
   }
 
   return { layout, saveLayout };

@@ -106,6 +106,7 @@ import { DateField, Overlay, ModalTitle, mkBtn, mkSolidBtn, mkDangerConfirm, Rev
 // v17.3.4: the two notification-layout render units (state stays in BookingApp).
 import { StatusToasts } from "./components/StatusToasts";
 import { RefusalToast } from "./components/RefusalToast";
+import { SettingsUndoToast } from "./components/SettingsUndoToast";
 import { toastBox } from "./lib/toast-box";
 import { planDrop, dropPreview, dropCheck, planRetime, retimePreview, retimeCheck } from "./lib/drop-plan";
 import { nextFreeAfter } from "./lib/cell-offer";
@@ -315,6 +316,7 @@ import { useUserPrefs } from "./hooks/useUserPrefs";
 // `readThemePref` is what SignedOutTheme mounts with.
 import { useShellPrefs, readTlSettings, readThemePref } from "./hooks/useShellPrefs";
 import { useLayout } from "./hooks/useLayout";
+import { useSettingsUndo } from "./hooks/useSettingsUndo";
 
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
 // `useReminders` owns reminders + reminderFires state, editor + delete-confirm
@@ -1283,6 +1285,9 @@ export function BookingApp({uid}){
   // TABLE_GROUPS bindings on each snapshot. saveLayout is wired to the Settings
   // Layout tab. See ./hooks/useLayout.js.
   const { layout, saveLayout } = useLayout();
+  // v18.19.1 (Patryk): every save the Layout tab makes is a step its Undo pill
+  // can take back, until Settings closes (lib/settings-undo.js).
+  const settingsUndo = useSettingsUndo({ open: showSettings, layout: layout, saveLayout: saveLayout });
   // ── WhatsApp Inbox hook (sandbox) ─────────────────────────────────────────
   // Owns conversations/messages/templates (DEV Firebase) + every inbox handler.
   // Form/view handoff setters flow in (controlled pattern, like useWalkin). The
@@ -4489,7 +4494,7 @@ export function BookingApp({uid}){
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.
-        showSettings?<Overlay /* @static-height the tab body eases inside SettingsContent's own AutoHeight watch={cur} */ onClose={requestCloseSettings} maxWidth={SETTINGS_CARD_W} anchor="top" footer={<div style={{display:"flex",justifyContent:"flex-end"}}><button
+        showSettings?<Overlay /* @static-height the tab body eases inside SettingsContent's own AutoHeight watch={cur} */ onClose={requestCloseSettings} maxWidth={SETTINGS_CARD_W} anchor="top" footer={<div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8}}><SettingsUndoToast pill={settingsUndo.pill} onUndo={settingsUndo.undo} /><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"8px 18px",background:BTN.quiet})}
               title={"Close Settings, asking first if a box holds an unsaved change"+keyHint("close")}
@@ -4552,7 +4557,7 @@ export function BookingApp({uid}){
             onUpdateRule={function(id,f){if(refused("recurringManage"))return;updateRule(id,f);}}
             onRemoveRule={function(id){if(refused("recurringManage"))return;removeRule(id);}}
             layout={layout}
-            onSaveLayout={saveLayout}
+            onSaveLayout={settingsUndo.saveLayoutStep}
             bookings={bookings}
             waitlist={waitlist}
             onDeleteCustomer={deleteCustomer}

@@ -56,6 +56,7 @@ git history, `git show 18f3ee66:src/components/CLAUDE.md`). The visual system is
 - **WaitAvailBanner.jsx** — the strip's "table free" section: one row per TODAY's waiting party a table fits (App's `waitAvail`), Book (`bookFromWaitlist`) and ✕, on `BannerRows`.
 
 - **RefusalToast.jsx** — the refusal toast in its own always-mounted layer at the app's root: `position: fixed`, z 400 (above the popups), `pointer-events: none`, its own `role="status"`, so it is never drawn under a modal. App's `flashRefusal` stores the box it floats in (`toastBox`); the timer turns `show` off without clearing text or box, so it fades in place. The pill is atoms' `ToastPill`.
+- **SettingsUndoToast.jsx** (v18.19.1) — the Settings Undo pill, in the dialog's FOOTER left of Close (App's `footer`), never a fixed layer: fixed, it covered a row of the tab body and stayed there (measured on DEV), and it could not follow the card's height. Its `role="status"` region mounts with the footer, before the first step. `pill` is `useSettingsUndo`'s `{text, undo, show}`.
 
 - **StatusToasts.jsx** — the transient-toast layer, rendering only (state stays in `BookingApp`): one-slot priority crossfade, the Undo pill. **Its always-mounted container IS the app's transient live region** (`role="status"`); never make it conditional.
 

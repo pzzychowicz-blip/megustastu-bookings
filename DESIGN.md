@@ -2175,6 +2175,25 @@ arithmetic `lib/reorder.js`.
   rule 2, party of 3 to 4"); ↑/↓ moves the row one place (←/→ too in a chip row) and
   focus follows the row.
 
+### Undo in Settings (v18.19.1)
+Patryk, 2026-11-27: every change made in Settings → Layout can be taken back, one
+step a press, back to when Settings opened (`useSettingsUndo`, `lib/settings-undo.js`).
+- **The pill is the app's Undo pill** (`ToastPill`, a neutral dot, the sentence, an
+  accent Undo), **in the dialog's footer, left of Close** (`SettingsUndoToast`). It
+  was first drawn where the refusal toast floats; measured on DEV, that covered a row
+  of the tab body on the phone and the tablet, and a pill that stays put turns a tap
+  on that row into an Undo. The footer's left side is empty at every width. Inside
+  the footer rather than fixed over it, so it moves when the card eases its height,
+  and Tab reaches it.
+- **No timer.** It stays while there is a step to take back and names the NEXT one
+  after each press; with none left it fades, keeping its text as it goes.
+- **Taps on one stepper in a row are one step**, matched by the leaf the save changed,
+  never by time. A step taken back to where it started is gone.
+- **Refuse and say why**: when the stored layout is no longer what this device wrote,
+  the pill says "Changed on another device, can't undo" in the warning tone, drops the
+  history, and fades after 3.5s, the refusal toast's time.
+- Ctrl+Z / ⌘Z does the same while Settings is open, never inside a text box.
+
 ### Motion — two curves, three durations (v17.8.0)
 
 Tokens in `src/index.css`'s `:root` (theme-agnostic, so NOT duplicated into the

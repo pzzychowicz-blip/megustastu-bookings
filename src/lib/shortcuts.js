@@ -370,6 +370,11 @@ export const OWN_SHORTCUT_SECTIONS = [
     { id: "manualSwap", caps: ["S"], label: "Toggle Swap busy" },
     { id: "manualClear", caps: ["C"], label: "Clear selected tables" },
   ] },
+  // v18.19.1: the Settings Undo pill's button, for a keyboard (the pill is
+  // outside the dialog's focus trap); useSettingsUndo handles it.
+  { title: "Settings", rows: [
+    { id: "settingsUndo", caps: ["Ctrl+Z", "⌘Z"], label: "Undo the last change in Settings → Layout" },
+  ] },
   { title: "Universal", rows: [
     { id: "close", caps: ["Esc"], label: "Close current window (or clear the List selection)" },
     { id: "confirm", caps: ["Enter"], label: "Confirm primary action" },
