@@ -94,7 +94,7 @@ export function useReminders({ nowMins, setWriteWarning, reminderEditor, setRemi
     if(!remindersLoaded.current){
       console.warn("[SAFE] Refused to write reminders — initial read has not completed yet.");
       if(!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
-      return;
+      return null;
     }
     // Captured ABOVE the mirror assignment — see useWaitlist for the reason.
     const prev=remindersRef.current;
@@ -107,6 +107,9 @@ export function useReminders({ nowMins, setWriteWarning, reminderEditor, setRemi
       const entry=settingsWriteEntry("reminders",prev,computed,{auto:isSilent===true});
       if(entry) emitActivity([entry]);
     });
+    // v18.20.0: what was stored, for Settings' Undo (null above: a refused
+    // save records nothing). The three savers below hand it on.
+    return computed;
   }
   function saveReminderFires(next){
     if(!reminderFiresLoaded.current){
@@ -202,31 +205,34 @@ export function useReminders({ nowMins, setWriteWarning, reminderEditor, setRemi
     setReminderEditor({id:r.id,draft:draft});
   }
   function saveReminderFromEditor(){
-    if(!reminderEditor) return;
+    if(!reminderEditor) return null;
     const d=reminderEditor.draft;
-    if(validateReminderDraft(d)) return; // UI button is disabled; guard here too.
+    if(validateReminderDraft(d)) return null; // UI button is disabled; guard here too.
     // Normalize: dedupe times, sort ascending, trim text.
     const uniqTimes=Array.from(new Set(d.times));uniqTimes.sort();
     const cleanDraft=Object.assign({},d,{times:uniqTimes,text:d.text.trim()});
     const id=reminderEditor.id;
+    let saved;
     if(id==="new"){
       const newR=Object.assign({id:genId(),createdAt:Date.now()},cleanDraft);
-      saveReminders(function(prev){return prev.concat([newR]);});
+      saved=saveReminders(function(prev){return prev.concat([newR]);});
     } else {
-      saveReminders(function(prev){return prev.map(function(r){return r.id===id?Object.assign({},r,cleanDraft):r;});});
+      saved=saveReminders(function(prev){return prev.map(function(r){return r.id===id?Object.assign({},r,cleanDraft):r;});});
     }
     setReminderEditor(null);
+    return saved;
   }
   function deleteReminder(id){
     // v14 p7 fix: open in-app confirmation. Actual removal happens in doDeleteReminder.
     setConfirmReminderDel(id);
   }
   function doDeleteReminder(id){
-    saveReminders(function(prev){return prev.filter(function(r){return r.id!==id;});});
+    const saved=saveReminders(function(prev){return prev.filter(function(r){return r.id!==id;});});
     setConfirmReminderDel(null);
+    return saved;
   }
   function toggleReminderActive(id){
-    saveReminders(function(prev){return prev.map(function(r){return r.id===id?Object.assign({},r,{active:!r.active}):r;});});
+    return saveReminders(function(prev){return prev.map(function(r){return r.id===id?Object.assign({},r,{active:!r.active}):r;});});
   }
 
   // v14 p7: reminder banners. Recomputed each render (cheap). nowMins ticks
@@ -290,6 +296,7 @@ export function useReminders({ nowMins, setWriteWarning, reminderEditor, setRemi
 
   return {
     reminders,
+    saveReminders,
     reminderDirty,
     saveReminderFromEditor,
     doDeleteReminder,

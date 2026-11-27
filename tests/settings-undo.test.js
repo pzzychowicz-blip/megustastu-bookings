@@ -248,3 +248,16 @@ describe("describeStep: Settings → Vouchers", () => {
     expect(describeAny("settings/voucherDefaults", { v: 1, expiryMonths: 12 }, { v: 1, expiryMonths: 6 }, ["expiryMonths"])).toBe("Default validity changed");
   });
 });
+
+describe("describeStep: Settings → Reminders", () => {
+  const r = { id: "r1", text: "Order the wine", active: true, times: ["11:00"] };
+  function say(b, a) { return describeAny("reminders", b, a, changedPaths(b, a)); }
+  it("added, deleted, paused, resumed and changed, named by the reminder's text", () => {
+    expect(say([], [r])).toBe("Reminder “Order the wine” added");
+    expect(say([r], [])).toBe("Reminder “Order the wine” deleted");
+    expect(say([r], [{ ...r, active: false }])).toBe("Reminder “Order the wine” paused");
+    expect(say([{ ...r, active: false }], [r])).toBe("Reminder “Order the wine” resumed");
+    expect(say([r], [{ ...r, times: ["12:00"] }])).toBe("Reminder “Order the wine” changed");
+    expect(say([], [{ ...r, text: "Call the fish supplier about Friday's order" }])).toBe("Reminder “Call the fish supplier about…” added");
+  });
+});

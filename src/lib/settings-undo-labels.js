@@ -227,6 +227,32 @@ export function describeVoucherStep(before, after, paths, node) {
 }
 export function describeVoucherDefaultsStep() { return "Default validity changed"; }
 
+// ── Settings → Reminders ─────────────────────────────────────────────────────
+// `reminders` is the whole list; a reminder is named by its text, cut to fit a
+// pill on a phone.
+function quoted(text) {
+  const t = String(text || "").trim();
+  if (!t) return "";
+  if (t.length <= 28) return " “" + t + "”";
+  // Cut at a word, so the pill never shows half of one.
+  const cut = t.slice(0, 29);
+  const sp = cut.lastIndexOf(" ");
+  return " “" + (sp > 0 ? cut.slice(0, sp) : t.slice(0, 27)).trimEnd() + "…”";
+}
+export function describeRemindersStep(before, after) {
+  const b = Array.isArray(before) ? before : [];
+  const a = Array.isArray(after) ? after : [];
+  const has = function (l, id) { return l.find(function (r) { return r.id === id; }); };
+  if (a.length > b.length) return "Reminder" + quoted((a.find(function (r) { return !has(b, r.id); }) || {}).text) + " added";
+  if (a.length < b.length) return "Reminder" + quoted((b.find(function (r) { return !has(a, r.id); }) || {}).text) + " deleted";
+  const moved = a.filter(function (r) { const o = has(b, r.id); return o && stableKey(o) !== stableKey(r); });
+  if (moved.length !== 1) return "Reminders changed";
+  const r = moved[0];
+  const o = has(b, r.id);
+  if (!!o.active !== !!r.active) return "Reminder" + quoted(r.text) + (r.active ? " resumed" : " paused");
+  return "Reminder" + quoted(r.text) + " changed";
+}
+
 // ── The one entry point ──────────────────────────────────────────────────────
 // A node with no describer of its own says "Setting changed": a step the pill
 // cannot name is still a step it can take back. `tests/settings-undo.test.js`
@@ -244,6 +270,7 @@ const DESCRIBERS = {
   "guestTags": describeGuestTagsStep,
   "voucher": describeVoucherStep,
   "settings/voucherDefaults": describeVoucherDefaultsStep,
+  "reminders": describeRemindersStep,
 };
 export function describeStep(node, before, after, paths, ctx) {
   const fam = node.indexOf(":") > 0 ? node.slice(0, node.indexOf(":")) : node;

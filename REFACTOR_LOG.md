@@ -42641,3 +42641,14 @@ visible name and what happened; a retention Undo restores the number only; the p
   stored). Issue stays outside (Patryk). Labels: "Voucher YFCN-ZPSX voided" / "… reinstated" (the button's word), "Default
   validity changed".
 - **On DEV:** Void voucher YFCN-ZPSX → "Voucher YFCN-ZPSX voided"; Undo → the row reads open again.
+
+### Commit 5 — Reminders
+
+- **What:** add and edit (the ReminderEditor over Settings), pause / resume, and delete through its confirm, all on node
+  `reminders` (the whole list, `remindersRev`). `saveReminders` returns the list it stored and is exported, so an Undo writes
+  `before` back through it; `saveReminderFromEditor`, `doDeleteReminder` and `toggleReminderActive` return what they saved.
+  App's raw writer is `deleteReminderNow` and `doDeleteReminder` is now the tracked saver, so the confirm keeps its pinned
+  `if(armSettled())doDeleteReminder(confirmReminderDel);`. Labels name the reminder by its text, cut at a word to fit a
+  phone's pill: "Reminder “Coca-Cola order in the…” paused" / resumed / added / deleted / changed.
+- **On DEV:** paused "Coca-Cola order in the supplier chat" → the pill named it; Undo → active again. Deleted it through the
+  confirm → "… deleted"; Undo → 3 reminders, the reminder back and active, and the pill faded keeping its sentence.

@@ -1382,9 +1382,10 @@ export function BookingApp({uid}){
   const setConfirmReminderDel = setModalFns.reminderdel;
   const {
     reminders,
+    saveReminders,
     reminderDirty,
     saveReminderFromEditor,
-    doDeleteReminder,
+    doDeleteReminder: deleteReminderNow,
     openNewReminder, openEditReminder,
     deleteReminder, toggleReminderActive,
     reminderBanners, reminderCount,
@@ -2015,6 +2016,8 @@ export function BookingApp({uid}){
         restore: function(k,b){return !!voidVoucher(k,b==="void");},
       },
       "settings/voucherDefaults": { value: function(){return voucherDefaults;}, restore: function(k,b){return !!saveVoucherDefaults(b);} },
+      // Settings → Reminders: the whole list, on one rev pair.
+      "reminders": { value: function(){return reminders;}, restore: function(k,b){return !!saveReminders(b);} },
       // A guest's tags live on their bookings (`guestTagMap`), keyed by
       // identity. A tap is one "+id" / "-id"; Undo is the opposite tap, through
       // the same save (Patryk). `ctx` names the guest and the tags for the pill.
@@ -2058,10 +2061,18 @@ export function BookingApp({uid}){
       customerTag:[function(key){return key?"guestTags:"+key:null;},saveCustomerTag],
       voidVoucher:[function(code){const c=normalizeCode(code);return c?"voucher:"+c:null;},function(c,on){return refused("voucherVoid")?false:voidVoucher(c,on);}],
       voucherDefaults:["settings/voucherDefaults",saveVoucherDefaults],
+      // The editor's Save and the delete confirm are reached by Enter too (the
+      // keyboard ctx below), so both doors take these, never the raw saves.
+      reminderSave:["reminders",saveReminderFromEditor],
+      reminderDelete:["reminders",deleteReminderNow],
+      reminderToggle:["reminders",toggleReminderActive],
       specialDay:["settings/operatingHours",function(i,x){if(refused("hoursEdit"))return false;return saveException(i,x);}],
       removeSpecialDay:["settings/operatingHours",function(i){if(refused("hoursEdit"))return false;return removeException(i);}],
     },
   });
+  // The reminder delete confirm's action, by both its doors (the button and
+  // Enter), is the tracked one; `deleteReminderNow` is the raw write.
+  const doDeleteReminder=settingsUndo.save.reminderDelete;
   // v17.0.0: "Delete customer" now ANONYMIZES instead of deleting — the
   // bookings remain for statistics (covers, day/range stats, phone-less
   // no-show tile) as name "Data removed" with phone/notes/history wiped and
@@ -2828,7 +2839,7 @@ export function BookingApp({uid}){
     can:can,hasModule:hasModule,setRolesFor:setRolesFor,setActivityOpen:setActivityOpen,requestDelete:requestDelete,
     // v14 p7: reminder editor state for Esc/Enter handling.
     reminderEditor:reminderEditor,
-    saveReminderFromEditor:saveReminderFromEditor,
+    saveReminderFromEditor:settingsUndo.save.reminderSave,
     // v14 p7 fix: reminder-delete confirm state.
     confirmReminderDel:confirmReminderDel,setConfirmReminderDel:setConfirmReminderDel,
     doDeleteReminder:doDeleteReminder,
@@ -4683,7 +4694,7 @@ export function BookingApp({uid}){
             onAddReminder={openNewReminder}
             onEditReminder={openEditReminder}
             onDeleteReminder={deleteReminder}
-            onToggleReminder={toggleReminderActive}
+            onToggleReminder={settingsUndo.save.reminderToggle}
             waSettings={waSettings}
             onSaveWaSettings={saveWaSettings}
             waLink={wa.waLink} /></Suspense></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmReminderDel}>{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
@@ -4701,7 +4712,7 @@ export function BookingApp({uid}){
         reminderEditor?<ReminderEditor
           draft={reminderEditor.draft}
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
-          onSave={saveReminderFromEditor}
+          onSave={settingsUndo.save.reminderSave}
           onCancel={requestCloseReminderEditor}
           isNew={reminderEditor.id==="new"} />:null}</ModalPresence><ModalPresence show={!!specialDay}>{/* v18.10.0: the special-day editor. Opened from Settings too, so it
           stacks above it the way the reminder editor does (z=250 vs 200). */
