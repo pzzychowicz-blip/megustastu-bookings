@@ -19,6 +19,32 @@ session and keeping it in sync.
 
 ## Deferred
 
+- **An emptied layout list comes back as the default's** (v18.19.1 /code-review, pre-existing).
+  Removing every cross-group combo or every join group saves an empty array, RTDB drops
+  it, and `sanitizeLayout` (`useLayout.js`) reads the absent field as `DEFAULT_LAYOUT`'s:
+  13 combos or 4 groups reappear on the echo, and Settings' Undo then says "Changed on
+  another device". The fix is the `v`-marker shape `priorities` and `pickRules` already
+  use, which changes what is stored (`SCHEMA` +1).
+
+- **Rule rows keep their keys by position after a change from outside** (v18.19.1
+  /code-review). `useListKeys` follows a drag and a remove made in the tab, but an Undo
+  (or another device) reorders or restores rules without telling it, so a restored rule
+  takes its neighbour's key and the last row is keyed as new. Cosmetic (which row's
+  entrance plays); the fix is keying rows by content, which changes how every row mounts.
+
+- **The Settings footer grows 6px on a phone while a two-line Undo pill shows**
+  (v18.19.1 /code-review, measured: pill 46px, Close 40px). A look decision for Patryk:
+  one line with an ellipsis, a shorter label, or a footer that is always 46px.
+
+- **Undo across the rest of Settings (v18.20.0, Patryk 2026-11-27).** v18.19.1 gave
+  Settings → Layout its Undo (`useSettingsUndo`, `lib/settings-undo.js`, the pill in the
+  dialog's footer). The rest of Settings is to follow on its own branch with its own plan:
+  every tab's saves, one history for the dialog, the same four rules (every step back to
+  when Settings opened, taps on one control merged, the pill until Settings closes,
+  refused with a reason when another device changed the node). Each node has its own
+  writer and guard (rev pairs, per-child CAS for `roles` / `vouchers`), so the plan must
+  first list them.
+
 - **`BookingApp` V2, V3 and V5** (`useInboxEntry`, `useWaitlistOffers`, `useBookingForm`). Designed in `MGT_Bookings_State_By_Domain_Design.md`, context folder. After WhatsApp go-live settles; each version needs its own approval and a fresh census first.
 
 - **The inbox's counts onto `CountBadge`.** The WhatsApp mark's unread count (`MARK_COUNT`, InboxPanel) and the menu rows' counts (`RowBadge`, ConversationMenu) are a small pill of their own (`T.micro`, carried from the old tabs) beside the atom `CountBadge` (`T.small`, 18px, a flat shadow). Moving them onto the atom changes how big the count looks, so it needs Patryk's eye first. Found by the v18.16.0 follow-up's `/code-review`.

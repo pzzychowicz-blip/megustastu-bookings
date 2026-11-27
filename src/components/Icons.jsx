@@ -92,6 +92,22 @@ export function ChevronDownIcon(props) { return <Chevron deg={90} {...props} />;
 export function ChevronLeftIcon(props) { return <Chevron deg={180} {...props} />; }
 export function ChevronUpIcon(props) { return <Chevron deg={270} {...props} />; }
 
+// v18.19.1: the drag grip (Settings → Layout's reorderable lists), six dots in
+// two columns, the mark every touch platform uses for "hold here and drag".
+// Filled dots, not stroked points: at 14px a round cap is 2.2 units across and
+// reads as dust; a radius of 1.6 stays a dot. Judged rasterised at IC.control.
+export function GripIcon(props) {
+  return (
+    <Svg {...props}>
+      {[6, 12, 18].map(function (y) {
+        return [9, 15].map(function (x) {
+          return <circle key={x + "-" + y} cx={x} cy={y} r={1.6} fill="currentColor" stroke="none" />;
+        });
+      })}
+    </Svg>
+  );
+}
+
 export function CloseIcon(props) {
   return (
     <Svg {...props}>

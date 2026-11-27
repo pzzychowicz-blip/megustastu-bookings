@@ -42414,3 +42414,157 @@ row, faded on `M.move`). The first row sits 1px lower under the section title th
 never resizes. Measured with the real `BannerRows` in a scratch root: a third row arriving held the content below at 202
 for the first frames, then eased to 243 (40px row + its line); the first row leaving held the survivor at 162 at 16ms,
 then eased to 121. `tests/motion.test.js` holds both; DESIGN.md's "Adding motion" says it as a rule.
+
+## v18.19.1 — Settings → Layout: drag to reorder, labels that stay with their steppers, add buttons on the right
+
+**Date:** 2026-11-27 · **Branch:** `fix/v18.19.1-layout-reorder`
+
+**Why:** Patryk, 2026-11-27, from a screenshot of a combo rule: the lists in Settings → Layout whose order the optimiser reads cannot
+be reordered easily; a rule's "priority" label and its stepper land on different lines; and the "+ Add …" buttons sit at the left.
+**Measured first** (`lib/booking-logic.js`): size rules are read first-match (`PRIORITIES.bands.find`), combo rules first-match per
+key and size (`_comboPri`), swap rules in list order (`optimise`'s `swapRules.forEach`), and inside a zone the tables' order is the
+order single tables are tried (`bandSingle`, `ALL_TABLES`) and the Timeline's row order (`buildLayout`, outdoor before indoor).
+Prefer, Anchors and the join groups' chips were ranked by ‹ › and ▲▼ only. He chose, in two rounds: a drag for all of them, by a
+grip that drags at once (↑/↓ on the focused grip); tables listed by zone and dragged within it; group chips within their group;
+every label kept with its stepper; all five add buttons on the right, the centred "Add a combo" box left as it is. Version 18.19.1
+is his. The plan is `/Users/patrykzychowicz/.claude/plans/i-want-a-patch-snug-widget-of-6a89cce3-cb06-44b4-aebf-4bd0e562d3d6.md`.
+**Behavioural change: yes**, each commit below. **No `SCHEMA` raise**: only the ORDER of arrays already stored changes, never a
+shape or a key.
+
+### Commit 1 — the add buttons keep the right
+
+- **What:** + Add table, + Add size rule, + Add combo rule, + Add swap rule and Tables picked together's + Add rule each sit in a
+  row of their own, `ADD_ROW` (`display: flex`, `justifyContent: flex-end`), so they keep the right on every width (DESIGN.md, "A
+  control keeps its side"). The five shared one hand-copied face, now `ADD_BTN`.
+- **On DEV (1440):** each button's right edge is its row's, 872, which is also the right edge of the rows' ✕ (size rule 1's).
+
+### Commit 2 — a label stays with its stepper
+
+- **What:** every label and the stepper it names is ONE flex item, `PAIR` (`inline-flex`, `flexShrink: 0`, `nowrap`): a size rule's
+  "Party of [n]" and "to [n]", a combo rule's "party [n]", "to [n]" and "priority [n]", a swap rule's "from a party of [n]" and "for a
+  party of [n]". A wrapping row breaks between pairs, never inside one. The screenshot's fault was a combo rule's "priority" at the end
+  of line 1 with its stepper starting line 2.
+- **On DEV (375 × 812, Table priorities open):** 54 pairs, every label on its stepper's line, none past its row's right edge.
+
+### Commit 3 — the pure reorder core
+
+- **`src/lib/reorder.js`**: `moveItem` (a new array, the same one when nothing moves), `slotAt` (where a dragged item lands: how
+  many of the other items' boxes come before its centre, in a column or a wrapping chip row), `zoneOrdered` and `moveWithinZone`
+  (the tables, outdoor first as the Timeline draws them; a drag never moves a table into the other zone).
+- **`slotAt` reads the boxes from the drag's START**, not from the moving preview, so the answer depends only on where the dragged
+  item is and cannot flicker between two slots.
+- **`tests/reorder.test.js`**, 17 tests: moves, identity on a no-op, every from/to pair round-tripped, a column of mixed heights,
+  a wrapping row on, between and across lines, and the zone rule (every table to every index keeps its zone and the list's length).
+
+### Commit 4 — drag to reorder: the mechanism, and the three rule lists
+
+- **What:** a grip (⋮⋮, `GripIcon`) leads every size, combo and swap rule. Drag it: the row lifts and follows the finger, the
+  others slide to the slot it is over, and on release it settles into place and the new order is saved once (`savePri`). Escape
+  eases it back and saves nothing. ↑/↓ on the focused grip moves the rule one place, and focus follows the rule. One commit with
+  its first callers rather than two, because a hook with no caller can be checked by nothing but its tests.
+- **`useDragReorder`** (`src/hooks`, new): one instance for every list in the tab. The design is DESIGN.md's new "Drag to reorder"
+  section; the rules it keeps are its header's and `hooks/CLAUDE.md`'s. **`useListKeys`** (new) gives the rules keys that follow
+  them, since a rule has no id.
+- **The grip is a local helper, not an atom** (the plan said a `DragGrip` atom): it has one caller file, and drawn there its
+  `title` and `@no-lift` sit on the tag the two style rules read.
+- **Three things found on DEV and fixed before the commit:**
+  - the lifted row's ground was `--bg-soft` alone, which is 95% opaque in light and 5% in dark, and the row it passed showed
+    through it (screenshot). It is now the row's two resting layers, `--bg-soft` over `--bg-sheet`.
+  - the settle waited on its animation's `finish`, which a hidden page never reaches, so a drop was not saved until the pane was
+    shown (measured: a real mouse drag left the order unchanged). A timeout now backs it; whichever comes first saves.
+  - the Escape listener was added with one render's function and removed with a later one's, so it never came off. It is kept
+    on the drag now.
+- **The React Compiler and the hook's object:** with `const dr = useDragReorder(…)` and `dr.order(…)` in render, lint reported
+  ten `react-hooks/refs` advisories (the object held a ref). A callback ref and a destructured result took that to zero.
+- **On DEV (1024 wide):** 20 grips, each named for its rule ("Move combo rule 4, 6 + 7 + 8"). ↓ on combo rule 1's grip: the list
+  read 3 + 4, 1 + 2, … and focus was on "Move combo rule 2, 1 + 2"; ↑ put it back. A paced pointer drag of size rule 1, 300px
+  down: at 120px the list still read 1, 2, 3, 4, at 240px the preview read 2, 1, 3, 4 with the row drawn at its pointer
+  (`translate(0px, 109px)` from its new slot), and the release saved 2, 1, 3, 4. The same drag with Escape at its end, sent to
+  the page body: the preview went back and nothing was saved, and Settings stayed open. (Sent to `window` itself, Escape also
+  closed Settings: at the target, the app's own listener runs in registration order. A key press always targets an element, so
+  that case is the test rig's; `stopImmediatePropagation` was added for it anyway.)
+
+### Commit 5 — the tables by zone, and the ranked chips
+
+- **Tables:** listed as the Timeline draws them, outdoor first (`zoneOrdered`), and dragged within their zone (two lists,
+  `tables-outdoor` and `tables-indoor`; a drop saves `moveWithinZone`). The row's zone switch snapshots both lists before it saves,
+  so the row slides into its new group.
+- **Chips:** Prefer, Anchors and a join group's chips drag by their id (`chipGrip`, the chip's label made a button, named "Move 9
+  in Prefer (size rule 3, …)"), within their own list or group. The ‹ › and ▲▼ buttons stay, and slide the chips too now.
+- **Two defects in commit 4's hook, found here and fixed in this commit:**
+  - **a drag started inside ~360ms of the last drop was torn down.** A settle calls `finish` from its animation's end AND from
+    the timeout behind it, and the second call ended whatever drag was live by then. Measured on DEV: back-to-back chip drags, the
+    fourth never lifted, and the Escape meant to cancel it closed Settings. `finish` now takes the drag it ends.
+  - **the boxes `slotAt` reads were measured mid-slide** when a grab came while the previous move's slide was running (in a hidden
+    pane, slides never end: a chip dragged 110px past its neighbour stayed put). The list's running slides are finished first.
+- **On DEV:** table 9 dragged 500px up went to the top of the outdoor tables and the Timeline's rows read 9, 1–8, 10–13; table 10
+  dragged 400px up stayed first among the indoor tables. ↓ on table 9's grip took it back one place a press. Anchors 13, 10 →
+  10, 13 by a 110px drag (chips are 88px wide, so a place is half a chip and the gap: 94px). Group 3 + 4 + 5: back-to-back drags,
+  an Escape mid-drag (preview 5, 3, 4, saved nothing, Settings stayed open), then → on chip 5 twice, focus following it.
+- **A table's grip reads "Move table 9 among the tables outdoors"**: "the outdoor tables" put a word from `count-label.test.js`'s
+  list after a `+ "`, which the sweep reads as a count typed with a plain space.
+
+### Commit 6 — Undo for Settings → Layout
+
+Patryk, mid-version: "all changes must be reversable by Undo button". His answers: the Layout tab now and the rest of Settings
+as v18.20.0 (ROADMAP); the app's pill; every step back to when Settings opened, taps on one stepper in a row as one step;
+the pill until Settings closes, naming the next step; refuse and say why when another device changed the layout.
+
+- **`lib/settings-undo.js`**: `recordStep` (merge by LEAF path, never by time; a merge back to the start drops the step),
+  `undoStep` (restores `before` only while the stored layout is the `after` this device wrote, compared through `stableKey`,
+  since RTDB echoes keys sorted), `describeStep` (the pill's sentence). `tests/settings-undo.test.js`, 13 tests.
+- **`useSettingsUndo`**: records each Layout-tab save that `saveLayout` wrote (it now returns the sanitized config, or null),
+  undoes through `saveLayout` (its guards, rev CAS and activity entry), forgets on close, and takes Ctrl+Z / ⌘Z (a new
+  "Settings" section in the Shortcuts tab).
+- **Where the pill sits, measured and decided twice.** It was built in RefusalToast's place, floating above the dialog. On DEV
+  that put it over the tab body: y 158–204 over the Tables row at 998×507, y 276–322 over the Combos row at 375×812. Because
+  it stays until Settings closes, a tap on that row would hit Undo. Asked again, Patryk chose the footer, left of Close. It is
+  drawn INSIDE the footer, so it follows the card as a section opens and sits in the focus trap.
+- **On DEV:** two + taps on the kitchen limit → one step ("Kitchen limit changed"); a size rule moved by ↓ → "Size rules
+  reordered"; Ctrl+Z took the move back and the pill named the kitchen step; its Undo put the limit back to 3 and the pill
+  left. A second tab as the other device stepped the limit 4 → 5; the first tab's Undo then said "Changed on another device,
+  can't undo", kept 5 and faded after 3.5s, and the second tab's own Undo worked. Closing Settings and reopening showed no pill.
+  In the footer at 375×812, "Seat count of table 1 changed" wraps to two lines (pill 46px, Close 40px), clear of Close. Dark
+  theme at 998×507 checked. Escape still closes Settings with the pill up.
+- **The entry chunk grew 6.3 kB (1.9 kB gz)**: the three new modules minify to 6.75 kB on their own, and no other chunk moved
+  (`atoms` +0.1 kB, the shortcut row).
+
+### Commit 7 — the Settings Undo pill centred (Patryk, at the ship run)
+
+- **"Floating Undo should be aligned to the center."** The footer is now a `1fr auto 1fr` grid: the pill in the middle
+  column, Close in the right one. Measured on DEV: at 1024 wide the pill's centre is the dialog's (512, 512); at 375 the
+  longest pill (251px, two lines) cannot be centred beside Close, so the grid moves it left and it ends 8px clear of Close
+  (277 against 285).
+
+### Commit 8 — a drag from bottom to top saves (Patryk, at the ship run)
+
+"When I try to drag from bottom to top it doesn't work." Measured, not guessed: a capture-phase recorder on every pointer
+event in the pane while Patryk dragged size rules by hand. Two faults:
+- **The drop was thrown away at release.** In both upward drags that failed, Chrome fired `lostpointercapture` (buttons 0)
+  BEFORE `pointerup`, in the same millisecond; the hook read a lost capture as a cancel and eased the row back (in one the
+  preview already showed the new order). A downward drag lost the capture MID-drag with the button down (buttons 1): the
+  preview reordered the list and React moved the dragged row's node, which drops its capture. Now a lost capture with the
+  button up is the release and saves; with it down the capture is taken back (`recapture`, in the handler and in the layout
+  pass that moved the node); only a capture that cannot be taken back while pressed cancels.
+- **An upward drag needed the pointer past the whole row above.** `slotAt` compared centres, and a size rule is tall and
+  grabbed at its top: one drag carried the row 190px up with no swap. In a column the leading edge now decides
+  (`slotAt`'s `edge`): up, once the row's top passes the middle of the row above; down, once its bottom passes the middle
+  of the row below. `tests/reorder.test.js` +3.
+- **Re-measured with Patryk's hand**: eleven drags, size rules and combo rules, up and down, every one saved, one of them
+  again with the lost capture reported before the release.
+
+### /code-review fixes (the ship run)
+
+The review raised eight; each was checked before it was acted on.
+- **Fixed, one commit each, all re-checked on DEV:**
+  - a keyboard move of a size rule closes the chip picker (it is keyed by the rule's index, and only a pointer drag
+    closed it); measured: picker open under rule 2, ↑ on its grip, the picker's 12 choices gone;
+  - a stepper merge needs the save to start from the last step's `after`, so a value another device set between two taps
+    keeps the Undo's refusal (`tests/settings-undo.test.js` +1);
+  - `finish` clears the drag BEFORE its save (src/CLAUDE.md, teardown first);
+  - a grip is not focused on mousedown (src/CLAUDE.md, a focused element is scrolled into view under the pointer);
+  - Ctrl+Z acts only while Settings is the top of the modal stack; measured: with the discard confirm up, Ctrl+Z left the
+    kitchen limit at 4, and the pill's Undo then took it back to 3.
+- **To ROADMAP, real but out of scope:** emptied join groups or cross-group combos coming back as the default's
+  (pre-existing; the fix changes what is stored), rule keys staying positional after an Undo (cosmetic; the fix rekeys every
+  row), and the phone footer growing 6px under a two-line pill (a look decision).

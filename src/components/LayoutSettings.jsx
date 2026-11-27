@@ -14,10 +14,13 @@ import { useState, useEffect } from "react";
 import { Section, Collapsible, Toggle, mkStep, mkBtn, mkDangerBtn, mkRemoveX, Reveal, SEG_TRACK, segStyle, TBadge } from "./atoms";
 import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
 import { AlertPanel, AlertRow } from "./AlertPanel";
-import { contiguousRuns, comboKey, activePickRules, PICK_RULES_MAX, R, T, FW, H, IC } from "../lib/constants";
-import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon, TrashIcon } from "./Icons";
+import { contiguousRuns, comboKey, activePickRules, PICK_RULES_MAX, R, T, FW, H, IC, M } from "../lib/constants";
+import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon, GripIcon, TrashIcon } from "./Icons";
 import { todayStr } from "../lib/day";
 import { countLabel, joinFirstMatters } from "../lib/booking-logic";
+import { moveItem, zoneOrdered, zoneTables, moveWithinZone } from "../lib/reorder";
+import { useDragReorder, liftStyle } from "../hooks/useDragReorder";
+import { useListKeys } from "../hooks/useListKeys";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
 // v17.8.0: was a private copy of the byte-identical style in Settings.jsx.
@@ -87,6 +90,31 @@ const SEG_BTN = {
 // primary action everywhere else — --border-glass rim (an accent border on an
 // accent fill was invisible anyway), mkBtn's weight and letter-spacing.
 const ACT_BTN = mkBtn({ padding: "6px 12px", minHeight: 32, background: "var(--accent)" });
+// v18.19.1 (Patryk): the row every "+ Add …" button sits in, so it keeps the
+// right on every width (DESIGN.md, "A control keeps its side"). It was left,
+// under the last row of a list whose ✕s all sit at the right.
+const ADD_ROW = { display: "flex", justifyContent: "flex-end", marginTop: 8 };
+// v18.19.1 (Patryk): a label and the stepper it names, as ONE flex item, so a
+// wrapping rule row breaks between pairs and never inside one. A combo rule's
+// "priority" stayed at the end of line 1 while its stepper started line 2.
+const PAIR = { display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0, whiteSpace: "nowrap" };
+// v18.19.1 (Patryk): the drag grip that leads a reorderable row
+// (useDragReorder). Quiet, like the editors' other small controls: no fill, the
+// muted ink, the chip's height so a row does not grow for it.
+const GRIP = {
+  background: "transparent", border: "none", padding: 0, width: 24, height: H.chip, flexShrink: 0,
+  borderRadius: R.pill, color: "var(--text-muted)",
+  display: "flex", alignItems: "center", justifyContent: "center"
+};
+// A chip's id as its grip: the chip's label, unchanged, made a button.
+const CHIP_GRIP = {
+  background: "transparent", border: "none", padding: "0 2px", borderRadius: R.pill,
+  fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", lineHeight: 1
+};
+// A reorderable row eases its lift in and out (the shadow and the ground).
+const LIFT_EASE = { transition: "box-shadow " + M.tap + ", background-color " + M.tap };
+// The neutral face the five add buttons share.
+const ADD_BTN = { ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" };
 // A table id is joined into combo keys with "|" (comboKey), so it must be
 // non-empty AND must not contain that separator — otherwise the key can't be
 // split back to the right ids (comboCaps overrides + rename remap would corrupt).
@@ -153,6 +181,9 @@ function Stepper({ value, onDec, onInc, disableDec, disableInc, label, descripti
 
 export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [], onDirty = null }) {
   const tables = (layout && Array.isArray(layout.tables)) ? layout.tables : [];
+  // v18.19.1 (Patryk): the tables as the Timeline draws them, outdoor first,
+  // which is what the list shows and what a table drag saves (lib/reorder.js).
+  const shownTables = zoneOrdered(tables);
   const kitchenLimit = layout && Number.isFinite(layout.kitchenLimit) ? layout.kitchenLimit : 3;
   const totalSeats = tables.reduce((a, t) => a + (Number(t.capacity) || 0), 0);
   const indoorCount = tables.filter((t) => t.zone === "indoor").length;
@@ -390,6 +421,65 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
   const [priPick, setPriPick] = useState(null);
   function samePick(kind, band) { return priPick && priPick.kind === kind && priPick.band === band; }
 
+  // ── v18.19.1 (Patryk): drag to reorder ─────────────────────────────────────
+  // The optimiser reads these lists in order: size rules first match wins,
+  // combo rules first match per combo and size, swap rules one after another.
+  // A grip leads each row (`gripEl`); a drop saves the new order once. The rules
+  // have no ids, so `useListKeys` gives each row a key that follows it when the
+  // list is reordered (a row keyed by index would keep its node and swap its
+  // content). One `useDragReorder` serves every list in the tab.
+  const bandKeys = useListKeys(priBands.length, "b");
+  const ruleKeys = useListKeys(priRules.length, "c");
+  const swapKeys = useListKeys(priSwaps.length, "s");
+  const { rootEl: dragRoot, gripProps, itemProps, isLifted, order: dragOrder, snapshot: dragSnapshot } = useDragReorder({
+    axisOf: function (list) { return list === "bands" || list === "rules" || list === "swaps" || list.indexOf("tables-") === 0 ? "y" : "wrap"; },
+    // A picker under a size rule is keyed by the rule's index, so a drag closes it.
+    onStart: function () { setPriPick(null); },
+    onCommit: function (list, from, to) {
+      // The picker is keyed by the rule's INDEX, so it closes here too: `onStart`
+      // only runs for a pointer drag, and ↑/↓ on a grip comes straight here.
+      if (list === "bands") { setPriPick(null); bandKeys.move(from, to); savePri({ bands: moveItem(priBands, from, to) }); }
+      else if (list === "rules") { ruleKeys.move(from, to); savePri({ comboRules: moveItem(priRules, from, to) }); }
+      else if (list === "swaps") { swapKeys.move(from, to); savePri({ swapRules: moveItem(priSwaps, from, to) }); }
+      else if (list.indexOf("tables-") === 0) {
+        // A table moves among its own zone's tables only (Patryk): the
+        // Timeline draws outdoor above indoor whatever is stored, so a place
+        // across zones would be saved and then ignored.
+        const zt = zoneTables(shownTables, list.slice(7));
+        if (zt[from]) onSaveLayout({ ...layout, tables: moveWithinZone(tables, zt[from].id, to) });
+      }
+      else if (list === "anchor") savePri({ anchors: moveItem(priAnchors, from, to) });
+      else if (list.indexOf("prefer-") === 0) {
+        const bi = Number(list.slice(7));
+        if (priBands[bi]) setBand(bi, { prefer: moveItem(priBands[bi].prefer || [], from, to) });
+      }
+      else if (list.indexOf("group-") === 0) {
+        const gi = Number(list.slice(6));
+        if (joinGroups[gi]) onSaveLayout({ ...layout, joinGroups: joinGroups.map(function (g, k) { return k === gi ? moveItem(g, from, to) : g; }) });
+      }
+    }
+  });
+  // The grip itself: a <button> with no text, so its name says what it moves.
+  function gripEl(list, i, count, key, name) {
+    const gp = gripProps(list, i, count, key);
+    return (
+      <button type="button" {...gp} /* @no-lift a drag grip moves with the finger, and a hover lift under a grab would make the row jump */
+        aria-label={"Move " + name}
+        title={"Drag to change the order, or focus it and press the up or down arrow"}
+        style={{ ...GRIP, ...gp.style }}><GripIcon size={IC.control} /></button>
+    );
+  }
+  // A chip's grip is its id: the chip is too small for a ⋮⋮ of its own, and the
+  // id is what a finger lands on. The visible id leads its name (WCAG 2.5.3).
+  function chipGrip(list, i, count, id, name, title) {
+    const gp = gripProps(list, i, count, id);
+    return (
+      <button type="button" {...gp} /* @no-lift the chip moves with the finger, and a hover lift under a grab would make it jump */
+        aria-label={name} title={title + ", or focus it and use the arrow keys"}
+        style={{ ...CHIP_GRIP, ...gp.style }}>{id}</button>
+    );
+  }
+
   function moveInList(list, idx, dir) {
     const j = idx + dir;
     if (j < 0 || j >= list.length) return list;
@@ -397,16 +487,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
     return n;
   }
   function setBand(i, patch) { savePri({ bands: priBands.map(function (b, idx) { return idx === i ? { ...b, ...patch } : b; }) }); }
-  function removeBand(i) { setPriPick(null); savePri({ bands: priBands.filter(function (_, idx) { return idx !== i; }) }); }
+  function removeBand(i) { setPriPick(null); bandKeys.remove(i); savePri({ bands: priBands.filter(function (_, idx) { return idx !== i; }) }); }
   function addBand() { savePri({ bands: priBands.concat([{ min: 2, max: 2, prefer: [], avoid: [], zoneOrder: [], combosFirst: false }]) }); }
   function setRule(i, patch) { savePri({ comboRules: priRules.map(function (r, idx) { return idx === i ? { ...r, ...patch } : r; }) }); }
-  function removeRule(i) { savePri({ comboRules: priRules.filter(function (_, idx) { return idx !== i; }) }); }
+  function removeRule(i) { ruleKeys.remove(i); savePri({ comboRules: priRules.filter(function (_, idx) { return idx !== i; }) }); }
   function addRule() {
     if (!declared.length) return;
     savePri({ comboRules: priRules.concat([{ key: declared[0].key, min: 2, max: 8, weight: 5, avoid: false }]) });
   }
   function setSwap(i, patch) { savePri({ swapRules: priSwaps.map(function (r, idx) { return idx === i ? { ...r, ...patch } : r; }) }); }
-  function removeSwap(i) { savePri({ swapRules: priSwaps.filter(function (_, idx) { return idx !== i; }) }); }
+  function removeSwap(i) { swapKeys.remove(i); savePri({ swapRules: priSwaps.filter(function (_, idx) { return idx !== i; }) }); }
   function addSwap() {
     if (!tables.length) return;
     savePri({ swapRules: priSwaps.concat([{ table: tables[0].id, fromSize: 4, toSize: 2 }]) });
@@ -440,21 +530,29 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
     const avail = full ? [] : tableIds.filter(function (id) { return list.indexOf(id) < 0 && skip.indexOf(id) < 0; });
     const open = samePick(kind, bandIdx);
     const last = list.length - 1;
+    // v18.19.1: a ranked list is also dragged, by the chip's id (`chipGrip`);
+    // its name in useDragReorder is per list ("prefer-2", "anchor").
+    const ln = kind === "anchor" ? "anchor" : kind + "-" + bandIdx;
+    const drawn = ranked ? dragOrder(ln, list.length) : list.map(function (_, i) { return i; });
     return (
       <div style={{ marginTop: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>{label}</span>
-          {list.length ? list.map(function (id, idx) {
+          {list.length ? drawn.map(function (idx) {
+            const id = list[idx];
+            const chipProps = ranked ? itemProps(ln, id) : null;
             return (
-              <span key={id} style={GCHIP}>
+              <span key={id} {...chipProps} style={{ ...GCHIP, ...(ranked ? LIFT_EASE : null), ...(ranked && isLifted(ln, id) ? { ...liftStyle, borderRadius: R.pill } : null) }}>
                 {ranked ? (
-                  <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { onChange(moveInList(list, idx, -1)); }} disabled={idx === 0}
+                  <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { dragSnapshot(ln); onChange(moveInList(list, idx, -1)); }} disabled={idx === 0}
                     title={"Move " + id + " up in " + label} aria-label={"Move " + id + " up in " + label + rowIn}
                     style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}><ChevronUpIcon size={IC.inline} /></button>
                 ) : null}
-                <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
+                {ranked
+                  ? chipGrip(ln, idx, list.length, id, "Move " + id + " in " + label + rowIn, "Drag " + id + " to another place in " + label)
+                  : <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>}
                 {ranked ? (
-                  <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { onChange(moveInList(list, idx, 1)); }} disabled={idx === last}
+                  <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { dragSnapshot(ln); onChange(moveInList(list, idx, 1)); }} disabled={idx === last}
                     title={"Move " + id + " down in " + label} aria-label={"Move " + id + " down in " + label + rowIn}
                     style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronDownIcon size={IC.inline} /></button>
                 ) : null}
@@ -489,7 +587,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
   }
 
   return (
-    <div>
+    <div ref={dragRoot}>
       <Collapsible
         title="Tables"
         subtitle="Each table's id, capacity and zone. Shared across all devices."
@@ -498,7 +596,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         <div style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", marginBottom: 2 }}>
           {outdoorCount} outdoor · {indoorCount} indoor · {totalSeats} seats total
         </div>
-        {tables.map(function (t) {
+        {/* v18.19.1 (Patryk): listed by zone, outdoor first, and dragged within
+            the zone: inside a zone this order is the order the optimiser tries
+            single tables in, and the Timeline's row order. Two lists, so a drag
+            cannot cross into the other zone; the row's zone switch moves it. */}
+        {["outdoor", "indoor"].reduce(function (rows, zone) {
+          const zt = zoneTables(shownTables, zone);
+          return rows.concat(dragOrder("tables-" + zone, zt.length).map(function (i) { return { t: zt[i], i: i, zone: zone, count: zt.length }; }));
+        }, []).map(function (row) {
+          const t = row.t;
+          const ln = "tables-" + row.zone;
           const cap = Number.isFinite(t.capacity) ? t.capacity : 2;
           const indoor = t.zone === "indoor";
           const editing = editId === t.id;
@@ -507,8 +614,9 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           // Computed once per row (orphanCount re-filters all bookings) — v15.0.1.
           const renameOrph = editing && editTrim !== t.id && editValid ? orphanCount(t.id) : 0;
           return (
-            <div key={t.id} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)" }}>
+            <div key={t.id} {...itemProps(ln, t.id)} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)", ...LIFT_EASE, ...(isLifted(ln, t.id) ? liftStyle : null) }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {gripEl(ln, row.i, row.count, t.id, "table " + t.id + " among the tables " + (row.zone === "indoor" ? "indoors" : "outdoors"))}
                 {editing ? (
                   <input /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={editVal} autoFocus aria-label={"Rename table " + t.id} title={"The new name for table " + t.id + "; Enter saves it, Esc cancels"} style={{ ...TXT_INP }}
                     onChange={function (e) { setEditVal(e.target.value); }}
@@ -541,7 +649,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   {["indoor", "outdoor"].map(function (z) {
                     const on = indoor === (z === "indoor");
                     return (
-                      <button key={z} onClick={function () { if (!on) updateTable(t.id, { zone: z }); }} className="mgt-hover-scale"
+                      <button key={z} onClick={function () { if (!on) { dragSnapshot(["tables-outdoor", "tables-indoor"]); updateTable(t.id, { zone: z }); } }} className="mgt-hover-scale"
                         aria-pressed={on}
                         aria-label={(z === "indoor" ? "Indoor" : "Outdoor") + " (table " + t.id + ")"}
                         title={"Put table " + t.id + " in the " + z + " zone"}
@@ -680,9 +788,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             </Reveal>
           </div>
         ) : (
-          <button onClick={function () { setAdding(true); }} className="mgt-hover-scale"
-            title="Add a table to the layout"
-            style={{ marginTop: 10, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add table</button>
+          <div style={{ ...ADD_ROW, marginTop: 10 }}>
+            <button onClick={function () { setAdding(true); }} className="mgt-hover-scale"
+              title="Add a table to the layout"
+              style={ADD_BTN}>+ Add table</button>
+          </div>
         )}
       </Collapsible>
       <Collapsible
@@ -699,20 +809,22 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           return (
             <div key={gi} style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 4 }}>
-                {group.map(function (id, idx) {
+                {dragOrder("group-" + gi, group.length).map(function (idx) {
+                  const id = group[idx];
+                  const ln = "group-" + gi;
                   return (
-                    <span key={id} style={GCHIP}>
+                    <span key={id} {...itemProps(ln, id)} style={{ ...GCHIP, ...LIFT_EASE, ...(isLifted(ln, id) ? { ...liftStyle, borderRadius: R.pill } : null) }}>
                       {/* v17.15.6: three icon-only buttons PER CHIP, and a chip
                           per table in every group — the densest instance of this
                           defect in the app. The table id alone disambiguates and
                           no group id is needed: `sanitizeLayout` enforces
                           single-group membership, so a table appears in exactly
                           one group. */}
-                      <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { moveInGroup(gi, idx, -1); }} disabled={idx === 0}
+                      <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { dragSnapshot("group-" + gi); moveInGroup(gi, idx, -1); }} disabled={idx === 0}
                         title={"Move " + id + " left in its joined group"} aria-label={"Move " + id + " left in its joined group"}
                         style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}><ChevronLeftIcon size={IC.inline} /></button>
-                      <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
-                      <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { moveInGroup(gi, idx, 1); }} disabled={idx === last}
+                      {chipGrip(ln, idx, group.length, id, "Move " + id + " in its joined group", "Drag " + id + " to another place in its joined group")}
+                      <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { dragSnapshot("group-" + gi); moveInGroup(gi, idx, 1); }} disabled={idx === last}
                         title={"Move " + id + " right in its joined group"} aria-label={"Move " + id + " right in its joined group"}
                         style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronRightIcon size={IC.inline} /></button>
                       <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { removeFromGroup(gi, id); }} title={"Take " + id + " out of its joined group"}
@@ -904,19 +1016,26 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
 
         {/* ── Party-size rules (bands) ── */}
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Party-size rules · {priBands.length}</div>
-        {priBands.map(function (b, i) {
+        {dragOrder("bands", priBands.length).map(function (i) {
+          const b = priBands[i];
+          const key = bandKeys.keys[i];
           const zm = zoneMode(b);
           // v18.18.0: the switch cannot change this rule's tables (joinFirstMatters).
           const switchIdle = !joinFirstMatters(b, tables);
           return (
-            <div key={i} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)", marginTop: 8 }}>
+            <div key={key} {...itemProps("bands", key)} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)", marginTop: 8, ...LIFT_EASE, ...(isLifted("bands", key) ? liftStyle : null) }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>Party of</span>
-                <Stepper value={b.min} disableDec={b.min <= 1} disableInc={b.min >= b.max} label={bandName(b, i) + ": smallest party size"} description={"the smallest party in size rule " + (i + 1) + ", one guest at a time"}
-                  onDec={function () { setBand(i, { min: b.min - 1 }); }} onInc={function () { setBand(i, { min: b.min + 1 }); }} />
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>to</span>
-                <Stepper value={b.max} disableDec={b.max <= b.min} disableInc={b.max >= 30} label={bandName(b, i) + ": largest party size"} description={"the largest party in size rule " + (i + 1) + ", one guest at a time"}
-                  onDec={function () { setBand(i, { max: b.max - 1 }); }} onInc={function () { setBand(i, { max: b.max + 1 }); }} />
+                {gripEl("bands", i, priBands.length, key, bandName(b, i))}
+                <span style={PAIR}>
+                  <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>Party of</span>
+                  <Stepper value={b.min} disableDec={b.min <= 1} disableInc={b.min >= b.max} label={bandName(b, i) + ": smallest party size"} description={"the smallest party in size rule " + (i + 1) + ", one guest at a time"}
+                    onDec={function () { setBand(i, { min: b.min - 1 }); }} onInc={function () { setBand(i, { min: b.min + 1 }); }} />
+                </span>
+                <span style={PAIR}>
+                  <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>to</span>
+                  <Stepper value={b.max} disableDec={b.max <= b.min} disableInc={b.max >= 30} label={bandName(b, i) + ": largest party size"} description={"the largest party in size rule " + (i + 1) + ", one guest at a time"}
+                    onDec={function () { setBand(i, { max: b.max - 1 }); }} onInc={function () { setBand(i, { max: b.max + 1 }); }} />
+                </span>
                 <button onClick={function () { removeBand(i); }} className="mgt-hover-scale"
                   title={"Remove size rule " + (i + 1)} aria-label={"Remove " + bandName(b, i)}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
@@ -973,9 +1092,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             </div>
           );
         })}
-        <button onClick={addBand} className="mgt-hover-scale"
-          title="Add a rule for another range of party sizes"
-          style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add size rule</button>
+        <div style={ADD_ROW}>
+          <button onClick={addBand} className="mgt-hover-scale"
+            title="Add a rule for another range of party sizes"
+            style={ADD_BTN}>+ Add size rule</button>
+        </div>
 
         {/* ── Combo preferences ── */}
         <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
@@ -983,20 +1104,27 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
             Which combo the optimiser reaches for first, by party size. Higher priority wins; “avoid” combos are used only when nothing else fits.
           </div>
-          {priRules.map(function (r, i) {
+          {dragOrder("rules", priRules.length).map(function (i, pos) {
+            const r = priRules[i];
+            const key = ruleKeys.keys[i];
             const known = declared.some(function (d) { return d.key === r.key; });
             return (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
+              <div key={key} {...itemProps("rules", key)} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: pos === 0 ? "1px solid transparent" : "1px solid var(--border-soft)", marginTop: 6, ...LIFT_EASE, ...(isLifted("rules", key) ? liftStyle : null) }}>
+                {gripEl("rules", i, priRules.length, key, comboName(r, i))}
                 <select /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={r.key} aria-label={"Combo for rule " + (i + 1)} title={"The joined tables combo rule " + (i + 1) + " is about"} onChange={function (e) { setRule(i, { key: e.target.value }); }} style={SEL_INP}>
                   {known ? null : <option value={r.key}>{String(r.key).split("|").join(" + ")}</option>}
                   {declared.map(function (d) { return <option key={d.key} value={d.key}>{d.label}</option>; })}
                 </select>
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>party</span>
-                <Stepper value={r.min} disableDec={r.min <= 1} disableInc={r.min >= r.max} label={comboName(r, i) + ": smallest party size"} description={"the smallest party combo rule " + (i + 1) + " applies to, one guest at a time"}
-                  onDec={function () { setRule(i, { min: r.min - 1 }); }} onInc={function () { setRule(i, { min: r.min + 1 }); }} />
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>to</span>
-                <Stepper value={r.max} disableDec={r.max <= r.min} disableInc={r.max >= 30} label={comboName(r, i) + ": largest party size"} description={"the largest party combo rule " + (i + 1) + " applies to, one guest at a time"}
-                  onDec={function () { setRule(i, { max: r.max - 1 }); }} onInc={function () { setRule(i, { max: r.max + 1 }); }} />
+                <span style={PAIR}>
+                  <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>party</span>
+                  <Stepper value={r.min} disableDec={r.min <= 1} disableInc={r.min >= r.max} label={comboName(r, i) + ": smallest party size"} description={"the smallest party combo rule " + (i + 1) + " applies to, one guest at a time"}
+                    onDec={function () { setRule(i, { min: r.min - 1 }); }} onInc={function () { setRule(i, { min: r.min + 1 }); }} />
+                </span>
+                <span style={PAIR}>
+                  <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>to</span>
+                  <Stepper value={r.max} disableDec={r.max <= r.min} disableInc={r.max >= 30} label={comboName(r, i) + ": largest party size"} description={"the largest party combo rule " + (i + 1) + " applies to, one guest at a time"}
+                    onDec={function () { setRule(i, { max: r.max - 1 }); }} onInc={function () { setRule(i, { max: r.max + 1 }); }} />
+                </span>
                 <button onClick={function () { setRule(i, { avoid: !r.avoid }); }} className="mgt-hover-scale"
                   title={r.avoid ? "Prefer combo rule " + (i + 1) + "'s tables again" : "Avoid combo rule " + (i + 1) + "'s tables, using them only as a last resort"}
                   aria-label={(r.avoid ? "Avoid" : "Prefer") + " (" + comboName(r, i) + ")"}
@@ -1004,11 +1132,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   {r.avoid ? "Avoid" : "Prefer"}
                 </button>
                 {r.avoid ? null : (
-                  <>
+                  <span style={PAIR}>
                     <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>priority</span>
                     <Stepper value={r.weight} disableDec={r.weight <= 1} disableInc={r.weight >= 10} label={comboName(r, i) + ": priority"} description={"combo rule " + (i + 1) + "'s priority, one step at a time"}
                       onDec={function () { setRule(i, { weight: r.weight - 1 }); }} onInc={function () { setRule(i, { weight: r.weight + 1 }); }} />
-                  </>
+                  </span>
                 )}
                 <button onClick={function () { removeRule(i); }} className="mgt-hover-scale"
                   title={"Remove combo rule " + (i + 1)} aria-label={"Remove " + comboName(r, i)}
@@ -1016,9 +1144,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
               </div>
             );
           })}
-          <button onClick={addRule} disabled={!declared.length} className={declared.length ? "mgt-hover-scale" : undefined}
-            title="Add a preference for one combo and a range of party sizes"
-            style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)", opacity: declared.length ? 1 : 0.4, cursor: declared.length ? "pointer" : "not-allowed" }}>+ Add combo rule</button>
+          <div style={ADD_ROW}>
+            <button onClick={addRule} disabled={!declared.length} className={declared.length ? "mgt-hover-scale" : undefined}
+              title="Add a preference for one combo and a range of party sizes"
+              style={{ ...ADD_BTN, opacity: declared.length ? 1 : 0.4, cursor: declared.length ? "pointer" : "not-allowed" }}>+ Add combo rule</button>
+          </div>
         </div>
 
         {/* ── Cross-zone combos ── */}
@@ -1059,29 +1189,38 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
             Free a table from a bigger party when a smaller overlapping party needs it (only applied when nobody loses a table).
           </div>
-          {priSwaps.map(function (r, i) {
+          {dragOrder("swaps", priSwaps.length).map(function (i, pos) {
+            const r = priSwaps[i];
+            const key = swapKeys.keys[i];
             return (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
+              <div key={key} {...itemProps("swaps", key)} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: pos === 0 ? "1px solid transparent" : "1px solid var(--border-soft)", marginTop: 6, ...LIFT_EASE, ...(isLifted("swaps", key) ? liftStyle : null) }}>
+                {gripEl("swaps", i, priSwaps.length, key, swapName(r, i))}
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>Free</span>
                 <select /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={r.table} aria-label={"Table to free, swap rule " + (i + 1)} title={"The table swap rule " + (i + 1) + " frees"} onChange={function (e) { setSwap(i, { table: e.target.value }); }} style={SEL_INP}>
                   {tableIds.indexOf(r.table) >= 0 ? null : <option value={r.table}>{r.table}</option>}
                   {tableIds.map(function (id) { return <option key={id} value={id}>{id}</option>; })}
                 </select>
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>from a party of</span>
-                <Stepper value={r.fromSize} disableDec={r.fromSize <= 1} disableInc={r.fromSize >= 30} label={swapName(r, i) + ": party size it is taken from"} description={"the party size swap rule " + (i + 1) + " takes table " + r.table + " from, one guest at a time"}
-                  onDec={function () { setSwap(i, { fromSize: r.fromSize - 1 }); }} onInc={function () { setSwap(i, { fromSize: r.fromSize + 1 }); }} />
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>for a party of</span>
-                <Stepper value={r.toSize} disableDec={r.toSize <= 1} disableInc={r.toSize >= 30} label={swapName(r, i) + ": party size it is given to"} description={"the party size swap rule " + (i + 1) + " gives table " + r.table + " to, one guest at a time"}
-                  onDec={function () { setSwap(i, { toSize: r.toSize - 1 }); }} onInc={function () { setSwap(i, { toSize: r.toSize + 1 }); }} />
+                <span style={PAIR}>
+                  <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>from a party of</span>
+                  <Stepper value={r.fromSize} disableDec={r.fromSize <= 1} disableInc={r.fromSize >= 30} label={swapName(r, i) + ": party size it is taken from"} description={"the party size swap rule " + (i + 1) + " takes table " + r.table + " from, one guest at a time"}
+                    onDec={function () { setSwap(i, { fromSize: r.fromSize - 1 }); }} onInc={function () { setSwap(i, { fromSize: r.fromSize + 1 }); }} />
+                </span>
+                <span style={PAIR}>
+                  <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>for a party of</span>
+                  <Stepper value={r.toSize} disableDec={r.toSize <= 1} disableInc={r.toSize >= 30} label={swapName(r, i) + ": party size it is given to"} description={"the party size swap rule " + (i + 1) + " gives table " + r.table + " to, one guest at a time"}
+                    onDec={function () { setSwap(i, { toSize: r.toSize - 1 }); }} onInc={function () { setSwap(i, { toSize: r.toSize + 1 }); }} />
+                </span>
                 <button onClick={function () { removeSwap(i); }} className="mgt-hover-scale"
                   title={"Remove swap rule " + (i + 1)} aria-label={"Remove " + swapName(r, i)}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
               </div>
             );
           })}
-          <button onClick={addSwap} className="mgt-hover-scale"
-            title="Add a rule that frees a table from one party size for another"
-            style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add swap rule</button>
+          <div style={ADD_ROW}>
+            <button onClick={addSwap} className="mgt-hover-scale"
+              title="Add a rule that frees a table from one party size for another"
+              style={ADD_BTN}>+ Add swap rule</button>
+          </div>
         </div>
       </Collapsible>
       {/* v18.6.1: the pick rules. They were four table ids written into the two
@@ -1119,9 +1258,11 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             </div>
           );
         })}
-        <button onClick={addPickRule} className="mgt-hover-scale" disabled={tables.length < 3 || pickRules.length >= PICK_RULES_MAX}
-          title="Add a pair of tables that may be picked together only with others"
-          style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add rule</button>
+        <div style={ADD_ROW}>
+          <button onClick={addPickRule} className="mgt-hover-scale" disabled={tables.length < 3 || pickRules.length >= PICK_RULES_MAX}
+            title="Add a pair of tables that may be picked together only with others"
+            style={ADD_BTN}>+ Add rule</button>
+        </div>
       </Collapsible>
       {/* v17.0.0: Floor plan — the Plan view's geometry (settings/layout.floorPlan).
           Drag tables/doors, draw walls, per-table shape/size/rotation/chairs. */}

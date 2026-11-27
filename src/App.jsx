@@ -106,6 +106,7 @@ import { DateField, Overlay, ModalTitle, mkBtn, mkSolidBtn, mkDangerConfirm, Rev
 // v17.3.4: the two notification-layout render units (state stays in BookingApp).
 import { StatusToasts } from "./components/StatusToasts";
 import { RefusalToast } from "./components/RefusalToast";
+import { SettingsUndoToast } from "./components/SettingsUndoToast";
 import { toastBox } from "./lib/toast-box";
 import { planDrop, dropPreview, dropCheck, planRetime, retimePreview, retimeCheck } from "./lib/drop-plan";
 import { nextFreeAfter } from "./lib/cell-offer";
@@ -315,6 +316,7 @@ import { useUserPrefs } from "./hooks/useUserPrefs";
 // `readThemePref` is what SignedOutTheme mounts with.
 import { useShellPrefs, readTlSettings, readThemePref } from "./hooks/useShellPrefs";
 import { useLayout } from "./hooks/useLayout";
+import { useSettingsUndo } from "./hooks/useSettingsUndo";
 
 // ── Phase D2 (v14.1.9): Reminder subsystem extracted ──────────────────────
 // `useReminders` owns reminders + reminderFires state, editor + delete-confirm
@@ -459,7 +461,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.19.0"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.19.1"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1283,6 +1285,9 @@ export function BookingApp({uid}){
   // TABLE_GROUPS bindings on each snapshot. saveLayout is wired to the Settings
   // Layout tab. See ./hooks/useLayout.js.
   const { layout, saveLayout } = useLayout();
+  // v18.19.1 (Patryk): every save the Layout tab makes is a step its Undo pill
+  // can take back, until Settings closes (lib/settings-undo.js).
+  const settingsUndo = useSettingsUndo({ open: showSettings, onTop: topModal(modalStack) === "settings", layout: layout, saveLayout: saveLayout });
   // ── WhatsApp Inbox hook (sandbox) ─────────────────────────────────────────
   // Owns conversations/messages/templates (DEV Firebase) + every inbox handler.
   // Form/view handoff setters flow in (controlled pattern, like useWalkin). The
@@ -4489,9 +4494,11 @@ export function BookingApp({uid}){
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.
-        showSettings?<Overlay /* @static-height the tab body eases inside SettingsContent's own AutoHeight watch={cur} */ onClose={requestCloseSettings} maxWidth={SETTINGS_CARD_W} anchor="top" footer={<div style={{display:"flex",justifyContent:"flex-end"}}><button
+        showSettings?<Overlay /* @static-height the tab body eases inside SettingsContent's own AutoHeight watch={cur} */ onClose={requestCloseSettings} maxWidth={SETTINGS_CARD_W} anchor="top" footer={/* v18.19.1 (Patryk): three columns, so the Undo pill is centred on the
+              dialog while it fits and Close keeps the right column; the pill never
+              covers it. */<div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",columnGap:8}}><div style={{gridColumn:2,minWidth:0}}><SettingsUndoToast pill={settingsUndo.pill} onUndo={settingsUndo.undo} /></div><button
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"8px 18px",background:BTN.quiet})}
+              style={{...mkBtn({minHeight:40,padding:"8px 18px",background:BTN.quiet}),gridColumn:3,justifySelf:"end"}}
               title={"Close Settings, asking first if a box holds an unsaved change"+keyHint("close")}
               onClick={requestCloseSettings}>Close</button></div>}><ModalTitle background="var(--app-btn-grey-strong)">Settings</ModalTitle><Suspense fallback={null}><SettingsContent
             appVersion={__APP_SIGNATURE__.version}
@@ -4552,7 +4559,7 @@ export function BookingApp({uid}){
             onUpdateRule={function(id,f){if(refused("recurringManage"))return;updateRule(id,f);}}
             onRemoveRule={function(id){if(refused("recurringManage"))return;removeRule(id);}}
             layout={layout}
-            onSaveLayout={saveLayout}
+            onSaveLayout={settingsUndo.saveLayoutStep}
             bookings={bookings}
             waitlist={waitlist}
             onDeleteCustomer={deleteCustomer}

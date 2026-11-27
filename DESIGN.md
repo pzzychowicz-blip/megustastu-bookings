@@ -2149,6 +2149,58 @@ to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
   and unmounted bare, so the count vanished on the tap and the header jumped by
   the subtitle's line while the body was still easing.
 
+### Drag to reorder (v18.19.1)
+Patryk, 2026-11-27: the lists in Settings → Layout whose ORDER the optimiser reads
+(size, combo and swap rules, the tables of a zone, Prefer, Anchors, a join group's
+chips) move by dragging. The mechanism is `useDragReorder` (src/hooks), the
+arithmetic `lib/reorder.js`.
+
+- **A grip, not the row.** ⋮⋮ (`GripIcon`) leads the row and drags the moment it is
+  touched: `touch-action: none` is on the grip only, so the rest of the row scrolls
+  the page and its steppers still tap. A hold on the whole row was the alternative
+  and was turned down: a slow tap on a stepper would start a drag. A press that
+  does not travel 4px is a tap, which only focuses the grip.
+- **The grip takes no hover lift** (`@no-lift`): it moves with the finger, and a
+  1.08 scale under a grab makes the row jump as the drag starts. Quiet: no fill,
+  `--text-muted`, the chip's height.
+- **In and out.** The lift is the row's resting ground (its two layers, `--bg-soft`
+  over `--bg-sheet`, so the text keeps its contrast and nothing shows through) plus
+  `--shadow-popover`, eased on `M.tap` both ways. The others slide to the slot the
+  dragged row is over (a FLIP on `M.dur.move`), so the list always shows what a
+  release would save. On release the row settles from under the finger into its
+  slot, then the order is saved, once. Escape or a cancelled pointer eases it back
+  and saves nothing; a lost capture does only when it cannot be taken back while
+  the button is down (with the button up it IS the release, and saves). Under
+  reduced motion nothing slides or settles.
+- **In a column the LEADING edge decides**: a row passes the one above once its top
+  edge crosses that row's middle, and the one below once its bottom edge does. A size
+  rule is tall and is grabbed at its top, so by centres a drag up had to carry the
+  pointer past the whole row above (measured: 190px and no swap).
+- **The keyboard path**: the grip is a `<button>` named for what it moves ("Move size
+  rule 2, party of 3 to 4"); ↑/↓ moves the row one place (←/→ too in a chip row) and
+  focus follows the row.
+
+### Undo in Settings (v18.19.1)
+Patryk, 2026-11-27: every change made in Settings → Layout can be taken back, one
+step a press, back to when Settings opened (`useSettingsUndo`, `lib/settings-undo.js`).
+- **The pill is the app's Undo pill** (`ToastPill`, a neutral dot, the sentence, an
+  accent Undo), **in the dialog's footer, CENTRED, with Close in the right column**
+  (`SettingsUndoToast`; the footer is a `1fr auto 1fr` grid). It was first drawn
+  where the refusal toast floats; measured on DEV, that covered a row of the tab body
+  on the phone and the tablet, and a pill that stays put turns a tap on that row into
+  an Undo. Then at the footer's left; Patryk asked for it centred. The grid centres it
+  on the dialog while it fits and moves it left of Close when it does not (a phone's
+  longest pill), so it never covers Close. Inside the footer rather than fixed over
+  it, so it moves when the card eases its height, and Tab reaches it.
+- **No timer.** It stays while there is a step to take back and names the NEXT one
+  after each press; with none left it fades, keeping its text as it goes.
+- **Taps on one stepper in a row are one step**, matched by the leaf the save changed,
+  never by time. A step taken back to where it started is gone.
+- **Refuse and say why**: when the stored layout is no longer what this device wrote,
+  the pill says "Changed on another device, can't undo" in the warning tone, drops the
+  history, and fades after 3.5s, the refusal toast's time.
+- Ctrl+Z / ⌘Z does the same while Settings is open, never inside a text box.
+
 ### Motion — two curves, three durations (v17.8.0)
 
 Tokens in `src/index.css`'s `:root` (theme-agnostic, so NOT duplicated into the
