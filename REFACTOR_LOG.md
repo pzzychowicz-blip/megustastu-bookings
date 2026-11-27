@@ -42671,7 +42671,8 @@ visible name and what happened; a retention Undo restores the number only; the p
   `shellPrefOf` and `setShellPref`: a second flip cannot take back a three-state theme or a fit that also stored a width. The
   ten plain switches restore by one flip from the other value, which is setting it. Never refused: nothing else writes these
   while Settings is open (an account's prefs reach another device only at sign-in). Split view switched off leaves the split,
-  as the switch does, and its Undo does not bring the split back. Two wiring pins (`drag-hold`, `app-width-fit`) now expect the
+  as the switch does, and its Undo does not bring the split back (Patryk, 2026-11-27: keep it this way, as with the
+  bookings standing bookings already made). Two wiring pins (`drag-hold`, `app-width-fit`) now expect the
   tracked saver.
 - **On DEV:** Fit to screen off → "Fit to screen switched off" (width 1050 stored), App width + → "App width changed"; Undo,
   Undo → Fit on, and both `mgt-appwidth` keys gone again. Automatic dark mode on, Larger text on, Time shown behind the
