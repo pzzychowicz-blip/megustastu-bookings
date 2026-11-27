@@ -3,7 +3,7 @@
 // v18.19.1's, assertion for assertion; only the call shape changed (a step
 // names its node, and `undoStep` reads the stored node through a function).
 import { describe, it, expect } from "vitest";
-import { stableKey, changedPaths, recordStep as recordAny, undoStep as undoAny, pillText, UNDO_CONFLICT } from "../src/lib/settings-undo";
+import { stableKey, changedPaths, recordStep as recordAny, undoStep as undoAny, undoRefused, pillText, UNDO_CONFLICT, UNDO_FAILED } from "../src/lib/settings-undo";
 import { describeStep as describeAny, describeLayoutStep as describeStep } from "../src/lib/settings-undo-labels";
 import { sanitizeLayout } from "../src/hooks/useLayout";
 import { DEFAULT_LAYOUT } from "../src/lib/constants";
@@ -137,6 +137,14 @@ describe("undoStep", () => {
     const other = edit((c) => { c.tables[3].capacity += 2; });
     expect(undoStep(stack, other)).toEqual({ refuse: UNDO_CONFLICT, rest: [] });
     expect(UNDO_CONFLICT).toBe("Changed on another device, can't undo");
+  });
+  // v18.20.0 /code-review: a restore the writer refused did nothing and said
+  // nothing, and the step stayed on top.
+  it("an Undo the writer refuses is said, and that setting's steps go", () => {
+    const two = recordAny(stack, { node: "settings/general", tab: "general", before: { v: 1, regularMin: 2 }, after: { v: 1, regularMin: 3 } }, describeAny);
+    expect(undoRefused(two, "settings/general")).toEqual({ refuse: UNDO_FAILED, rest: stack });
+    expect(undoRefused(two, LAYOUT).rest.map((x) => x.node)).toEqual(["settings/general"]);
+    expect(UNDO_FAILED).toBe("Couldn't undo that change");
   });
   it("an echo differing only in key order is not another device", () => {
     // Every object's keys reversed, as a stand-in for RTDB's sorted echo.

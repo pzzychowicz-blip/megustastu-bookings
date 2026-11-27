@@ -49,7 +49,7 @@
 // typing (a text box's own undo is the browser's), not while a modal sits over
 // Settings, and only with a step to take back.
 import { useEffect, useState } from "react";
-import { recordStep, undoStep, pillText } from "../lib/settings-undo";
+import { recordStep, undoStep, undoRefused, pillText } from "../lib/settings-undo";
 import { describeStep } from "../lib/settings-undo-labels";
 import { isTyping } from "../lib/keyboard";
 import { SETTINGS_TABS } from "../components/SettingsChrome";
@@ -109,25 +109,28 @@ export function useSettingsUndo({ open, onTop, tab, nodes, savers }) {
     };
   }
 
+  // A refusal (`{refuse, rest}`): said in the warning tone for NOTICE_MS, then
+  // the pill names the next step left, or fades.
+  function sayRefusal(r) {
+    const n = ++noticeSeq;
+    setU({ stack: r.rest, text: r.refuse, undo: false, show: true, notice: n });
+    setTimeout(function () {
+      setU(function (s) {
+        if (s.notice !== n) return s;
+        return s.stack.length ? { ...s, undo: true, show: true, notice: 0 } : { ...s, show: false, notice: 0 };
+      });
+    }, NOTICE_MS);
+  }
+
   function undo() {
     const plan = undoStep(u.stack, function (id) {
       const ad = nodes[familyOf(id)];
       return ad ? ad.value(keyOf(id)) : undefined;
     });
     if (!plan) return;
-    if (plan.refuse) {
-      const n = ++noticeSeq;
-      setU({ stack: plan.rest, text: plan.refuse, undo: false, show: true, notice: n });
-      setTimeout(function () {
-        setU(function (s) {
-          if (s.notice !== n) return s;
-          return s.stack.length ? { ...s, undo: true, show: true, notice: 0 } : { ...s, show: false, notice: 0 };
-        });
-      }, NOTICE_MS);
-      return;
-    }
+    if (plan.refuse) { sayRefusal(plan); return; }
     const ad = nodes[familyOf(plan.node)];
-    if (!ad || !ad.restore(keyOf(plan.node), plan.restore, top.after)) return;
+    if (!ad || !ad.restore(keyOf(plan.node), plan.restore, top.after)) { sayRefusal(undoRefused(u.stack, plan.node)); return; }
     const rest = plan.rest;
     // Emptied, the pill fades still saying the step it just took back.
     setU(rest.length

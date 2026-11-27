@@ -2213,7 +2213,9 @@ log, Remove person and the invitations, WhatsApp's Disconnect and Check usage.
 - **Refuse and say why**: when the stored setting is no longer what this device wrote,
   the pill says "Changed on another device, can't undo" in the warning tone for 3.5s,
   the refusal toast's time, drops THAT setting's steps (each older one chains from
-  it) and then names the next step of another, or fades with none left.
+  it) and then names the next step of another, or fades with none left. An Undo the
+  setting's own writer refuses says "Couldn't undo that change" the same way
+  (v18.20.0 /code-review: it did nothing and said nothing).
 - **On a phone the footer is always 46px**, the two-line pill's height, so a step
   arriving never grows the dialog (v18.20.0, Patryk; measured: Close 40, the pill 46).
 - Ctrl+Z / ⌘Z does the same while Settings is open, never inside a text box.

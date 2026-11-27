@@ -143,13 +143,24 @@ export function recordStep(stack, step, describe) {
 // keep `rest`, or `{refuse, rest}` with the sentence the pill says instead and
 // the stack without that node's steps. null when there is nothing to undo.
 export const UNDO_CONFLICT = "Changed on another device, can't undo";
+function withoutNode(stack, node) { return stack.filter(function (s) { return s.node !== node; }); }
 export function undoStep(stack, currentOf) {
   if (!stack.length) return null;
   const top = stack[stack.length - 1];
   if (stableKey(currentOf(top.node)) !== stableKey(top.after)) {
-    return { refuse: UNDO_CONFLICT, rest: stack.filter(function (s) { return s.node !== top.node; }) };
+    return { refuse: UNDO_CONFLICT, rest: withoutNode(stack, top.node) };
   }
   return { restore: top.before, node: top.node, label: top.label, rest: stack.slice(0, -1) };
+}
+
+// An Undo the node's own writer refused (its loaded guard, a capability, a
+// write held while the data may be stale, your own admin access): said like a
+// conflict, and that node's steps go, since each older one chains through the
+// refused one (v18.20.0 /code-review: it did nothing and said nothing, and the
+// step stayed on top). The writer says its own why where it has one.
+export const UNDO_FAILED = "Couldn't undo that change";
+export function undoRefused(stack, node) {
+  return { refuse: UNDO_FAILED, rest: withoutNode(stack, node) };
 }
 
 // What the pill says for `step` while Settings shows `tab`: the step's label,
