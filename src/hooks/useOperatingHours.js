@@ -38,7 +38,7 @@ import { attachRev, writeWithRev } from "../lib/revGuard";
 import { setWeekHours, setActiveDayHours, setHourExceptions } from "../lib/constants";
 import { dbError } from "../lib/dbError";
 // v18.0.0 session 8: the activity log.
-import { settingsWriteEntry, specialDayEntry } from "../lib/activity";
+import { settingsWriteEntry, specialDayEntry, hoursRestoreEntries } from "../lib/activity";
 import { emitActivity } from "../lib/activitySink";
 import { todayStr } from "../lib/day";
 import { genId } from "../lib/booking-fields";
@@ -88,7 +88,8 @@ export function useOperatingHours(viewDate){
   setActiveDayHours(viewDate || todayStr());
 
   // The one writer. `entry` builds the activity line from the state before and
-  // after; the default is the key diff of the weekdays.
+  // after (one entry, or a list of them); the default is the key diff of the
+  // weekdays.
   function persist(nextWeek, nextEx, entry){
     if(!loaded.current){
       console.warn("[SAFE] Refused to write operatingHours — initial read has not completed yet.");
@@ -104,7 +105,8 @@ export function useOperatingHours(viewDate){
     // a log entry that is technically produced and tells you nothing.
     writeWithRev("settings/operatingHours", { days: nextWeek, exceptions }, revRef, undefined, function () {
       const e = entry ? entry(prev) : settingsWriteEntry("settings/operatingHours", { days: prev.week }, { days: nextWeek });
-      if (e) emitActivity([e]);
+      const list = [].concat(e || []);
+      if (list.length) emitActivity(list);
     });
     // v18.20.0: the hours as stored, in the state's shape, for Settings' Undo
     // (false above: a refused save records nothing). Callers that only ask
@@ -152,10 +154,14 @@ export function useOperatingHours(viewDate){
   }
 
   // v18.20.0: Settings' Undo puts the whole node back, week and special days,
-  // through the one writer (its guard, rev CAS and activity entry).
+  // through the one writer (its guard, rev CAS and activity entry). The entry
+  // names each special day it brings back or takes away (`hoursRestoreEntries`,
+  // /code-review: with the default, the weekday diff, an Undo of a special day
+  // logged nothing).
   function restoreHours(v){
     if(!v || !v.week) return false;
-    return persist(v.week, v.exceptions || {});
+    const ex = pruneExceptions(v.exceptions || {}, todayStr());
+    return persist(v.week, ex, function (prev) { return hoursRestoreEntries(prev, { week: v.week, exceptions: ex }); });
   }
 
   return { weekHours: hours.week, exceptions: hours.exceptions, hoursSig: hours, saveDayHours, saveAllDays, saveException, removeException, restoreHours };

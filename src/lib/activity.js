@@ -420,6 +420,24 @@ export function specialDayEntry(verb, ex) {
   return clean({ kind: kindForPath("settings/operatingHours"), text: verb + " a special day · " + parts.join(" · ") });
 }
 
+// v18.20.0 /code-review: what Settings' Undo of opening hours writes back,
+// said as the change it makes. `prev` and `next` are useOperatingHours' state,
+// `{week, exceptions}`. The week by the key diff, and each special day by what
+// it is: an Undo of a special day leaves the week as it was, so the key diff
+// alone said nothing and the log never heard that a closed day came or went
+// (measured: `settingsWriteEntry` answered null). Returns a list, maybe empty.
+export function hoursRestoreEntries(prev, next) {
+  const out = [settingsWriteEntry("settings/operatingHours", { days: prev.week }, { days: next.week })];
+  const a = prev.exceptions || {};
+  const b = next.exceptions || {};
+  Object.keys(b).sort().forEach(function (id) {
+    if (!a[id]) out.push(specialDayEntry("added", b[id]));
+    else if (!same(a[id], b[id])) out.push(specialDayEntry("changed", b[id]));
+  });
+  Object.keys(a).sort().forEach(function (id) { if (!b[id]) out.push(specialDayEntry("removed", a[id])); });
+  return out.filter(Boolean);
+}
+
 // The node's name as a person would say it. A path is a fallback, not a label:
 // "changed settings/bookingDefaults" is the database talking to itself.
 const NODE_LABEL = {

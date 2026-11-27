@@ -16,7 +16,7 @@ import {
 import { hoursFor, setHourExceptions, setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
 import { findTimes } from "../src/lib/booking-logic.js";
 import { dueOccurrences } from "../src/lib/recurring.js";
-import { specialDayEntry } from "../src/lib/activity.js";
+import { specialDayEntry, hoursRestoreEntries } from "../src/lib/activity.js";
 import { addDays } from "../src/lib/day.js";
 import { appCode } from "./app-source.js";
 
@@ -145,6 +145,20 @@ describe("keeping and listing", () => {
     expect(specialHoursLabel(XMAS)).toBe("Closed");
     expect(specialHoursLabel(NYE)).toBe("19:00–01:00");
     expect(specialDayEntry("added", XMAS).text).toMatch(/^added a special day · .*24\.12.*26\.12.* · Closed · Christmas$/);
+  });
+  // v18.20.0 /code-review: Settings' Undo of a special day wrote the node and
+  // logged nothing, because the weekday diff it fell back on saw no change.
+  it("an Undo of a special day is logged as the special day it takes away or brings back", () => {
+    const week = { 0: { open: 13, close: 22, closed: false } };
+    const texts = (p, n) => hoursRestoreEntries(p, n).map((e) => e.text);
+    expect(texts({ week, exceptions: { x: XMAS } }, { week, exceptions: {} })).toEqual([specialDayEntry("removed", XMAS).text]);
+    expect(texts({ week, exceptions: {} }, { week, exceptions: { x: XMAS } })).toEqual([specialDayEntry("added", XMAS).text]);
+    expect(texts({ week, exceptions: { x: XMAS } }, { week, exceptions: { x: { ...XMAS, note: "Boxing" } } })).toEqual([specialDayEntry("changed", { ...XMAS, note: "Boxing" }).text]);
+    expect(hoursRestoreEntries({ week, exceptions: { x: XMAS } }, { week, exceptions: { x: XMAS } })).toEqual([]);
+    expect(texts({ week, exceptions: {} }, { week: { 0: { open: 12, close: 22, closed: false } }, exceptions: {} })).toHaveLength(1);
+  });
+  it("the hook's restore logs through it", () => {
+    expect(read("src/hooks/useOperatingHours.js")).toMatch(/return persist\(v\.week, ex, function \(prev\) \{ return hoursRestoreEntries\(prev, \{ week: v\.week, exceptions: ex \}\); \}\);/);
   });
 });
 
