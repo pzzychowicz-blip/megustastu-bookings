@@ -100,3 +100,33 @@ describe("the tables' zone rule", () => {
     }
   });
 });
+
+// v18.19.1 /code-review and ship (Patryk, measured on DEV): in a column the
+// LEADING edge decides, so a tall row grabbed at its top moves up without the
+// pointer having to clear the whole row above.
+describe("slotAt — a column, by the leading edge", () => {
+  // Three rows: a short one (0–60), a tall one (60–260), another tall (260–460).
+  const all = [{ left: 0, top: 0, width: 100, height: 60 }, { left: 0, top: 60, width: 100, height: 200 }, { left: 0, top: 260, width: 100, height: 200 }];
+  const others = (from) => all.filter((_, i) => i !== from);
+  const at = (from, top) => {
+    const h = all[from].height;
+    return slotAt(others(from), { x: 50, y: top + h / 2 }, "y", { top: top, bottom: top + h, from: from });
+  };
+  it("dragging the last tall row up swaps once its top passes the centre above", () => {
+    expect(at(2, 260)).toBe(2);
+    expect(at(2, 161)).toBe(2);
+    expect(at(2, 159)).toBe(1);
+    expect(at(2, 29)).toBe(0);
+    // By centres the same row needed its centre above 160, i.e. its top at 59.
+    expect(slotAt(others(2), { x: 50, y: 159 + 100 }, "y")).toBe(2);
+  });
+  it("dragging the short first row down swaps once its bottom passes the centre below", () => {
+    expect(at(0, 0)).toBe(0);
+    expect(at(0, 99)).toBe(0);
+    expect(at(0, 101)).toBe(1);
+    expect(at(0, 301)).toBe(2);
+  });
+  it("standing still is its own slot for every row", () => {
+    [0, 1, 2].forEach((i) => expect(at(i, all[i].top)).toBe(i));
+  });
+});

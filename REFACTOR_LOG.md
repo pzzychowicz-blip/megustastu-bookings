@@ -42535,3 +42535,20 @@ the pill until Settings closes, naming the next step; refuse and say why when an
   column, Close in the right one. Measured on DEV: at 1024 wide the pill's centre is the dialog's (512, 512); at 375 the
   longest pill (251px, two lines) cannot be centred beside Close, so the grid moves it left and it ends 8px clear of Close
   (277 against 285).
+
+### Commit 8 — a drag from bottom to top saves (Patryk, at the ship run)
+
+"When I try to drag from bottom to top it doesn't work." Measured, not guessed: a capture-phase recorder on every pointer
+event in the pane while Patryk dragged size rules by hand. Two faults:
+- **The drop was thrown away at release.** In both upward drags that failed, Chrome fired `lostpointercapture` (buttons 0)
+  BEFORE `pointerup`, in the same millisecond; the hook read a lost capture as a cancel and eased the row back (in one the
+  preview already showed the new order). A downward drag lost the capture MID-drag with the button down (buttons 1): the
+  preview reordered the list and React moved the dragged row's node, which drops its capture. Now a lost capture with the
+  button up is the release and saves; with it down the capture is taken back (`recapture`, in the handler and in the layout
+  pass that moved the node); only a capture that cannot be taken back while pressed cancels.
+- **An upward drag needed the pointer past the whole row above.** `slotAt` compared centres, and a size rule is tall and
+  grabbed at its top: one drag carried the row 190px up with no swap. In a column the leading edge now decides
+  (`slotAt`'s `edge`): up, once the row's top passes the middle of the row above; down, once its bottom passes the middle
+  of the row below. `tests/reorder.test.js` +3.
+- **Re-measured with Patryk's hand**: eleven drags, size rules and combo rules, up and down, every one saved, one of them
+  again with the lost capture reported before the release.

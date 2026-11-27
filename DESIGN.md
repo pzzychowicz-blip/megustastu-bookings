@@ -2168,9 +2168,14 @@ arithmetic `lib/reorder.js`.
   `--shadow-popover`, eased on `M.tap` both ways. The others slide to the slot the
   dragged row is over (a FLIP on `M.dur.move`), so the list always shows what a
   release would save. On release the row settles from under the finger into its
-  slot, then the order is saved, once. Escape, a lost capture or a cancelled
-  pointer eases it back and saves nothing. Under reduced motion nothing slides or
-  settles.
+  slot, then the order is saved, once. Escape or a cancelled pointer eases it back
+  and saves nothing; a lost capture does only when it cannot be taken back while
+  the button is down (with the button up it IS the release, and saves). Under
+  reduced motion nothing slides or settles.
+- **In a column the LEADING edge decides**: a row passes the one above once its top
+  edge crosses that row's middle, and the one below once its bottom edge does. A size
+  rule is tall and is grabbed at its top, so by centres a drag up had to carry the
+  pointer past the whole row above (measured: 190px and no swap).
 - **The keyboard path**: the grip is a `<button>` named for what it moves ("Move size
   rule 2, party of 3 to 4"); ↑/↓ moves the row one place (←/→ too in a chip row) and
   focus follows the row.

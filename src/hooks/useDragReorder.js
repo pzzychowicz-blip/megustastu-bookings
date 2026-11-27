@@ -28,7 +28,8 @@
 //
 // The rules this keeps (src/CLAUDE.md, Gotchas):
 //   · setPointerCapture on the GRIP, which has no child click targets;
-//     `onLostPointerCapture` guarded on `e.target === e.currentTarget`;
+//     `onLostPointerCapture` guarded on `e.target === e.currentTarget`, and a
+//     lost capture is a cancel only when it cannot be taken back while pressed;
 //   · a mouse move with `buttons === 0` ends it (a scrim that ate the release);
 //   · teardown first, dispatch last;
 //   · `beginHold()` for the length of the drag, so iOS raises no selection UI;
@@ -107,7 +108,9 @@ export function useDragReorder(opts) {
     const tx = d.axis === "y" ? 0 : x - d.layout.left;
     d.el.style.transform = "translate(" + tx + "px, " + (y - d.layout.top) + "px)";
     if (d.settling) return;
-    const to = slotAt(d.others, { x: x + d.size.width / 2, y: y + d.size.height / 2 }, d.axis === "y" ? "y" : "wrap");
+    const to = d.axis === "y"
+      ? slotAt(d.others, { x: x + d.size.width / 2, y: y + d.size.height / 2 }, "y", { top: y, bottom: y + d.size.height, from: d.from })
+      : slotAt(d.others, { x: x + d.size.width / 2, y: y + d.size.height / 2 }, "wrap");
     if (to !== d.to) {
       snapshot(d.list);
       d.to = to;
@@ -132,6 +135,14 @@ export function useDragReorder(opts) {
     }
     d.lastT = t;
     d.raf = requestAnimationFrame(edgeLoop);
+  }
+
+  // Take the pointer back after React moved the grip's row (see
+  // onLostPointerCapture). False when it cannot be: the pointer is no longer
+  // down, or the grip has left the page.
+  function recapture(d) {
+    if (!d.grip.isConnected) return false;
+    try { d.grip.setPointerCapture(d.pointerId); return true; } catch { return false; }
   }
 
   // ── ending ─────────────────────────────────────────────────────────────────
@@ -213,6 +224,9 @@ export function useDragReorder(opts) {
       });
     }
     const d = st.current;
+    // The preview just moved DOM nodes, which can have dropped the grip's
+    // capture: take it back before the next move goes somewhere else.
+    if (d && d.active && !d.settling && d.grip.hasPointerCapture && !d.grip.hasPointerCapture(d.pointerId)) recapture(d);
     if (d && d.active) {
       const keep = d.el.style.transform;
       d.el.style.transform = "";
@@ -296,10 +310,22 @@ export function useDragReorder(opts) {
       },
       onPointerUp: function (e) { const d = st.current; if (d && e.pointerId === d.pointerId) end(true); },
       onPointerCancel: function (e) { const d = st.current; if (d && e.pointerId === d.pointerId) end(false); },
+      // A lost capture is not always a cancel (v18.19.1 /code-review and ship,
+      // measured on DEV from Patryk's own drags):
+      //  · with the button still DOWN it is React moving the row: a preview that
+      //    reorders the list moves DOM nodes, and a node that is moved loses its
+      //    capture. The drag carries on: capture is taken back here, and already
+      //    in the layout pass that moved it (below);
+      //  · with the button UP it is the release, which Chrome reported BEFORE
+      //    the pointerup in two of the drags that failed, so the drop was eased
+      //    back and nothing was saved. A release saves.
+      // Only a capture that cannot be taken back while pressed calls it off.
       onLostPointerCapture: function (e) {
         const d = st.current;
         if (e.target !== e.currentTarget || !d || e.pointerId !== d.pointerId || d.settling) return;
-        end(false);
+        if (d.grip.hasPointerCapture && d.grip.hasPointerCapture(d.pointerId)) return;
+        if (e.buttons === 0) { end(true); return; }
+        if (!recapture(d)) end(false);
       },
       onKeyDown: function (e) {
         if (st.current || e.altKey || e.ctrlKey || e.metaKey) return;

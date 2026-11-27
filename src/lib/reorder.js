@@ -32,10 +32,19 @@ export function moveItem(list, from, to) {
 // above the point, or when the point is on its line and its centre is to the
 // left. A point between two lines counts every box above it.
 //
+// `edge` (a column only, v18.19.1 /code-review and ship, Patryk) is the dragged
+// item's box now and its index at the start, `{top, bottom, from}`: then an item
+// it started AFTER comes before it once its BOTTOM edge passes that item's
+// centre, and an item it started BEFORE stays before until its TOP edge passes
+// that item's centre. The leading edge decides, not the centre. A size rule is
+// tall and grabbed by the grip at its top, so with centres a drag up had to
+// carry the pointer past the whole row above before anything moved (measured
+// on DEV: 190px up and no swap).
+//
 // Measured from the layout at the START, never re-measured as the preview moves
 // the others: the answer depends only on where the dragged item is, so it
 // cannot feed back into itself and flicker between two slots.
-export function slotAt(others, point, axis) {
+export function slotAt(others, point, axis, edge) {
   if (!Array.isArray(others) || !point) return 0;
   let k = 0;
   for (let i = 0; i < others.length; i++) {
@@ -47,6 +56,8 @@ export function slotAt(others, point, axis) {
       if (bottom <= point.y) before = true;
       else if (b.top > point.y) before = false;
       else before = b.left + b.width / 2 < point.x;
+    } else if (edge) {
+      before = i < edge.from ? !(edge.top < cy) : edge.bottom > cy;
     } else {
       before = cy < point.y;
     }
