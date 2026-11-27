@@ -14,10 +14,13 @@ import { useState, useEffect } from "react";
 import { Section, Collapsible, Toggle, mkStep, mkBtn, mkDangerBtn, mkRemoveX, Reveal, SEG_TRACK, segStyle, TBadge } from "./atoms";
 import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
 import { AlertPanel, AlertRow } from "./AlertPanel";
-import { contiguousRuns, comboKey, activePickRules, PICK_RULES_MAX, R, T, FW, H, IC } from "../lib/constants";
-import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon, TrashIcon } from "./Icons";
+import { contiguousRuns, comboKey, activePickRules, PICK_RULES_MAX, R, T, FW, H, IC, M } from "../lib/constants";
+import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon, GripIcon, TrashIcon } from "./Icons";
 import { todayStr } from "../lib/day";
 import { countLabel, joinFirstMatters } from "../lib/booking-logic";
+import { moveItem } from "../lib/reorder";
+import { useDragReorder, liftStyle } from "../hooks/useDragReorder";
+import { useListKeys } from "../hooks/useListKeys";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
 // v17.8.0: was a private copy of the byte-identical style in Settings.jsx.
@@ -95,6 +98,16 @@ const ADD_ROW = { display: "flex", justifyContent: "flex-end", marginTop: 8 };
 // wrapping rule row breaks between pairs and never inside one. A combo rule's
 // "priority" stayed at the end of line 1 while its stepper started line 2.
 const PAIR = { display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0, whiteSpace: "nowrap" };
+// v18.19.1 (Patryk): the drag grip that leads a reorderable row
+// (useDragReorder). Quiet, like the editors' other small controls: no fill, the
+// muted ink, the chip's height so a row does not grow for it.
+const GRIP = {
+  background: "transparent", border: "none", padding: 0, width: 24, height: H.chip, flexShrink: 0,
+  borderRadius: R.pill, color: "var(--text-muted)",
+  display: "flex", alignItems: "center", justifyContent: "center"
+};
+// A reorderable row eases its lift in and out (the shadow and the ground).
+const LIFT_EASE = { transition: "box-shadow " + M.tap + ", background-color " + M.tap };
 // The neutral face the five add buttons share.
 const ADD_BTN = { ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" };
 // A table id is joined into combo keys with "|" (comboKey), so it must be
@@ -400,6 +413,37 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
   const [priPick, setPriPick] = useState(null);
   function samePick(kind, band) { return priPick && priPick.kind === kind && priPick.band === band; }
 
+  // ── v18.19.1 (Patryk): drag to reorder ─────────────────────────────────────
+  // The optimiser reads these lists in order: size rules first match wins,
+  // combo rules first match per combo and size, swap rules one after another.
+  // A grip leads each row (`gripEl`); a drop saves the new order once. The rules
+  // have no ids, so `useListKeys` gives each row a key that follows it when the
+  // list is reordered (a row keyed by index would keep its node and swap its
+  // content). One `useDragReorder` serves every list in the tab.
+  const bandKeys = useListKeys(priBands.length, "b");
+  const ruleKeys = useListKeys(priRules.length, "c");
+  const swapKeys = useListKeys(priSwaps.length, "s");
+  const { rootEl: dragRoot, gripProps, itemProps, isLifted, order: dragOrder } = useDragReorder({
+    axisOf: function (list) { return list === "bands" || list === "rules" || list === "swaps" ? "y" : "wrap"; },
+    // A picker under a size rule is keyed by the rule's index, so a drag closes it.
+    onStart: function () { setPriPick(null); },
+    onCommit: function (list, from, to) {
+      if (list === "bands") { bandKeys.move(from, to); savePri({ bands: moveItem(priBands, from, to) }); }
+      else if (list === "rules") { ruleKeys.move(from, to); savePri({ comboRules: moveItem(priRules, from, to) }); }
+      else if (list === "swaps") { swapKeys.move(from, to); savePri({ swapRules: moveItem(priSwaps, from, to) }); }
+    }
+  });
+  // The grip itself: a <button> with no text, so its name says what it moves.
+  function gripEl(list, i, count, key, name) {
+    const gp = gripProps(list, i, count, key);
+    return (
+      <button type="button" {...gp} /* @no-lift a drag grip moves with the finger, and a hover lift under a grab would make the row jump */
+        aria-label={"Move " + name}
+        title={"Drag to change the order, or focus it and press the up or down arrow"}
+        style={{ ...GRIP, ...gp.style }}><GripIcon size={IC.control} /></button>
+    );
+  }
+
   function moveInList(list, idx, dir) {
     const j = idx + dir;
     if (j < 0 || j >= list.length) return list;
@@ -407,16 +451,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
     return n;
   }
   function setBand(i, patch) { savePri({ bands: priBands.map(function (b, idx) { return idx === i ? { ...b, ...patch } : b; }) }); }
-  function removeBand(i) { setPriPick(null); savePri({ bands: priBands.filter(function (_, idx) { return idx !== i; }) }); }
+  function removeBand(i) { setPriPick(null); bandKeys.remove(i); savePri({ bands: priBands.filter(function (_, idx) { return idx !== i; }) }); }
   function addBand() { savePri({ bands: priBands.concat([{ min: 2, max: 2, prefer: [], avoid: [], zoneOrder: [], combosFirst: false }]) }); }
   function setRule(i, patch) { savePri({ comboRules: priRules.map(function (r, idx) { return idx === i ? { ...r, ...patch } : r; }) }); }
-  function removeRule(i) { savePri({ comboRules: priRules.filter(function (_, idx) { return idx !== i; }) }); }
+  function removeRule(i) { ruleKeys.remove(i); savePri({ comboRules: priRules.filter(function (_, idx) { return idx !== i; }) }); }
   function addRule() {
     if (!declared.length) return;
     savePri({ comboRules: priRules.concat([{ key: declared[0].key, min: 2, max: 8, weight: 5, avoid: false }]) });
   }
   function setSwap(i, patch) { savePri({ swapRules: priSwaps.map(function (r, idx) { return idx === i ? { ...r, ...patch } : r; }) }); }
-  function removeSwap(i) { savePri({ swapRules: priSwaps.filter(function (_, idx) { return idx !== i; }) }); }
+  function removeSwap(i) { swapKeys.remove(i); savePri({ swapRules: priSwaps.filter(function (_, idx) { return idx !== i; }) }); }
   function addSwap() {
     if (!tables.length) return;
     savePri({ swapRules: priSwaps.concat([{ table: tables[0].id, fromSize: 4, toSize: 2 }]) });
@@ -499,7 +543,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
   }
 
   return (
-    <div>
+    <div ref={dragRoot}>
       <Collapsible
         title="Tables"
         subtitle="Each table's id, capacity and zone. Shared across all devices."
@@ -916,13 +960,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
 
         {/* ── Party-size rules (bands) ── */}
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Party-size rules · {priBands.length}</div>
-        {priBands.map(function (b, i) {
+        {dragOrder("bands", priBands.length).map(function (i) {
+          const b = priBands[i];
+          const key = bandKeys.keys[i];
           const zm = zoneMode(b);
           // v18.18.0: the switch cannot change this rule's tables (joinFirstMatters).
           const switchIdle = !joinFirstMatters(b, tables);
           return (
-            <div key={i} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)", marginTop: 8 }}>
+            <div key={key} {...itemProps("bands", key)} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)", marginTop: 8, ...LIFT_EASE, ...(isLifted("bands", key) ? liftStyle : null) }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {gripEl("bands", i, priBands.length, key, bandName(b, i))}
                 <span style={PAIR}>
                   <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>Party of</span>
                   <Stepper value={b.min} disableDec={b.min <= 1} disableInc={b.min >= b.max} label={bandName(b, i) + ": smallest party size"} description={"the smallest party in size rule " + (i + 1) + ", one guest at a time"}
@@ -1001,10 +1048,13 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
             Which combo the optimiser reaches for first, by party size. Higher priority wins; “avoid” combos are used only when nothing else fits.
           </div>
-          {priRules.map(function (r, i) {
+          {dragOrder("rules", priRules.length).map(function (i, pos) {
+            const r = priRules[i];
+            const key = ruleKeys.keys[i];
             const known = declared.some(function (d) { return d.key === r.key; });
             return (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
+              <div key={key} {...itemProps("rules", key)} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: pos === 0 ? "1px solid transparent" : "1px solid var(--border-soft)", marginTop: 6, ...LIFT_EASE, ...(isLifted("rules", key) ? liftStyle : null) }}>
+                {gripEl("rules", i, priRules.length, key, comboName(r, i))}
                 <select /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={r.key} aria-label={"Combo for rule " + (i + 1)} title={"The joined tables combo rule " + (i + 1) + " is about"} onChange={function (e) { setRule(i, { key: e.target.value }); }} style={SEL_INP}>
                   {known ? null : <option value={r.key}>{String(r.key).split("|").join(" + ")}</option>}
                   {declared.map(function (d) { return <option key={d.key} value={d.key}>{d.label}</option>; })}
@@ -1083,9 +1133,12 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
             Free a table from a bigger party when a smaller overlapping party needs it (only applied when nobody loses a table).
           </div>
-          {priSwaps.map(function (r, i) {
+          {dragOrder("swaps", priSwaps.length).map(function (i, pos) {
+            const r = priSwaps[i];
+            const key = swapKeys.keys[i];
             return (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
+              <div key={key} {...itemProps("swaps", key)} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: pos === 0 ? "1px solid transparent" : "1px solid var(--border-soft)", marginTop: 6, ...LIFT_EASE, ...(isLifted("swaps", key) ? liftStyle : null) }}>
+                {gripEl("swaps", i, priSwaps.length, key, swapName(r, i))}
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>Free</span>
                 <select /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={r.table} aria-label={"Table to free, swap rule " + (i + 1)} title={"The table swap rule " + (i + 1) + " frees"} onChange={function (e) { setSwap(i, { table: e.target.value }); }} style={SEL_INP}>
                   {tableIds.indexOf(r.table) >= 0 ? null : <option value={r.table}>{r.table}</option>}

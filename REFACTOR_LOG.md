@@ -42455,3 +42455,31 @@ shape or a key.
   item is and cannot flicker between two slots.
 - **`tests/reorder.test.js`**, 17 tests: moves, identity on a no-op, every from/to pair round-tripped, a column of mixed heights,
   a wrapping row on, between and across lines, and the zone rule (every table to every index keeps its zone and the list's length).
+
+### Commit 4 — drag to reorder: the mechanism, and the three rule lists
+
+- **What:** a grip (⋮⋮, `GripIcon`) leads every size, combo and swap rule. Drag it: the row lifts and follows the finger, the
+  others slide to the slot it is over, and on release it settles into place and the new order is saved once (`savePri`). Escape
+  eases it back and saves nothing. ↑/↓ on the focused grip moves the rule one place, and focus follows the rule. One commit with
+  its first callers rather than two, because a hook with no caller can be checked by nothing but its tests.
+- **`useDragReorder`** (`src/hooks`, new): one instance for every list in the tab. The design is DESIGN.md's new "Drag to reorder"
+  section; the rules it keeps are its header's and `hooks/CLAUDE.md`'s. **`useListKeys`** (new) gives the rules keys that follow
+  them, since a rule has no id.
+- **The grip is a local helper, not an atom** (the plan said a `DragGrip` atom): it has one caller file, and drawn there its
+  `title` and `@no-lift` sit on the tag the two style rules read.
+- **Three things found on DEV and fixed before the commit:**
+  - the lifted row's ground was `--bg-soft` alone, which is 95% opaque in light and 5% in dark, and the row it passed showed
+    through it (screenshot). It is now the row's two resting layers, `--bg-soft` over `--bg-sheet`.
+  - the settle waited on its animation's `finish`, which a hidden page never reaches, so a drop was not saved until the pane was
+    shown (measured: a real mouse drag left the order unchanged). A timeout now backs it; whichever comes first saves.
+  - the Escape listener was added with one render's function and removed with a later one's, so it never came off. It is kept
+    on the drag now.
+- **The React Compiler and the hook's object:** with `const dr = useDragReorder(…)` and `dr.order(…)` in render, lint reported
+  ten `react-hooks/refs` advisories (the object held a ref). A callback ref and a destructured result took that to zero.
+- **On DEV (1024 wide):** 20 grips, each named for its rule ("Move combo rule 4, 6 + 7 + 8"). ↓ on combo rule 1's grip: the list
+  read 3 + 4, 1 + 2, … and focus was on "Move combo rule 2, 1 + 2"; ↑ put it back. A paced pointer drag of size rule 1, 300px
+  down: at 120px the list still read 1, 2, 3, 4, at 240px the preview read 2, 1, 3, 4 with the row drawn at its pointer
+  (`translate(0px, 109px)` from its new slot), and the release saved 2, 1, 3, 4. The same drag with Escape at its end, sent to
+  the page body: the preview went back and nothing was saved, and Settings stayed open. (Sent to `window` itself, Escape also
+  closed Settings: at the target, the app's own listener runs in registration order. A key press always targets an element, so
+  that case is the test rig's; `stopImmediatePropagation` was added for it anyway.)

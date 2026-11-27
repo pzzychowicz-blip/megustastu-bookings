@@ -2149,6 +2149,32 @@ to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
   and unmounted bare, so the count vanished on the tap and the header jumped by
   the subtitle's line while the body was still easing.
 
+### Drag to reorder (v18.19.1)
+Patryk, 2026-11-27: the lists in Settings → Layout whose ORDER the optimiser reads
+(size, combo and swap rules, the tables of a zone, Prefer, Anchors, a join group's
+chips) move by dragging. The mechanism is `useDragReorder` (src/hooks), the
+arithmetic `lib/reorder.js`.
+
+- **A grip, not the row.** ⋮⋮ (`GripIcon`) leads the row and drags the moment it is
+  touched: `touch-action: none` is on the grip only, so the rest of the row scrolls
+  the page and its steppers still tap. A hold on the whole row was the alternative
+  and was turned down: a slow tap on a stepper would start a drag. A press that
+  does not travel 4px is a tap, which only focuses the grip.
+- **The grip takes no hover lift** (`@no-lift`): it moves with the finger, and a
+  1.08 scale under a grab makes the row jump as the drag starts. Quiet: no fill,
+  `--text-muted`, the chip's height.
+- **In and out.** The lift is the row's resting ground (its two layers, `--bg-soft`
+  over `--bg-sheet`, so the text keeps its contrast and nothing shows through) plus
+  `--shadow-popover`, eased on `M.tap` both ways. The others slide to the slot the
+  dragged row is over (a FLIP on `M.dur.move`), so the list always shows what a
+  release would save. On release the row settles from under the finger into its
+  slot, then the order is saved, once. Escape, a lost capture or a cancelled
+  pointer eases it back and saves nothing. Under reduced motion nothing slides or
+  settles.
+- **The keyboard path**: the grip is a `<button>` named for what it moves ("Move size
+  rule 2, party of 3 to 4"); ↑/↓ moves the row one place (←/→ too in a chip row) and
+  focus follows the row.
+
 ### Motion — two curves, three durations (v17.8.0)
 
 Tokens in `src/index.css`'s `:root` (theme-agnostic, so NOT duplicated into the
