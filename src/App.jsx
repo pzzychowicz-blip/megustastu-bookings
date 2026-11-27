@@ -1241,7 +1241,7 @@ export function BookingApp({uid}){
   // saveAllDays are wired to the Settings General-tab 7-day editor below.
   // v18.10.0: and the special days (`hourExceptions`), which `hoursFor` reads.
   // `hoursSig` is both halves as ONE object, the memoised views' repaint key.
-  const { weekHours, exceptions: hourExceptions, hoursSig, saveDayHours, saveAllDays, saveException, removeException } = useOperatingHours(viewDate);
+  const { weekHours, exceptions: hourExceptions, hoursSig, saveDayHours, saveAllDays, saveException, removeException, restoreHours } = useOperatingHours(viewDate);
   // v18.2.0: then stretch the viewed day's grid to its latest booking's end
   // (constants.js `extendActiveGrid` — display only, never shorter). Same
   // render-time module mutation as the line above, and it must come AFTER it,
@@ -1430,7 +1430,7 @@ export function BookingApp({uid}){
   // the reason `hoursSig`, `layoutSig` and `turnBuffer` are all scalars too.
   const vouchersOn = hasModule("vouchers");
   // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
-  const { recurring, addRule, updateRule, removeRule, removeRules, setRulesActive, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
+  const { recurring, saveRecurring, addRule, updateRule, removeRule, removeRules, setRulesActive, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
   // ── v18.0.0 session 8: the activity log ────────────────────────────────────
   // Installing the sink is the whole of the write side here — every writer in
   // the app already emits into it, and until this runs `emitActivity` is a
@@ -1990,6 +1990,33 @@ export function BookingApp({uid}){
     open: showSettings, onTop: topModal(modalStack) === "settings", tab: settingsTab,
     nodes: {
       "settings/layout": { value: function(){return layout;}, restore: function(k,b){return !!saveLayout(b);} },
+      // v18.20.0: Settings → General. Each writer returns what it stored, and
+      // an Undo hands the whole node back to it (a partial merge of a whole
+      // sanitized node is that node).
+      "settings/operatingHours": { value: function(){return hoursSig;}, restore: function(k,b){return !!restoreHours(b);} },
+      "settings/dayShifts": { value: function(){return dayShifts;}, restore: function(k,b){return !!saveDayShifts(b);} },
+      "settings/optimizer": { value: function(){return optimizerSettings;}, restore: function(k,b){return !!saveOptimizerSettings(b);} },
+      "settings/bookingDefaults": { value: function(){return bookingDefaults;}, restore: function(k,b){return !!saveBookingDefaults(b);} },
+      "settings/general": { value: function(){return generalSettings;}, restore: function(k,b){return !!saveGeneralSettings(b);} },
+      "recurring": { value: function(){return recurring;}, restore: function(k,b){return !!saveRecurring(b);} },
+    },
+    // Each Settings save, `[node, save]`, handed back wrapped as
+    // `settingsUndo.save.<name>`. A `refused(...)` gate stays INSIDE its save,
+    // so a refused save writes nothing and records nothing.
+    savers: {
+      dayHours:["settings/operatingHours",function(i,p){if(refused("hoursEdit"))return null;return saveDayHours(i,p);}],
+      allDays:["settings/operatingHours",function(d){if(refused("hoursEdit"))return null;return saveAllDays(d);}],
+      shifts:["settings/dayShifts",function(p){if(refused("hoursEdit"))return null;return saveDayShifts(p);}],
+      optimizer:["settings/optimizer",saveOptimizerSettings],
+      bookingDefaults:["settings/bookingDefaults",saveBookingDefaults],
+      general:["settings/general",saveGeneralSettings],
+      recurringEnabled:["recurring",function(on){if(refused("recurringManage"))return null;return setRecurringEnabled(on);}],
+      recurringHorizon:["recurring",function(w){if(refused("recurringManage"))return null;return setRecurringHorizon(w);}],
+      updateRule:["recurring",function(id,f){if(refused("recurringManage"))return null;return updateRule(id,f);}],
+      removeRule:["recurring",function(id){if(refused("recurringManage"))return null;return removeRule(id);}],
+      layout:["settings/layout",saveLayout],
+      specialDay:["settings/operatingHours",function(i,x){if(refused("hoursEdit"))return false;return saveException(i,x);}],
+      removeSpecialDay:["settings/operatingHours",function(i){if(refused("hoursEdit"))return false;return removeException(i);}],
     },
   });
   // v17.0.0: "Delete customer" now ANONYMIZES instead of deleting — the
@@ -4545,30 +4572,30 @@ export function BookingApp({uid}){
             dragHold={dragHold}
             onSetDragHold={onSetDragHold}
             weekHours={weekHours}
-            onSaveDayHours={function(i,p){if(refused("hoursEdit"))return;saveDayHours(i,p);}}
-            onSaveAllDays={function(d){if(refused("hoursEdit"))return;saveAllDays(d);}}
+            onSaveDayHours={settingsUndo.save.dayHours}
+            onSaveAllDays={settingsUndo.save.allDays}
             exceptions={hourExceptions}
             onOpenSpecialDay={function(id){openSpecialDay(null,id||null);}}
             weekRange={weekRange()}
             splitHour={dayShifts.split}
             shiftsEnabled={dayShifts.enabled}
-            onSaveShifts={function(p){if(refused("hoursEdit"))return;saveDayShifts(p);}}
+            onSaveShifts={settingsUndo.save.shifts}
             optimizerCutoff={optimizerSettings.cutoff}
             optimizerAutoSwitch={optimizerSettings.autoSwitch}
-            onSaveOptimizer={saveOptimizerSettings}
+            onSaveOptimizer={settingsUndo.save.optimizer}
             bookingDefaults={bookingDefaults}
-            onSaveBookingDefaults={saveBookingDefaults}
+            onSaveBookingDefaults={settingsUndo.save.bookingDefaults}
             generalSettings={generalSettings}
-            onSaveGeneralSettings={saveGeneralSettings}
+            onSaveGeneralSettings={settingsUndo.save.general}
             onBackup={doBackup}
             backupStatus={backupStatus}
             recurring={recurring}
-            onSetRecurringEnabled={function(on){if(refused("recurringManage"))return;setRecurringEnabled(on);}}
-            onSetRecurringHorizon={function(w){if(refused("recurringManage"))return;setRecurringHorizon(w);}}
-            onUpdateRule={function(id,f){if(refused("recurringManage"))return;updateRule(id,f);}}
-            onRemoveRule={function(id){if(refused("recurringManage"))return;removeRule(id);}}
+            onSetRecurringEnabled={settingsUndo.save.recurringEnabled}
+            onSetRecurringHorizon={settingsUndo.save.recurringHorizon}
+            onUpdateRule={settingsUndo.save.updateRule}
+            onRemoveRule={settingsUndo.save.removeRule}
             layout={layout}
-            onSaveLayout={settingsUndo.track("settings/layout",saveLayout)}
+            onSaveLayout={settingsUndo.save.layout}
             bookings={bookings}
             waitlist={waitlist}
             onDeleteCustomer={deleteCustomer}
@@ -4640,8 +4667,8 @@ export function BookingApp({uid}){
           exceptions={hourExceptions}
           bookings={bookings}
           today={todayStr()}
-          onSave={function(id,d){if(refused("hoursEdit"))return false;return saveException(id,d);}}
-          onRemove={function(id){if(refused("hoursEdit"))return false;return removeException(id);}}
+          onSave={function(id,d){return settingsUndo.save.specialDay(id,d)||false;}}
+          onRemove={function(id){return settingsUndo.save.removeSpecialDay(id)||false;}}
           onDirty={setSpecialDirty}
           onClose={function(done){if(done)setSpecialDay(null);else requestCloseSpecialDay();}} /></Suspense></div>:null}</ModalPresence>{/* v18.0.0 phase 5 review: `whatsappOn &&`, not `showInbox`
           alone. Gating only the ENTRY POINTS left an inbox that was already open

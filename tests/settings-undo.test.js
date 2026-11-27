@@ -170,3 +170,51 @@ describe("one history, several nodes", () => {
     expect(pillText(null, "general", name)).toBe("");
   });
 });
+
+// v18.20.0 (Patryk): the pill says the control's visible name and what happened.
+describe("describeStep: Settings → General", () => {
+  function say(node, before, after) { return describeAny(node, before, after, changedPaths(before, after)); }
+  const day = { open: 13, close: 22, closed: false };
+  const week = { 0: day, 1: day, 2: day, 3: day, 4: day, 5: day, 6: day };
+  const H = { week, exceptions: {} };
+  it("opening hours and special days", () => {
+    expect(say("settings/operatingHours", H, { ...H, week: { ...week, 1: { ...day, open: 12 } } })).toBe("Monday's hours changed");
+    expect(say("settings/operatingHours", H, { ...H, week: { ...week, 0: { ...day, closed: true } } })).toBe("Sunday's hours changed");
+    const other = { open: 12, close: 23, closed: false };
+    const varied = { ...week, 3: other };
+    expect(say("settings/operatingHours", { ...H, week: varied }, H)).toBe("Wednesday's hours changed");
+    const all = { 0: other, 1: other, 2: other, 3: other, 4: other, 5: other, 6: other };
+    expect(say("settings/operatingHours", { ...H, week: varied }, { ...H, week: all })).toBe("Hours copied to all days");
+    const ex = { from: "2026-12-24", to: "2026-12-26", closed: true };
+    expect(say("settings/operatingHours", H, { ...H, exceptions: { a: ex } })).toBe("Special day added");
+    expect(say("settings/operatingHours", { ...H, exceptions: { a: ex } }, H)).toBe("Special day removed");
+    expect(say("settings/operatingHours", { ...H, exceptions: { a: ex } }, { ...H, exceptions: { a: { ...ex, note: "Xmas" } } })).toBe("Special day changed");
+  });
+  it("shifts, the optimiser and the booking defaults", () => {
+    expect(say("settings/dayShifts", { split: 17, enabled: true }, { split: 17, enabled: false })).toBe("Shifts switched off");
+    expect(say("settings/dayShifts", { split: 17, enabled: true }, { split: 18, enabled: true })).toBe("Afternoon / Evening split changed");
+    expect(say("settings/optimizer", { cutoff: 15, autoSwitch: false }, { cutoff: 15, autoSwitch: true })).toBe("Auto-optimiser switched on");
+    expect(say("settings/optimizer", { cutoff: 15, autoSwitch: true }, { cutoff: 16, autoSwitch: true })).toBe("Daily cutoff changed");
+    const bd = { v: 1, tiers: [{ max: 2, dur: 90 }, { max: 4, dur: 120 }], restDur: 150, lateEnabled: true, lateWarnMin: 15 };
+    expect(say("settings/bookingDefaults", bd, { ...bd, tiers: [{ max: 2, dur: 90 }, { max: 4, dur: 135 }] })).toBe("Booking duration 2 changed");
+    expect(say("settings/bookingDefaults", bd, { ...bd, tiers: bd.tiers.slice(0, 1) })).toBe("Booking duration removed");
+    expect(say("settings/bookingDefaults", bd, { ...bd, restDur: 165 })).toBe("Larger parties' stay changed");
+    expect(say("settings/bookingDefaults", { ...bd, tiers: [] }, { ...bd, tiers: [], restDur: 165 })).toBe("All parties' stay changed");
+    expect(say("settings/bookingDefaults", bd, { ...bd, lateEnabled: false })).toBe("Running late switched off");
+    expect(say("settings/bookingDefaults", bd, { ...bd, lateWarnMin: 20 })).toBe("Highlight after changed");
+  });
+  it("general settings and standing bookings", () => {
+    const gs = { v: 1, restaurantName: "Me Gustas Tú", currency: "€", undoSecs: 10, pinnedCountries: ["ES"] };
+    expect(say("settings/general", gs, { ...gs, restaurantName: "MGT" })).toBe("Restaurant name changed");
+    expect(say("settings/general", gs, { ...gs, undoSecs: 15 })).toBe("Undo toast time changed");
+    expect(say("settings/general", gs, { ...gs, pinnedCountries: ["ES", "GB"] })).toBe("Pinned country added");
+    expect(say("settings/general", gs, { ...gs, pinnedCountries: [] })).toBe("Pinned country removed");
+    const r = { id: "r1", name: "Ana", active: true };
+    const rec = { v: 1, enabled: true, horizonWeeks: 4, rules: [r] };
+    expect(say("recurring", rec, { ...rec, enabled: false })).toBe("Standing bookings switched off");
+    expect(say("recurring", rec, { ...rec, horizonWeeks: 6 })).toBe("Generate ahead changed");
+    expect(say("recurring", rec, { ...rec, rules: [{ ...r, active: false }] })).toBe("Standing booking for Ana paused");
+    expect(say("recurring", { ...rec, rules: [{ ...r, active: false }] }, rec)).toBe("Standing booking for Ana resumed");
+    expect(say("recurring", rec, { ...rec, rules: [] })).toBe("Standing booking for Ana removed");
+  });
+});

@@ -42602,3 +42602,21 @@ visible name and what happened; a retention Undo restores the number only; the p
   a refusal drops only its node's steps, and the tab prefix.
 - **On DEV (1440 × 900):** Layout's kitchen limit 3 → 4 → 5 is one step, "Kitchen limit changed"; on General the pill reads
   "Layout · Kitchen limit changed"; Undo takes it back to 3, measured again 3 → 4 → Undo → 3.
+
+### Commit 2 — General
+
+- **What:** every General save records a step: opening hours, Copy to all days and special days (`settings/operatingHours`, with
+  a new `restoreHours`), shifts, the optimiser, booking defaults, general settings, and standing bookings (on, Generate ahead, a
+  rule paused, resumed or deleted). The writers return what they stored (`persist` returns `{week, exceptions}`; the others their
+  sanitized `next`; `saveRecurring` its `computed`), or a falsy value when a guard refused, so nothing is recorded. The hours'
+  refusal stays `false`, as `tests/special-days.test.js` pins and SpecialDayModal's `!== false` reads.
+- **The savers are handed to the hook** (`savers` → `settingsUndo.save.<name>`), not wrapped by a `track(...)` call in App's
+  JSX: each such call passed a closure over App's refs to a function called during render, which the React Compiler reports
+  (`react-hooks/refs`, lint 63 → 70, measured). The refusal's notice timer became a token in state for the same reason.
+- **`track` records nothing while Settings is closed** (the special-day editor also opens from the day itself).
+- **Labels** (`settings-undo-labels.js`): "Monday's hours changed", "Hours copied to all days", "Special day added", "Shifts
+  switched off", "Daily cutoff changed", "Booking duration 2 changed", "Larger parties' stay changed", "Running late switched
+  off", "Restaurant name changed", "Pinned country added", "Standing booking for Ana paused", among others; 3 tests.
+- **On DEV (1440 × 900):** Daily cutoff 15:00 → 17:00 in two taps is one step; Overlap warnings off, then Undo → on, Undo →
+  15:00. Refusal: a second tab raised the cutoff 16:00 → 17:00 under this tab's step; Undo said "Changed on another device,
+  can't undo" and left 17:00, and 3.5s later the pill named the Overlap warnings step below it, which Undo then took back.

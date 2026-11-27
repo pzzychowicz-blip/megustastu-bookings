@@ -158,7 +158,7 @@ export function useBookingDefaults(){
   function saveBookingDefaults(partial){
     if(!loaded.current){
       console.warn("[SAFE] Refused to write booking defaults — initial read has not completed yet.");
-      return;
+      return null;
     }
     const prev = bookingDefaults;
     const next = sanitizeBookingDefaults({ ...prev, ...(partial || {}) });
@@ -169,6 +169,9 @@ export function useBookingDefaults(){
       const entry = settingsWriteEntry("settings/bookingDefaults", prev, next);
       if (entry) emitActivity([entry]);
     });
+    // v18.20.0: what was stored, sanitized, for Settings' Undo (null above:
+    // a refused save records nothing).
+    return next;
   }
 
   return { bookingDefaults, saveBookingDefaults };

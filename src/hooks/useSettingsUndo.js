@@ -1,7 +1,7 @@
 // ── useSettingsUndo ──────────────────────────────────────────────────────────
 // v18.19.1 (Patryk): Undo for Settings → Layout. v18.20.0 (Patryk): for every
 // tab, as ONE history for the whole dialog. Every save Settings makes goes
-// through a saver `track(node, save)` returns, which records it; the pill in
+// through a saver the hook wraps (`savers` → `save.<name>`, by `track`), which records it; the pill in
 // the dialog's footer (SettingsUndoToast) names the step an Undo press would
 // take back, and each press takes back one, back to when Settings opened. WHAT
 // is recorded, merged and refused is `lib/settings-undo.js`, what a step is
@@ -40,14 +40,19 @@
 // keyboard can take a step back without walking Tab to the footer. Not while
 // typing (a text box's own undo is the browser's), not while a modal sits over
 // Settings, and only with a step to take back.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { recordStep, undoStep, pillText } from "../lib/settings-undo";
 import { describeStep } from "../lib/settings-undo-labels";
 import { isTyping } from "../lib/keyboard";
 import { SETTINGS_TABS } from "../components/SettingsChrome";
 
 const NOTICE_MS = 3500;
-const IDLE = { stack: [], text: "", undo: false, show: false };
+const IDLE = { stack: [], text: "", undo: false, show: false, notice: 0 };
+// Each refusal's notice gets its own number, and its timer acts only while the
+// state still carries it: a save or an Undo in between moves `notice` on, so
+// a late timer changes nothing. No timer ref, so a saver `track` returns reads
+// no ref, and calling `track` in render is not reading one (React Compiler).
+let noticeSeq = 0;
 
 function familyOf(id) { const i = id.indexOf(":"); return i > 0 ? id.slice(0, i) : id; }
 function keyOf(id) { const i = id.indexOf(":"); return i > 0 ? id.slice(i + 1) : null; }
@@ -56,9 +61,8 @@ function tabLabel(id) {
   return t ? t.label : "";
 }
 
-export function useSettingsUndo({ open, onTop, tab, nodes }) {
+export function useSettingsUndo({ open, onTop, tab, nodes, savers }) {
   const [u, setU] = useState(IDLE);
-  const timer = useRef(null);
 
   // Settings closed: the steps go with it. The pill fades where it was.
   if (!open && (u.stack.length || u.show)) setU({ ...u, stack: [], show: false, undo: false });
@@ -69,7 +73,9 @@ export function useSettingsUndo({ open, onTop, tab, nodes }) {
     return function () {
       const args = arguments;
       const id = typeof node === "function" ? node.apply(null, args) : node;
-      const ad = id ? nodes[familyOf(id)] : null;
+      // Not while Settings is closed: the special-day editor also opens from
+      // the day itself, and a step recorded there would only be forgotten.
+      const ad = open && id ? nodes[familyOf(id)] : null;
       if (!ad) return save.apply(null, args);
       const key = keyOf(id);
       const before = ad.value(key);
@@ -77,13 +83,12 @@ export function useSettingsUndo({ open, onTop, tab, nodes }) {
       const after = ad.after ? ad.after(key, ret, before, args) : (ret && typeof ret === "object" ? ret : null);
       if (after == null) return ret;
       const step = { node: id, tab: tab, before: before, after: after };
-      clearTimeout(timer.current);
       setU(function (s) {
         const stack = recordStep(s.stack, step, describeStep);
         if (stack === s.stack) return s;
         return stack.length
-          ? { stack: stack, text: s.text, undo: true, show: true }
-          : { ...s, stack: stack, undo: false, show: false };
+          ? { stack: stack, text: s.text, undo: true, show: true, notice: 0 }
+          : { ...s, stack: stack, undo: false, show: false, notice: 0 };
       });
       return ret;
     };
@@ -97,11 +102,14 @@ export function useSettingsUndo({ open, onTop, tab, nodes }) {
       return ad ? ad.value(keyOf(id)) : undefined;
     });
     if (!plan) return;
-    clearTimeout(timer.current);
     if (plan.refuse) {
-      setU({ stack: plan.rest, text: plan.refuse, undo: false, show: true });
-      timer.current = setTimeout(function () {
-        setU(function (s) { return s.stack.length ? { ...s, undo: true, show: true } : { ...s, show: false }; });
+      const n = ++noticeSeq;
+      setU({ stack: plan.rest, text: plan.refuse, undo: false, show: true, notice: n });
+      setTimeout(function () {
+        setU(function (s) {
+          if (s.notice !== n) return s;
+          return s.stack.length ? { ...s, undo: true, show: true, notice: 0 } : { ...s, show: false, notice: 0 };
+        });
       }, NOTICE_MS);
       return;
     }
@@ -110,8 +118,8 @@ export function useSettingsUndo({ open, onTop, tab, nodes }) {
     const rest = plan.rest;
     // Emptied, the pill fades still saying the step it just took back.
     setU(rest.length
-      ? { ...u, stack: rest, undo: true, show: true }
-      : { ...u, stack: rest, text: pillText(top, tab, tabLabel), undo: false, show: false });
+      ? { ...u, stack: rest, undo: true, show: true, notice: 0 }
+      : { ...u, stack: rest, text: pillText(top, tab, tabLabel), undo: false, show: false, notice: 0 });
   }
 
   // The keyboard's way to the pill. Re-added each render, so it always calls
@@ -133,10 +141,17 @@ export function useSettingsUndo({ open, onTop, tab, nodes }) {
     window.addEventListener("keydown", onKey);
     return function () { window.removeEventListener("keydown", onKey); };
   });
-  useEffect(function () { return function () { clearTimeout(timer.current); }; }, []);
+
+  // `savers` maps a name to `[node, save]`, and `save.<name>` is that save
+  // wrapped by `track`. Wrapped HERE rather than by a `track(...)` call in
+  // App's JSX: a save closing over App's refs, handed to a function called
+  // during render, is a React Compiler `react-hooks/refs` advisory per call
+  // site (seven, measured), where handing it to a hook is not.
+  const save = {};
+  Object.keys(savers || {}).forEach(function (name) { save[name] = track(savers[name][0], savers[name][1]); });
 
   // The pill's sentence is read at render, so a tab switch re-words it: the tab
   // is named only while you are on another (Patryk, v18.20.0).
   const text = u.undo && top ? pillText(top, tab, tabLabel) : u.text;
-  return { track, undo, pill: { text: text, undo: u.undo, show: u.show } };
+  return { save, undo, pill: { text: text, undo: u.undo, show: u.show } };
 }

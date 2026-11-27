@@ -68,7 +68,7 @@ export function useDayShifts(){
   function saveDayShifts(partial){
     if(!loaded.current){
       console.warn("[SAFE] Refused to write dayShifts — initial read has not completed yet.");
-      return;
+      return null;
     }
     // `prev` is captured before anything is overwritten — read it later and it
     // is the same object as `next`, so the diff reports nothing changed.
@@ -79,6 +79,9 @@ export function useDayShifts(){
       const entry = settingsWriteEntry("settings/dayShifts", prev, next);
       if (entry) emitActivity([entry]);
     });
+    // v18.20.0: what was stored, sanitized, for Settings' Undo (null above:
+    // a refused save records nothing).
+    return next;
   }
 
   return { dayShifts, saveDayShifts };

@@ -106,7 +106,10 @@ export function useOperatingHours(viewDate){
       const e = entry ? entry(prev) : settingsWriteEntry("settings/operatingHours", { days: prev.week }, { days: nextWeek });
       if (e) emitActivity([e]);
     });
-    return true;
+    // v18.20.0: the hours as stored, in the state's shape, for Settings' Undo
+    // (false above: a refused save records nothing). Callers that only ask
+    // whether it went out (SpecialDayModal's `!== false`) read it as truthy.
+    return { week: nextWeek, exceptions };
   }
 
   // Persist one day (partial patch merged onto the current day). Writes the whole
@@ -116,7 +119,7 @@ export function useOperatingHours(viewDate){
     const k = Number(weekdayKey);
     const next = { ...cur.week };
     next[k] = sanitizeDay({ ...cur.week[k], ...(patch || {}) });
-    persist(next, cur.exceptions);
+    return persist(next, cur.exceptions);
   }
 
   // "Copy to all days" — set every weekday to one day's full config.
@@ -124,7 +127,7 @@ export function useOperatingHours(viewDate){
     const clean = sanitizeDay(dayConfig);
     const next = {};
     for(let i = 0; i < 7; i++) next[i] = { ...clean };
-    persist(next, hoursRef.current.exceptions);
+    return persist(next, hoursRef.current.exceptions);
   }
 
   // v18.10.0: add (id null) or replace one special day. The caller has asked
@@ -148,5 +151,12 @@ export function useOperatingHours(viewDate){
     return persist(cur.week, next, function () { return specialDayEntry("removed", had); });
   }
 
-  return { weekHours: hours.week, exceptions: hours.exceptions, hoursSig: hours, saveDayHours, saveAllDays, saveException, removeException };
+  // v18.20.0: Settings' Undo puts the whole node back, week and special days,
+  // through the one writer (its guard, rev CAS and activity entry).
+  function restoreHours(v){
+    if(!v || !v.week) return false;
+    return persist(v.week, v.exceptions || {});
+  }
+
+  return { weekHours: hours.week, exceptions: hours.exceptions, hoursSig: hours, saveDayHours, saveAllDays, saveException, removeException, restoreHours };
 }

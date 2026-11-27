@@ -222,7 +222,7 @@ export function useGeneralSettings(){
   function saveGeneralSettings(partial){
     if(!loaded.current){
       console.warn("[SAFE] Refused to write general settings — initial read has not completed yet.");
-      return;
+      return null;
     }
     // v18.0.0 session 8: `prev` is captured BEFORE anything is overwritten, and
     // that ordering is the whole of the correctness here — read a line later and
@@ -242,6 +242,9 @@ export function useGeneralSettings(){
       const entry = settingsWriteEntry("settings/general", prev, next);
       if (entry) emitActivity([entry]);
     });
+    // v18.20.0: what was stored, sanitized, for Settings' Undo (null above:
+    // a refused save records nothing).
+    return next;
   }
 
   return { generalSettings, saveGeneralSettings };

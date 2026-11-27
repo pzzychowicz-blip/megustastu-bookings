@@ -84,6 +84,108 @@ export function describeLayoutStep(before, after, paths) {
   return "Layout changed";
 }
 
+// ── Shared shapes ────────────────────────────────────────────────────────────
+// The top-level keys a step changed ("tiers.1.max" → "tiers").
+function topKeys(paths) {
+  const top = {};
+  paths.forEach(function (p) { top[p.split(".")[0]] = true; });
+  return Object.keys(top);
+}
+// A switch says which way it went; any other control says "changed".
+function switchLabel(name, on) { return name + " switched " + (on ? "on" : "off"); }
+// A node of named controls: `names` maps a key to the control's visible name,
+// `switches` lists the keys that are switches. One key changed is named; more
+// than one is `whole` (a save sends one control's value, so more than one
+// means another control moved with it, which only a clamp does).
+function keyedLabel(names, switches, whole, before, after, paths) {
+  const keys = topKeys(paths).filter(function (k) { return k !== "v"; });
+  if (keys.length !== 1 || !names[keys[0]]) return whole;
+  const k = keys[0];
+  return switches.indexOf(k) >= 0 ? switchLabel(names[k], after[k] === true) : names[k] + " changed";
+}
+
+// ── Settings → General ───────────────────────────────────────────────────────
+// Weekday keys are UTC `getUTCDay()` order, as `settings/operatingHours` stores
+// them (lib/day.js).
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+// `before` / `after` are `{week, exceptions}`, useOperatingHours' state.
+export function describeHoursStep(before, after, paths) {
+  const days = {};
+  paths.forEach(function (p) { const a = p.split("."); if (a[0] === "week") days[a[1]] = true; });
+  const changed = Object.keys(days);
+  if (changed.length) {
+    if (changed.length === 1) return DAY_NAMES[Number(changed[0])] + "'s hours changed";
+    const w = after.week || {};
+    const first = stableKey(w[0]);
+    const same = [1, 2, 3, 4, 5, 6].every(function (i) { return stableKey(w[i]) === first; });
+    return same ? "Hours copied to all days" : "Opening hours changed";
+  }
+  const nb = Object.keys(before.exceptions || {}).length;
+  const na = Object.keys(after.exceptions || {}).length;
+  if (na > nb) return "Special day added";
+  if (na < nb) return "Special day removed";
+  return "Special day changed";
+}
+export function describeShiftsStep(before, after, paths) {
+  return keyedLabel({ enabled: "Shifts", split: "Afternoon / Evening split" }, ["enabled"], "Shifts changed", before, after, paths);
+}
+export function describeOptimizerStep(before, after, paths) {
+  return keyedLabel({ autoSwitch: "Auto-optimiser", cutoff: "Daily cutoff" }, ["autoSwitch"], "Auto-optimiser changed", before, after, paths);
+}
+const BOOKING_DEFAULT_NAMES = {
+  turnaroundEnabled: "Separation between bookings", turnaroundMin: "Separation",
+  lateEnabled: "Running late", lateWarnMin: "Highlight after", lateNoShowMin: "Offer no-show after",
+  overlapWarnEnabled: "Overlap warnings", reshuffleSuggestEnabled: "Reshuffle suggestions",
+  freeSoonEnabled: "Table turns", freeSoonWindow: "Predict up to",
+};
+const BOOKING_DEFAULT_SWITCHES = ["turnaroundEnabled", "lateEnabled", "overlapWarnEnabled", "reshuffleSuggestEnabled", "freeSoonEnabled"];
+export function describeBookingDefaultsStep(before, after, paths) {
+  const keys = topKeys(paths).filter(function (k) { return k !== "v"; });
+  if (keys.length === 1 && keys[0] === "tiers") return listLabel("Booking duration", "Booking durations", before.tiers, after.tiers, paths, "tiers");
+  if (keys.length === 1 && keys[0] === "restDur") return ((after.tiers || []).length ? "Larger parties'" : "All parties'") + " stay changed";
+  if (keys.indexOf("tiers") >= 0) return "Booking durations changed";
+  return keyedLabel(BOOKING_DEFAULT_NAMES, BOOKING_DEFAULT_SWITCHES, "Booking settings changed", before, after, paths);
+}
+const GENERAL_NAMES = {
+  restaurantName: "Restaurant name", currency: "Currency symbol", timeZone: "Time zone",
+  regularMin: "“Regular” from", lateCollapseMax: "Collapse banners above",
+  waitMatchWin: "Waitlist match window", undoSecs: "Undo toast time",
+  defaultBookingSize: "New booking size", defaultWalkinSize: "Walk-in size",
+};
+export function describeGeneralStep(before, after, paths) {
+  const keys = topKeys(paths).filter(function (k) { return k !== "v"; });
+  if (keys.length === 1 && keys[0] === "pinnedCountries") {
+    const nb = (before.pinnedCountries || []).length;
+    const na = (after.pinnedCountries || []).length;
+    return na > nb ? "Pinned country added" : na < nb ? "Pinned country removed" : "Pinned countries changed";
+  }
+  return keyedLabel(GENERAL_NAMES, [], "Preferences changed", before, after, paths);
+}
+// `recurring` is `{v, enabled, horizonWeeks, rules}`; a rule names its guest.
+export function describeRecurringStep(before, after, paths) {
+  const keys = topKeys(paths).filter(function (k) { return k !== "v"; });
+  if (keys.length === 1 && keys[0] === "enabled") return switchLabel("Standing bookings", after.enabled === true);
+  if (keys.length === 1 && keys[0] === "horizonWeeks") return "Generate ahead changed";
+  const rb = before.rules || [];
+  const ra = after.rules || [];
+  const ib = rb.map(function (r) { return r.id; });
+  const ia = ra.map(function (r) { return r.id; });
+  function who(r) { return r && r.name ? "Standing booking for " + r.name : "Standing booking"; }
+  if (ra.length < rb.length) return who(rb.filter(function (r) { return ia.indexOf(r.id) < 0; })[0]) + " removed";
+  if (ra.length > rb.length) return who(ra.filter(function (r) { return ib.indexOf(r.id) < 0; })[0]) + " added";
+  const moved = ra.filter(function (r) {
+    const o = rb.find(function (x) { return x.id === r.id; });
+    return o && stableKey(o) !== stableKey(r);
+  });
+  if (moved.length === 1) {
+    const r = moved[0];
+    const o = rb.find(function (x) { return x.id === r.id; });
+    if (o.active !== r.active) return who(r) + (r.active === false ? " paused" : " resumed");
+    return who(r) + " changed";
+  }
+  return "Standing bookings changed";
+}
+
 // ── The one entry point ──────────────────────────────────────────────────────
 // A node with no describer of its own says "Setting changed": a step the pill
 // cannot name is still a step it can take back. `tests/settings-undo.test.js`
@@ -91,6 +193,12 @@ export function describeLayoutStep(before, after, paths) {
 export const FALLBACK_LABEL = "Setting changed";
 const DESCRIBERS = {
   "settings/layout": describeLayoutStep,
+  "settings/operatingHours": describeHoursStep,
+  "settings/dayShifts": describeShiftsStep,
+  "settings/optimizer": describeOptimizerStep,
+  "settings/bookingDefaults": describeBookingDefaultsStep,
+  "settings/general": describeGeneralStep,
+  "recurring": describeRecurringStep,
 };
 export function describeStep(node, before, after, paths) {
   const fam = node.indexOf(":") > 0 ? node.slice(0, node.indexOf(":")) : node;
