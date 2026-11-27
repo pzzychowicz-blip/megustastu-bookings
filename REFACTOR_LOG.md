@@ -42660,3 +42660,19 @@ visible name and what happened; a retention Undo restores the number only; the p
   labels are a sentence each. Disconnect and Check usage stay outside (Patryk).
 - **On DEV:** Auto-archive off → "Auto-archive switched off"; Undo → on again, with no refusal or rev error in the console.
   Auto-reply was left alone: DEV is the sandbox's database, and its auto-reply stays off until the rehearsal.
+
+### Commit 7 — App
+
+- **What:** every control in Settings → App, per account and per device, as node `app:<name>`: theme (Dark mode and
+  Automatic dark mode share `app:theme`, `"auto"` / `"dark"` / `"light"`), `app:appWidth` (`{width: the STORED width or null,
+  fit}`, so Fit to screen and the width stepper are one node), `app:timeline` (the whole `tlSettings`, since lowering Maximum
+  zoom clamps the other two), `app:dragHold`, and ten switches. Every setter in `useShellPrefs` now returns the value it set
+  (Dark mode's refusal while Automatic is on returns null), and two new functions read and write a pref by VALUE,
+  `shellPrefOf` and `setShellPref`: a second flip cannot take back a three-state theme or a fit that also stored a width. The
+  ten plain switches restore by one flip from the other value, which is setting it. Never refused: nothing else writes these
+  while Settings is open (an account's prefs reach another device only at sign-in). Split view switched off leaves the split,
+  as the switch does, and its Undo does not bring the split back. Two wiring pins (`drag-hold`, `app-width-fit`) now expect the
+  tracked saver.
+- **On DEV:** Fit to screen off → "Fit to screen switched off" (width 1050 stored), App width + → "App width changed"; Undo,
+  Undo → Fit on, and both `mgt-appwidth` keys gone again. Automatic dark mode on, Larger text on, Time shown behind the
+  now-line + + (one step, "… changed"); three Undos in order → light theme, Larger text off, 30 min with its key removed.

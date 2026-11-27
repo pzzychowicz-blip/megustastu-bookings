@@ -1503,6 +1503,7 @@ export function BookingApp({uid}){
     cellBook,onToggleCellBook,
     vibrateOnDrag,onToggleVibrate,
     dragHold,onSetDragHold,
+    shellPrefOf,setShellPref,
     split,focusedPane,setFocusedPane,applySplit,fitTimeline,
     confirmSplit,swapSides,toggleSplitDir,exitSplit,setSplitRatio,
     splitSideBySideOk,shellFixed,
@@ -2017,6 +2018,10 @@ export function BookingApp({uid}){
       },
       "settings/voucherDefaults": { value: function(){return voucherDefaults;}, restore: function(k,b){return !!saveVoucherDefaults(b);} },
       "settings/whatsapp": { value: function(){return waSettings;}, restore: function(k,b){return !!saveWaSettings(b);} },
+      // Settings → App: one node per pref, "app:<name>" (useShellPrefs' shellPrefOf
+      // names them). Each setter returns the value it set, false included, so a
+      // null alone is a refusal (Dark mode while Automatic is on).
+      "app": { value: function(k){return shellPrefOf(k);}, after: function(k,ret){return ret==null?null:ret;}, restore: function(k,b){return setShellPref(k,b);} },
       // Settings → Reminders: the whole list, on one rev pair.
       "reminders": { value: function(){return reminders;}, restore: function(k,b){return !!saveReminders(b);} },
       // A guest's tags live on their bookings (`guestTagMap`), keyed by
@@ -2063,6 +2068,15 @@ export function BookingApp({uid}){
       voidVoucher:[function(code){const c=normalizeCode(code);return c?"voucher:"+c:null;},function(c,on){return refused("voucherVoid")?false:voidVoucher(c,on);}],
       voucherDefaults:["settings/voucherDefaults",saveVoucherDefaults],
       waSettings:["settings/whatsapp",saveWaSettings],
+      // Settings → App
+      dark:["app:theme",onToggleDark], autoTheme:["app:theme",onToggleAutoTheme],
+      appWidth:["app:appWidth",onSetAppWidth], appWidthFit:["app:appWidth",onToggleAppWidthFit],
+      reduceMotion:["app:reduceMotion",onToggleReduceMotion], sw:["app:swEnabled",onToggleSw],
+      planGestures:["app:planGestures",onTogglePlanGestures], planAvail:["app:planAvail",onTogglePlanAvail],
+      navLock:["app:navLocked",onToggleNavLock], splitEnabled:["app:splitEnabled",onToggleSplitEnabled],
+      tlSetting:["app:timeline",onSetTlSetting], largeText:["app:largeText",onToggleLargeText],
+      indoorTint:["app:indoorTint",onToggleIndoorTint], cellBook:["app:cellBook",onToggleCellBook],
+      vibrate:["app:vibrateOnDrag",onToggleVibrate], dragHold:["app:dragHold",onSetDragHold],
       // The editor's Save and the delete confirm are reached by Enter too (the
       // keyboard ctx below), so both doors take these, never the raw saves.
       reminderSave:["reminders",saveReminderFromEditor],
@@ -4596,37 +4610,37 @@ export function BookingApp({uid}){
             appVersion={__APP_SIGNATURE__.version}
             onDirty={setSettingsDirty}
             isDark={isDark}
-            onToggleDark={onToggleDark}
+            onToggleDark={settingsUndo.save.dark}
             autoTheme={themePref===undefined}
-            onToggleAutoTheme={onToggleAutoTheme}
+            onToggleAutoTheme={settingsUndo.save.autoTheme}
             appWidth={appWidth}
-            onSetAppWidth={onSetAppWidth}
+            onSetAppWidth={settingsUndo.save.appWidth}
             appWidthFit={appWidthFit}
-            onToggleAppWidthFit={onToggleAppWidthFit}
+            onToggleAppWidthFit={settingsUndo.save.appWidthFit}
             reduceMotion={reduceMotion}
-            onToggleReduceMotion={onToggleReduceMotion}
+            onToggleReduceMotion={settingsUndo.save.reduceMotion}
             swEnabled={swEnabled}
-            onToggleSw={onToggleSw}
+            onToggleSw={settingsUndo.save.sw}
             navLocked={navLocked}
-            onToggleNavLock={onToggleNavLock}
+            onToggleNavLock={settingsUndo.save.navLock}
             splitEnabled={splitEnabled}
-            onToggleSplitEnabled={onToggleSplitEnabled}
+            onToggleSplitEnabled={settingsUndo.save.splitEnabled}
             planGestures={planGestures}
             planAvail={planAvail}
-            onTogglePlanAvail={onTogglePlanAvail}
-            onTogglePlanGestures={onTogglePlanGestures}
+            onTogglePlanAvail={settingsUndo.save.planAvail}
+            onTogglePlanGestures={settingsUndo.save.planGestures}
             tlSettings={tlSettings}
-            onSetTlSetting={onSetTlSetting}
+            onSetTlSetting={settingsUndo.save.tlSetting}
             largeText={largeText}
-            onToggleLargeText={onToggleLargeText}
+            onToggleLargeText={settingsUndo.save.largeText}
             indoorTint={indoorTint}
-            onToggleIndoorTint={onToggleIndoorTint}
+            onToggleIndoorTint={settingsUndo.save.indoorTint}
             cellBook={cellBook}
-            onToggleCellBook={onToggleCellBook}
+            onToggleCellBook={settingsUndo.save.cellBook}
             vibrateOnDrag={vibrateOnDrag}
-            onToggleVibrate={onToggleVibrate}
+            onToggleVibrate={settingsUndo.save.vibrate}
             dragHold={dragHold}
-            onSetDragHold={onSetDragHold}
+            onSetDragHold={settingsUndo.save.dragHold}
             weekHours={weekHours}
             onSaveDayHours={settingsUndo.save.dayHours}
             onSaveAllDays={settingsUndo.save.allDays}

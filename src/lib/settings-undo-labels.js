@@ -235,6 +235,33 @@ export function describeWhatsAppStep(before, after, paths) {
   return keyedLabel(WA_NAMES, ["autoArchiveOnComplete", "autoReply"], "WhatsApp settings changed", before, after, paths);
 }
 
+// ── Settings → App ───────────────────────────────────────────────────────────
+// Node "app:<name>", one per pref (useShellPrefs' shellPrefOf). Named by the
+// switch or the row's heading on screen.
+const APP_SWITCHES = {
+  reduceMotion: "Reduce animations", swEnabled: "Work offline", planGestures: "Plan zoom and pan",
+  planAvail: "Table availability", navLocked: "Lock navigation", splitEnabled: "Split view",
+  largeText: "Larger text", indoorTint: "Tint indoor tables", cellBook: "Tap an empty cell to book",
+  vibrateOnDrag: "Vibrate on drag",
+};
+const TIMELINE_NAMES = {
+  defaultZoom: "Zoom when opening the app", followZoom: "Zoom when Follow turns on",
+  followLead: "Time shown behind the now-line", maxZoom: "Maximum zoom",
+};
+export function describeAppStep(before, after, paths, node) {
+  const k = node.slice(node.indexOf(":") + 1);
+  if (k === "theme") {
+    if (after === "auto" || before === "auto") return switchLabel("Automatic dark mode", after === "auto");
+    return switchLabel("Dark mode", after === "dark");
+  }
+  if (k === "appWidth") {
+    return (before || {}).fit !== (after || {}).fit ? switchLabel("Fit to screen", !!(after || {}).fit) : "App width changed";
+  }
+  if (k === "timeline") return keyedLabel(TIMELINE_NAMES, [], "Timeline zoom changed", before, after, paths);
+  if (k === "dragHold") return "Drag hold changed";
+  return APP_SWITCHES[k] ? switchLabel(APP_SWITCHES[k], after === true) : FALLBACK_LABEL;
+}
+
 // ── Settings → Reminders ─────────────────────────────────────────────────────
 // `reminders` is the whole list; a reminder is named by its text, cut to fit a
 // pill on a phone.
@@ -280,6 +307,7 @@ const DESCRIBERS = {
   "settings/voucherDefaults": describeVoucherDefaultsStep,
   "reminders": describeRemindersStep,
   "settings/whatsapp": describeWhatsAppStep,
+  "app": describeAppStep,
 };
 export function describeStep(node, before, after, paths, ctx) {
   const fam = node.indexOf(":") > 0 ? node.slice(0, node.indexOf(":")) : node;

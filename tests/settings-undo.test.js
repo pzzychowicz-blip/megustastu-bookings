@@ -270,3 +270,25 @@ describe("describeStep: Settings → WhatsApp", () => {
     expect(say({ ...w, autoReply: false }, w)).toBe("Auto-reply switched on");
   });
 });
+
+describe("describeStep: Settings → App", () => {
+  function say(node, b, a) { return describeAny(node, b, a, changedPaths(b, a)); }
+  it("names the switch or the row, on screen", () => {
+    expect(say("app:theme", "light", "dark")).toBe("Dark mode switched on");
+    expect(say("app:theme", "dark", "auto")).toBe("Automatic dark mode switched on");
+    expect(say("app:theme", "auto", "light")).toBe("Automatic dark mode switched off");
+    expect(say("app:appWidth", { width: 1200, fit: false }, { width: 1250, fit: false })).toBe("App width changed");
+    expect(say("app:appWidth", { width: null, fit: true }, { width: 1300, fit: false })).toBe("Fit to screen switched off");
+    expect(say("app:reduceMotion", false, true)).toBe("Reduce animations switched on");
+    expect(say("app:cellBook", true, false)).toBe("Tap an empty cell to book switched off");
+    const tl = { defaultZoom: 2, followZoom: 3, followLead: 30, maxZoom: 6 };
+    expect(say("app:timeline", tl, { ...tl, followLead: 45 })).toBe("Time shown behind the now-line changed");
+    expect(say("app:timeline", tl, { ...tl, maxZoom: 2.5, followZoom: 2.5, defaultZoom: 2 })).toBe("Timeline zoom changed");
+    expect(say("app:dragHold", "normal", "long")).toBe("Drag hold changed");
+  });
+  it("two taps on one switch fold back to nothing", () => {
+    const one = recordAny([], { node: "app:largeText", tab: "app", before: false, after: true }, describeAny);
+    expect(one[0].label).toBe("Larger text switched on");
+    expect(recordAny(one, { node: "app:largeText", tab: "app", before: true, after: false }, describeAny)).toEqual([]);
+  });
+});
