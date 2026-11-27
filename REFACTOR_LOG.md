@@ -42652,3 +42652,11 @@ visible name and what happened; a retention Undo restores the number only; the p
   phone's pill: "Reminder “Coca-Cola order in the…” paused" / resumed / added / deleted / changed.
 - **On DEV:** paused "Coca-Cola order in the supplier chat" → the pill named it; Undo → active again. Deleted it through the
   confirm → "… deleted"; Undo → 3 reminders, the reminder back and active, and the pill faded keeping its sentence.
+
+### Commit 6 — WhatsApp
+
+- **What:** Auto-archive and Auto-reply (node `settings/whatsapp`, `whatsappRev`); `saveWaSettings` returns what it stored,
+  null when the loaded guard refuses. Named by their sections' titles ("Auto-archive switched off"), since the switches' own
+  labels are a sentence each. Disconnect and Check usage stay outside (Patryk).
+- **On DEV:** Auto-archive off → "Auto-archive switched off"; Undo → on again, with no refusal or rev error in the console.
+  Auto-reply was left alone: DEV is the sandbox's database, and its auto-reply stays off until the rehearsal.

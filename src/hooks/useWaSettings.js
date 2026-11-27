@@ -93,7 +93,7 @@ export function useWaSettings({ enabled } = {}) {
   function saveWaSettings(partial) {
     if (!loaded.current) {
       console.warn("[SAFE] Refused to write WhatsApp settings — initial read has not completed yet.");
-      return;
+      return null;
     }
     const prev = waSettings;
     const next = sanitizeWa({ ...prev, ...(partial || {}) });
@@ -102,6 +102,9 @@ export function useWaSettings({ enabled } = {}) {
       const entry = settingsWriteEntry("settings/whatsapp", prev, next);
       if (entry) emitActivity([entry]);
     });
+    // v18.20.0: what it stored, so Settings' Undo can record the step and
+    // compare against it (the v18.19.1 writer contract; null above = refused).
+    return next;
   }
 
   // ── The auto-archive epoch ──────────────────────────────────────────────────

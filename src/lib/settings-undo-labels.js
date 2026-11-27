@@ -227,6 +227,14 @@ export function describeVoucherStep(before, after, paths, node) {
 }
 export function describeVoucherDefaultsStep() { return "Default validity changed"; }
 
+// ── Settings → WhatsApp ──────────────────────────────────────────────────────
+// Named by their sections' titles, which are on screen beside each switch and
+// fit a phone's pill (the switches' own labels are a sentence each).
+const WA_NAMES = { autoArchiveOnComplete: "Auto-archive", autoReply: "Auto-reply" };
+export function describeWhatsAppStep(before, after, paths) {
+  return keyedLabel(WA_NAMES, ["autoArchiveOnComplete", "autoReply"], "WhatsApp settings changed", before, after, paths);
+}
+
 // ── Settings → Reminders ─────────────────────────────────────────────────────
 // `reminders` is the whole list; a reminder is named by its text, cut to fit a
 // pill on a phone.
@@ -271,6 +279,7 @@ const DESCRIBERS = {
   "voucher": describeVoucherStep,
   "settings/voucherDefaults": describeVoucherDefaultsStep,
   "reminders": describeRemindersStep,
+  "settings/whatsapp": describeWhatsAppStep,
 };
 export function describeStep(node, before, after, paths, ctx) {
   const fam = node.indexOf(":") > 0 ? node.slice(0, node.indexOf(":")) : node;

@@ -261,3 +261,12 @@ describe("describeStep: Settings → Reminders", () => {
     expect(say([], [{ ...r, text: "Call the fish supplier about Friday's order" }])).toBe("Reminder “Call the fish supplier about…” added");
   });
 });
+
+describe("describeStep: Settings → WhatsApp", () => {
+  const w = { v: 1, autoArchiveOnComplete: true, autoArchiveSince: 5, autoReply: true };
+  function say(b, a) { return describeAny("settings/whatsapp", b, a, changedPaths(b, a)); }
+  it("names each switch by its section's title", () => {
+    expect(say(w, { ...w, autoArchiveOnComplete: false })).toBe("Auto-archive switched off");
+    expect(say({ ...w, autoReply: false }, w)).toBe("Auto-reply switched on");
+  });
+});

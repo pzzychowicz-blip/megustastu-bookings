@@ -2016,6 +2016,7 @@ export function BookingApp({uid}){
         restore: function(k,b){return !!voidVoucher(k,b==="void");},
       },
       "settings/voucherDefaults": { value: function(){return voucherDefaults;}, restore: function(k,b){return !!saveVoucherDefaults(b);} },
+      "settings/whatsapp": { value: function(){return waSettings;}, restore: function(k,b){return !!saveWaSettings(b);} },
       // Settings → Reminders: the whole list, on one rev pair.
       "reminders": { value: function(){return reminders;}, restore: function(k,b){return !!saveReminders(b);} },
       // A guest's tags live on their bookings (`guestTagMap`), keyed by
@@ -2061,6 +2062,7 @@ export function BookingApp({uid}){
       customerTag:[function(key){return key?"guestTags:"+key:null;},saveCustomerTag],
       voidVoucher:[function(code){const c=normalizeCode(code);return c?"voucher:"+c:null;},function(c,on){return refused("voucherVoid")?false:voidVoucher(c,on);}],
       voucherDefaults:["settings/voucherDefaults",saveVoucherDefaults],
+      waSettings:["settings/whatsapp",saveWaSettings],
       // The editor's Save and the delete confirm are reached by Enter too (the
       // keyboard ctx below), so both doors take these, never the raw saves.
       reminderSave:["reminders",saveReminderFromEditor],
@@ -4696,7 +4698,7 @@ export function BookingApp({uid}){
             onDeleteReminder={deleteReminder}
             onToggleReminder={settingsUndo.save.reminderToggle}
             waSettings={waSettings}
-            onSaveWaSettings={saveWaSettings}
+            onSaveWaSettings={settingsUndo.save.waSettings}
             waLink={wa.waLink} /></Suspense></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmReminderDel}>{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
         // window.confirm which is blocked in sandboxed preview environments).
         // Renders on top of Settings in DOM order so it visually covers the list.
