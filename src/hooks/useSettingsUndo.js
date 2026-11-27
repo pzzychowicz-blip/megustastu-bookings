@@ -70,8 +70,9 @@ export function useSettingsUndo({ open, onTop, tab, nodes, savers }) {
   if (!open && (u.stack.length || u.show)) setU({ ...u, stack: [], show: false, undo: false });
 
   // `node` is a node id, or a function of the save's arguments that returns one
-  // (a voucher's code, a guest's identity); null records nothing.
-  function track(node, save) {
+  // (a voucher's code, a guest's identity); null records nothing. `via` is the
+  // saver's name, so only taps on one control merge (lib/settings-undo.js).
+  function track(node, save, via) {
     return function () {
       const args = arguments;
       const id = typeof node === "function" ? node.apply(null, args) : node;
@@ -84,7 +85,7 @@ export function useSettingsUndo({ open, onTop, tab, nodes, savers }) {
       const ret = save.apply(null, args);
       const after = ad.after ? ad.after(key, ret, before, args) : (ret && typeof ret === "object" ? ret : null);
       if (after == null) return ret;
-      const step = { node: id, tab: tab, before: before, after: after, ctx: ad.context ? ad.context(key, args) : undefined };
+      const step = { node: id, tab: tab, via: via, before: before, after: after, ctx: ad.context ? ad.context(key, args) : undefined };
       setU(function (s) {
         const stack = recordStep(s.stack, step, describeStep);
         if (stack === s.stack) return s;
@@ -150,7 +151,7 @@ export function useSettingsUndo({ open, onTop, tab, nodes, savers }) {
   // during render, is a React Compiler `react-hooks/refs` advisory per call
   // site (seven, measured), where handing it to a hook is not.
   const save = {};
-  Object.keys(savers || {}).forEach(function (name) { save[name] = track(savers[name][0], savers[name][1]); });
+  Object.keys(savers || {}).forEach(function (name) { save[name] = track(savers[name][0], savers[name][1], name); });
 
   // The pill's sentence is read at render, so a tab switch re-words it: the tab
   // is named only while you are on another (Patryk, v18.20.0).

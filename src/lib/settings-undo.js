@@ -22,11 +22,17 @@
 //  • **Every step, back to when Settings opened.** The stack is forgotten when
 //    Settings closes (the hook's job).
 //  • **Taps on one control in a row are one step.** A save that changes exactly
-//    the one leaf the step on top changed, of the SAME node, is merged into it,
-//    keeping the older `before`. Merged back to where it started, the step is
-//    dropped: + then − is no change. By LEAF, never by time, so two taps a
-//    minute apart on one stepper still merge and a tap on another stepper never
-//    does.
+//    the one leaf the step on top changed, of the SAME node, made by the SAME
+//    saver (`via`), is merged into it, keeping the older `before`. Merged back
+//    to where it started, the step is dropped: + then − is no change. By LEAF,
+//    never by time, so two taps a minute apart on one stepper still merge and a
+//    tap on another stepper never does. Two things share a leaf without being
+//    one control (v18.20.0 /code-review, measured): two switches writing one
+//    value (Automatic dark mode, then Dark mode: `via` tells them apart), and a
+//    LIST's slot, which an item taken off the end and another put on both write
+//    (a guest's VIP off, then Allergy on). So at an array index the item must be
+//    there before, between and after (a stepper inside a row), or the merge must
+//    take the step back to where it started.
 //  • **The pill names the next step** (`pillText` of the top).
 //  • **Refuse and say why.** An Undo restores `before` only while the stored
 //    node is still the `after` this device wrote. Anything else means another
@@ -88,13 +94,29 @@ export function changedPaths(a, b, base) {
   return out;
 }
 
-// The stack after a save. `step` is `{node, tab, before, after, ctx?}`;
+// The value at a dotted path of `changedPaths` ("" is the value itself).
+function valueAt(v, path) {
+  if (!path) return v;
+  return path.split(".").reduce(function (o, k) { return o && typeof o === "object" ? o[k] : undefined; }, v);
+}
+// Is `path` a list's slot whose item comes or goes across the three values?
+// Then it is not one control (see the merge rule at the top).
+function slotComesOrGoes(path, values) {
+  if (!path) return false;
+  const i = path.lastIndexOf(".");
+  const parent = i < 0 ? "" : path.slice(0, i);
+  if (!values.some(function (v) { return Array.isArray(valueAt(v, parent)); })) return false;
+  return values.some(function (v) { return asStored(valueAt(v, path)) === undefined; });
+}
+
+// The stack after a save. `step` is `{node, tab, before, after, ctx?, via?}`;
 // `describe` is `(node, before, after, paths, ctx) → label` (`describeStep` in
 // lib/settings-undo-labels.js; passed in so this file names no node). `ctx` is
 // what a label needs that the node does not hold (a guest's name, a tag's
-// label), taken when the save was made; a merge keeps the first. A save
-// that changed nothing leaves the stack as it was (the same array, so a caller
-// can compare).
+// label), taken when the save was made; a merge keeps the first. `via` names
+// the saver that made it (the hook's saver name), so two controls writing one
+// leaf are never merged. A save that changed nothing leaves the stack as it was
+// (the same array, so a caller can compare).
 export function recordStep(stack, step, describe) {
   const node = step.node;
   const paths = changedPaths(step.before, step.after);
@@ -103,15 +125,17 @@ export function recordStep(stack, step, describe) {
   // …and only when this save starts from what the last one wrote: a value
   // another device set between two taps would otherwise vanish into the merge,
   // and the Undo would restore over it without the refusal.
-  if (last && last.node === node && paths.length === 1 && last.paths.length === 1 && last.paths[0] === paths[0]
+  if (last && last.node === node && last.via === step.via && paths.length === 1 && last.paths.length === 1 && last.paths[0] === paths[0]
       && stableKey(step.before) === stableKey(last.after)) {
     const merged = changedPaths(last.before, step.after);
     const rest = stack.slice(0, -1);
     if (!merged.length) return rest;
-    const ctx = last.ctx || step.ctx;
-    return rest.concat([{ node: node, tab: last.tab, before: last.before, after: step.after, ctx: ctx, label: describe(node, last.before, step.after, merged, ctx), paths: merged }]);
+    if (!slotComesOrGoes(paths[0], [last.before, step.before, step.after])) {
+      const ctx = last.ctx || step.ctx;
+      return rest.concat([{ node: node, tab: last.tab, via: last.via, before: last.before, after: step.after, ctx: ctx, label: describe(node, last.before, step.after, merged, ctx), paths: merged }]);
+    }
   }
-  return stack.concat([{ node: node, tab: step.tab, before: step.before, after: step.after, ctx: step.ctx, label: describe(node, step.before, step.after, paths, step.ctx), paths: paths }]);
+  return stack.concat([{ node: node, tab: step.tab, via: step.via, before: step.before, after: step.after, ctx: step.ctx, label: describe(node, step.before, step.after, paths, step.ctx), paths: paths }]);
 }
 
 // What an Undo press does, given the stack and `currentOf(node)`, the node as

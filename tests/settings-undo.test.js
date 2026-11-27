@@ -78,6 +78,49 @@ describe("recordStep", () => {
   });
 });
 
+// v18.20.0 /code-review (measured): two controls can write ONE leaf, and they
+// merged into one step that one Undo took back whole.
+describe("recordStep merges only taps on one control", () => {
+  function rec(stack, node, via, before, after, ctx) { return recordAny(stack, { node, tab: "x", via, before, after, ctx }, describeAny); }
+  const labels = { a: "A", b: "VIP", c: "Allergy" };
+  it("a guest's VIP off, then Allergy on: two chips, two steps", () => {
+    let s = rec([], "guestTags:p1", "customerTag", ["a", "b"], ["a"], { name: "Ana", labels });
+    s = rec(s, "guestTags:p1", "customerTag", ["a"], ["a", "c"], { name: "Ana", labels });
+    expect(s.map((x) => x.label)).toEqual(["VIP removed from Ana", "Allergy added for Ana"]);
+  });
+  it("one chip on and off again is still no change", () => {
+    const s = rec([], "guestTags:p1", "customerTag", ["a"], ["a", "c"], { name: "Ana", labels });
+    expect(rec(s, "guestTags:p1", "customerTag", ["a", "c"], ["a"], { name: "Ana", labels })).toEqual([]);
+  });
+  it("Automatic dark mode off, then Dark mode on: two switches, two steps", () => {
+    let s = rec([], "app:theme", "autoTheme", "auto", "light");
+    s = rec(s, "app:theme", "dark", "light", "dark");
+    expect(s.map((x) => x.label)).toEqual(["Automatic dark mode switched off", "Dark mode switched on"]);
+  });
+  it("one switch flipped twice is still no change", () => {
+    const s = rec([], "app:theme", "dark", "light", "dark");
+    expect(rec(s, "app:theme", "dark", "dark", "light")).toEqual([]);
+  });
+  it("a pinned country removed, then another added: two steps", () => {
+    const g = (p) => ({ v: 1, pinnedCountries: p });
+    let s = rec([], "settings/general", "general", g(["ES", "GB"]), g(["ES"]));
+    s = rec(s, "settings/general", "general", g(["ES"]), g(["ES", "DE"]));
+    expect(s.map((x) => x.label)).toEqual(["Pinned country removed", "Pinned country added"]);
+  });
+  it("a stepper inside a list's row still merges (the item is there throughout)", () => {
+    const a = edit((c) => { c.tables[2].capacity = 6; });
+    const b = edit((c) => { c.tables[2].capacity = 7; });
+    const s = rec(rec([], LAYOUT, "layout", base, a), LAYOUT, "layout", a, b);
+    expect(s).toHaveLength(1);
+    expect(s[0].before).toBe(base);
+  });
+  it("a merged step keeps the saver that made it", () => {
+    const s = rec(rec([], "settings/general", "general", { v: 1, regularMin: 2 }, { v: 1, regularMin: 3 }), "settings/general", "general", { v: 1, regularMin: 3 }, { v: 1, regularMin: 4 });
+    expect(s).toHaveLength(1);
+    expect(s[0].via).toBe("general");
+  });
+});
+
 describe("undoStep", () => {
   const a = edit((c) => { c.kitchenLimit += 1; });
   const b = edit((c) => { c.kitchenLimit += 1; c.tables[0].capacity += 1; });
