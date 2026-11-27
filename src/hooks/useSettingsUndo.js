@@ -19,6 +19,8 @@
 //                                 object (the v18.19.1 contract: a writer
 //                                 returns the sanitized value it stored, or
 //                                 null when its guards refused).
+//   context(key, args) (optional) → what the pill's sentence needs that the
+//                                 node does not hold (a guest's name).
 //
 // Five things here are load-bearing:
 //  • **The history is forgotten when Settings closes**, by any door (Close, Esc,
@@ -82,7 +84,7 @@ export function useSettingsUndo({ open, onTop, tab, nodes, savers }) {
       const ret = save.apply(null, args);
       const after = ad.after ? ad.after(key, ret, before, args) : (ret && typeof ret === "object" ? ret : null);
       if (after == null) return ret;
-      const step = { node: id, tab: tab, before: before, after: after };
+      const step = { node: id, tab: tab, before: before, after: after, ctx: ad.context ? ad.context(key, args) : undefined };
       setU(function (s) {
         const stack = recordStep(s.stack, step, describeStep);
         if (stack === s.stack) return s;

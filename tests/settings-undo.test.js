@@ -218,3 +218,25 @@ describe("describeStep: Settings → General", () => {
     expect(say("recurring", rec, { ...rec, rules: [] })).toBe("Standing booking for Ana removed");
   });
 });
+
+describe("describeStep: Settings → Customers", () => {
+  const L = { v: 1, guest: [{ id: "vip", label: "VIP" }], occasion: [{ id: "bday", label: "Birthday" }] };
+  function say(node, before, after, ctx) { return describeAny(node, before, after, changedPaths(before, after), ctx); }
+  it("the tag list", () => {
+    expect(say("settings/tags", L, { ...L, guest: L.guest.concat([{ id: "nuts", label: "Nut allergy" }]) })).toBe("Tag “Nut allergy” added");
+    expect(say("settings/tags", L, { ...L, occasion: [] })).toBe("Tag “Birthday” removed");
+    expect(say("settings/tags", L, { ...L, guest: [{ id: "vip", label: "V.I.P." }] })).toBe("Tag “VIP” renamed");
+  });
+  it("a guest's tags, named by the guest and the tag as they were at the tap", () => {
+    const ctx = { name: "Ana", labels: { vip: "VIP" } };
+    expect(say("guestTags:34600111222", [], ["vip"], ctx)).toBe("VIP added for Ana");
+    expect(say("guestTags:34600111222", ["vip"], [], ctx)).toBe("VIP removed from Ana");
+    expect(say("guestTags:g1", [], ["vip"], { labels: { vip: "VIP" } })).toBe("VIP added");
+  });
+  it("taps on one guest's chip merge, and a merge keeps the first tap's context", () => {
+    const ctx = { name: "Ana", labels: { vip: "VIP" } };
+    const s1 = recordAny([], { node: "guestTags:k", tab: "customers", before: [], after: ["vip"], ctx }, describeAny);
+    expect(s1[0].label).toBe("VIP added for Ana");
+    expect(recordAny(s1, { node: "guestTags:k", tab: "customers", before: ["vip"], after: [], ctx: {} }, describeAny)).toEqual([]);
+  });
+});

@@ -69,9 +69,11 @@ export function changedPaths(a, b, base) {
   return out;
 }
 
-// The stack after a save. `step` is `{node, tab, before, after}`; `describe` is
-// `(node, before, after, paths) → label` (`describeStep` in
-// lib/settings-undo-labels.js; passed in so this file names no node). A save
+// The stack after a save. `step` is `{node, tab, before, after, ctx?}`;
+// `describe` is `(node, before, after, paths, ctx) → label` (`describeStep` in
+// lib/settings-undo-labels.js; passed in so this file names no node). `ctx` is
+// what a label needs that the node does not hold (a guest's name, a tag's
+// label), taken when the save was made; a merge keeps the first. A save
 // that changed nothing leaves the stack as it was (the same array, so a caller
 // can compare).
 export function recordStep(stack, step, describe) {
@@ -87,9 +89,10 @@ export function recordStep(stack, step, describe) {
     const merged = changedPaths(last.before, step.after);
     const rest = stack.slice(0, -1);
     if (!merged.length) return rest;
-    return rest.concat([{ node: node, tab: last.tab, before: last.before, after: step.after, label: describe(node, last.before, step.after, merged), paths: merged }]);
+    const ctx = last.ctx || step.ctx;
+    return rest.concat([{ node: node, tab: last.tab, before: last.before, after: step.after, ctx: ctx, label: describe(node, last.before, step.after, merged, ctx), paths: merged }]);
   }
-  return stack.concat([{ node: node, tab: step.tab, before: step.before, after: step.after, label: describe(node, step.before, step.after, paths), paths: paths }]);
+  return stack.concat([{ node: node, tab: step.tab, before: step.before, after: step.after, ctx: step.ctx, label: describe(node, step.before, step.after, paths, step.ctx), paths: paths }]);
 }
 
 // What an Undo press does, given the stack and `currentOf(node)`, the node as

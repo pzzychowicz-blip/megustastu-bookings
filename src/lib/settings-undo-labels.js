@@ -186,6 +186,36 @@ export function describeRecurringStep(before, after, paths) {
   return "Standing bookings changed";
 }
 
+// ── Settings → Customers ─────────────────────────────────────────────────────
+// `settings/tags` is `{v, guest:[{id,label}], occasion:[{id,label}]}`; a tag is
+// named by its label as the list shows it.
+export function describeTagListStep(before, after) {
+  function all(l) { return (l.guest || []).concat(l.occasion || []); }
+  const b = all(before || {});
+  const a = all(after || {});
+  const byId = function (l, id) { return l.find(function (t) { return t.id === id; }); };
+  const added = a.filter(function (t) { return !byId(b, t.id); });
+  const gone = b.filter(function (t) { return !byId(a, t.id); });
+  const renamed = a.filter(function (t) { const o = byId(b, t.id); return o && o.label !== t.label; });
+  if (added.length === 1 && !gone.length) return "Tag “" + added[0].label + "” added";
+  if (gone.length === 1 && !added.length) return "Tag “" + gone[0].label + "” removed";
+  if (renamed.length === 1 && !added.length && !gone.length) return "Tag “" + b.find(function (t) { return t.id === renamed[0].id; }).label + "” renamed";
+  return "Tags changed";
+}
+// A guest's tags (`guestTags:<identity>`): sorted tag ids. `ctx` carries the
+// guest's name and the tag list's labels, as they were when the tap was made.
+export function describeGuestTagsStep(before, after, paths, node, ctx) {
+  const b = before || [];
+  const a = after || [];
+  const on = a.filter(function (id) { return b.indexOf(id) < 0; });
+  const off = b.filter(function (id) { return a.indexOf(id) < 0; });
+  const labels = ctx.labels || {};
+  const who = ctx.name ? ctx.name : "";
+  if (on.length === 1 && !off.length) return (labels[on[0]] || "Tag") + " added" + (who ? " for " + who : "");
+  if (off.length === 1 && !on.length) return (labels[off[0]] || "Tag") + " removed" + (who ? " from " + who : "");
+  return "Guest tags changed" + (who ? " for " + who : "");
+}
+
 // ── The one entry point ──────────────────────────────────────────────────────
 // A node with no describer of its own says "Setting changed": a step the pill
 // cannot name is still a step it can take back. `tests/settings-undo.test.js`
@@ -199,9 +229,11 @@ const DESCRIBERS = {
   "settings/bookingDefaults": describeBookingDefaultsStep,
   "settings/general": describeGeneralStep,
   "recurring": describeRecurringStep,
+  "settings/tags": describeTagListStep,
+  "guestTags": describeGuestTagsStep,
 };
-export function describeStep(node, before, after, paths) {
+export function describeStep(node, before, after, paths, ctx) {
   const fam = node.indexOf(":") > 0 ? node.slice(0, node.indexOf(":")) : node;
   const fn = DESCRIBERS[fam];
-  return fn ? fn(before, after, paths, node) : FALLBACK_LABEL;
+  return fn ? fn(before, after, paths, node, ctx || {}) : FALLBACK_LABEL;
 }

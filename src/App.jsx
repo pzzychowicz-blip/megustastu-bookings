@@ -371,7 +371,7 @@ import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
 // occasion tags a booking can carry. Its decisions are lib/tags.js.
 import { useTagSettings } from "./hooks/useTagSettings";
 // v18.11.0: Book from the waitlist keeps the occasion tags the list still has.
-import { knownTagIds } from "./lib/tags";
+import { knownTagIds, sanitizeTagList, cleanTagIds } from "./lib/tags";
 // v18.0.0 session 8: the activity log. `useActivityLog` installs the module-level
 // sink every writer emits into.
 import { useActivityLog, redactGuest } from "./hooks/useActivityLog";
@@ -1999,6 +1999,37 @@ export function BookingApp({uid}){
       "settings/bookingDefaults": { value: function(){return bookingDefaults;}, restore: function(k,b){return !!saveBookingDefaults(b);} },
       "settings/general": { value: function(){return generalSettings;}, restore: function(k,b){return !!saveGeneralSettings(b);} },
       "recurring": { value: function(){return recurring;}, restore: function(k,b){return !!saveRecurring(b);} },
+      // Settings → Customers. `saveTagList` answers a boolean (its test pins
+      // that), so the list it stored is its own sanitizer's reading of the
+      // list it was given.
+      "settings/tags": {
+        value: function(){return tagList;},
+        after: function(k,ret,b,args){return ret?sanitizeTagList(args[0]):null;},
+        restore: function(k,b){return saveTagList(b);},
+      },
+      // A guest's tags live on their bookings (`guestTagMap`), keyed by
+      // identity. A tap is one "+id" / "-id"; Undo is the opposite tap, through
+      // the same save (Patryk). `ctx` names the guest and the tags for the pill.
+      "guestTags": {
+        value: function(k){return guestTags[k]||[];},
+        after: function(k,ret,b,args){
+          if(!ret) return null;
+          const e=String(args[1]||""), id=e.slice(1);
+          return cleanTagIds(e[0]==="+"?b.concat([id]):b.filter(function(x){return x!==id;}));
+        },
+        context: function(k,args){
+          const labels={};
+          (tagList.guest||[]).forEach(function(t){labels[t.id]=t.label;});
+          return { name: args[2]||"", labels: labels };
+        },
+        restore: function(k,b,a){
+          const taps=a.filter(function(id){return b.indexOf(id)<0;}).map(function(id){return "-"+id;})
+            .concat(b.filter(function(id){return a.indexOf(id)<0;}).map(function(id){return "+"+id;}));
+          let ok=taps.length>0;
+          taps.forEach(function(t){ if(!saveCustomerTag(k,t)) ok=false; });
+          return ok;
+        },
+      },
     },
     // Each Settings save, `[node, save]`, handed back wrapped as
     // `settingsUndo.save.<name>`. A `refused(...)` gate stays INSIDE its save,
@@ -2015,6 +2046,8 @@ export function BookingApp({uid}){
       updateRule:["recurring",function(id,f){if(refused("recurringManage"))return null;return updateRule(id,f);}],
       removeRule:["recurring",function(id){if(refused("recurringManage"))return null;return removeRule(id);}],
       layout:["settings/layout",saveLayout],
+      tagList:["settings/tags",function(l){return refused("settingsWrite")?false:saveTagList(l);}],
+      customerTag:[function(key){return key?"guestTags:"+key:null;},saveCustomerTag],
       specialDay:["settings/operatingHours",function(i,x){if(refused("hoursEdit"))return false;return saveException(i,x);}],
       removeSpecialDay:["settings/operatingHours",function(i){if(refused("hoursEdit"))return false;return removeException(i);}],
     },
@@ -4600,14 +4633,14 @@ export function BookingApp({uid}){
             waitlist={waitlist}
             onDeleteCustomer={deleteCustomer}
             guestTags={guestTags}
-            onSetCustomerTag={saveCustomerTag}
+            onSetCustomerTag={settingsUndo.save.customerTag}
             vouchers={vouchers}
             voucherDefaults={voucherDefaults}
             onIssueVoucher={function(a){return refused("voucherIssue")?{ok:false,error:"You don't have permission to issue vouchers."}:issueVoucher(a);}}
             onVoidVoucher={function(c,on){return refused("voucherVoid")?false:voidVoucher(c,on);}}
             onSaveVoucherDefaults={saveVoucherDefaults}
             tagList={tagList}
-            onSaveTagList={function(l){return refused("settingsWrite")?false:saveTagList(l);}}
+            onSaveTagList={settingsUndo.save.tagList}
             tagError={tagError}
             onClearTagError={clearTagError}
             tab={settingsTab}

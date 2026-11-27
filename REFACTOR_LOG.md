@@ -42620,3 +42620,16 @@ visible name and what happened; a retention Undo restores the number only; the p
 - **On DEV (1440 × 900):** Daily cutoff 15:00 → 17:00 in two taps is one step; Overlap warnings off, then Undo → on, Undo →
   15:00. Refusal: a second tab raised the cutoff 16:00 → 17:00 under this tab's step; Undo said "Changed on another device,
   can't undo" and left 17:00, and 3.5s later the pill named the Overlap warnings step below it, which Undo then took back.
+
+### Commit 3 — Customers
+
+- **What:** the tag list (`settings/tags`: add, rename, remove) and a guest's tag chips record steps. `saveTagList` keeps its
+  boolean (`tests/tags.test.js` pins it), so its adapter reads the list it stored with the writer's own `sanitizeTagList`. A guest's
+  tags are node `guestTags:<identity>`, read from App's `guestTagMap`; a tap's step is the set after it, and **Undo is the opposite
+  tap** through the same `saveCustomerTag` (Patryk), refused when the guest's tags changed elsewhere.
+- **A step may carry `ctx`**, what its sentence needs that the node does not hold, taken at the save (the adapter's `context`);
+  a merge keeps the first. Customers passes the guest's name as `onSetCustomerTag`'s third argument, which the save ignores.
+- **Labels:** "Tag “Nut allergy” added", "Tag “VIP” renamed", "VIP added for Ana", "VIP removed from Ana"; 3 tests, one of them
+  a tap and its tap back merging to nothing.
+- **On DEV:** Raúl Méndez's Vegan chip → "Vegan added for Raúl Méndez", Undo → unpressed; "Undo test" added to the guest tags →
+  "Tag “Undo test” added", Undo → the row folds away and the list is the five it was.

@@ -64,7 +64,7 @@ const GUESTS_COL = 58;
 // index here, so `guestTags[c.key]` is the customer's tag ids. A CLOSED row
 // shows them as words under the phone; opened, the words fold away and it shows
 // every guest tag of the list as a chip, pressed when the customer has it. A tap is one write
-// (`onSetCustomerTag(key, "+id" | "-id")`, App's `saveCustomerTag`), and the
+// (`onSetCustomerTag(key, "+id" | "-id", name)`, App's `saveCustomerTag`; the name is for Settings' Undo pill), and the
 // chips are disabled for an account that may not edit bookings
 // (`canEditGuestTags`): a guest's tags live on their bookings.
 export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2, seekQuery = "", tagList, onSaveTagList, tagError, onClearTagError, canEditTags = false, onDirty, guestTags = null, onSetCustomerTag, canEditGuestTags = false, whatsappOn = false }) {
@@ -222,7 +222,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
                   on={tagIds}
                   disabled={!canEditGuestTags || !onSetCustomerTag}
                   description={function (label) { return "Add " + label + " to " + (c.name || "this customer") + "'s tags on all their bookings, or take it off"; }}
-                  onToggle={function (id) { onSetCustomerTag(c.key, (tagIds.indexOf(id) >= 0 ? "-" : "+") + id); }} />
+                  onToggle={function (id) { onSetCustomerTag(c.key, (tagIds.indexOf(id) >= 0 ? "-" : "+") + id, c.name); }} />
               </div>
             ) : null}
             <div style={{ fontSize: T.body, fontWeight: FW.medium, color: S.muted, margin: "4px 0 6px" }}>{countLabel(c.bookings.length, "booking", "bookings") + (wlCount ? " · " + countLabel(wlCount, "waitlist entry", "waitlist entries") : "")}</div>
