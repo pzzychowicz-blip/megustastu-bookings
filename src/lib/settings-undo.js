@@ -35,18 +35,37 @@
 //    THAT node, since each older one chains from the one refused and none could
 //    pass either, and keeps the steps of every other node (v18.20.0, Patryk).
 
-// Key-order-insensitive JSON. RTDB hands an object's keys back SORTED, and a
-// sanitizer copies a map such as `comboCaps` in the order it was given, so the
-// echo of a write and the write itself can differ only in key order. Arrays
-// keep their order: in a layout, order is meaning.
-export function stableKey(v) {
-  if (Array.isArray(v)) return "[" + v.map(stableKey).join(",") + "]";
+// Key-order-insensitive JSON, of a value AS RTDB STORES IT. RTDB hands an
+// object's keys back SORTED, and a sanitizer copies a map such as `comboCaps` in
+// the order it was given, so the echo of a write and the write itself can
+// differ only in key order. Arrays keep their order: in a layout, order is
+// meaning. And RTDB stores no empty array, no empty object and no null
+// (v18.20.0, measured): a one-off reminder's `recurrence.days: []` came back
+// without `days`, and its Undo was refused as "Changed on another device". So
+// those count as absent, at any depth, which is the only equality the echo can
+// answer; a node whose reader has no sanitizer (`reminders`) needs nothing more.
+function asStored(v) {
+  if (v === null || v === undefined) return undefined;
+  if (Array.isArray(v)) {
+    const a = v.map(asStored);
+    return a.length ? a : undefined;
+  }
+  if (typeof v === "object") {
+    const o = {};
+    let any = false;
+    Object.keys(v).forEach(function (k) { const x = asStored(v[k]); if (x !== undefined) { o[k] = x; any = true; } });
+    return any ? o : undefined;
+  }
+  return v;
+}
+function keyOf(v) {
+  if (Array.isArray(v)) return "[" + v.map(keyOf).join(",") + "]";
   if (v && typeof v === "object") {
-    return "{" + Object.keys(v).sort().filter(function (k) { return v[k] !== undefined; })
-      .map(function (k) { return JSON.stringify(k) + ":" + stableKey(v[k]); }).join(",") + "}";
+    return "{" + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ":" + keyOf(v[k]); }).join(",") + "}";
   }
   return v === undefined ? "null" : JSON.stringify(v);
 }
+export function stableKey(v) { return keyOf(asStored(v)); }
 
 // Every leaf path at which `a` and `b` differ, as dotted strings
 // ("tables.3.capacity", "priorities.bands.1.prefer.0"). A path present on one

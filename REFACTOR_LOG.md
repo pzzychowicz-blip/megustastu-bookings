@@ -42697,3 +42697,15 @@ visible name and what happened; a retention Undo restores the number only; the p
   `isMobile`; wider, the pill is one line and fits the 40 Close sets. The ROADMAP entry is removed.
 - **On DEV:** at 375 × 812, the row reads 46 before any step, 46 with "Reminder “Coca-Cola order in the…” paused" showing,
   and 46 after the Undo; the card's height did not move. At 1024 wide the row is still 40.
+
+### Commit 10 — fix: an Undo compares a value as RTDB stores it
+
+- **Found on DEV, writing the round-trip guard:** a new One-off reminder, then Undo → "Changed on another device, can't
+  undo". The step's `after` held `recurrence.days: []`; RTDB stores no empty array, so the echo came back without `days`, and
+  `reminders` has no sanitizer to put it back. Any node can meet it: a write of an empty array, object or null reads back
+  as absent.
+- **Fix:** `stableKey` (`lib/settings-undo.js`) compares a value as RTDB stores it: an empty array, an empty object and a
+  null count as absent, at any depth; `false`, `0`, `""` and array order still count. Three tests pin it, the reminder case
+  among them.
+- **On DEV:** a new One-off reminder "Undo probe two", Undo → taken back, no refusal. (The first probe, "Undo probe once",
+  stays on DEV from the refused attempt.)

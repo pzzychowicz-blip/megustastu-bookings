@@ -309,3 +309,28 @@ describe("describeStep: Settings → Admin", () => {
     expect(say("role:u1", r, { ...r, denies: { bookingEdit: true } }, { name: "Ana", cap: "bookingEdit", on: false })).toBe("“Edit bookings” taken from Ana");
   });
 });
+
+describe("stableKey compares a value as RTDB stores it", () => {
+  it("an empty array, an empty object or a null is the same as absent, at any depth", () => {
+    // Measured on DEV: a one-off reminder's `recurrence.days: []` came back
+    // without `days`, and its Undo was refused as "Changed on another device".
+    const wrote = [{ id: "r1", text: "x", recurrence: { type: "once", date: "2026-11-27", days: [] }, extras: {}, note: null }];
+    const echo = [{ id: "r1", text: "x", recurrence: { type: "once", date: "2026-11-27" } }];
+    expect(stableKey(wrote)).toBe(stableKey(echo));
+    expect(stableKey([])).toBe(stableKey(undefined));
+    expect(stableKey({ a: { b: [] } })).toBe(stableKey({}));
+  });
+  it("still tells apart what RTDB keeps: false, 0, an empty string, order", () => {
+    expect(stableKey({ a: false })).not.toBe(stableKey({}));
+    expect(stableKey({ a: 0 })).not.toBe(stableKey({}));
+    expect(stableKey({ a: "" })).not.toBe(stableKey({}));
+    expect(stableKey([1, 2])).not.toBe(stableKey([2, 1]));
+  });
+  it("an Undo of a new one-off reminder is not refused by the echo", () => {
+    const after = [{ id: "r1", text: "x", recurrence: { type: "once", date: "2026-11-27", days: [] } }];
+    const stack = recordAny([], { node: "reminders", tab: "reminders", before: [], after }, describeAny);
+    const plan = undoAny(stack, function () { return [{ id: "r1", text: "x", recurrence: { type: "once", date: "2026-11-27" } }]; });
+    expect(plan.refuse).toBeUndefined();
+    expect(plan.restore).toEqual([]);
+  });
+});
