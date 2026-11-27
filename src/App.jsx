@@ -4619,7 +4619,11 @@ export function BookingApp({uid}){
         // resets to 'general' on close so reopens feel fresh.
         showSettings?<Overlay /* @static-height the tab body eases inside SettingsContent's own AutoHeight watch={cur} */ onClose={requestCloseSettings} maxWidth={SETTINGS_CARD_W} anchor="top" footer={/* v18.19.1 (Patryk): three columns, so the Undo pill is centred on the
               dialog while it fits and Close keeps the right column; the pill never
-              covers it. */<div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",columnGap:8}}><div style={{gridColumn:2,minWidth:0}}><SettingsUndoToast pill={settingsUndo.pill} onUndo={settingsUndo.undo} /></div><button
+              covers it.
+              v18.20.0 (Patryk): on a phone the row is always the height of a
+              TWO-LINE pill, so a step arriving never grows the dialog by 6px
+              (measured at 375 wide: Close 40, the pill 46). Wider, the pill is one
+              line and fits the 40 Close already sets. */<div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",columnGap:8,minHeight:isMobile?46:undefined /* @canvas */}}><div style={{gridColumn:2,minWidth:0}}><SettingsUndoToast pill={settingsUndo.pill} onUndo={settingsUndo.undo} /></div><button
               className="mgt-hover-scale"
               style={{...mkBtn({minHeight:40,padding:"8px 18px",background:BTN.quiet}),gridColumn:3,justifySelf:"end"}}
               title={"Close Settings, asking first if a box holds an unsaved change"+keyHint("close")}

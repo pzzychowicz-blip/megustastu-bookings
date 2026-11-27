@@ -42689,3 +42689,11 @@ visible name and what happened; a retention Undo restores the number only; the p
 - **On DEV:** Rubén staff → manager, then the log's retention 365 → 90 days; Undo, Undo → 365, then staff. In the
   capabilities window, Edit bookings off for Rubén; closed it → the pill named it; Undo → on again in the grid. Enforce roles
   and the module switches were left alone on DEV (other accounts use it); their sentences are in the tests.
+
+### Commit 9 — the phone footer is always 46px
+
+- **What:** v18.19.1's /code-review measured the Settings footer growing 6px on a phone while a two-line pill showed (Close
+  40, the pill 46), and Patryk chose a footer that is always 46px there. The footer row takes `minHeight: 46` when
+  `isMobile`; wider, the pill is one line and fits the 40 Close sets. The ROADMAP entry is removed.
+- **On DEV:** at 375 × 812, the row reads 46 before any step, 46 with "Reminder “Coca-Cola order in the…” paused" showing,
+  and 46 after the Undo; the card's height did not move. At 1024 wide the row is still 40.

@@ -32,10 +32,6 @@ session and keeping it in sync.
   takes its neighbour's key and the last row is keyed as new. Cosmetic (which row's
   entrance plays); the fix is keying rows by content, which changes how every row mounts.
 
-- **The Settings footer grows 6px on a phone while a two-line Undo pill shows**
-  (v18.19.1 /code-review, measured: pill 46px, Close 40px). A look decision for Patryk:
-  one line with an ellipsis, a shorter label, or a footer that is always 46px.
-
 - **Undo across the rest of Settings (v18.20.0, Patryk 2026-11-27).** v18.19.1 gave
   Settings → Layout its Undo (`useSettingsUndo`, `lib/settings-undo.js`, the pill in the
   dialog's footer). The rest of Settings is to follow on its own branch with its own plan:
