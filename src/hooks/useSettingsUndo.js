@@ -37,6 +37,12 @@
 //  • **The pill stays while there is a step to take back** (no timer, Patryk);
 //    a refusal says why for 3.5s, then the pill names the next step if a step
 //    of another node is left (v18.20.0, Patryk), or fades keeping its text.
+//    **`undo` is how the pill LOOKS** (the Undo button, the neutral dot), and
+//    only a refusal sets it false. So a pill that goes off after the last
+//    Undo, a tap taking the only step back, or Close fades as it looked; with
+//    `undo: false` it turned amber and lost its button for the length of the
+//    exit, the refusal's look (/code-review, measured on DEV). Whether a press
+//    can act is `u.stack.length`, which Ctrl+Z asks too.
 //
 // Ctrl+Z / ⌘Z does the same as the pill's button while Settings is open, so a
 // keyboard can take a step back without walking Tab to the footer. Not while
@@ -71,7 +77,7 @@ export function useSettingsUndo({ open, onTop, tab, nodes, savers }) {
   // what it said: `u.text` is only the sentence of a pill that names no step
   // (a refusal, or one fading), so it is set here from the step on top
   // (/code-review: it faded saying an older step, measured on DEV).
-  if (!open && (u.stack.length || u.show)) setU({ ...u, stack: [], text: u.undo && top ? pillText(top, tab, tabLabel) : u.text, show: false, undo: false });
+  if (!open && (u.stack.length || u.show)) setU({ ...u, stack: [], text: u.undo && top ? pillText(top, tab, tabLabel) : u.text, show: false });
 
   // `node` is a node id, or a function of the save's arguments that returns one
   // (a voucher's code, a guest's identity); null records nothing. `via` is the
@@ -97,7 +103,7 @@ export function useSettingsUndo({ open, onTop, tab, nodes, savers }) {
         // A tap that took the only step back (a switch flipped back): the pill
         // fades saying that step, or the refusal it was saying.
         const gone = s.stack[s.stack.length - 1];
-        return { ...s, stack: stack, text: s.undo && gone ? pillText(gone, tab, tabLabel) : s.text, undo: false, show: false, notice: 0 };
+        return { ...s, stack: stack, text: s.undo && gone ? pillText(gone, tab, tabLabel) : s.text, show: false, notice: 0 };
       });
       return ret;
     };
@@ -126,7 +132,7 @@ export function useSettingsUndo({ open, onTop, tab, nodes, savers }) {
     // Emptied, the pill fades still saying the step it just took back.
     setU(rest.length
       ? { ...u, stack: rest, undo: true, show: true, notice: 0 }
-      : { ...u, stack: rest, text: pillText(top, tab, tabLabel), undo: false, show: false, notice: 0 });
+      : { ...u, stack: rest, text: pillText(top, tab, tabLabel), show: false, notice: 0 });
   }
 
   // The keyboard's way to the pill. Re-added each render, so it always calls

@@ -2201,7 +2201,10 @@ log, Remove person and the invitations, WhatsApp's Disconnect and Check usage.
   longest pill), so it never covers Close. Inside the footer rather than fixed over
   it, so it moves when the card eases its height, and Tab reaches it.
 - **No timer.** It stays while there is a step to take back and names the NEXT one
-  after each press; with none left it fades, keeping its text as it goes.
+  after each press; with none left it fades, keeping its text and its look as it
+  goes: the neutral dot and the Undo button, which then does nothing. Only a
+  refusal is amber with no button (v18.20.0 /code-review: the last Undo and Close
+  faded it in the refusal's look, measured on DEV).
 - **Taps on one control in a row are one step**, matched by the setting and the leaf
   the save changed, never by time. A step taken back to where it started is gone.
 - **Refuse and say why**: when the stored setting is no longer what this device wrote,
