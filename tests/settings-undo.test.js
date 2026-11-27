@@ -100,3 +100,18 @@ describe("undoStep", () => {
     expect(undoStep(stack, echo).restore).toBe(a);
   });
 });
+
+// v18.19.1 /code-review: a value another device set between two taps on one
+// stepper must not vanish into the merge.
+describe("recordStep across another device's change", () => {
+  it("does not merge when this save does not start from the last one's after", () => {
+    const a = edit((c) => { c.kitchenLimit = 4; });
+    const remote = edit((c) => { c.kitchenLimit = 6; });
+    const b = edit((c) => { c.kitchenLimit = 7; });
+    const s = recordStep(recordStep([], base, a), remote, b);
+    expect(s).toHaveLength(2);
+    expect(s[1].before).toBe(remote);
+    // …so taking the first step back is refused once the second is undone.
+    expect(undoStep(s.slice(0, 1), remote)).toEqual({ refuse: UNDO_CONFLICT });
+  });
+});

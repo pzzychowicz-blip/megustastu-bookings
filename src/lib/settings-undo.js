@@ -135,7 +135,11 @@ export function recordStep(stack, before, after) {
   const paths = changedPaths(before, after);
   if (!paths.length) return stack;
   const last = stack.length ? stack[stack.length - 1] : null;
-  if (last && paths.length === 1 && last.paths.length === 1 && last.paths[0] === paths[0]) {
+  // …and only when this save starts from what the last one wrote: a value
+  // another device set between two taps would otherwise vanish into the merge,
+  // and the Undo would restore over it without the refusal.
+  if (last && paths.length === 1 && last.paths.length === 1 && last.paths[0] === paths[0]
+      && stableKey(before) === stableKey(last.after)) {
     const merged = changedPaths(last.before, after);
     const rest = stack.slice(0, -1);
     if (!merged.length) return rest;
