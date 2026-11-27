@@ -11,6 +11,7 @@
 // (`lib/settings-undo.js` says what one is), `before` / `after` the node's two
 // sanitized values and `paths` their `changedPaths`.
 import { stableKey } from "./settings-undo";
+import { formatCode } from "./vouchers";
 
 function sameItems(a, b) {
   if (a.length !== b.length) return false;
@@ -216,6 +217,16 @@ export function describeGuestTagsStep(before, after, paths, node, ctx) {
   return "Guest tags changed" + (who ? " for " + who : "");
 }
 
+// ── Settings → Vouchers ──────────────────────────────────────────────────────
+// A voucher (`voucher:<CODE>`) is compared by its stored status alone: the CAS
+// stamps differ on every echo, and Void / un-void is the only change Undo
+// covers (Issue is not undoable, Patryk).
+export function describeVoucherStep(before, after, paths, node) {
+  const code = node.slice(node.indexOf(":") + 1);
+  return "Voucher " + formatCode(code) + (after === "void" ? " voided" : " reinstated");
+}
+export function describeVoucherDefaultsStep() { return "Default validity changed"; }
+
 // ── The one entry point ──────────────────────────────────────────────────────
 // A node with no describer of its own says "Setting changed": a step the pill
 // cannot name is still a step it can take back. `tests/settings-undo.test.js`
@@ -231,6 +242,8 @@ const DESCRIBERS = {
   "recurring": describeRecurringStep,
   "settings/tags": describeTagListStep,
   "guestTags": describeGuestTagsStep,
+  "voucher": describeVoucherStep,
+  "settings/voucherDefaults": describeVoucherDefaultsStep,
 };
 export function describeStep(node, before, after, paths, ctx) {
   const fam = node.indexOf(":") > 0 ? node.slice(0, node.indexOf(":")) : node;

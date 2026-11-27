@@ -240,3 +240,11 @@ describe("describeStep: Settings → Customers", () => {
     expect(recordAny(s1, { node: "guestTags:k", tab: "customers", before: ["vip"], after: [], ctx: {} }, describeAny)).toEqual([]);
   });
 });
+
+describe("describeStep: Settings → Vouchers", () => {
+  it("void, reinstate and the default validity", () => {
+    expect(describeAny("voucher:A1B2C3", "open", "void", [""])).toMatch(/^Voucher .+ voided$/);
+    expect(describeAny("voucher:A1B2C3", "void", "open", [""])).toMatch(/^Voucher .+ reinstated$/);
+    expect(describeAny("settings/voucherDefaults", { v: 1, expiryMonths: 12 }, { v: 1, expiryMonths: 6 }, ["expiryMonths"])).toBe("Default validity changed");
+  });
+});

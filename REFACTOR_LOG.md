@@ -42633,3 +42633,11 @@ visible name and what happened; a retention Undo restores the number only; the p
   a tap and its tap back merging to nothing.
 - **On DEV:** Raúl Méndez's Vegan chip → "Vegan added for Raúl Méndez", Undo → unpressed; "Undo test" added to the guest tags →
   "Tag “Undo test” added", Undo → the row folds away and the list is the five it was.
+
+### Commit 4 — Vouchers
+
+- **What:** Void and Reinstate (node `voucher:<CODE>`, compared by its stored `status` alone, since the per-child CAS stamps
+  differ on every echo; Undo calls `voidVoucher` the other way) and Default validity (`saveVoucherDefaults` now returns what it
+  stored). Issue stays outside (Patryk). Labels: "Voucher YFCN-ZPSX voided" / "… reinstated" (the button's word), "Default
+  validity changed".
+- **On DEV:** Void voucher YFCN-ZPSX → "Voucher YFCN-ZPSX voided"; Undo → the row reads open again.

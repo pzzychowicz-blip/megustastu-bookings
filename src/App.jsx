@@ -2007,6 +2007,14 @@ export function BookingApp({uid}){
         after: function(k,ret,b,args){return ret?sanitizeTagList(args[0]):null;},
         restore: function(k,b){return saveTagList(b);},
       },
+      // Settings → Vouchers. A voucher is read by its stored status, the one
+      // thing Void / un-void changes; Undo voids or un-voids it back.
+      "voucher": {
+        value: function(k){const v=vouchersByCode[k];return v?v.status:null;},
+        after: function(k,ret,b,args){return ret?(args[1]===false?"open":"void"):null;},
+        restore: function(k,b){return !!voidVoucher(k,b==="void");},
+      },
+      "settings/voucherDefaults": { value: function(){return voucherDefaults;}, restore: function(k,b){return !!saveVoucherDefaults(b);} },
       // A guest's tags live on their bookings (`guestTagMap`), keyed by
       // identity. A tap is one "+id" / "-id"; Undo is the opposite tap, through
       // the same save (Patryk). `ctx` names the guest and the tags for the pill.
@@ -2048,6 +2056,8 @@ export function BookingApp({uid}){
       layout:["settings/layout",saveLayout],
       tagList:["settings/tags",function(l){return refused("settingsWrite")?false:saveTagList(l);}],
       customerTag:[function(key){return key?"guestTags:"+key:null;},saveCustomerTag],
+      voidVoucher:[function(code){const c=normalizeCode(code);return c?"voucher:"+c:null;},function(c,on){return refused("voucherVoid")?false:voidVoucher(c,on);}],
+      voucherDefaults:["settings/voucherDefaults",saveVoucherDefaults],
       specialDay:["settings/operatingHours",function(i,x){if(refused("hoursEdit"))return false;return saveException(i,x);}],
       removeSpecialDay:["settings/operatingHours",function(i){if(refused("hoursEdit"))return false;return removeException(i);}],
     },
@@ -4637,8 +4647,8 @@ export function BookingApp({uid}){
             vouchers={vouchers}
             voucherDefaults={voucherDefaults}
             onIssueVoucher={function(a){return refused("voucherIssue")?{ok:false,error:"You don't have permission to issue vouchers."}:issueVoucher(a);}}
-            onVoidVoucher={function(c,on){return refused("voucherVoid")?false:voidVoucher(c,on);}}
-            onSaveVoucherDefaults={saveVoucherDefaults}
+            onVoidVoucher={settingsUndo.save.voidVoucher}
+            onSaveVoucherDefaults={settingsUndo.save.voucherDefaults}
             tagList={tagList}
             onSaveTagList={settingsUndo.save.tagList}
             tagError={tagError}

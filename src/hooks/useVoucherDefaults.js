@@ -79,7 +79,7 @@ export function useVoucherDefaults() {
   function saveVoucherDefaults(partial) {
     if (!loaded.current) {
       console.warn("[SAFE] Refused to write voucher defaults — initial read has not completed yet.");
-      return;
+      return null;
     }
     const prev = voucherDefaults;
     const next = sanitizeVoucherDefaults({ ...prev, ...(partial || {}) });
@@ -88,6 +88,8 @@ export function useVoucherDefaults() {
       const entry = settingsWriteEntry("settings/voucherDefaults", prev, next);
       if (entry) emitActivity([entry]);
     });
+    // v18.20.0: what was stored, sanitized, for Settings' Undo (null above).
+    return next;
   }
 
   return { voucherDefaults, saveVoucherDefaults };
