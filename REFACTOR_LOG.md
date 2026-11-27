@@ -42528,3 +42528,10 @@ the pill until Settings closes, naming the next step; refuse and say why when an
   theme at 998×507 checked. Escape still closes Settings with the pill up.
 - **The entry chunk grew 6.3 kB (1.9 kB gz)**: the three new modules minify to 6.75 kB on their own, and no other chunk moved
   (`atoms` +0.1 kB, the shortcut row).
+
+### Commit 7 — the Settings Undo pill centred (Patryk, at the ship run)
+
+- **"Floating Undo should be aligned to the center."** The footer is now a `1fr auto 1fr` grid: the pill in the middle
+  column, Close in the right one. Measured on DEV: at 1024 wide the pill's centre is the dialog's (512, 512); at 375 the
+  longest pill (251px, two lines) cannot be centred beside Close, so the grid moves it left and it ends 8px clear of Close
+  (277 against 285).

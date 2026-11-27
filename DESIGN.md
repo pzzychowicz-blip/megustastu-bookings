@@ -2179,12 +2179,14 @@ arithmetic `lib/reorder.js`.
 Patryk, 2026-11-27: every change made in Settings → Layout can be taken back, one
 step a press, back to when Settings opened (`useSettingsUndo`, `lib/settings-undo.js`).
 - **The pill is the app's Undo pill** (`ToastPill`, a neutral dot, the sentence, an
-  accent Undo), **in the dialog's footer, left of Close** (`SettingsUndoToast`). It
-  was first drawn where the refusal toast floats; measured on DEV, that covered a row
-  of the tab body on the phone and the tablet, and a pill that stays put turns a tap
-  on that row into an Undo. The footer's left side is empty at every width. Inside
-  the footer rather than fixed over it, so it moves when the card eases its height,
-  and Tab reaches it.
+  accent Undo), **in the dialog's footer, CENTRED, with Close in the right column**
+  (`SettingsUndoToast`; the footer is a `1fr auto 1fr` grid). It was first drawn
+  where the refusal toast floats; measured on DEV, that covered a row of the tab body
+  on the phone and the tablet, and a pill that stays put turns a tap on that row into
+  an Undo. Then at the footer's left; Patryk asked for it centred. The grid centres it
+  on the dialog while it fits and moves it left of Close when it does not (a phone's
+  longest pill), so it never covers Close. Inside the footer rather than fixed over
+  it, so it moves when the card eases its height, and Tab reaches it.
 - **No timer.** It stays while there is a step to take back and names the NEXT one
   after each press; with none left it fades, keeping its text as it goes.
 - **Taps on one stepper in a row are one step**, matched by the leaf the save changed,

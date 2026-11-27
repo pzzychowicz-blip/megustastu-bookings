@@ -1,7 +1,8 @@
 // ── SettingsUndoToast ────────────────────────────────────────────────────────
 // v18.19.1 (Patryk): the Undo pill for Settings → Layout. The same pill as the
 // app's own Undo (`ToastPill`, a neutral dot, the sentence and an accent Undo
-// button), drawn in the Settings dialog's FOOTER, left of Close.
+// button), drawn in the Settings dialog's FOOTER, centred, with Close on the
+// right (Patryk: centred, after it first sat at the footer's left).
 //
 // Patryk first chose the pill floating above the dialog in RefusalToast's
 // place. Measured on DEV that put it over the tab body (the Combos row on a
@@ -23,7 +24,7 @@ import { keyHint } from "../lib/shortcuts";
 export function SettingsUndoToast({ pill, onUndo }) {
   const on = !!pill && pill.show;
   return (
-    <div role="status" aria-live="polite" style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center" }}>
+    <div role="status" aria-live="polite" style={{ minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <Toast show={on} style={{ maxWidth: "100%" }}>
         {pill && pill.text ? (
           <ToastPill tone={pill.undo ? "var(--text-muted)" : "var(--warn-text)"}

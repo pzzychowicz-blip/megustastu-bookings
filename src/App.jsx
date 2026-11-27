@@ -4494,9 +4494,11 @@ export function BookingApp({uid}){
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.
-        showSettings?<Overlay /* @static-height the tab body eases inside SettingsContent's own AutoHeight watch={cur} */ onClose={requestCloseSettings} maxWidth={SETTINGS_CARD_W} anchor="top" footer={<div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8}}><SettingsUndoToast pill={settingsUndo.pill} onUndo={settingsUndo.undo} /><button
+        showSettings?<Overlay /* @static-height the tab body eases inside SettingsContent's own AutoHeight watch={cur} */ onClose={requestCloseSettings} maxWidth={SETTINGS_CARD_W} anchor="top" footer={/* v18.19.1 (Patryk): three columns, so the Undo pill is centred on the
+              dialog while it fits and Close keeps the right column; the pill never
+              covers it. */<div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",columnGap:8}}><div style={{gridColumn:2,minWidth:0}}><SettingsUndoToast pill={settingsUndo.pill} onUndo={settingsUndo.undo} /></div><button
               className="mgt-hover-scale"
-              style={mkBtn({minHeight:40,padding:"8px 18px",background:BTN.quiet})}
+              style={{...mkBtn({minHeight:40,padding:"8px 18px",background:BTN.quiet}),gridColumn:3,justifySelf:"end"}}
               title={"Close Settings, asking first if a box holds an unsaved change"+keyHint("close")}
               onClick={requestCloseSettings}>Close</button></div>}><ModalTitle background="var(--app-btn-grey-strong)">Settings</ModalTitle><Suspense fallback={null}><SettingsContent
             appVersion={__APP_SIGNATURE__.version}
