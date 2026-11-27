@@ -65,9 +65,13 @@ function tabLabel(id) {
 
 export function useSettingsUndo({ open, onTop, tab, nodes, savers }) {
   const [u, setU] = useState(IDLE);
+  const top = u.stack.length ? u.stack[u.stack.length - 1] : null;
 
-  // Settings closed: the steps go with it. The pill fades where it was.
-  if (!open && (u.stack.length || u.show)) setU({ ...u, stack: [], show: false, undo: false });
+  // Settings closed: the steps go with it. The pill fades where it was, saying
+  // what it said: `u.text` is only the sentence of a pill that names no step
+  // (a refusal, or one fading), so it is set here from the step on top
+  // (/code-review: it faded saying an older step, measured on DEV).
+  if (!open && (u.stack.length || u.show)) setU({ ...u, stack: [], text: u.undo && top ? pillText(top, tab, tabLabel) : u.text, show: false, undo: false });
 
   // `node` is a node id, or a function of the save's arguments that returns one
   // (a voucher's code, a guest's identity); null records nothing. `via` is the
@@ -89,15 +93,15 @@ export function useSettingsUndo({ open, onTop, tab, nodes, savers }) {
       setU(function (s) {
         const stack = recordStep(s.stack, step, describeStep);
         if (stack === s.stack) return s;
-        return stack.length
-          ? { stack: stack, text: s.text, undo: true, show: true, notice: 0 }
-          : { ...s, stack: stack, undo: false, show: false, notice: 0 };
+        if (stack.length) return { stack: stack, text: s.text, undo: true, show: true, notice: 0 };
+        // A tap that took the only step back (a switch flipped back): the pill
+        // fades saying that step, or the refusal it was saying.
+        const gone = s.stack[s.stack.length - 1];
+        return { ...s, stack: stack, text: s.undo && gone ? pillText(gone, tab, tabLabel) : s.text, undo: false, show: false, notice: 0 };
       });
       return ret;
     };
   }
-
-  const top = u.stack.length ? u.stack[u.stack.length - 1] : null;
 
   function undo() {
     const plan = undoStep(u.stack, function (id) {
