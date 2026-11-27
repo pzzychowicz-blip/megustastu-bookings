@@ -21,8 +21,8 @@
 //
 // Ctrl+Z / ⌘Z does the same as the pill's button while Settings is open, so a
 // keyboard can take a step back without walking Tab to the footer. Not while
-// typing (a text box's own undo is the browser's), and only with a step to
-// take back.
+// typing (a text box's own undo is the browser's), not while a modal sits over
+// Settings, and only with a step to take back.
 import { useEffect, useRef, useState } from "react";
 import { recordStep, undoStep } from "../lib/settings-undo";
 import { isTyping } from "../lib/keyboard";
@@ -30,7 +30,7 @@ import { isTyping } from "../lib/keyboard";
 const NOTICE_MS = 3500;
 const IDLE = { stack: [], text: "", undo: false, show: false };
 
-export function useSettingsUndo({ open, layout, saveLayout }) {
+export function useSettingsUndo({ open, onTop, layout, saveLayout }) {
   const [u, setU] = useState(IDLE);
   const timer = useRef(null);
 
@@ -68,7 +68,10 @@ export function useSettingsUndo({ open, layout, saveLayout }) {
   // The keyboard's way to the pill. Re-added each render, so it always calls
   // this render's `undo` (the src/CLAUDE.md row on an effect kept fresh by a
   // parent's props: list nothing rather than something stale).
-  const canUndo = open && u.stack.length > 0;
+  // `onTop`: Settings is the top of the modal stack, so a key pressed in a
+  // confirm raised over it (the discard confirm) does not change the layout
+  // behind that confirm.
+  const canUndo = open && onTop && u.stack.length > 0;
   useEffect(function () {
     if (!canUndo) return undefined;
     function onKey(e) {

@@ -1287,7 +1287,7 @@ export function BookingApp({uid}){
   const { layout, saveLayout } = useLayout();
   // v18.19.1 (Patryk): every save the Layout tab makes is a step its Undo pill
   // can take back, until Settings closes (lib/settings-undo.js).
-  const settingsUndo = useSettingsUndo({ open: showSettings, layout: layout, saveLayout: saveLayout });
+  const settingsUndo = useSettingsUndo({ open: showSettings, onTop: topModal(modalStack) === "settings", layout: layout, saveLayout: saveLayout });
   // ── WhatsApp Inbox hook (sandbox) ─────────────────────────────────────────
   // Owns conversations/messages/templates (DEV Firebase) + every inbox handler.
   // Form/view handoff setters flow in (controlled pattern, like useWalkin). The
