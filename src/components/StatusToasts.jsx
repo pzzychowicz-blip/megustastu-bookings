@@ -143,6 +143,11 @@ export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown
       node:toast("var(--status-online)",loadMsg)},
   ];
   const topToastKey=(statusToasts.find(function(t){return t.on;})||{}).key;
+  // v18.19.0 (tablet check): a toast that has gone OFF hands `Toast` nothing, so
+  // `Presence` plays the exit on the copy it last drew. Built from props that
+  // are null by then, the Undo pill faded out as a bare "Undo" (measured on the
+  // tablet, 0.62 opacity, the sentence gone) and a drag message as an empty pane.
+  // A toast that is still on but outranked keeps its live node.
   // Floating layer — absolutely positioned over the TOP-CENTRE of mainView so the
   // toast lands in the empty gap of the timeline toolbar (between the
   // Optimizer/Reshuffle group on the left and the Follow/zoom group on the right)
@@ -164,5 +169,5 @@ export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown
     role="status"
     aria-live="polite"
     style={{position:"absolute",top:0,left:0,right:0,zIndex:60,display:"flex",justifyContent:"center",alignItems:"flex-start",padding:"6px 12px 0",pointerEvents:"none"}}><div
-    style={{width:"100%",maxWidth:480,display:"grid",justifyItems:"center",textAlign:"center"}}>{statusToasts.map(function(t){return <Toast key={t.key} show={t.key===topToastKey} style={{gridArea:"1 / 1",width:"fit-content",justifySelf:"center"}}>{t.node}</Toast>;})}</div></div>;
+    style={{width:"100%",maxWidth:480,display:"grid",justifyItems:"center",textAlign:"center"}}>{statusToasts.map(function(t){return <Toast key={t.key} show={t.key===topToastKey} style={{gridArea:"1 / 1",width:"fit-content",justifySelf:"center"}}>{t.on?t.node:null}</Toast>;})}</div></div>;
 }

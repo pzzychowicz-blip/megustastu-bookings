@@ -158,7 +158,7 @@ export function WalkinForm({
   // tablet, and nothing on screen said there was no table. A picked table settles
   // the question, so the line goes with that tap rather than after the scan.
   const wAsking = wSel.length === 0;
-  const wLine = useLineBand(wAsking ? wAutoCheck : null, wAsking && wChecking);
+  const wLine = useLineBand(wAsking ? wAutoCheck : null, wAsking && wChecking, "No table for " + wSize + " at " + wTime);
   const wCap = getCapOf(wSel);
   const wOk = wSel.length > 0 && wCap >= wSize;
   const wPickSaid = pickNote && pickNote.at === wSel.join("|") ? pickNote.text : null;
@@ -353,7 +353,7 @@ export function WalkinForm({
         <Reveal show={wLine.shown}>
           {wLine.answer ? (
             <AvailLine
-              text={"No table for " + wSize + " at " + wTime}
+              text={wLine.words}
               sugg={wLine.answer}
               checking={wLine.checking}
               leaving={!wLine.shown}

@@ -34,7 +34,7 @@ import { S, BLOCK_BG, BLOCK_INK, STATUS_BTN_BG, STATUS_COLORS, BTN, R, T, FW, IC
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { useLeavingOrder } from "../hooks/useLeavingOrder";
-import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf, countLabel, offZone, offZoneLabel } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf, bookAgainOffered, countLabel, offZone, offZoneLabel } from "../lib/booking-logic";
 import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
 import { statusTitle } from "../lib/status-change";
 import { EmptyDay } from "./EmptyDay";
@@ -42,8 +42,10 @@ import { noShowMap, identityKey, formatPhone, bookingTags } from "../lib/custome
 import { filterByTags, dayTagChips, toggleTagId, tagNames, liveTagIds } from "../lib/tag-filter";
 import { TagChips } from "./TagChips";
 import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, RowSlot, useFlip, InlineAlert, ALERT_TONES, textWidth, reduceMotionOn, ModalPresence } from "./atoms";
-import { AssignIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon, IndoorIcon, OutdoorIcon } from "./Icons";
+import { AssignIcon, BookAgainIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
+// v18.19.0: the Book again slot names its key (B on a selected card).
+import { keyHint } from "../lib/shortcuts";
 
 // ── The card's flag rail (v17.15.5) ──────────────────────────────────────────
 // The same facts TimelineBlock draws on its right-hand rail, in the same order
@@ -115,8 +117,9 @@ const FLAG_DANGER = "var(--danger-text)";
 //                    worse than a taller card).
 //   STATUS_COL  98 — `SBADGE_W` (atoms.jsx since phase 75): the widest status
 //                    badge, "Completed" (97.8px); "Seated" is 76.
-//   NEXT_COL   116 — the widest next-step button, "Completed" (115.7px);
-//                    "Seated" is 92.
+//   NEXT_COL   117 — the widest button in the next step's slot, "Book again"
+//                    with its mark (116.28px, v18.19.0, measured on DEV);
+//                    "Completed" is 115.7 and "Seated" 92.
 //   NAME_LINE   20 — the name's line box, and the badge's height (both 20px
 //                    measured). The cells beside the name are this tall and
 //                    centre what they hold, so a wrapped name keeps its badge,
@@ -131,7 +134,7 @@ const TIME_COL = 58;
 const TIME_GAP = 14;
 const NAME_COL = 180;
 const STATUS_COL = SBADGE_W;
-const NEXT_COL = 116;
+const NEXT_COL = 117;
 const NAME_LINE = 20;
 // FLAGS_MIN 104 — the widest flag chip, "double-booked" with its mark
 //                  (101.3px; a voucher code is ~80). Beside the size and status
@@ -281,8 +284,12 @@ function endsASelection(el) {
 // too whenever the card showed it. ONE function, read by the card and by the
 // ⋯ card's mount, so what the card shows and what the ⋯ card omits cannot
 // drift apart.
+// v18.19.0: and `again` — a booking with no next step that may be booked again
+// (a COMPLETED one: seated has Completed as its next step) shows Book again in
+// the next step's slot, so the ⋯ card leaves Book again out for it too.
 function cardActionsOf(b, late, today, nowMins) {
-  return { next: nextStatusOf(b, today, nowMins), noShow: late[b.id] === "noshow" };
+  const next = nextStatusOf(b, today, nowMins);
+  return { next: next, noShow: late[b.id] === "noshow", again: !next && bookAgainOffered(b) };
 }
 
 // v17.1.0 perf: React.memo — all function props are App's stable VA wrappers,
@@ -293,6 +300,9 @@ export const ListView = memo(function ListView({
   // v17.15.5: `clashes[id]` = {names, tables} for a booking double-booked with
   // another — App's `clashMap`, the same memo TimelineView takes.
   late = {}, clashes = {}, onNoShow = () => {}, onUnlock = null,
+  // v18.19.0: Book again — the ⋯ card's button and a completed card's slot
+  // (App's VA.onBookAgain).
+  onBookAgain = null,
   selectedId = null, onSelect = () => {}, focusReq = 0,
   // v18.0.0: code -> voucher, so a card can say whether an attached voucher is
   // still unsettled. A STABLE object from App's memo, per the React.memo rule.
@@ -828,6 +838,18 @@ export const ListView = memo(function ListView({
           >
             <StatusIcon status={nextSt} size={IC.control} />{nextSt}
           </button>
+        ) : acts.again && onBookAgain ? (
+          // v18.19.0 (Patryk): a completed visit's next step is its guest's next
+          // visit. Book again in the same slot, NEXT_COL wide like the status
+          // buttons, so Assign keeps its x; the form's green and its mark.
+          <button
+            className="mgt-hover-scale"
+            style={mkBtn({ background: "var(--app-success-solid)", color: "var(--text-on-accent)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: NEXT_COL })}
+            onClick={stopped(() => onBookAgain(b))}
+            title={"Start a new booking for " + (b.name || "(no name)") + ", their details filled in" + keyHint("listBookAgain")}
+          >
+            <BookAgainIcon size={IC.control} />Book again
+          </button>
         ) : null;
         // Icon-only, so it needs a name. The card is a NAMED listitem
         // (`describeBooking`), so a static "More actions" leans on it — the
@@ -1114,7 +1136,12 @@ export const ListView = memo(function ListView({
                 {moreBtn}
               </div>
             </div>
-            {notesEl ? <div style={{ gridColumn: 2, gridRow: 3, minWidth: 0 }}>{notesEl}</div> : null}
+            {/* v18.19.0 (tablet check): the note eases in and out, as the flags above
+                it have since correction 25. A note added in the form grew the card
+                from 97 to 128px in ONE frame, and every card under it jumped. A
+                closed Reveal renders nothing, so a card with no note has no row 3;
+                a note that has gone leaves on the copy the Reveal kept. */}
+            <Reveal show={!!notesEl} style={{ gridColumn: 2, gridRow: 3, minWidth: 0 }}>{notesEl}</Reveal>
             </div>
             </div>
           </div>
@@ -1208,7 +1235,7 @@ export const ListView = memo(function ListView({
       <ModalPresence show={!!menuFor}>
         {menuFor ? (function () {
           const menuB = day.find((x) => x.id === menuFor) || null;
-          const onCard = menuB ? cardActionsOf(menuB, late, today, nowMins) : { next: null, noShow: false };
+          const onCard = menuB ? cardActionsOf(menuB, late, today, nowMins) : { next: null, noShow: false, again: false };
           return (
             <QuickStatusPopup
               booking={menuB}
@@ -1218,9 +1245,11 @@ export const ListView = memo(function ListView({
               onStatus={onStatus}
               onNoShow={onNoShow}
               onUnlock={onUnlock}
+              onBookAgain={onBookAgain}
               onDelete={onDelete}
               omitStatus={onCard.next}
               omitNoShow={onCard.noShow}
+              omitBookAgain={onCard.again}
               startArmed
               onClose={() => setMenuFor(null)} />
           );

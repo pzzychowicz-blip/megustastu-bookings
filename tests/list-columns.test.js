@@ -30,7 +30,7 @@ describe("the column widths are the measured ones", () => {
   it("fit the widest thing each column holds", () => {
     expect(num("NAME_COL"), "the CAP: María José Fernández is 178px").toBe(180);
     expect(num("STATUS_COL"), "the Completed badge is 97.8px").toBe(98);
-    expect(num("NEXT_COL"), "the Completed button is 115.7px").toBe(116);
+    expect(num("NEXT_COL"), "the Book again button is 116.28px (v18.19.0); Completed is 115.7").toBe(117);
     expect(num("NAME_LINE"), "the name's line box and the badge are 20px").toBe(20);
     expect(num("FLAGS_MIN"), "the double-booked chip is 101.3px").toBe(104);
     expect(num("TIME_COL")).toBe(58);

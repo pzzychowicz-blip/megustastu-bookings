@@ -21,7 +21,7 @@ the Rule of law; `src/CLAUDE.md` holds the app-code architecture and gotchas.
   - **The prune is ARMED on connect and CONSUMED by the next `presence` snapshot**: in the `.info/connected` handler no snapshot exists yet. `.info/serverTimeOffset` is read because the model compares a server timestamp with local time.
   - Exempt from the CAS rule (the root Rule of law's ephemeral shape); its grant is `presence/$key` `auth != null`, needed since the root `.write` went (v17.16.7).
 
-- **useReminders.jsx** — reminder state, listeners and banner JSX: **the only hook that returns JSX**, so a sweep of `src/components` misses its banner. Ref-mirror saves on a rev pair. It owns `reminderBaseline`/`reminderDirty` for the unsaved-changes guard, diffed through `flatReminder()` (a nested draft must be flattened before `sameDraft`). Which surface is open (`reminderEditor`, `confirmReminderDel`) is App's modal stack, passed in (v17.14.0); the baseline and the save path stay here.
+- **useReminders.jsx** — reminder state, listeners and banner JSX: **the only hook that returns JSX**, so a sweep of `src/components` misses its banner. Its rows go through `BannerRows` (v18.19.0, keyed on `fireKey`), so Done and Snooze fold a row like every other strip section. Ref-mirror saves on a rev pair. It owns `reminderBaseline`/`reminderDirty` for the unsaved-changes guard, diffed through `flatReminder()` (a nested draft must be flattened before `sameDraft`). Which surface is open (`reminderEditor`, `confirmReminderDel`) is App's modal stack, passed in (v17.14.0); the baseline and the save path stay here.
 
 - **useNowMins.js** — the 15s clock tick.
 

@@ -312,6 +312,21 @@ export const SEG_TRACK = {
   display: "inline-flex", gap: 2, padding: 2, borderRadius: R.pill,
   background: "var(--bg-tabbar)", boxShadow: "inset 0 0 0 1px var(--border-soft)"
 };
+// v18.19.0 (tablet check): the label of a segment whose neighbours must not move.
+// The chosen segment is BOLD (segStyle), which is wider, so picking another view
+// resized two buttons: the header's switcher is anchored on its right, and its
+// left edge and labels moved by up to 0.38px on each change (measured on the
+// tablet, 600 → 700 at T.body). A hidden bold copy in the same grid cell holds
+// the bold width at every weight. It is `aria-hidden` and `visibility: hidden`,
+// so the name is still the visible text, once.
+export function SegLabel({ children }) {
+  return (
+    <span style={{ display: "inline-grid" }}>
+      <span style={{ gridArea: "1 / 1" }}>{children}</span>
+      <span aria-hidden="true" style={{ gridArea: "1 / 1", fontWeight: FW.bold, visibility: "hidden" }}>{children}</span>
+    </span>
+  );
+}
 export function segStyle(active) {
   return {
     borderRadius: R.pill, border: "none", cursor: "pointer",
@@ -786,7 +801,9 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
 // registered in tests/contrast.test.js against `--text-on-accent`.
 // `srText` follows the number for a screen reader only ("new crashes"), so a
 // chip is named "Crashes 2 new crashes" rather than "Crashes2". Nothing at all
-// for zero, or for anything that is not a positive number.
+// for zero, or for anything that is not a positive number, once the last count
+// has left. So a caller keeps it MOUNTED and passes 0, never a conditional
+// mount, which would cut the exit (v18.19.0).
 // `plus` adds a "+" (a count that stopped at its listener's limit: "50+").
 // The 18px pill and its 5px side padding are the WhatsApp badge's own, kept to
 // the pixel, hence the @canvas mark. Inline in App the same literal passed
@@ -796,17 +813,41 @@ export function ModalTitle({ background, marginBottom = 14, children }) {
 // inbox's Needs action: it points `aria-describedby` here, and only while the
 // count shows, since at zero there is no element to point at.
 export function CountBadge({ n, background, float = false, srText, plus = false, id }) {
-  if (!(typeof n === "number" && n > 0)) return null;
-  return (
+  // v18.19.0 (the motion sweep): the count ARRIVES and LEAVES, where it used to
+  // appear and vanish in a frame. A 0 to 1 is a signal (the connection dot eases
+  // its colour for the same reason); the number changing while it shows stays
+  // instant, since that is data being read. The pill is the child of the
+  // presence wrapper and is null at zero, so the wrapper's own cache keeps the
+  // LAST count on screen while it leaves (a wrapper between them would cache
+  // itself and fold empty, BannerRows' v18.19.0 lesson).
+  //   float   — a Presence on `mgt-badge-in/out` (scale from 0.6 and a fade, on
+  //             --t-move), the corner position moved onto it, so the badge
+  //             takes no room and nothing around it moves.
+  //   inline  — a horizontal Reveal on `move`, as a span (it sits in a
+  //             <button>), so the label beside it eases over as the pill's
+  //             width comes and goes rather than jumping at the end of a fade.
+  //             The gap is the pill's own margin, inside the fold. A leaving
+  //             copy is inert, so a screen reader does not read the old count.
+  const on = typeof n === "number" && n > 0;
+  const pill = on ? (
     <span id={id} style={Object.assign({
       minWidth: 18, height: 18, padding: "0 5px",   /* @canvas */ borderRadius: R.pill,
       background, color: "var(--text-on-accent)", fontSize: T.small, fontWeight: FW.bold,
       display: "inline-flex", alignItems: "center", justifyContent: "center",
       boxShadow: "var(--shadow-flat)", boxSizing: "border-box", flexShrink: 0,
-    }, float ? { position: "absolute", top: -6, right: -6 } : { marginLeft: SP.snug })}>
+    }, float ? null : { marginLeft: SP.snug })}>
       {n}{plus ? "+" : ""}{srText ? <span className="mgt-sr-only">{" " + srText}</span> : null}
     </span>
-  );
+  ) : null;
+  if (float) {
+    return (
+      <Presence show={on} tag="span" inClass="mgt-badge-in" outClass="mgt-badge-out"
+        style={{ position: "absolute", top: -6, right: -6, display: "inline-flex" }}>
+        {pill}
+      </Presence>
+    );
+  }
+  return <Reveal horizontal tag="span" speed="move" show={on} inert={!on}>{pill}</Reveal>;
 }
 
 // ── InlineAlert — a notification-strip section, inside a modal (v17.15.0) ────
@@ -1187,7 +1228,12 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // screen reader's attention. One attribute does all three, where the WA list's
 // departing row needed `pointer-events`, a `tabIndex` and a click guard, and
 // was still announced. A real boolean, for App's `anyModal` reason.
-export function Reveal({ show, children, style, horizontal = false, end = false, speed = "reveal", presentational = false, inert = false }) {
+export function Reveal({ show, children, style, horizontal = false, end = false, speed = "reveal", presentational = false, inert = false, tag = "div" }) {
+  // v18.19.0: `tag="span"` for a Reveal inside phrasing content (a <button>
+  // holds no <div>): CountBadge's inline count. Both boxes take it; a
+  // horizontal Reveal sets both boxes' `display`, so there the element changes
+  // nothing else (a vertical one's inner box would be inline as a span).
+  const Tag = tag;
   const last = useRef(null);
   if (children) last.current = children;
   const [mounted, setMounted] = useState(show === true);
@@ -1309,9 +1355,29 @@ export function Reveal({ show, children, style, horizontal = false, end = false,
     // now by tests/wa-sandbox-integrity.test.js.
     : { overflow: isRevealed ? "visible" : "hidden", minHeight: 0, minWidth: 0 };
   return (
-    <div role={presentational ? "presentation" : undefined} inert={inert === true} style={{ ...track, opacity: isOpen ? 1 : 0, ...(style || {}) }}>
-      <div role={presentational ? "presentation" : undefined} style={innerStyle}>{children || last.current}</div>
-    </div>
+    <Tag role={presentational ? "presentation" : undefined} inert={inert === true} style={{ ...track, opacity: isOpen ? 1 : 0, ...(style || {}) }}>
+      <Tag role={presentational ? "presentation" : undefined} style={innerStyle}>{children || last.current}</Tag>
+    </Tag>
+  );
+}
+
+// ── IconSwap — a control confirming itself in place (v18.19.0) ──────────────
+// Two buttons say "done" by changing their mark: Copy becomes a check on a
+// voucher's number, and Add to waitlist becomes On the waitlist on the WhatsApp
+// draft card. The mark used to be swapped in a frame. Both now sit in ONE grid
+// cell, always mounted, and cross-fade on `M.tap`: the old one fades and shrinks
+// to 0.6 as the new one grows from it. Transform and opacity only, so under
+// reduced motion it is the house's short fade. The marks are decoration (each
+// control is named by its text or its aria-label), hence `aria-hidden`.
+// TurnChevron's rule still stands for a disclosure: ONE mark that turns, never
+// two swapped. This is for two different marks, which nothing can turn between.
+export function IconSwap({ on, offIcon, onIcon }) {
+  const cell = { gridArea: "1 / 1", display: "inline-flex", transition: "opacity " + M.tap + ", transform " + M.tap };
+  return (
+    <span aria-hidden="true" style={{ display: "inline-grid", placeItems: "center" }}>
+      <span style={{ ...cell, opacity: on ? 0 : 1, transform: on ? "scale(.6)" : "none" }}>{offIcon}</span>
+      <span style={{ ...cell, opacity: on ? 1 : 0, transform: on ? "none" : "scale(.6)" }}>{onIcon}</span>
+    </span>
   );
 }
 

@@ -2550,5 +2550,25 @@ after, it went from the ~1.69× on screen to 1.95×, one notch).
   inbox's select checkbox is a `RowSlot` on the list's `ROW_FOLD`, where it
   appeared in one frame and every row's text jumped 28px. `RowSlot` takes a
   `speed` for this; as a row's FIRST item it works unchanged.
+- **A leaving copy is drawn from its wrapper's cache, so the thing that leaves
+  must be the wrapper's DIRECT child** (v18.19.0). `Reveal` and `Presence` keep
+  their last truthy `children` and draw that once the caller passes nothing. Put
+  a styling box between them and the content, and the cache keeps the box: the
+  copy that leaves is empty. `BannerRows` had a padding wrapper there, so every
+  row whose data left with its id (a reminder marked Done, a dismissed waiting
+  party) folded as 0px in one frame while its neighbour jumped. So a styling
+  box goes in only as `row ? <div …>{row}</div> : null`, and the cache keeps the
+  box with the row in it. A line between rows keeps its WIDTH and changes only
+  its colour: a border that comes and goes is a 1px step on the rows under it
+  (the code review of v18.19.0 found two in `BannerRows`). The other
+  half of the same rule: the wrapper must STAY MOUNTED. A badge rendered only
+  while a count is above zero has no exit to play, so `CountBadge` is mounted
+  with 0 and decides for itself.
+- **Two different marks swap through `IconSwap`** (v18.19.0): both in one grid
+  cell, always mounted, cross-fading on `M.tap` with a 0.6 scale. It is for a
+  control that confirms itself (Copy → check), where nothing can turn one mark
+  into the other; a disclosure keeps ONE mark that turns (`TurnChevron`). A
+  number on a badge does not animate when it changes, only when it arrives and
+  leaves: a changing number is data being read.
 
 ---

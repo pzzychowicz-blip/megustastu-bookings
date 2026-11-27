@@ -42177,3 +42177,240 @@ mechanism commit 16 measured with `manual-assign.js`. **Not a stale install eith
 - ROADMAP: no entry is resolved by this version, and none was added.
 - **Gate after the review:** 490.47 kB / 145.32 kB gz · 4805 tests (from 4804, fix 1's) · lint 63 problems (0 errors, 63
   warnings) · style OK, hover descriptions 0 of ceiling 0.
+
+## v18.19.0 — Book again, one tap from wherever the booking is
+
+**Date:** 2026-11-26 · **Branch:** `feat/v18.19.0-book-again-everywhere`
+
+**Why:** Patryk, 2026-11-26: Book again (a new booking pre-filled from a seated or completed visit) should be quicker to reach.
+**Measured first:** before this version it had ONE door, the edit form's footer (`BookingFormModal`'s `bookAgainBtn`, and `B` while
+that form is open). The hold / right-click card, the List card and Find a booking had none, so a guest booking again meant finding
+and opening their visit first. He chose the doors in one round of questions (the hold / right-click card, a completed List card's
+slot, `B` on a selection, Find a booking; not Customers), kept the statuses at seated and completed, and asked for a mark that the
+form's button wears too. The plan is `/Users/patrykzychowicz/.claude/plans/i-have-this-idea-proud-pinwheel-of-a0afe4e6-de79-48f2-95b4-6bd5a58d3bd8.md`.
+**Behavioural change: yes**, each commit below. What the form opens with is unchanged (`againDraft`).
+
+### Commit 1 — one predicate, the mark, and the form's button
+
+- **`bookAgainOffered(b)`** (`lib/booking-logic.js`, beside `nextStatusOf`): seated or completed. The form's button and its `B` row
+  each wrote the condition out; both ask this now, and so does every door added below.
+- **`BookAgainIcon`** (`Icons.jsx`): a calendar (body and two rings) with a clockwise return arrow across its face. **Judged
+  rasterised at 14px** (`IC.control`) against three other drawings, as the file asks: with a calendar's header rule the arrow had a
+  3.4 radius and at 14px closed into a "G" with its head merged; without the rule it takes r 4.3 and its head stands clear.
+- **The form's button** wears it (`inline-flex`, gap 6, the Delete button's shape beside it). Seen on DEV (Olga Ferrer, completed,
+  22.11): "Book again" with the mark, 117 × 35.
+
+### Commit 2 — Book again on the quick-status card
+
+- **What:** the card a hold or right-click opens on a Timeline block or a Plan table, and the List card's ⋯ opens by click, now
+  offers **Book again** for a seated or completed booking (`onBookAgain && bookAgainOffered(booking)`): green, `BookAgainIcon`, after
+  Unlock and before Delete. App adds `bookAgain` to `viewActionsRef` and one stable wrapper, `VA.onBookAgain`, which the three views
+  take as `onBookAgain` (they are `React.memo`) and hand to their card.
+- **A pick like the others:** `armed` / `leaving` guard, `skipExit()`, `handBack()`, then `bookAgain`, then close. The form is a modal,
+  so focus goes back to the opener before it makes the page inert (the card's v18.3.1 rule).
+- **No key in its description:** `B` is not live while the card is open, so the title names no key.
+- **On DEV (2026-11-26):** a walk-in seated at table 4 today. Right-click on its Timeline block → Confirmed · Completed · Cancelled ·
+  Book again; Book again → the form titled "Book again" with "Return guest · Walk-in 1 · Thu 26.11 11:57 — set a date". Right-click on
+  table 4 in the Plan → the same card with Book again.
+
+`tests/book-again.test.js`: the predicate over every status, the form asking it, App's wrapper and its three mounts, each view handing
+it to the card, and the card's guard and pick order.
+- **Pins moved, each because the card has a fifth pick:** `tests/focus-return.test.js` counts `skipExit(); handBack();` (4 → 5) and
+  `tests/motion.test.js` lists the picks one skip each (`onBookAgain(booking)` added).
+
+### Commit 3 — a completed List card's slot
+
+- **What:** a completed card had no next-step button. Now `cardActionsOf` returns `again: !next && bookAgainOffered(b)`, and where
+  it is set the slot holds **Book again** (green, `BookAgainIcon`, `minWidth: NEXT_COL`, through `stopped()` so the card does not
+  also open the edit form). Its ⋯ passes `omitBookAgain`, the same idea as `omitStatus`, so the card never offers it twice. A seated
+  card keeps Completed in the slot and offers Book again behind ⋯ (commit 2).
+- **`NEXT_COL` 116 → 117, measured:** with `minWidth` released on DEV, "Book again" with its mark was **116.28px**, the slot's widest
+  label ("Completed" is 115.7). At 116 that card's Assign would have stood 0.3px off the column, so the column rose a pixel on every
+  card. Read back at 117: the slot is 117.
+- **On DEV (22.11):** Olga Ferrer's completed card → Assign · Book again · ⋯; its ⋯ → Confirmed · Cancelled · Delete (no Book again);
+  Book again → one dialog, "Book again", "Return guest · Olga Ferrer · Sun 22.11 13:30 — set a date", the edit form not opened.
+  The card in the finished fold sits 15px inside the active cards (card 31–993 against 16–1008), which is the fold's own inset and
+  predates this version.
+
+Pins moved: `tests/list-card.test.js` (`cardActionsOf`'s body, and `omitBookAgain` at the ⋯ mount) and `tests/list-columns.test.js`
+(`NEXT_COL` 117, with the measurement). `tests/book-again.test.js`: the slot's condition, its width and `stopped()`.
+
+### Commit 4 — `B` on a selected List card and on a focused Timeline block
+
+- **What:** two rows in `lib/shortcuts.js`. `listBookAgain` in the List layer, beside A / E / S / C / D: B books the selected card's
+  guest again. `bookAgainFocused` in the global layer, beside `newAfter` (N on a focused block): with a Timeline block focused
+  (`env.focusedBlock`), B books that booking's guest again. Both ask `bookAgainOffered` and are TAKEN and ignored on any other booking,
+  as S is on a pending card, so the key never falls through to something else. The global row sits below the "any modal" stop like
+  every global key, and the Shortcuts tab lists both from the table.
+- **The List slot names its key:** the completed card's Book again carries `keyHint("listBookAgain")` (" (B)"). The quick-status
+  card's does not, since B is not live while that card is open.
+- **On DEV:** the seated walk-in's block focused on today's Timeline, B → "Book again". On 22.11's List, ↓ to Inés Romero
+  (confirmed), B → nothing; ↓ to Olga Ferrer (completed), B → "Book again".
+
+`tests/shortcuts.test.js`: both rows over seated, completed and confirmed, with no selection, in the Plan, and under a modal.
+
+### Commit 5 — Book again in Find a booking
+
+- **What:** a seated or completed result has a green **Book again** beside it. Each result row is a whole `<button>`, so the button
+  is its SIBLING in a flex wrapper, never inside it. App's `onBookAgain` closes the panel and then calls `bookAgain`, so the form
+  never opens over the search.
+- **Layout, measured first, chosen by Patryk:** on the tablet (1024 wide) the row was 670px with 540 of content for "o", and a long
+  name can take the name column to its 190 cap, so a 117px button beside it leaves the name about 80px less. He chose a reserved
+  column over a mark-only square or a line under each result: **every row keeps `AGAIN_COL` (117, the List slot's measured width)
+  while any result offers Book again**, so the name gives up the same room on every row and the columns stay in line; with no such
+  result the column is not there. On a phone the button takes a line of its own under the result, full width.
+- **On DEV:** "olga" on the tablet: ten results, four confirmed with the empty column and six completed with Book again, every row
+  545 wide and every status badge at x 582. Book again on the 22.11 result → the search closed and one dialog, "Book again" for Olga
+  Ferrer. At 375 wide: the row 339 wide and Book again 339 wide, 8px under it; Escape in the search box still closes the panel.
+- **Found on the way, not changed:** results are capped at 30, upcoming first, so a short query ("o") listed no past visit at all.
+  Typing more of the name reaches them, which is how the search already worked.
+
+`tests/book-again.test.js`: the sibling, the reserved column and App's order.
+
+### Verification across the version
+
+- **Gate at each commit** (main entry gz · tests · lint · style): 145.38 kB · 4805 · 0 errors, 63 warnings · OK → 145.56 · 4810 → 145.66
+  · 4812 → 145.68 · 4814 → **145.69 kB · 4817 passed · 0 errors, 63 warnings · OK** (the lint cap, unchanged).
+- **Dark theme on DEV:** the completed card's slot sits in the finished card's fade like Assign beside it, and its ⋯ card shows
+  Confirmed · Cancelled · Delete. `--app-success-solid` under `--text-on-accent` was already a registered pair in
+  `tests/contrast.test.js` (the form's Book again), so no new pair.
+- **Console:** no error after a clean reload and a walk through the List. One `keyHint is not defined` was logged while the List's
+  call was in and its import not yet (the hot-reloaded module of that moment), and never again.
+- **Not checkable here:** a real finger's hold on a block or table, then lifting onto Book again (`useArmAfterRelease`), is the
+  tablet's and the iPhone's to settle after merge.
+
+### Tablet and simulator checks — findings fixed in this version
+
+Patryk asked for every device check carried since the last tablet session (v18.14.2, 2026-11-02) to be run on the
+restaurant tablet, PROD only looked at and everything that writes on a DEV tab served from this branch, and then on the iOS 27
+simulators; every finding fixed here, nothing to ROADMAP.
+
+- **A toast left without its words.** Carried check (v18.14.0): with an Undo pill up, a Reshuffle that moves nobody says "No
+  tables needed moving." above the pill. It does: sampled every 250ms, the sentence held the slot for 3s and the drop's pill came
+  back with its timer still running, gone at 10s. The same samples showed the pill's exit reading a bare **"Undo"** at 0.62
+  opacity: `StatusToasts` rebuilt each toast from its props on every render, and on the way out `undoInfo` is already null, so the
+  sentence emptied before the fade. `Presence` holds the last children it drew, but only when it is handed none, and it never was.
+  Now a toast that is off hands `Toast` nothing (`t.on?t.node:null`); an outranked toast that is still on keeps its live node. On
+  the tablet afterwards, "Sofía Navarro moved to 5." stayed whole down to 0.07 opacity. A drag message's exit had the same fault
+  (an empty pane). `tests/drop-plan.test.js` holds both halves.
+- **A List card's note arrived with a jump.** Carried check (v18.14.0): flags arrive without a jump. They do: Unlock from a
+  card's ⋯ faded its Locked flag out over about 200ms before its slot closed. The note under the flags did not: a note added in
+  the form grew the card from 97 to 128px in one frame, sampled every frame, and every card under it jumped. The note's cell is
+  now a `Reveal`, which renders nothing while closed, so a card with no note has no third row; it leaves on the copy it kept.
+  On the tablet after a reload: clearing the note 128 → 97 and adding it 97 → 128, each over about 400ms.
+- **Passed on the tablet, nothing to fix** (DEV tab, 998 × 507): keeping the day (an edit and a time change move nobody else
+  and claim no re-optimise); the inbox search's magnifier raises the keyboard and an empty search closes on blur; H archives
+  and Backspace does nothing; ⋯ by touch opens, keeps focus where it was, and closes on a tap outside; a sideways drag of an
+  Optimiser-placed booking keeps its table with no lock; the time drag's edge scroll (once the finger reaches the band);
+  Undo after a drag; a refused drop right after a move speaks over the pill and the pill comes back; the availability line
+  and Save above the keyboard in the form (231px) and the walk-in (289px); the Undo pill offline (armed on landing) and not
+  at all when the landing comes after its 10s; a second device deleting under a held drag clears the row's hint; the inbox's
+  merged title row and composer above the keyboard; a double tap on a country code and on Add to waitlist each do it once.
+  Not reachable from here: a slow connection, since CDP's throttling does not reach Firebase's WebSocket.
+- **The view switcher moved on every pick.** First seen on the PROD app as a 1px step of its left edge between List and
+  Timeline, then measured on the DEV tab to the hundredth: the chosen segment is bold (`segStyle`, 600 → 700), which widened
+  it by 0.2–0.4px, and the group is anchored on its right, so its left edge and the labels moved by up to 0.38px on each pick.
+  The label is now a `SegLabel` (atoms): a hidden bold copy in the same grid cell holds the bold width at every weight, out of
+  the name (`aria-hidden`, `visibility: hidden`). After a reload the group and all three segments read identically in
+  Timeline, List and Plan (463.35–651.21), 36px tall as before, and CDP's accessibility tree still names each from its
+  contents, once ("Timeline", "List", "Plan"). `tests/segmented.test.js` holds it.
+- **Also passed:** the time-zone picker in Settings → General with the keyboard up (231px: the search and a list three rows
+  tall inside the dialog), and Book again in a completed List card's slot opening "Book again" for its guest by touch.
+- **The availability line blinked on every change of the time** (carried check "Checking the tables… without flicker"; fixed
+  on Patryk's word). Per frame on the tablet, 12 guests at a full 21:00: the answer held at 1.00 for the ~90ms check, the first
+  frame after it read **0.08** (the compositor had run the fade-out while the main thread was busy), then it eased back over
+  ~110ms; the words never showed, being delayed. v18.14.0 round 10 recorded "the answer dips and returns" on the Mac; on the
+  tablet it was a near-blank. The same frames showed the sentence naming the NEW time beside the OLD answer's times while it
+  faded, because the sentence was built from the draft and only the times were held. Two changes: `AvailLine` hides the
+  answer after the same `--t-tap` grace the words wait (`ANSWER_HIDE`; a fold does not wait), and `useLineBand` holds the
+  sentence with its answer (`words`). On the tablet afterwards, three changes of the time at 1×: the answer 1.00 on every
+  frame, and the sentence switching in place when the answer lands (~95ms); the walk-in the same at 13:15, and its fold when 13:30 had a table starts at once, as a fold should. At 6× CPU the slow path is unchanged: the words
+  come up, the answer goes, and they crossfade back. One reading there is not explained and was not changed: in about one run
+  in three, a single sampled frame reads both layers at 0.00 between the words and the answer. The previous `AvailLine` does
+  the same at 6× (control run), `useDeferredCompute` sets its value and `pending` in one update, and it never appears at 1×.
+- **The phone's bottom bar covered the end of every view** (iPhone 18 Pro Max, iOS 27.0 simulator, Safari, Lock navigation
+  on). Found when the List on Sun 29.11 showed no "Completed & cancelled" fold even scrolled to its end. Measured on the phone
+  through a scratch eval channel: `<main>` at its end, the fold at 745–775 under the bar from 735, and the bar's 61px spacer at
+  407–468, part-way down the List. In the fixed shell the column between `<main>` and the view (the toast anchor, the view's
+  wrapper, `SlideView fill`) was `flex: 1; min-height: 0` at every level, so a single view was clamped to the room left (469px)
+  and OVERFLOWED that box to 846px; `<main>` scrolled the overflow, and the spacer, placed after the box, never reached the end.
+  The Timeline (content to 784) and the Plan (to 772) lost the same strip. Only a split needs the clamp (each pane scrolls
+  itself), so without one the two wrappers keep `min-height: auto` and `SlideView` takes no `fill`; with one, nothing changed.
+  After a reload on the phone: all three views end with the spacer last (711–772) above the bar, the fold at 672–702, the
+  Timeline's sticky ruler held at `<main>`'s top through a full scroll, and the completed card's Book again in its slot. On
+  the iPad Pro 13 (iOS 27.0) nothing overflows in either orientation. In the Browser pane at 998 × 507 a Timeline/List split
+  still gives two 195px panes, the first scrolling its own 750px. `tests/mobile-bar.test.js` holds it.
+- **Passed on the iPhone simulator, nothing to fix:** the hold card on a seated block (at ~455ms, the release keeps it open
+  and presses nothing) offering Confirmed · Completed · Cancelled · Book again, and its Book again opening the form with the
+  Return guest line and the date left blank; Back on an untouched form closes with no question; Find a booking with the
+  on-screen keyboard up (Done stays above it), Book again on a row of its own under the completed visit, closing the search
+  before the form; the form's Save bar above the full keyboard; the time picker opening on the field's own time; More's sheet
+  solid with a solid footer; the inbox search opening in one tap, filtering as typed with the keyboard up, the header in
+  place; the List's ⋯ on a seated card offering Book again and not repeating Completed. On the iPad: the hold card at
+  ~430–450ms, Book again with its mark in the form's footer, the header. A tap on a hold card's scrim sometimes produced no
+  click from injected taps, and a plain probe page did the same (1 click in 5 with no hold at all), so that is the
+  simulator's tap injection, not the app.
+- **More's sheet showed key hints on a phone** ("W/M/S view · ↑↓ day · ←→ week · T today · Enter open", under the week), on
+  a device with no keyboard. Older than this version; on Patryk's word the line is left out where `isMobile` (the switch the
+  sheet's own layout already reads) and kept on a tablet, which can have a keyboard attached. In the Browser pane: absent at
+  440px wide, present at 998. `tests/week-view.test.js` holds it.
+
+### The motion sweep — three moments that should ease (Patryk, before the ship run)
+
+`/find-animation-opportunities` over the whole repo kept three places that changed in a frame and rejected five. Patryk
+asked for all three in this version.
+
+- **The reminder rows fold like the strip's other sections.** They were the strip's one row section drawn as a plain
+  map, so a reminder marked Done or snoozed went in a frame and every row under it jumped. They go through `BannerRows`
+  now (`useReminders.jsx`'s `reminderRow`, keyed on `fireKey`). Doing so found a defect in `BannerRows` that every row
+  section shared: the row sat in a padding wrapper INSIDE its `Reveal`, so `Reveal`'s cache (`last`) kept the wrapper.
+  A caller whose `renderRow` answers null once the id has gone (its data left with it: a reminder done, a waiting party
+  dismissed) folded an empty box. Measured on DEV with two reminders: Done on the first dropped it to 0px in the first
+  frame and the row under it jumped 53px. The padding and the hairline moved onto the `Reveal`'s own style, so the row is
+  its direct child and the cache keeps it. After: 52 → 0 over ~510ms on the ease-out curve, the next row easing up the
+  same 53px, the leaving copy keeping its text to the end. Two more changes rode along: a leaving row is now `inert`, as
+  `FoldRows`' are, so a second tap during the fold cannot land on the copy; and the rows are drawn in the caller's order
+  through `useLeavingOrder` (`useRevealRows` returns them in arrival order, which put a reminder whose time was moved
+  earlier below the later ones). The padding is horizontal only and a leaving row never carries the hairline, so nothing
+  on the outer box holds height while it folds. `tests/motion.test.js` holds all three.
+- **A count badge arrives and leaves.** `CountBadge` (the WhatsApp unread count, the gear's crashes, a Settings tab's
+  alert, the inbox's Needs action, "Open the log" and the Crashes chip) appeared and vanished in a frame. A floating one
+  now rides a `Presence` on a new pair, `mgt-badge-in/out` (scale from 0.6 and a fade, on `--t-move`, `--ease-out` in
+  and `--ease-in` out), with its corner position moved onto the wrapper so it still takes no room. An inline one rides a
+  horizontal `Reveal` on `move`, so the label beside it eases over instead of jumping once the fade ends; `Reveal` took
+  a `tag` prop for it, since a `<button>` holds no `<div>`. The pill is the wrapper's direct child and null at zero, so
+  the wrapper's cache shows the last count while it leaves (the reminder rows' lesson, one commit earlier). A number
+  changing while the badge shows stays instant: that is data being read. Settings' tab bar mounted its badge only on an
+  alert, which would have cut the exit, so it now passes 0; `tests/motion.test.js` fails any conditional mount.
+  Measured on DEV with the real atom in a scratch root (Patryk's own unread and crash counts left alone): float 0.6 → 1
+  and opacity 0 → 1 over ~260ms, out over ~254ms still reading "4"; inline 65 → 89px over ~300ms, the next element
+  easing with it, inert while leaving; 3 → 4 replayed nothing. In the app, the WhatsApp badge and the Admin tab's sit
+  where they sat (−6/−6 from the padding box).
+- **A control confirming itself cross-fades its mark.** Copy on a voucher's number turns into a check for 2s, and Add to
+  waitlist on the WhatsApp draft card into On the waitlist; both swapped the mark in a frame. A new atom, `IconSwap`,
+  keeps both marks in one grid cell, always mounted, and cross-fades them on `M.tap` (opacity, and a 0.6 scale on the
+  mark going out and the one coming in), so under reduced motion it is the house's short fade. The draft card's words
+  stay a plain swap, in the `WAIT_W` box that already holds them still. Measured on DEV with the real atom in a scratch
+  root: both directions over ~145ms, the control's width unchanged. The voucher button itself could not be pressed
+  into its done state in the Browser pane, which refuses the clipboard write even to a real click (the click landed on
+  the button, and `Copied` never came); the draft card's Add to waitlist was not pressed, since it writes the DEV
+  waitlist. `tests/motion.test.js` holds the atom and both sites.
+
+### `/code-review and ship` — findings
+
+The review (high) raised two, both 1px steps in the strip's rows, and both were confirmed and fixed in one commit, since
+one change answers both:
+
+- **An arriving row's hairline stepped the rows under it 1px** (raised against this version). The motion sweep's
+  `BannerRows` fix had moved the padding and hairline onto the `Reveal`'s outer box, outside the clipped track, so a
+  second or later row's 1px border counted from its first frame.
+- **The survivor of a first row leaving dropped its line and jumped 1px** (older than this version). The line is keyed
+  on the row's place among OPEN rows, so the survivor went from `i = 1` to `i = 0` in the render that starts the fold.
+  The fold measured earlier showed it: the second reminder moved 226 → 225 at 29ms while the leaving row was still 52px.
+
+The wrapper is back inside the clip, rendered as `row ? <div …>{row}</div> : null`, so `Reveal`'s cache keeps it with
+the row in it, and every row's top border is always 1px with only its colour changing (`transparent` on the first open
+row, faded on `M.move`). The first row sits 1px lower under the section title than before, the price of a line that
+never resizes. Measured with the real `BannerRows` in a scratch root: a third row arriving held the content below at 202
+for the first frames, then eased to 243 (40px row + its line); the first row leaving held the survivor at 162 at 16ms,
+then eased to 121. `tests/motion.test.js` holds both; DESIGN.md's "Adding motion" says it as a rule.

@@ -181,7 +181,9 @@ export function TabBar({ tabs, current, onSelect, alerts }) {
             }}
           >
             {t.label}
-            {alerts && alerts[t.id] ? <CountBadge n={alerts[t.id].n} plus={alerts[t.id].plus} float background="var(--app-danger-solid)" srText={alerts[t.id].srText} /> : null}
+            {/* v18.19.0: mounted on every tab with 0 for none, never mounted
+                on the alert, so the count leaves as it arrived (CountBadge). */}
+            <CountBadge n={alerts && alerts[t.id] ? alerts[t.id].n : 0} plus={!!(alerts && alerts[t.id] && alerts[t.id].plus)} float background="var(--app-danger-solid)" srText={alerts && alerts[t.id] ? alerts[t.id].srText : undefined} />
           </button>
         );
       })}

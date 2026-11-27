@@ -32,6 +32,17 @@ describe("the phone's bottom bar", () => {
   it("<main> ends with a spacer of the bar's height, so nothing is left under it", () => {
     expect(App).toMatch(/\{isMobile\?<div aria-hidden="true" style=\{MOBILE_BAR_SPACER\} \/>:null\}<\/div><\/main>/);
   });
+
+  // v18.19.0 (iPhone check): with Lock navigation on, the column above the
+  // spacer clamped every view to the room left and the view OVERFLOWED it, so
+  // the spacer landed part-way down and the last 49px of the Timeline, List and
+  // Plan stayed under the bar (the List's "Completed & cancelled" fold was out of
+  // reach). Measured on the iPhone 18 Pro Max simulator: content to 784 under a
+  // bar from 735 before, the spacer last at 711–772 after. Only a split clamps.
+  it("in the fixed shell, only a split clamps the column, so the spacer comes after the view", () => {
+    expect(App).toMatch(/ref=\{toastAnchorRef\} style=\{shellFixed\?\{position:"relative",flex:1,minHeight:split\?0:"auto",display:"flex",flexDirection:"column"\}/);
+    expect(App).toMatch(/inert=\{anyModal\}\s+style=\{shellFixed\?\{flex:1,minHeight:split\?0:"auto",display:"flex",flexDirection:"column"\}:undefined\}><SlideView key=\{slide\.k\} dir=\{slide\.dir\} fill=\{shellFixed&&!!split\}>/);
+  });
 });
 
 // v18.2.0 phase 79 (round 2's loose end): with WhatsApp on, the phone's

@@ -103,12 +103,13 @@ describe("the walk-in's answer is the booking form's line", () => {
     expect(FORM.slice(FORM.indexOf("<Overlay onClose")), "the body keeps no copy of it").not.toMatch(/<AvailLine|Add to waitlist/);
   });
   it("says what the booking form says, in the same tone, with the same ways out", () => {
-    expect(FORM).toContain('text={"No table for " + wSize + " at " + wTime}');
+    expect(FORM, "the same sentence, held with its answer (v18.19.0)").toContain('wAsking && wChecking, "No table for " + wSize + " at " + wTime);');
     expect(FORM.slice(FORM.indexOf("<AvailLine"), FORM.indexOf("/>", FORM.indexOf("<AvailLine")))).not.toContain("warn");
     expect(FORM).toContain("onAddToWaitlist={onAddToWaitlist || null}");
   });
   it("keeps its band through a re-check, and a picked table settles it at once", () => {
-    expect(FORM).toContain("const wLine = useLineBand(wAsking ? wAutoCheck : null, wAsking && wChecking);");
+    expect(FORM).toContain('const wLine = useLineBand(wAsking ? wAutoCheck : null, wAsking && wChecking, "No table for " + wSize + " at " + wTime);');
+    expect(FORM).toContain("text={wLine.words}");
     expect(FORM).toContain("checking={wLine.checking}");
     expect(FORM).toContain("leaving={!wLine.shown}");
     expect(FORM, "the body's cue stays shut under the band").toContain("show={wChecking && wAsking && !wLine.shown}");

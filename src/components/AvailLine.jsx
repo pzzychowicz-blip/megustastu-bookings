@@ -69,6 +69,11 @@ const LINE_TIMES = 4;
 const SENTENCE_GROW = 9999;
 const ANSWER_FADE = "opacity " + M.tap;
 const WORDS_FADE_IN = "opacity " + M.move + " var(--t-tap)";
+// v18.19.0 (tablet check, Patryk): a re-check hides the answer only after the same
+// grace the words wait, so one shorter than it changes nothing on screen. Hidden at
+// once, the answer blinked on every change of the time: a ~90ms check on the tablet
+// left the compositor's fade at 0.08 before the answer came back.
+const ANSWER_HIDE = "opacity " + M.tap + " var(--t-tap)";
 
 export function AvailLine({ text, warn, sugg, onTapTime, onAddToWaitlist, checking = false, leaving = false }) {
   const role = ALERT_TONES[warn ? "warn" : "danger"];
@@ -86,7 +91,7 @@ export function AvailLine({ text, warn, sugg, onTapTime, onAddToWaitlist, checki
   return (
     <InlineAlert tone={role.tone} tint={role.tint} icon={null} style={{ marginBottom: SP.base, ...(padding ? { padding: padding } : null) }}>
       <span style={{ display: "grid" }}>
-      <span ref={rowRef} inert={answerHidden} style={{ gridArea: "1 / 1", minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.snug, opacity: answerHidden ? 0 : 1, transition: ANSWER_FADE }}>
+      <span ref={rowRef} inert={answerHidden} style={{ gridArea: "1 / 1", minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "center", gap: SP.snug, opacity: answerHidden ? 0 : 1, transition: checking && !leaving ? ANSWER_HIDE : ANSWER_FADE }}>
         <span ref={sentenceRef} style={{ flex: SENTENCE_GROW + " 1 auto", minWidth: 0, fontSize: T.lead }}>
           {text}
         </span>

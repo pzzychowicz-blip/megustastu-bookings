@@ -3158,11 +3158,14 @@ describe("the save and the preview ask tablesKept (v18.3.2)", () => {
   // on every change of the time, which no build or render test would notice.
   it("the band holds while a refused answer is re-checked, and nothing stale shows", () => {
     expect(FORM).toMatch(/const answeredNo=formAvail&&!formAvail\.ok\?formAvail:null;/);
-    expect(FORM).toContain("const {answer:lineAvail,shown:lineShown,checking:lineChecking}=useLineBand(answeredNo,availScan.pending);");
+    expect(FORM).toContain("const {answer:lineAvail,shown:lineShown,checking:lineChecking,words:lineWords}=useLineBand(answeredNo,availScan.pending,lineSaid);");
     const Band = stripComments(readFileSync(new URL("../src/hooks/useLineBand.js", import.meta.url), "utf8")).join("\n");
     expect(Band, "from the render that starts the check, so never a commit behind").toMatch(/if \(!pending\) \{\s*if \(open !== !!refused\) setOpen\(!!refused\);/);
     expect(Band).toMatch(/const checking = pending && open;/);
-    expect(Band).toMatch(/shown: !!refused \|\| checking, checking, answer: refused \|\| held/);
+    expect(Band).toMatch(/shown: !!refused \|\| checking, checking, answer: refused \|\| held, words: refused \? words : heldWords/);
+    // v18.19.0: the sentence is held with its answer, never rebuilt from the draft mid-check.
+    expect(Band).toMatch(/if \(refused && heldWords !== words\) setHeldWords\(words\);/);
+    expect(FORM).toMatch(/text=\{lineWords\}/);
     expect(FORM).toMatch(/checking=\{lineChecking\}\s*leaving=\{!lineShown\}/);
     const Line = stripComments(readFileSync(new URL("../src/components/AvailLine.jsx", import.meta.url), "utf8")).join("\n");
     expect(Line, "the old answer cannot be tapped, focused or read out").toMatch(/<span ref=\{rowRef\} inert=\{answerHidden\}/);
@@ -3175,6 +3178,10 @@ describe("the save and the preview ask tablesKept (v18.3.2)", () => {
     const Line = stripComments(readFileSync(new URL("../src/components/AvailLine.jsx", import.meta.url), "utf8")).join("\n");
     expect(Line).toMatch(/opacity: checking \? 1 : 0, transition: checking \? WORDS_FADE_IN : ANSWER_FADE/);
     expect(Line, "`leaving` must not reach the words").not.toMatch(/opacity: answerHidden \? 1 : 0/);
+    // v18.19.0 (tablet check): the answer waits out the same grace before it hides, so a
+    // check shorter than it never blinks the line; a fold (`leaving`) does not wait.
+    expect(Line).toContain('const ANSWER_HIDE = "opacity " + M.tap + " var(--t-tap)";');
+    expect(Line).toMatch(/opacity: answerHidden \? 0 : 1, transition: checking && !leaving \? ANSWER_HIDE : ANSWER_FADE/);
   });
 
   it("the body's row stays shut while the band is up: at dinner the kitchen's scan would open it on every change of time", () => {
@@ -3187,7 +3194,9 @@ describe("the save and the preview ask tablesKept (v18.3.2)", () => {
 
   it("v18.3.3: the scan asks keptRefusal and the line shows its sentence as a warning (H3 moved it to the footer)", () => {
     expect(/const refusal=keptRefusal\(bookings,cur,form,tableBlocks\);/.test(FORM)).toBe(true);
-    expect(/text=\{lineAvail\.refusal\|\|"No table for "\+\(Number\(form\.size\)\|\|2\)\+" at "\+form\.time\}/.test(FORM)).toBe(true);
+    // v18.19.0: the sentence is built for the live answer and held with it (`useLineBand`).
+    expect(/const lineSaid=answeredNo\?\(answeredNo\.refusal\|\|"No table for "\+\(Number\(form\.size\)\|\|2\)\+" at "\+form\.time\):"";/.test(FORM)).toBe(true);
+    expect(/text=\{lineWords\}/.test(FORM)).toBe(true);
     expect(/warn=\{!!lineAvail\.refusal\}/.test(FORM)).toBe(true);
   });
 });

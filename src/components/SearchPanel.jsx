@@ -14,13 +14,16 @@
 //   isMobile   — App's `winW < 600`: the phone's two-line rows (v18.2.0 phase 76)
 //   onPick(b)  — jump to the booking (App: setViewDate + select + close)
 //   onClose()  — close the panel
+//   onBookAgain(b) — v18.19.0: Book again from a seated or completed result
+//                (App: close the panel, then `bookAgain`). Absent = no button.
 
 import { useState, useRef, useEffect } from "react";
-import { BTN, S, R, T, FW } from "../lib/constants";
+import { BTN, S, R, T, FW, IC } from "../lib/constants";
 import { searchBookings, matchedTagLabels, formatPhone } from "../lib/customers";
 import { formatDay, showsYear } from "../lib/day";
 import { keyHint } from "../lib/shortcuts";
-import { guestsLabel } from "../lib/booking-logic";
+import { guestsLabel, bookAgainOffered } from "../lib/booking-logic";
+import { BookAgainIcon } from "./Icons";
 import { Overlay, ModalTitle, mkInp, mkBtn, AutoHeight, SBadge, SBADGE_W, textWidth } from "./atoms";
 
 // ── Fixed columns (v18.2.0 phase 76, round 2's X7) ───────────────────────────
@@ -46,6 +49,12 @@ import { Overlay, ModalTitle, mkInp, mkBtn, AutoHeight, SBadge, SBADGE_W, textWi
 const FIND_CARD_W = 720;
 const NAME_CAP = 190;
 const TIME_COL = 44;
+// v18.19.0: the Book again button's column, the List slot's measured width
+// ("Book again" with its mark, 116.28px in mkBtn's font; ListView's NEXT_COL).
+// EVERY row reserves it while any result offers Book again (Patryk), so the
+// name column gives up the same room on every row and the columns stay lined
+// up; with no such result it is not there at all.
+const AGAIN_COL = 117;
 const DATE_FONT = { fontWeight: FW.bold, fontSize: T.body };
 const NAME_FONT = { fontWeight: FW.bold, fontSize: T.lead };
 const CELL_FONT = { fontWeight: FW.regular, fontSize: T.body };
@@ -62,7 +71,7 @@ function widest(labels, font) {
   return w || undefined;
 }
 
-export function SearchPanel({ bookings, todayStr, isMobile, guestTags, tagList, onPick, onClose }) {
+export function SearchPanel({ bookings, todayStr, isMobile, guestTags, tagList, onPick, onClose, onBookAgain = null }) {
   const [query, setQuery] = useState("");
   const inputRef = useRef(null);
   useEffect(function () { if (inputRef.current) inputRef.current.focus(); }, []);
@@ -95,18 +104,22 @@ export function SearchPanel({ bookings, todayStr, isMobile, guestTags, tagList, 
   // a phone column, so an unmeasurable width used to hide every number.
   const phoneCol = phones.length ? (widest(phones, CELL_FONT) || "auto") : 0;
 
+  // v18.19.0: does any result offer Book again? Then every row reserves its column.
+  const againCol = onBookAgain && results.some(bookAgainOffered);
+
   const rows = results.map(function (b) {
-    return (
+    const row = (
       <button /* @no-lift a result row as wide as the card: .mgt-ac-row tints it through --row-bg */
-        key={b.id}
         onClick={function () { onPick(b); }}
         title={"Go to " + formatDay(b.date) + " and show " + (b.name || "(no name)") + "'s booking in the List"}
         // v18.4.0 (Patryk): a wide row takes the tint and neither the lift nor the press dip (DESIGN.md, Press feedback).
         // At 8% a 690px row grew 28px a side, and at 96% its date slid inward.
         className="mgt-ac-row mgt-nopress"
         style={{
-          display: "flex", alignItems: "center", gap: 10, flexWrap: isMobile ? "wrap" : "nowrap", width: "100%",
-          padding: "10px 12px", marginBottom: 6, borderRadius: R.inset, cursor: "pointer",
+          // v18.19.0: a flex item of the result's own row (below), sharing it
+          // with Book again; `minWidth: 0` so the name column can give way.
+          display: "flex", alignItems: "center", gap: 10, flexWrap: isMobile ? "wrap" : "nowrap", flex: "1 1 0%", minWidth: 0,
+          padding: "10px 12px", borderRadius: R.inset, cursor: "pointer",
           "--row-bg": "var(--bg-soft)", "--row-bg-hover": "var(--bg-hover-card)", border: "1px solid var(--border-soft)", textAlign: "left",
           boxShadow: "var(--shadow-input)"
         }}>
@@ -136,6 +149,25 @@ export function SearchPanel({ bookings, todayStr, isMobile, guestTags, tagList, 
             **A comment claiming parity with an atom is not parity with it.** */}
         <span style={{ width: SBADGE_W, flexShrink: 0, display: "flex" }}><SBadge status={b.status} /></span>
       </button>
+    );
+    // v18.19.0 (Patryk): Book again beside a seated or completed result. A
+    // SIBLING of the row, never inside it (a button cannot hold a button). On
+    // a phone it takes a line of its own under the result; a row that does
+    // not offer it keeps the column empty, so its columns stay in line.
+    const again = againCol && bookAgainOffered(b) ? (
+      <button
+        className="mgt-hover-scale"
+        style={mkBtn({ background: "var(--app-success-solid)", color: "var(--text-on-accent)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: AGAIN_COL, flex: isMobile ? "1 1 100%" : "0 0 auto" })}
+        title={"Start a new booking for " + (b.name || "(no name)") + ", their details filled in"}
+        onClick={function () { onBookAgain(b); }}
+      >
+        <BookAgainIcon size={IC.control} />Book again
+      </button>
+    ) : againCol && !isMobile ? <span aria-hidden="true" style={{ width: AGAIN_COL, flexShrink: 0 }} /> : null;
+    return (
+      <div key={b.id} style={{ display: "flex", alignItems: "stretch", gap: 8, flexWrap: isMobile ? "wrap" : "nowrap", marginBottom: 6 }}>
+        {row}{again}
+      </div>
     );
   });
 

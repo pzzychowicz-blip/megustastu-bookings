@@ -7,11 +7,13 @@
 // comparison is in REFACTOR_LOG. These are the cases that stay.
 import { describe, it, expect } from "vitest";
 import { againDraft } from "../src/lib/booking-save.js";
-import { getDur } from "../src/lib/booking-logic.js";
+import { getDur, bookAgainOffered } from "../src/lib/booking-logic.js";
 import { sanitizeVoucher } from "../src/lib/vouchers.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
 import { appCode } from "./app-source.js";
+import { readFileSync } from "node:fs";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 const TODAY = todayStr();
 const NOW = Date.now();
@@ -129,3 +131,73 @@ describe("a new booking needs bookingCreate, whichever door it came through", ()
   });
 });
 
+
+// ── v18.19.0: Book again's doors ─────────────────────────────────────────────
+// One predicate (`bookAgainOffered`) answers who may be booked again, and every
+// door asks it. Before v18.19.0 the only door was the edit form; the card a hold
+// or right-click opens, the List card and Find a booking had none.
+const comp = (f) => stripComments(readFileSync(new URL("../src/components/" + f, import.meta.url), "utf8")).join("\n");
+
+describe("bookAgainOffered", () => {
+  it("is seated or completed, and nothing else", () => {
+    const got = ["pending", "confirmed", "seated", "completed", "cancelled", ""].map((status) => bookAgainOffered({ status }));
+    expect(got).toEqual([false, false, true, true, false, false]);
+    expect(bookAgainOffered(null)).toBe(false);
+    expect(bookAgainOffered(undefined)).toBe(false);
+  });
+  it("the form's button asks it, rather than writing the statuses out", () => {
+    const f = comp("BookingFormModal.jsx");
+    expect(f).toContain("if(!bookAgainOffered(cur)) return null;");
+    expect(f).not.toMatch(/cur\.status!=="seated"&&cur\.status!=="completed"/);
+  });
+});
+
+describe("the quick-status card offers Book again", () => {
+  it("App hands every view one stable wrapper, read through the ref", () => {
+    const app = appCode();
+    expect(app).toContain("onBookAgain:function(b){R.current.bookAgain(b);},");
+    expect(app.match(/onBookAgain=\{VA\.onBookAgain\}/g)).toHaveLength(3);
+  });
+  it("all three places the card opens hand it onBookAgain", () => {
+    for (const f of ["TimelineView.jsx", "ListView.jsx", "PlanView.jsx"]) {
+      expect(comp(f), f).toMatch(/<QuickStatusPopup[^]*?onBookAgain=\{onBookAgain\}/);
+    }
+  });
+  it("the card shows it where bookAgainOffered says so, and acts like every other pick", () => {
+    const q = comp("QuickStatusPopup.jsx");
+    expect(q).toContain("onBookAgain && !omitBookAgain && bookAgainOffered(booking) ?");
+    expect(q.replace(/\s+/g, "")).toContain("if(!armed||leaving)return;skipExit();handBack();onBookAgain(booking);onClose();");
+  });
+});
+
+describe("a completed List card shows Book again in its next step's slot", () => {
+  const List = comp("ListView.jsx");
+  it("only where there is no next step, and the ⋯ card then leaves it out", () => {
+    expect(List).toContain("again: !next && bookAgainOffered(b)");
+    expect(List).toContain(") : acts.again && onBookAgain ? (");
+    expect(comp("QuickStatusPopup.jsx")).toContain("onBookAgain && !omitBookAgain && bookAgainOffered(booking) ?");
+  });
+  it("NEXT_COL wide like the status buttons, through stopped() so the card does not also open", () => {
+    const at = List.indexOf(") : acts.again && onBookAgain ? (");
+    const btn = List.slice(at, List.indexOf("</button>", at));
+    expect(btn).toContain("minWidth: NEXT_COL");
+    expect(btn).toContain("onClick={stopped(() => onBookAgain(b))}");
+  });
+});
+
+describe("Find a booking offers Book again on a seated or completed result", () => {
+  const Find = comp("SearchPanel.jsx");
+  it("as a SIBLING of the result's row, never inside its button", () => {
+    const at = Find.indexOf("const again = againCol && bookAgainOffered(b) ? (");
+    expect(at).toBeGreaterThan(-1);
+    expect(Find).toContain("{row}{again}");
+    expect(Find).toContain("onClick={function () { onBookAgain(b); }}");
+  });
+  it("every row reserves the column while any result offers it, so the columns stay in line", () => {
+    expect(Find).toContain("const againCol = onBookAgain && results.some(bookAgainOffered);");
+    expect(Find).toContain(') : againCol && !isMobile ? <span aria-hidden="true" style={{ width: AGAIN_COL, flexShrink: 0 }} /> : null;');
+  });
+  it("App closes the panel first, then opens the form", () => {
+    expect(appCode()).toContain("onBookAgain={function(b){setShowSearch(false);bookAgain(b);}}");
+  });
+});

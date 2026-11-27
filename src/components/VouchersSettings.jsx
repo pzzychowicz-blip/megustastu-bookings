@@ -35,7 +35,7 @@ import {
   MANUAL_CODE_MIN, MANUAL_CODE_MAX, expiryFrom, money,
 } from "../lib/vouchers";
 import { EXPIRY_MIN, EXPIRY_MAX } from "../hooks/useVoucherDefaults";
-import { Section, OutlineChip, Reveal, TurnChevron, InlineAlert, Fld, SearchField, mkInp, mkBtn, mkDangerBtn } from "./atoms";
+import { Section, OutlineChip, Reveal, TurnChevron, InlineAlert, Fld, SearchField, IconSwap, mkInp, mkBtn, mkDangerBtn } from "./atoms";
 import { CopyIcon, CheckIcon } from "./Icons";
 import { formatDay, localDay } from "../lib/day";
 import { countLabel } from "../lib/booking-logic";
@@ -134,7 +134,8 @@ function CopyBtn({ code }) {
           display: "inline-flex", alignItems: "center", justifyContent: "center",
           background: BTN.quiet,
         })}>
-        {done ? <CheckIcon size={IC.chrome} /> : <CopyIcon size={IC.chrome} />}
+        {/* v18.19.0: the check cross-fades in over the copy mark and back after 2s (IconSwap). */}
+        <IconSwap on={done} offIcon={<CopyIcon size={IC.chrome} />} onIcon={<CheckIcon size={IC.chrome} />} />
       </button>
       <span className="mgt-sr-only" role="status" aria-live="polite">{done ? "Copied " + text : ""}</span>
     </>

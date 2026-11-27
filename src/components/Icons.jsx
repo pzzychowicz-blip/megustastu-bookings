@@ -495,6 +495,25 @@ export function HistoryIcon(props) {
     </Svg>
   );
 }
+// v18.19.0 — Book again: a new booking for a guest who has already been. A
+// calendar (the app's "a booking on a date") with a clockwise return arrow
+// inside it ("the same again"). Judged rasterised at the 14px it ships at
+// (IC.control), against three other drawings: a calendar's header rule left
+// the arrow a 3.4 radius, and at 14px it closed up into a "G" with its head
+// merged in. Without the rule the rings and the body still say calendar, and
+// the arrow takes the whole face (r 4.3) with its head clear of the arc. It
+// is on every Book again button: the form, the quick-status card, the List
+// card's slot and Find a booking.
+export function BookAgainIcon(props) {
+  return (
+    <Svg {...props}>
+      <rect x="3.5" y="4.5" width="17" height="16.5" rx="2.5" />
+      <path d="M8 2.5v4M16 2.5v4" />
+      <path d="M14.76 9.91A4.3 4.3 0 1 1 9.85 9.48" />
+      <path d="M7.29 9.02L9.85 9.48L8.96 11.92" />
+    </Svg>
+  );
+}
 export function ClosedIcon(props) {
   return (
     <Svg {...props}>

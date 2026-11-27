@@ -24,7 +24,7 @@
 
 import { useRef, useEffect } from "react";
 import { BTN, T, IC, H } from "../lib/constants";
-import { mkBtn, Presence, SEG_TRACK, segStyle } from "./atoms";
+import { mkBtn, Presence, SEG_TRACK, SegLabel, segStyle } from "./atoms";
 import { beginHold } from "../lib/holdSelection";
 import { keyHint } from "../lib/shortcuts";
 import { CloseIcon, SplitSideIcon, SplitStackIcon, SwapIcon } from "./Icons";
@@ -157,7 +157,7 @@ export function ViewSwitcher({
               ? { boxShadow: "inset 0 -3px 0 var(--accent), var(--shadow-btn)" }
               : null
           )}
-        >{v}</button>
+        ><SegLabel>{v}</SegLabel></button>
       ))}
       </div>
       <Presence show={!!split} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span">

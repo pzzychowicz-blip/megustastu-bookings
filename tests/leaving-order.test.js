@@ -57,8 +57,10 @@ describe("Reveal can mark a leaving row inert", () => {
   const atoms = read("components/atoms.jsx");
   it("takes an inert prop and renders it as a real boolean on the outer wrapper", () => {
     // v18.18.0 commit 17: `end` joined the signature (the header's Follow and zoom).
-    expect(atoms).toMatch(/export function Reveal\(\{ show, children, style, horizontal = false, end = false, speed = "reveal", presentational = false, inert = false \}\)/);
-    expect(atoms).toMatch(/<div role=\{presentational \? "presentation" : undefined\} inert=\{inert === true\} style=\{\{ \.\.\.track/);
+    // v18.19.0: `tag` came after `inert` (CountBadge's inline count is a span
+    // inside a <button>); its default keeps every other Reveal a <div>.
+    expect(atoms).toMatch(/export function Reveal\(\{ show, children, style, horizontal = false, end = false, speed = "reveal", presentational = false, inert = false, tag = "div" \}\)/);
+    expect(atoms).toMatch(/<Tag role=\{presentational \? "presentation" : undefined\} inert=\{inert === true\} style=\{\{ \.\.\.track/);
   });
 });
 

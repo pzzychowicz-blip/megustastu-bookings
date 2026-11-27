@@ -60,7 +60,9 @@ import {
   // v18.2.0 phase 77: any other count and its word, joined the same way.
   countLabel,
   // v18.14.0 (H4): the refusal that carries the pinned codes.
-  NO_CODE_REFUSAL
+  NO_CODE_REFUSAL,
+  // v18.19.0: who may be booked again — the one answer every door asks.
+  bookAgainOffered
 } from "../lib/booking-logic";
 import { codeColumns, pinnedCodes } from "../lib/phone-countries";
 // v18.3.3: and what the save will say about the tables it keeps — v18.3.4 moved
@@ -75,7 +77,7 @@ import { AvailLine } from "./AvailLine";
 import { TimeChip } from "./TimeChip";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
-import { AssignIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon, TrashIcon } from "./Icons";
+import { AssignIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon, TrashIcon, BookAgainIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 import { TablesPreview } from "./TablesPreview";
 import { DurationReset } from "./DurationReset";
@@ -484,7 +486,9 @@ export function BookingFormModal({
   // v18.14.0 (correction 10, Patryk): the line keeps its band while a refused answer is
   // re-checked (`useLineBand`).
   const answeredNo=formAvail&&!formAvail.ok?formAvail:null;
-  const {answer:lineAvail,shown:lineShown,checking:lineChecking}=useLineBand(answeredNo,availScan.pending);
+  // v18.19.0: the sentence is held with the answer it describes (`useLineBand`'s `words`).
+  const lineSaid=answeredNo?(answeredNo.refusal||"No table for "+(Number(form.size)||2)+" at "+form.time):"";
+  const {answer:lineAvail,shown:lineShown,checking:lineChecking,words:lineWords}=useLineBand(answeredNo,availScan.pending,lineSaid);
 
   // ── v18.0.0 session 8 (items 2b, 7): this guest's other vouchers ───────────
   // Read once per mount, like the picker's own and the Vouchers tab's: expiry is
@@ -715,7 +719,7 @@ export function BookingFormModal({
   // v18.14.0 (H3): this is the footer's availability line now (`AvailLine`, whose
   // header says why), and the body's banner is gone.
   const availLine=lineAvail?<AvailLine
-    text={lineAvail.refusal||"No table for "+(Number(form.size)||2)+" at "+form.time}
+    text={lineWords}
     warn={!!lineAvail.refusal}
     sugg={lineAvail.sugg}
     checking={lineChecking}
@@ -905,13 +909,15 @@ export function BookingFormModal({
     if(!editId) return null;
     const cur=bookings.find(function(b){return b.id===editId;});
     if(!cur) return null;
-    if(cur.status!=="seated"&&cur.status!=="completed") return null;
+    if(!bookAgainOffered(cur)) return null;
+    // v18.19.0: the mark every Book again button carries (BookAgainIcon), on
+    // the footer's own geometry; inline-flex like Delete beside it.
     return (
       <button
         onClick={function(){onBookAgain(cur);}}
         title={"Start a new booking for this guest, their details filled in"+keyHint("bookAgain")}
         className="mgt-hover-scale"
-        style={mkBtn({fontSize: T.body,background:"var(--app-success-solid)",padding:"8px 16px",minHeight:36})}>Book again</button>
+        style={mkBtn({fontSize: T.body,background:"var(--app-success-solid)",padding:"8px 16px",minHeight:36,display:"inline-flex",alignItems:"center",gap:6})}><BookAgainIcon size={IC.control} />Book again</button>
     );
   })();
   // v14: "return guest" banner at top of form when this is a Book Again creation.

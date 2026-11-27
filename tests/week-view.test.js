@@ -90,3 +90,12 @@ describe("phase 61 — More hangs from the top, and its body eases", () => {
     expect(Week).toMatch(/<AutoHeight watch=\{mode \+ "\|" \+ ref\}>/);
   });
 });
+
+// v18.19.0 (iPhone check, Patryk): the key hints under More's body are for a
+// keyboard, and a phone has none. Measured in the Browser pane: absent from the
+// sheet at 440px wide, present at the tablet's 998.
+describe("the key hints", () => {
+  it("are left out on a phone and kept everywhere else", () => {
+    expect(Week).toMatch(/\{isMobile \? null : \(\s*<div style=\{\{ marginTop: 18, fontSize: T\.small, color: "var\(--text-faint\)", textAlign: "center" \}\}>\s*\{isStats\s*\? "W\/M\/S view/);
+  });
+});

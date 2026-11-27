@@ -484,6 +484,16 @@ describe("BookingApp's saveMove", () => {
     expect(at("reshuffled")).toBeGreaterThan(at("undo"));
     expect(toasts).toContain('{key:"reshuffled",on:!!reshuffled&&reshuffled!=="unmoved",');
   });
+  // v18.19.0 (tablet check): the pill faded out as a bare "Undo", its sentence
+  // rebuilt from an `undoInfo` already null. A toast that is off hands `Toast`
+  // nothing, so `Presence` plays the exit on the copy it last drew.
+  it("a toast leaves with the words it showed", () => {
+    const toasts = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "StatusToasts.jsx"), "utf8")).join("\n");
+    expect(toasts).toContain('{t.on?t.node:null}</Toast>');
+    const atoms = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "atoms.jsx"), "utf8")).join("\n");
+    expect(atoms).toContain("if (children) last.current = children;");
+    expect(atoms).toContain("{children || last.current}");
+  });
   // Measured: another device removed the booking under a held finger, and the pill and
   // the amber row outlived the release, until the next tap, because `endDrag` never ran.
   it("a block that leaves under a held drag takes the row's warning with it", () => {

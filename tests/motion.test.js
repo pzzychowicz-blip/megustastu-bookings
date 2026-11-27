@@ -217,7 +217,7 @@ describe("exit holds outlast their animations", () => {
     expect(tl).toMatch(/if \(handOffQuick\) handOffQuick\(\); else setQuickStatus\(null\);/);
     expect((tl.match(/handOffQuick=\{handOffQuick\}/g) || []).length, "both live block sites get the hand-off").toBe(2);
     const sites = [
-      ["src/components/QuickStatusPopup.jsx", ["onStatus(booking.id, st)", "onNoShow(booking.id)", "onUnlock(booking.id)", "onDelete(booking.id)"]],
+      ["src/components/QuickStatusPopup.jsx", ["onStatus(booking.id, st)", "onNoShow(booking.id)", "onUnlock(booking.id)", "onBookAgain(booking)", "onDelete(booking.id)"]],
       ["src/components/PlanView.jsx", ["onPick(b)", "onWalkinHere()"]],
       ["src/components/SplitMenu.jsx", ["onConfirm({"]],
     ];
@@ -404,5 +404,128 @@ describe("a customer's tag words belong to the closed row", () => {
     const words = customers.slice(customers.indexOf("<Reveal show={!open && tagNames.length > 0}"), customers.indexOf("tagNames.join("));
     expect(words).not.toContain("speed=");
     expect(customers).toContain("<Reveal show={open}>");
+  });
+});
+
+// ── v18.19.0 (the motion sweep): the reminder rows fold like the strip's others ─
+// Reminders were the one row section of the notification strip that was a plain
+// map, so a reminder marked Done or snoozed vanished in a frame and the rows
+// under it jumped. They go through BannerRows now. Doing so found a defect in
+// BannerRows itself: the row was wrapped in a padding div inside its Reveal, so
+// Reveal's cache kept the WRAPPER, and a caller whose `renderRow` answers null
+// for a departed id (its data left with it) folded an empty box. Measured on DEV
+// with two reminders: Done dropped the first to 0px in one frame and the second
+// jumped 53px; after, the row eased 52 → 0 over ~510ms, the next row with it.
+describe("the strip's row sections fold the row as it looked", () => {
+  const rows = code(join(ROOT, "src/components/BannerRows.jsx"), "utf8");
+  const reminders = code(join(ROOT, "src/hooks/useReminders.jsx"), "utf8");
+
+  it("the wrapper is null when the row is, so Reveal's cache keeps the wrapper WITH the row", () => {
+    expect(rows).toContain("const row = renderRow(id);");
+    expect(rows).toMatch(/<Reveal key=\{id\} show=\{openIds\.has\(id\)\} inert=\{!openIds\.has\(id\)\}>\s*(?:\{\s*\}\s*)?\{row \? \(\s*<div style=\{\{[^\n]*\}\}>\s*\{row\}\s*<\/div>\s*\) : null\}\s*<\/Reveal>/);
+  });
+
+  it("the hairline never changes width, only colour, so no row steps 1px (code review)", () => {
+    // Measured with the real BannerRows in a scratch root: a third row arriving
+    // held the content below at 202 for the first frames, then eased to 243;
+    // the first row leaving held the survivor at 162, then eased to 121.
+    expect(rows).toContain('borderTop: "1px solid", borderTopColor: i > 0 ? "var(--border-soft)" : "transparent", transition: "border-top-color " + M.move');
+    expect(rows).not.toMatch(/i > 0 \? \{ borderTop:/);
+  });
+
+  it("rows are drawn in the caller's order, a leaving one kept in place", () => {
+    expect(rows).toContain("const order = useLeavingOrder(ids, renderIds);");
+    expect(rows).toContain("{order.map(function (id) {");
+  });
+
+  it("the reminder rows go through BannerRows, never a plain map", () => {
+    expect(reminders).toMatch(/<BannerRows ids=\{activeReminderBanners\.map\(function\(ab\)\{return ab\.fireKey;\}\)\} renderRow=\{reminderRow\} \/>/);
+    expect(reminders).not.toMatch(/activeReminderBanners\.map\(function\(ab\)\{\s*return\s*\(?\s*</);
+  });
+});
+
+// ── v18.19.0 (the motion sweep): a count badge arrives and leaves ─────────────
+// CountBadge appeared and vanished in a frame (the WhatsApp unread count, the
+// gear's crashes, a Settings tab's alert, the inbox's Needs action, and two
+// inline counts). Measured on DEV with the real atom mounted in a scratch root:
+// a float badge scaled 0.6 → 1 and faded in over ~260ms and out over ~254ms,
+// showing its last number to the end; an inline one widened 65 → 89px over
+// ~300ms with the next element easing along, and was inert while leaving; a
+// number change (3 → 4) replayed nothing.
+describe("a count badge arrives and leaves", () => {
+  const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+  const badge = atoms.slice(atoms.indexOf("export function CountBadge"), atoms.indexOf("export function InlineAlert"));
+
+  it("float rides a Presence on the badge pair, positioned on the wrapper", () => {
+    expect(badge).toMatch(/<Presence show=\{on\} tag="span" inClass="mgt-badge-in" outClass="mgt-badge-out"\s+style=\{\{ position: "absolute", top: -6, right: -6, display: "inline-flex" \}\}>\s*\{pill\}\s*<\/Presence>/);
+  });
+
+  it("inline rides a horizontal span Reveal, so the label beside it eases", () => {
+    expect(badge).toContain('<Reveal horizontal tag="span" speed="move" show={on} inert={!on}>{pill}</Reveal>');
+  });
+
+  it("the pill is the wrapper's own child and null at zero, so the last count is cached", () => {
+    expect(badge).toMatch(/const pill = on \? \(/);
+    expect(badge).not.toMatch(/if \(!\(typeof n === "number" && n > 0\)\) return null;/);
+  });
+
+  it("the pair exists, scale and fade only, on the move token", () => {
+    expect(html).toMatch(/@keyframes mgt-badge-in\s*\{ from \{ opacity: 0; transform: scale\(\.6\); \} to \{ opacity: 1; transform: none; \} \}/);
+    expect(html).toMatch(/@keyframes mgt-badge-out\s*\{ from \{ opacity: 1; transform: none; \} to \{ opacity: 0; transform: scale\(\.6\); \} \}/);
+    expect(html).toContain(".mgt-badge-in  { animation: mgt-badge-in var(--t-move) var(--ease-out) both; }");
+    expect(html).toContain(".mgt-badge-out { animation: mgt-badge-out var(--t-move) var(--ease-in) both; }");
+  });
+
+  it("no caller mounts a badge conditionally, which would cut its exit", () => {
+    const dir = join(ROOT, "src");
+    const files = [];
+    (function walk(d) {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        if (e.isDirectory()) walk(join(d, e.name));
+        else if (/\.jsx?$/.test(e.name)) files.push(join(d, e.name));
+      }
+    })(dir);
+    const offenders = [];
+    for (const f of files) {
+      const src = code(f, "utf8");
+      // A ternary or && whose branch IS the badge. ActivityLogModal's
+      // `k === "crash" ?` picks which chip carries one, a fixed fact per chip,
+      // never a count, so it is the one shape allowed.
+      const re = /(\?|&&)\s*<CountBadge\b/g;
+      let m;
+      while ((m = re.exec(src))) {
+        const before = src.slice(Math.max(0, m.index - 20), m.index);
+        if (!/k === "crash" $/.test(before)) offenders.push(f.slice(ROOT.length + 1));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+// ── v18.19.0 (the motion sweep): a control confirming itself cross-fades ─────
+// Copy → check on a voucher's number, Add to waitlist → On the waitlist on the
+// WhatsApp draft card: the mark swapped in a frame. Measured on DEV with the
+// real atom in a scratch root: both directions cross-fade over ~145ms (the old
+// mark to opacity 0 and scale 0.6, the new one from there), the control's width
+// unchanged. The voucher button's own press could not be driven in the Browser
+// pane: it refuses the clipboard write, so the button never reaches "Copied".
+describe("a control confirming itself cross-fades its mark", () => {
+  const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+  const swap = atoms.slice(atoms.indexOf("export function IconSwap"), atoms.indexOf("export function TurnChevron"));
+
+  it("IconSwap stacks both marks in one cell, easing opacity and transform on M.tap", () => {
+    expect(swap).toContain('gridArea: "1 / 1"');
+    expect(swap).toContain('transition: "opacity " + M.tap + ", transform " + M.tap');
+    expect(swap).toContain('opacity: on ? 0 : 1, transform: on ? "scale(.6)" : "none"');
+    expect(swap).toContain('opacity: on ? 1 : 0, transform: on ? "none" : "scale(.6)"');
+  });
+
+  it("both sites use it, and neither swaps its mark with a ternary", () => {
+    const vouchers = code(join(ROOT, "src/components/VouchersSettings.jsx"), "utf8");
+    expect(vouchers).toContain("<IconSwap on={done} offIcon={<CopyIcon size={IC.chrome} />} onIcon={<CheckIcon size={IC.chrome} />} />");
+    expect(vouchers).not.toMatch(/done \? <CheckIcon/);
+    const card = code(join(ROOT, "src/components/whatsapp/DraftCard.jsx"), "utf8");
+    expect(card).toContain("<IconSwap on={onTheWaitlist} offIcon={<WaitIcon size={IC.inline} />} onIcon={<CheckIcon size={IC.inline} />} />");
+    expect(card).not.toMatch(/onTheWaitlist \? <CheckIcon/);
   });
 });
