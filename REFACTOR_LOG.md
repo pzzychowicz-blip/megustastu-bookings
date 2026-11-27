@@ -42733,3 +42733,36 @@ visible name and what happened; a retention Undo restores the number only; the p
   `src/lib/CLAUDE.md` (`stableKey`'s RTDB shape, the describer guard), `src/components/CLAUDE.md` (the 46px phone footer),
   `tests/CLAUDE.md`, DESIGN.md's "Undo in Settings" (every tab, the tab prefix, the per-node refusal, the footer), the
   GLOSSARY row, and the ROADMAP entry "Undo across the rest of Settings" removed.
+
+### /code-review fixes (the ship run)
+
+The review (`/code-review` at xhigh, over `origin/main...HEAD`) raised five; each was checked before it was acted on, and
+all five were fixed here, one commit each (Patryk, during the run: nothing goes to ROADMAP).
+- **Two controls on one leaf merged into one step** (measured with the real `recordStep`: a guest's VIP off then Allergy on,
+  Automatic dark mode off then Dark mode on, and a pinned country removed then another added each gave ONE step that one
+  Undo took back whole). A step now carries the saver that made it (`via`, the hook's saver name) and a merge needs the same
+  one; at a list's slot the item must be there before, between and after, unless the merge takes the step back to where it
+  started. `tests/settings-undo.test.js` +7. On DEV: Dark mode on, then Automatic on: two steps, each Undo its own switch.
+- **An Undo of a special day logged nothing**: `restoreHours` fell back on the weekday diff, which `settingsWriteEntry`
+  answers null for (measured). `hoursRestoreEntries` (`lib/activity.js`) logs the week's diff and each special day in
+  `specialDayEntry`'s words; `persist` takes one entry or a list. `tests/special-days.test.js` +2. On DEV: "removed a special
+  day · Fri 15.01.2027 · Closed · Undo log probe" in the log after the Undo (the probe stays on DEV as an add and a remove).
+- **A cancelled step faded with an older sentence**: a tap taking the only step back, and Close, faded with `u.text`, which
+  v18.20.0 keeps only for a pill naming no step. Measured on DEV: Tint indoor tables taken back by Undo, then Vibrate on
+  drag flipped twice, and the pill faded saying "Tint indoor tables switched off". Both now take the sentence from the step
+  that went away. **Disproved in part**: the review said the pill would also blink out with an empty sentence, but
+  `Presence` (atoms) keeps its last children while leaving, so an empty sentence fades the pill as it was.
+- **The pill faded in the refusal's look** (pre-existing since v18.19.1): the last Undo, a cancelled step and Close set
+  `undo: false` as it went off, and the toast draws its dot and button from that. Measured on DEV: the dot went from
+  `--text-muted` (#5a6474) to `--warn-text` (#8a4b0a) the frame after the last Undo, and the button went. `undo` is now the
+  pill's look, false only for a refusal; whether a press can act is the stack's length. On DEV the fade keeps the neutral
+  dot and the button, and a press during it changes nothing.
+- **An Undo the writer refused did nothing and said nothing**, and the step stayed on top (read from the code: a bookings
+  write held on a stale gap returns false, `usePersistence.js`, and `undo()` returned there). It is now said like a
+  conflict, "Couldn't undo that change", and that setting's steps go (`undoRefused`). On DEV, through a temporary forced
+  failure reverted before the commit: the sentence in amber, the setting unchanged, then the step left on another setting.
+- **Docs:** `src/lib/CLAUDE.md` (the merge rule, `undoRefused`), `src/hooks/CLAUDE.md` (`restoreHours` logs),
+  `src/components/CLAUDE.md` (`undo` is the pill's look), DESIGN.md's "Undo in Settings" (what one control is, the fade, the
+  writer's refusal).
+- **Gate at the ship run's head:** entry 152.65 kB gz (152.30 before the fixes) · 4922 tests · lint 0 errors, 63 warnings ·
+  style OK. No rules change, so no `test:rules`.
