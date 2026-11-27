@@ -4,7 +4,7 @@
 // reads (size, combo and swap rules, the tables in a zone, Prefer, Anchors and a
 // join group's chips). One instance serves every list in a component, because
 // only one drag runs at a time; each list has a name, and its items are siblings
-// marked with `itemProps(list, idx, key)`.
+// marked with `itemProps(list, key)`.
 //
 // The gesture (Patryk's choice): a GRIP that drags the moment it is touched
 // (`gripProps`), with `touch-action: none` on the grip only, so the rest of a
@@ -82,10 +82,15 @@ export function useDragReorder(opts) {
   }
   // The rects of a list's items as they are DRAWN now (a running slide
   // included), keyed by item key: where the next FLIP pass starts each one.
-  function snapshot(list) {
+  // Several lists at once for a change that moves an item between them (a
+  // table whose zone changes goes from one zone's list to the other's).
+  function snapshot(lists) {
+    const names = Array.isArray(lists) ? lists : [lists];
     const rects = new Map();
-    items(list).forEach(function (el) { rects.set(el.getAttribute("data-reorder-key"), rel(el)); });
-    snap.current = { list: list, rects: rects };
+    names.forEach(function (list) {
+      items(list).forEach(function (el) { rects.set(el.getAttribute("data-reorder-key"), rel(el)); });
+    });
+    snap.current = { lists: names, rects: rects };
     // A snapshot no render consumed (a save that was refused) must not start a
     // slide later, for some other change: it lives one frame.
     const mine = snap.current;
@@ -138,9 +143,14 @@ export function useDragReorder(opts) {
     end(false);
   }
   // Teardown first, dispatch last: a throw in the save must not strand a row lifted.
-  function finish() {
+  // `mine` is the drag this call ends. A settle calls it twice (its animation's
+  // end and the timeout behind it), and the second can come after the NEXT drag
+  // has started: without the check it tore that drag down (measured: a chip
+  // grabbed inside 360ms of the last drop never lifted, and the Escape meant for
+  // it closed Settings).
+  function finish(mine) {
     const d = st.current;
-    if (!d) return;
+    if (!d || (mine && mine !== d)) return;
     st.current = null;
     if (d.onEsc) window.removeEventListener("keydown", d.onEsc, true);
     if (d.raf) cancelAnimationFrame(d.raf);
@@ -153,7 +163,7 @@ export function useDragReorder(opts) {
   function end(commit) {
     const d = st.current;
     if (!d) return;
-    if (!d.active) { finish(); return; }
+    if (!d.active) { finish(d); return; }
     if (d.settling) return;
     d.settling = true;
     d.commit = commit;
@@ -173,14 +183,15 @@ export function useDragReorder(opts) {
     if (!d) return;
     const el = d.el, from = el.style.transform;
     el.style.transform = "";
-    if (reduceMotionOn() || typeof el.animate !== "function" || !from) { finish(); return; }
+    if (reduceMotionOn() || typeof el.animate !== "function" || !from) { finish(d); return; }
     const a = el.animate([{ transform: from }, { transform: "translate(0px, 0px)" }], { duration: M.dur.move, easing: M.easeOut });
-    a.onfinish = finish;
-    a.oncancel = finish;
+    const done = function () { finish(d); };
+    a.onfinish = done;
+    a.oncancel = done;
     // A hidden page runs no frames, so the settle would never finish and the
-    // drop would wait to be saved until the page is shown again. `finish` runs
-    // once (it clears the drag first), so whichever comes first saves.
-    setTimeout(finish, M.dur.move + 120);
+    // drop would wait to be saved until the page is shown again. `finish` acts
+    // once for this drag (it clears the drag first), so whichever comes first saves.
+    setTimeout(done, M.dur.move + 120);
   }
 
   // ── after each render: slide the others, re-measure the lifted item ─────────
@@ -190,7 +201,7 @@ export function useDragReorder(opts) {
       snap.current = null;
       const d = st.current;
       const quiet = reduceMotionOn();
-      items(s.list).forEach(function (el) {
+      s.lists.reduce(function (all, list) { return all.concat(items(list)); }, []).forEach(function (el) {
         if (d && el === d.el) return;
         const was = s.rects.get(el.getAttribute("data-reorder-key"));
         if (!was || typeof el.animate !== "function") return;
@@ -244,6 +255,11 @@ export function useDragReorder(opts) {
         const all = items(list);
         const from = all.indexOf(el);
         if (from < 0) return;
+        // Measure the LAYOUT, not a slide still running from the last move:
+        // `slotAt` reads these boxes for the whole drag, and a box taken mid-slide
+        // is somewhere the item is not (measured in a hidden pane, where slides
+        // never end: a chip dragged 110px past its neighbour stayed put).
+        all.forEach(function (it) { it.getAnimations().forEach(function (a) { a.finish(); }); });
         const boxes = all.map(rel);
         const r = el.getBoundingClientRect();
         st.current = {

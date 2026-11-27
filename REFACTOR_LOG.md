@@ -42483,3 +42483,23 @@ shape or a key.
   the page body: the preview went back and nothing was saved, and Settings stayed open. (Sent to `window` itself, Escape also
   closed Settings: at the target, the app's own listener runs in registration order. A key press always targets an element, so
   that case is the test rig's; `stopImmediatePropagation` was added for it anyway.)
+
+### Commit 5 — the tables by zone, and the ranked chips
+
+- **Tables:** listed as the Timeline draws them, outdoor first (`zoneOrdered`), and dragged within their zone (two lists,
+  `tables-outdoor` and `tables-indoor`; a drop saves `moveWithinZone`). The row's zone switch snapshots both lists before it saves,
+  so the row slides into its new group.
+- **Chips:** Prefer, Anchors and a join group's chips drag by their id (`chipGrip`, the chip's label made a button, named "Move 9
+  in Prefer (size rule 3, …)"), within their own list or group. The ‹ › and ▲▼ buttons stay, and slide the chips too now.
+- **Two defects in commit 4's hook, found here and fixed in this commit:**
+  - **a drag started inside ~360ms of the last drop was torn down.** A settle calls `finish` from its animation's end AND from
+    the timeout behind it, and the second call ended whatever drag was live by then. Measured on DEV: back-to-back chip drags, the
+    fourth never lifted, and the Escape meant to cancel it closed Settings. `finish` now takes the drag it ends.
+  - **the boxes `slotAt` reads were measured mid-slide** when a grab came while the previous move's slide was running (in a hidden
+    pane, slides never end: a chip dragged 110px past its neighbour stayed put). The list's running slides are finished first.
+- **On DEV:** table 9 dragged 500px up went to the top of the outdoor tables and the Timeline's rows read 9, 1–8, 10–13; table 10
+  dragged 400px up stayed first among the indoor tables. ↓ on table 9's grip took it back one place a press. Anchors 13, 10 →
+  10, 13 by a 110px drag (chips are 88px wide, so a place is half a chip and the gap: 94px). Group 3 + 4 + 5: back-to-back drags,
+  an Escape mid-drag (preview 5, 3, 4, saved nothing, Settings stayed open), then → on chip 5 twice, focus following it.
+- **A table's grip reads "Move table 9 among the tables outdoors"**: "the outdoor tables" put a word from `count-label.test.js`'s
+  list after a `+ "`, which the sweep reads as a count typed with a plain space.

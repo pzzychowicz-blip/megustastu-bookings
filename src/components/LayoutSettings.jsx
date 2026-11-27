@@ -18,7 +18,7 @@ import { contiguousRuns, comboKey, activePickRules, PICK_RULES_MAX, R, T, FW, H,
 import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon, GripIcon, TrashIcon } from "./Icons";
 import { todayStr } from "../lib/day";
 import { countLabel, joinFirstMatters } from "../lib/booking-logic";
-import { moveItem } from "../lib/reorder";
+import { moveItem, zoneOrdered, zoneTables, moveWithinZone } from "../lib/reorder";
 import { useDragReorder, liftStyle } from "../hooks/useDragReorder";
 import { useListKeys } from "../hooks/useListKeys";
 
@@ -106,6 +106,11 @@ const GRIP = {
   borderRadius: R.pill, color: "var(--text-muted)",
   display: "flex", alignItems: "center", justifyContent: "center"
 };
+// A chip's id as its grip: the chip's label, unchanged, made a button.
+const CHIP_GRIP = {
+  background: "transparent", border: "none", padding: "0 2px", borderRadius: R.pill,
+  fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", lineHeight: 1
+};
 // A reorderable row eases its lift in and out (the shadow and the ground).
 const LIFT_EASE = { transition: "box-shadow " + M.tap + ", background-color " + M.tap };
 // The neutral face the five add buttons share.
@@ -176,6 +181,9 @@ function Stepper({ value, onDec, onInc, disableDec, disableInc, label, descripti
 
 export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [], onDirty = null }) {
   const tables = (layout && Array.isArray(layout.tables)) ? layout.tables : [];
+  // v18.19.1 (Patryk): the tables as the Timeline draws them, outdoor first,
+  // which is what the list shows and what a table drag saves (lib/reorder.js).
+  const shownTables = zoneOrdered(tables);
   const kitchenLimit = layout && Number.isFinite(layout.kitchenLimit) ? layout.kitchenLimit : 3;
   const totalSeats = tables.reduce((a, t) => a + (Number(t.capacity) || 0), 0);
   const indoorCount = tables.filter((t) => t.zone === "indoor").length;
@@ -423,14 +431,30 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
   const bandKeys = useListKeys(priBands.length, "b");
   const ruleKeys = useListKeys(priRules.length, "c");
   const swapKeys = useListKeys(priSwaps.length, "s");
-  const { rootEl: dragRoot, gripProps, itemProps, isLifted, order: dragOrder } = useDragReorder({
-    axisOf: function (list) { return list === "bands" || list === "rules" || list === "swaps" ? "y" : "wrap"; },
+  const { rootEl: dragRoot, gripProps, itemProps, isLifted, order: dragOrder, snapshot: dragSnapshot } = useDragReorder({
+    axisOf: function (list) { return list === "bands" || list === "rules" || list === "swaps" || list.indexOf("tables-") === 0 ? "y" : "wrap"; },
     // A picker under a size rule is keyed by the rule's index, so a drag closes it.
     onStart: function () { setPriPick(null); },
     onCommit: function (list, from, to) {
       if (list === "bands") { bandKeys.move(from, to); savePri({ bands: moveItem(priBands, from, to) }); }
       else if (list === "rules") { ruleKeys.move(from, to); savePri({ comboRules: moveItem(priRules, from, to) }); }
       else if (list === "swaps") { swapKeys.move(from, to); savePri({ swapRules: moveItem(priSwaps, from, to) }); }
+      else if (list.indexOf("tables-") === 0) {
+        // A table moves among its own zone's tables only (Patryk): the
+        // Timeline draws outdoor above indoor whatever is stored, so a place
+        // across zones would be saved and then ignored.
+        const zt = zoneTables(shownTables, list.slice(7));
+        if (zt[from]) onSaveLayout({ ...layout, tables: moveWithinZone(tables, zt[from].id, to) });
+      }
+      else if (list === "anchor") savePri({ anchors: moveItem(priAnchors, from, to) });
+      else if (list.indexOf("prefer-") === 0) {
+        const bi = Number(list.slice(7));
+        if (priBands[bi]) setBand(bi, { prefer: moveItem(priBands[bi].prefer || [], from, to) });
+      }
+      else if (list.indexOf("group-") === 0) {
+        const gi = Number(list.slice(6));
+        if (joinGroups[gi]) onSaveLayout({ ...layout, joinGroups: joinGroups.map(function (g, k) { return k === gi ? moveItem(g, from, to) : g; }) });
+      }
     }
   });
   // The grip itself: a <button> with no text, so its name says what it moves.
@@ -441,6 +465,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         aria-label={"Move " + name}
         title={"Drag to change the order, or focus it and press the up or down arrow"}
         style={{ ...GRIP, ...gp.style }}><GripIcon size={IC.control} /></button>
+    );
+  }
+  // A chip's grip is its id: the chip is too small for a ⋮⋮ of its own, and the
+  // id is what a finger lands on. The visible id leads its name (WCAG 2.5.3).
+  function chipGrip(list, i, count, id, name, title) {
+    const gp = gripProps(list, i, count, id);
+    return (
+      <button type="button" {...gp} /* @no-lift the chip moves with the finger, and a hover lift under a grab would make it jump */
+        aria-label={name} title={title + ", or focus it and use the arrow keys"}
+        style={{ ...CHIP_GRIP, ...gp.style }}>{id}</button>
     );
   }
 
@@ -494,21 +528,29 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
     const avail = full ? [] : tableIds.filter(function (id) { return list.indexOf(id) < 0 && skip.indexOf(id) < 0; });
     const open = samePick(kind, bandIdx);
     const last = list.length - 1;
+    // v18.19.1: a ranked list is also dragged, by the chip's id (`chipGrip`);
+    // its name in useDragReorder is per list ("prefer-2", "anchor").
+    const ln = kind === "anchor" ? "anchor" : kind + "-" + bandIdx;
+    const drawn = ranked ? dragOrder(ln, list.length) : list.map(function (_, i) { return i; });
     return (
       <div style={{ marginTop: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", width: 52, flexShrink: 0 }}>{label}</span>
-          {list.length ? list.map(function (id, idx) {
+          {list.length ? drawn.map(function (idx) {
+            const id = list[idx];
+            const chipProps = ranked ? itemProps(ln, id) : null;
             return (
-              <span key={id} style={GCHIP}>
+              <span key={id} {...chipProps} style={{ ...GCHIP, ...(ranked ? LIFT_EASE : null), ...(ranked && isLifted(ln, id) ? { ...liftStyle, borderRadius: R.pill } : null) }}>
                 {ranked ? (
-                  <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { onChange(moveInList(list, idx, -1)); }} disabled={idx === 0}
+                  <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { dragSnapshot(ln); onChange(moveInList(list, idx, -1)); }} disabled={idx === 0}
                     title={"Move " + id + " up in " + label} aria-label={"Move " + id + " up in " + label + rowIn}
                     style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}><ChevronUpIcon size={IC.inline} /></button>
                 ) : null}
-                <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
+                {ranked
+                  ? chipGrip(ln, idx, list.length, id, "Move " + id + " in " + label + rowIn, "Drag " + id + " to another place in " + label)
+                  : <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>}
                 {ranked ? (
-                  <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { onChange(moveInList(list, idx, 1)); }} disabled={idx === last}
+                  <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { dragSnapshot(ln); onChange(moveInList(list, idx, 1)); }} disabled={idx === last}
                     title={"Move " + id + " down in " + label} aria-label={"Move " + id + " down in " + label + rowIn}
                     style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronDownIcon size={IC.inline} /></button>
                 ) : null}
@@ -552,7 +594,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         <div style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", marginBottom: 2 }}>
           {outdoorCount} outdoor · {indoorCount} indoor · {totalSeats} seats total
         </div>
-        {tables.map(function (t) {
+        {/* v18.19.1 (Patryk): listed by zone, outdoor first, and dragged within
+            the zone: inside a zone this order is the order the optimiser tries
+            single tables in, and the Timeline's row order. Two lists, so a drag
+            cannot cross into the other zone; the row's zone switch moves it. */}
+        {["outdoor", "indoor"].reduce(function (rows, zone) {
+          const zt = zoneTables(shownTables, zone);
+          return rows.concat(dragOrder("tables-" + zone, zt.length).map(function (i) { return { t: zt[i], i: i, zone: zone, count: zt.length }; }));
+        }, []).map(function (row) {
+          const t = row.t;
+          const ln = "tables-" + row.zone;
           const cap = Number.isFinite(t.capacity) ? t.capacity : 2;
           const indoor = t.zone === "indoor";
           const editing = editId === t.id;
@@ -561,8 +612,9 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           // Computed once per row (orphanCount re-filters all bookings) — v15.0.1.
           const renameOrph = editing && editTrim !== t.id && editValid ? orphanCount(t.id) : 0;
           return (
-            <div key={t.id} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)" }}>
+            <div key={t.id} {...itemProps(ln, t.id)} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)", ...LIFT_EASE, ...(isLifted(ln, t.id) ? liftStyle : null) }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {gripEl(ln, row.i, row.count, t.id, "table " + t.id + " among the tables " + (row.zone === "indoor" ? "indoors" : "outdoors"))}
                 {editing ? (
                   <input /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={editVal} autoFocus aria-label={"Rename table " + t.id} title={"The new name for table " + t.id + "; Enter saves it, Esc cancels"} style={{ ...TXT_INP }}
                     onChange={function (e) { setEditVal(e.target.value); }}
@@ -595,7 +647,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   {["indoor", "outdoor"].map(function (z) {
                     const on = indoor === (z === "indoor");
                     return (
-                      <button key={z} onClick={function () { if (!on) updateTable(t.id, { zone: z }); }} className="mgt-hover-scale"
+                      <button key={z} onClick={function () { if (!on) { dragSnapshot(["tables-outdoor", "tables-indoor"]); updateTable(t.id, { zone: z }); } }} className="mgt-hover-scale"
                         aria-pressed={on}
                         aria-label={(z === "indoor" ? "Indoor" : "Outdoor") + " (table " + t.id + ")"}
                         title={"Put table " + t.id + " in the " + z + " zone"}
@@ -755,20 +807,22 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           return (
             <div key={gi} style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 4 }}>
-                {group.map(function (id, idx) {
+                {dragOrder("group-" + gi, group.length).map(function (idx) {
+                  const id = group[idx];
+                  const ln = "group-" + gi;
                   return (
-                    <span key={id} style={GCHIP}>
+                    <span key={id} {...itemProps(ln, id)} style={{ ...GCHIP, ...LIFT_EASE, ...(isLifted(ln, id) ? { ...liftStyle, borderRadius: R.pill } : null) }}>
                       {/* v17.15.6: three icon-only buttons PER CHIP, and a chip
                           per table in every group — the densest instance of this
                           defect in the app. The table id alone disambiguates and
                           no group id is needed: `sanitizeLayout` enforces
                           single-group membership, so a table appears in exactly
                           one group. */}
-                      <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { moveInGroup(gi, idx, -1); }} disabled={idx === 0}
+                      <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { dragSnapshot("group-" + gi); moveInGroup(gi, idx, -1); }} disabled={idx === 0}
                         title={"Move " + id + " left in its joined group"} aria-label={"Move " + id + " left in its joined group"}
                         style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}><ChevronLeftIcon size={IC.inline} /></button>
-                      <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
-                      <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { moveInGroup(gi, idx, 1); }} disabled={idx === last}
+                      {chipGrip(ln, idx, group.length, id, "Move " + id + " in its joined group", "Drag " + id + " to another place in its joined group")}
+                      <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { dragSnapshot("group-" + gi); moveInGroup(gi, idx, 1); }} disabled={idx === last}
                         title={"Move " + id + " right in its joined group"} aria-label={"Move " + id + " right in its joined group"}
                         style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronRightIcon size={IC.inline} /></button>
                       <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { removeFromGroup(gi, id); }} title={"Take " + id + " out of its joined group"}
