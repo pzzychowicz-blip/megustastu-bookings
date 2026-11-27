@@ -42445,3 +42445,13 @@ shape or a key.
   party of [n]". A wrapping row breaks between pairs, never inside one. The screenshot's fault was a combo rule's "priority" at the end
   of line 1 with its stepper starting line 2.
 - **On DEV (375 × 812, Table priorities open):** 54 pairs, every label on its stepper's line, none past its row's right edge.
+
+### Commit 3 — the pure reorder core
+
+- **`src/lib/reorder.js`**: `moveItem` (a new array, the same one when nothing moves), `slotAt` (where a dragged item lands: how
+  many of the other items' boxes come before its centre, in a column or a wrapping chip row), `zoneOrdered` and `moveWithinZone`
+  (the tables, outdoor first as the Timeline draws them; a drag never moves a table into the other zone).
+- **`slotAt` reads the boxes from the drag's START**, not from the moving preview, so the answer depends only on where the dragged
+  item is and cannot flicker between two slots.
+- **`tests/reorder.test.js`**, 17 tests: moves, identity on a no-op, every from/to pair round-tripped, a column of mixed heights,
+  a wrapping row on, between and across lines, and the zone rule (every table to every index keeps its zone and the list's length).
