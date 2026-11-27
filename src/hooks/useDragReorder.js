@@ -263,6 +263,10 @@ export function useDragReorder(opts) {
     return {
       "data-reorder-grip": "",
       style: { touchAction: "none", cursor: drag && drag.list === list && drag.key === key ? "grabbing" : "grab" },
+      // A button is focused on mousedown and scrolled into view, which would move
+      // a half-hidden row out from under the pointer as the drag starts
+      // (src/CLAUDE.md, making an element focusable). Tab still reaches it.
+      onMouseDown: function (e) { e.preventDefault(); },
       onPointerDown: function (e) {
         if (st.current || (e.pointerType === "mouse" && e.button !== 0)) return;
         const grip = e.currentTarget;
