@@ -1,12 +1,19 @@
 // v18.19.1 (Patryk): Settings → Layout's Undo history (src/lib/settings-undo.js).
+// v18.20.0 (Patryk): one history for every tab. The Layout cases below are
+// v18.19.1's, assertion for assertion; only the call shape changed (a step
+// names its node, and `undoStep` reads the stored node through a function).
 import { describe, it, expect } from "vitest";
-import { stableKey, changedPaths, describeStep, recordStep, undoStep, UNDO_CONFLICT } from "../src/lib/settings-undo";
+import { stableKey, changedPaths, recordStep as recordAny, undoStep as undoAny, pillText, UNDO_CONFLICT } from "../src/lib/settings-undo";
+import { describeStep as describeAny, describeLayoutStep as describeStep } from "../src/lib/settings-undo-labels";
 import { sanitizeLayout } from "../src/hooks/useLayout";
 import { DEFAULT_LAYOUT } from "../src/lib/constants";
 
 const base = sanitizeLayout(JSON.parse(JSON.stringify(DEFAULT_LAYOUT)));
 function edit(fn) { const c = JSON.parse(JSON.stringify(base)); fn(c); return sanitizeLayout(c); }
 function step(before, after) { return describeStep(before, after, changedPaths(before, after)); }
+const LAYOUT = "settings/layout";
+function recordStep(stack, before, after) { return recordAny(stack, { node: LAYOUT, tab: "layout", before, after }, describeAny); }
+function undoStep(stack, current) { return undoAny(stack, function () { return current; }); }
 
 describe("stableKey", () => {
   it("ignores object key order and keeps array order", () => {
@@ -85,7 +92,7 @@ describe("undoStep", () => {
   });
   it("refuses when the stored layout is not what this device wrote", () => {
     const other = edit((c) => { c.tables[3].capacity += 2; });
-    expect(undoStep(stack, other)).toEqual({ refuse: UNDO_CONFLICT });
+    expect(undoStep(stack, other)).toEqual({ refuse: UNDO_CONFLICT, rest: [] });
     expect(UNDO_CONFLICT).toBe("Changed on another device, can't undo");
   });
   it("an echo differing only in key order is not another device", () => {
@@ -112,6 +119,54 @@ describe("recordStep across another device's change", () => {
     expect(s).toHaveLength(2);
     expect(s[1].before).toBe(remote);
     // …so taking the first step back is refused once the second is undone.
-    expect(undoStep(s.slice(0, 1), remote)).toEqual({ refuse: UNDO_CONFLICT });
+    expect(undoStep(s.slice(0, 1), remote)).toEqual({ refuse: UNDO_CONFLICT, rest: [] });
+  });
+});
+
+// v18.20.0 (Patryk): one history across the dialog's nodes.
+describe("one history, several nodes", () => {
+  const G = "settings/general";
+  const g0 = { currency: "€", undoSecs: 8 };
+  const g1 = { currency: "€", undoSecs: 9 };
+  const g2 = { currency: "€", undoSecs: 10 };
+  const lay = edit((c) => { c.kitchenLimit = 4; });
+  function rec(stack, node, before, after, tab) { return recordAny(stack, { node, tab: tab || "general", before, after }, describeAny); }
+
+  it("taps on the same leaf of DIFFERENT nodes never merge", () => {
+    const s = rec(rec([], LAYOUT, base, lay, "layout"), G, { kitchenLimit: 3 }, { kitchenLimit: 4 });
+    expect(s).toHaveLength(2);
+    expect(s.map((x) => x.node)).toEqual([LAYOUT, G]);
+  });
+  it("taps on one control of one node still merge, across another node's step below", () => {
+    const s = rec(rec(rec([], LAYOUT, base, lay, "layout"), G, g0, g1), G, g1, g2);
+    expect(s).toHaveLength(2);
+    expect(s[1].before).toBe(g0);
+    expect(s[1].after).toBe(g2);
+  });
+  it("Undo restores each node's own before, newest first", () => {
+    const s = rec(rec([], LAYOUT, base, lay, "layout"), G, g0, g1);
+    const stored = { [LAYOUT]: lay, [G]: g1 };
+    const one = undoAny(s, (n) => stored[n]);
+    expect(one.node).toBe(G);
+    expect(one.restore).toBe(g0);
+    stored[G] = g0;
+    const two = undoAny(one.rest, (n) => stored[n]);
+    expect(two.node).toBe(LAYOUT);
+    expect(two.restore).toBe(base);
+  });
+  it("a refusal drops only its own node's steps (Patryk)", () => {
+    const s = rec(rec(rec([], G, g0, g1), LAYOUT, base, lay, "layout"), G, { ...g1, currency: "€" }, { ...g1, currency: "$" });
+    const stored = { [LAYOUT]: lay, [G]: { ...g1, currency: "£" } };
+    const r = undoAny(s, (n) => stored[n]);
+    expect(r.refuse).toBe(UNDO_CONFLICT);
+    expect(r.rest.map((x) => x.node)).toEqual([LAYOUT]);
+    expect(undoAny(r.rest, (n) => stored[n]).restore).toBe(base);
+  });
+  it("the pill names the step's tab only while you are on another", () => {
+    const st = { label: "Kitchen limit changed", tab: "layout" };
+    const name = (id) => ({ layout: "Layout", general: "General" })[id];
+    expect(pillText(st, "layout", name)).toBe("Kitchen limit changed");
+    expect(pillText(st, "general", name)).toBe("Layout · Kitchen limit changed");
+    expect(pillText(null, "general", name)).toBe("");
   });
 });

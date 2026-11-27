@@ -1,77 +1,126 @@
 // ── useSettingsUndo ──────────────────────────────────────────────────────────
-// v18.19.1 (Patryk): Undo for Settings → Layout. Every save the tab makes goes
-// through `saveLayoutStep`, which records it; the pill above the Settings
-// dialog names the step an Undo press would take back, and each press takes
-// back one, back to when Settings opened. The pill is drawn in the dialog's
-// footer (SettingsUndoToast). WHAT is recorded, merged, named and
-// refused is `lib/settings-undo.js`; this keeps the stack, the pill and the key.
+// v18.19.1 (Patryk): Undo for Settings → Layout. v18.20.0 (Patryk): for every
+// tab, as ONE history for the whole dialog. Every save Settings makes goes
+// through a saver `track(node, save)` returns, which records it; the pill in
+// the dialog's footer (SettingsUndoToast) names the step an Undo press would
+// take back, and each press takes back one, back to when Settings opened. WHAT
+// is recorded, merged and refused is `lib/settings-undo.js`, what a step is
+// called `lib/settings-undo-labels.js`; this keeps the stack, the pill and the
+// key.
 //
-// Four things here are load-bearing:
+// `nodes` maps a node FAMILY to its adapter (`lib/settings-undo.js` says what
+// a node id is: "settings/general", or a family and a key, "voucher:1234"):
+//   value(key)                  → the node as stored now, sanitized
+//   restore(key, before, after) → write `before` back through the node's own
+//                                 writer; truthy when it was dispatched
+//   after(key, ret, before, args) (optional) → the value the save wrote, from
+//                                 the save's return; null when it refused. By
+//                                 default the return itself when it is an
+//                                 object (the v18.19.1 contract: a writer
+//                                 returns the sanitized value it stored, or
+//                                 null when its guards refused).
+//
+// Five things here are load-bearing:
 //  • **The history is forgotten when Settings closes**, by any door (Close, Esc,
 //    a booking opened from the activity log): `open` going false empties it,
 //    adjusted during render, so no door has to remember to.
-//  • **A step is recorded only for a save `saveLayout` WROTE** (it returns the
-//    sanitized config, or null when its guards refused). `before` is the stored
-//    layout, so both sides of every comparison went through `sanitizeLayout`.
-//  • **An Undo writes through `saveLayout` too**, never around it: the load and
-//    empty-layout guards, the rev CAS and the activity entry all apply, and the
-//    restore is not itself recorded.
+//  • **A step is recorded only for a save that WROTE**, with the stored node as
+//    `before`, so both sides of every comparison went through the node's own
+//    sanitizer.
+//  • **An Undo writes through the node's own writer too**, never around it: the
+//    load and empty guards, the rev or per-child CAS and the activity entry all
+//    apply, and the restore is not itself recorded.
+//  • **A save records through a state UPDATER** (`recordStep` is pure), so two
+//    saves in one handler both land on the stack.
 //  • **The pill stays while there is a step to take back** (no timer, Patryk);
-//    a refusal says why for 3.5s and fades, keeping its text as it goes.
+//    a refusal says why for 3.5s, then the pill names the next step if a step
+//    of another node is left (v18.20.0, Patryk), or fades keeping its text.
 //
 // Ctrl+Z / ⌘Z does the same as the pill's button while Settings is open, so a
 // keyboard can take a step back without walking Tab to the footer. Not while
 // typing (a text box's own undo is the browser's), not while a modal sits over
 // Settings, and only with a step to take back.
 import { useEffect, useRef, useState } from "react";
-import { recordStep, undoStep } from "../lib/settings-undo";
+import { recordStep, undoStep, pillText } from "../lib/settings-undo";
+import { describeStep } from "../lib/settings-undo-labels";
 import { isTyping } from "../lib/keyboard";
+import { SETTINGS_TABS } from "../components/SettingsChrome";
 
 const NOTICE_MS = 3500;
 const IDLE = { stack: [], text: "", undo: false, show: false };
 
-export function useSettingsUndo({ open, onTop, layout, saveLayout }) {
+function familyOf(id) { const i = id.indexOf(":"); return i > 0 ? id.slice(0, i) : id; }
+function keyOf(id) { const i = id.indexOf(":"); return i > 0 ? id.slice(i + 1) : null; }
+function tabLabel(id) {
+  const t = SETTINGS_TABS.find(function (x) { return x.id === id; });
+  return t ? t.label : "";
+}
+
+export function useSettingsUndo({ open, onTop, tab, nodes }) {
   const [u, setU] = useState(IDLE);
   const timer = useRef(null);
 
   // Settings closed: the steps go with it. The pill fades where it was.
   if (!open && (u.stack.length || u.show)) setU({ ...u, stack: [], show: false, undo: false });
 
-  function saveLayoutStep(next) {
-    const before = layout;
-    const cfg = saveLayout(next);
-    if (!cfg) return;
-    const stack = recordStep(u.stack, before, cfg);
-    if (stack === u.stack) return;
-    clearTimeout(timer.current);
-    const top = stack[stack.length - 1];
-    setU(top
-      ? { stack: stack, text: top.label, undo: true, show: true }
-      : { ...u, stack: stack, undo: false, show: false });
+  // `node` is a node id, or a function of the save's arguments that returns one
+  // (a voucher's code, a guest's identity); null records nothing.
+  function track(node, save) {
+    return function () {
+      const args = arguments;
+      const id = typeof node === "function" ? node.apply(null, args) : node;
+      const ad = id ? nodes[familyOf(id)] : null;
+      if (!ad) return save.apply(null, args);
+      const key = keyOf(id);
+      const before = ad.value(key);
+      const ret = save.apply(null, args);
+      const after = ad.after ? ad.after(key, ret, before, args) : (ret && typeof ret === "object" ? ret : null);
+      if (after == null) return ret;
+      const step = { node: id, tab: tab, before: before, after: after };
+      clearTimeout(timer.current);
+      setU(function (s) {
+        const stack = recordStep(s.stack, step, describeStep);
+        if (stack === s.stack) return s;
+        return stack.length
+          ? { stack: stack, text: s.text, undo: true, show: true }
+          : { ...s, stack: stack, undo: false, show: false };
+      });
+      return ret;
+    };
   }
 
+  const top = u.stack.length ? u.stack[u.stack.length - 1] : null;
+
   function undo() {
-    const plan = undoStep(u.stack, layout);
+    const plan = undoStep(u.stack, function (id) {
+      const ad = nodes[familyOf(id)];
+      return ad ? ad.value(keyOf(id)) : undefined;
+    });
     if (!plan) return;
     clearTimeout(timer.current);
     if (plan.refuse) {
-      setU({ stack: [], text: plan.refuse, undo: false, show: true });
-      timer.current = setTimeout(function () { setU(function (s) { return { ...s, show: false }; }); }, NOTICE_MS);
+      setU({ stack: plan.rest, text: plan.refuse, undo: false, show: true });
+      timer.current = setTimeout(function () {
+        setU(function (s) { return s.stack.length ? { ...s, undo: true, show: true } : { ...s, show: false }; });
+      }, NOTICE_MS);
       return;
     }
-    if (!saveLayout(plan.restore)) return;
+    const ad = nodes[familyOf(plan.node)];
+    if (!ad || !ad.restore(keyOf(plan.node), plan.restore, top.after)) return;
     const rest = plan.rest;
-    const top = rest[rest.length - 1];
-    setU(top ? { ...u, stack: rest, text: top.label } : { ...u, stack: rest, undo: false, show: false });
+    // Emptied, the pill fades still saying the step it just took back.
+    setU(rest.length
+      ? { ...u, stack: rest, undo: true, show: true }
+      : { ...u, stack: rest, text: pillText(top, tab, tabLabel), undo: false, show: false });
   }
 
   // The keyboard's way to the pill. Re-added each render, so it always calls
   // this render's `undo` (the src/CLAUDE.md row on an effect kept fresh by a
   // parent's props: list nothing rather than something stale).
   // `onTop`: Settings is the top of the modal stack, so a key pressed in a
-  // confirm raised over it (the discard confirm) does not change the layout
-  // behind that confirm.
-  const canUndo = open && onTop && u.stack.length > 0;
+  // confirm raised over it (the discard confirm) does not change what is behind
+  // that confirm. `u.undo`: not while a refusal is being said.
+  const canUndo = open && onTop && u.undo && u.stack.length > 0;
   useEffect(function () {
     if (!canUndo) return undefined;
     function onKey(e) {
@@ -86,5 +135,8 @@ export function useSettingsUndo({ open, onTop, layout, saveLayout }) {
   });
   useEffect(function () { return function () { clearTimeout(timer.current); }; }, []);
 
-  return { saveLayoutStep, undo, pill: { text: u.text, undo: u.undo, show: u.show } };
+  // The pill's sentence is read at render, so a tab switch re-words it: the tab
+  // is named only while you are on another (Patryk, v18.20.0).
+  const text = u.undo && top ? pillText(top, tab, tabLabel) : u.text;
+  return { track, undo, pill: { text: text, undo: u.undo, show: u.show } };
 }

@@ -42568,3 +42568,37 @@ The review raised eight; each was checked before it was acted on.
 - **To ROADMAP, real but out of scope:** emptied join groups or cross-group combos coming back as the default's
   (pre-existing; the fix changes what is stored), rule keys staying positional after an Undo (cosmetic; the fix rekeys every
   row), and the phone footer growing 6px under a two-line pill (a look decision).
+
+## v18.20.0 — Undo across all of Settings
+
+**Date:** 2026-11-27 · **Branch:** `feat/v18.20.0-settings-undo`
+
+**Why:** Patryk, 2026-11-27, during v18.19.1: "all changes must be reversable by Undo button. These and in general all settings in
+Settings." v18.19.1 gave Settings → Layout its Undo; this version gives it to every other tab, as ONE history for the whole dialog,
+under his four rules (every step back to when Settings opened; taps on one control in a row as one step; the pill until Settings
+closes, naming the next step; refused with a reason when another device changed that node). The plan, with the inventory of every
+save path in Settings (its writer, node and guard) and his answers to four rounds of questions, is
+`/Users/patrykzychowicz/.claude/plans/sequential-baking-dijkstra-of-39f32d15-ba65-4519-9eb9-5ffb570a64d8.md`.
+**His decisions:** excluded are Delete customer, Issue voucher, every button that changes no setting (backup, the log's Open, Clear
+and crash download, WhatsApp's Disconnect and usage), and Admin's Remove person and invites; a person's level and capabilities, the
+whole App tab and a guest's tag taps are in; a refusal drops only that node's steps; the pill names a step's tab while you are on
+another; one node per step; standing bookings switched on and undone keep the bookings they made; the pill says the control's
+visible name and what happened; a retention Undo restores the number only; the phone footer is always the two-line pill's height.
+**No `SCHEMA` raise, no rules change**: nothing stored changes shape, and no node is added.
+
+### Commit 1 — one history, keyed by node
+
+- **`lib/settings-undo.js`**: a step is `{node, tab, before, after, label, paths}`. `recordStep(stack, step, describe)` merges only
+  within one NODE (same leaf, starting from the top's `after`, as before); `undoStep(stack, currentOf)` reads each node as stored
+  and, refusing, drops that node's steps and keeps the rest (`{refuse, rest}`); `pillText(step, tab, tabLabel)` leads with the
+  tab's name while you are on another.
+- **`lib/settings-undo-labels.js`** (new): what the pill calls a step, per node. Layout's sentences moved here unchanged
+  (`describeLayoutStep`); a node with no describer says "Setting changed".
+- **`hooks/useSettingsUndo.js`**: `nodes` maps a node family to an adapter (`value`, `restore`, optional `after`), and
+  `track(node, save)` wraps a save so it records. A save records through a state updater, so two saves in one handler both land.
+  Ctrl+Z stays off while a refusal is being said. App calls it below `useSettingsPanel`, for `settingsTab`.
+- **`tests/settings-undo.test.js`**: v18.19.1's 14 cases kept assertion for assertion (only the call shape changed), plus 5:
+  two nodes never merge, a node's taps merge across another node's step, Undo restores each node's own `before` newest first,
+  a refusal drops only its node's steps, and the tab prefix.
+- **On DEV (1440 × 900):** Layout's kitchen limit 3 → 4 → 5 is one step, "Kitchen limit changed"; on General the pill reads
+  "Layout · Kitchen limit changed"; Undo takes it back to 3, measured again 3 → 4 → Undo → 3.

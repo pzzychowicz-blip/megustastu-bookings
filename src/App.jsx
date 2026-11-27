@@ -461,7 +461,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.19.1"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.20.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1285,9 +1285,6 @@ export function BookingApp({uid}){
   // TABLE_GROUPS bindings on each snapshot. saveLayout is wired to the Settings
   // Layout tab. See ./hooks/useLayout.js.
   const { layout, saveLayout } = useLayout();
-  // v18.19.1 (Patryk): every save the Layout tab makes is a step its Undo pill
-  // can take back, until Settings closes (lib/settings-undo.js).
-  const settingsUndo = useSettingsUndo({ open: showSettings, onTop: topModal(modalStack) === "settings", layout: layout, saveLayout: saveLayout });
   // ── WhatsApp Inbox hook (sandbox) ─────────────────────────────────────────
   // Owns conversations/messages/templates (DEV Firebase) + every inbox handler.
   // Form/view handoff setters flow in (controlled pattern, like useWalkin). The
@@ -1982,6 +1979,18 @@ export function BookingApp({uid}){
   }=useSettingsPanel({
     activityOpen,activityRetentionDays,endBackupOpen,isAdmin,refused,
     setActivityOpen,setConfirmDiscard,setShowSettings,setWriteWarning,
+  });
+  // v18.19.1 (Patryk): every save Settings → Layout makes is a step its Undo
+  // pill can take back, until Settings closes. v18.20.0 (Patryk): every tab,
+  // in one history (lib/settings-undo.js). Below `useSettingsPanel` for
+  // `settingsTab`, and below every writer hook it is handed: a hook's arguments
+  // are read at the call. `nodes` maps each node family to how it is read and
+  // written back (hooks/useSettingsUndo.js says what an adapter is).
+  const settingsUndo = useSettingsUndo({
+    open: showSettings, onTop: topModal(modalStack) === "settings", tab: settingsTab,
+    nodes: {
+      "settings/layout": { value: function(){return layout;}, restore: function(k,b){return !!saveLayout(b);} },
+    },
   });
   // v17.0.0: "Delete customer" now ANONYMIZES instead of deleting — the
   // bookings remain for statistics (covers, day/range stats, phone-less
@@ -4559,7 +4568,7 @@ export function BookingApp({uid}){
             onUpdateRule={function(id,f){if(refused("recurringManage"))return;updateRule(id,f);}}
             onRemoveRule={function(id){if(refused("recurringManage"))return;removeRule(id);}}
             layout={layout}
-            onSaveLayout={settingsUndo.saveLayoutStep}
+            onSaveLayout={settingsUndo.track("settings/layout",saveLayout)}
             bookings={bookings}
             waitlist={waitlist}
             onDeleteCustomer={deleteCustomer}
