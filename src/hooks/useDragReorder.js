@@ -167,8 +167,10 @@ export function useDragReorder(opts) {
     if (d.raf) cancelAnimationFrame(d.raf);
     d.el.style.transform = "";
     try { if (d.grip.hasPointerCapture && d.grip.hasPointerCapture(d.pointerId)) d.grip.releasePointerCapture(d.pointerId); } catch { /* already gone */ }
-    if (d.commit && d.to !== d.from) optsRef.current.onCommit(d.list, d.from, d.to);
+    // Cleared BEFORE the save, so a throw in it cannot leave the row lifted and
+    // the preview standing; both land in one render, so nothing flashes.
     setDrag(null);
+    if (d.commit && d.to !== d.from) optsRef.current.onCommit(d.list, d.from, d.to);
   }
   // A release saves (`commit`); Escape, a lost capture or a cancel does not.
   function end(commit) {
